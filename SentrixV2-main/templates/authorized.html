@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}SENTRIX — Access Control{% endblock %}
+{% block description %}Manage authorized face enrollments for identity verification{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Access Control</h1>
+  <div class="page-meta" style="display: flex; gap: 1rem;">
+    <button class="btn btn-outline" onclick="toggleWebcam()">
+      📷 Live Capture
+    </button>
+    <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">
+      + Upload File
+    </button>
+    <input type="file" id="file-input" style="display:none" accept="image/jpeg, image/png" onchange="uploadFace(this)">
+  </div>
+</div>
+
+<div class="card auth-card" id="webcam-section" style="display: none; margin-bottom: 1.5rem; border-color: var(--accent-blue);">
+  <div class="card-label">Enroll via Webcam</div>
+  <div style="display: flex; gap: 1.5rem; align-items: stretch; flex-wrap: wrap;">
+    <video id="webcam-video" autoplay playsinline style="width: 100%; max-width: 400px; aspect-ratio: 4/3; border-radius: 8px; background: #000; object-fit: cover;"></video>
+    <div style="display: flex; flex-direction: column; justify-content: center; gap: 1rem; flex: 1; min-width: 250px;">
+      <input type="text" id="capture-name" style="padding: 0.75rem; background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); color: #fff; border-radius: 6px; font-family: var(--font-sans);" placeholder="Enter Name (e.g. alice)">
+      <button class="btn btn-primary" onclick="captureWebcam()">📸 Take Snapshot & Save</button>
+      <button class="btn btn-cancel" onclick="toggleWebcam()">Cancel</button>
+    </div>
+  </div>
+  <canvas id="webcam-canvas" style="display:none;"></canvas>
+</div>
+
+<div class="card auth-card">
+  <div class="card-label">Authorized Faces</div>
+  <div class="faces-grid" id="faces-grid">
+    {% for face in faces %}
+    <div class="face-item">
+      <img src="{{ face.url }}" alt="{{ face.filename }}" class="face-img">
+        <span class="face-name" title="{{ face.filename }}">{{ face.filename }}</span>
+        <button class="btn btn-outline" style="padding: 2px 6px; font-size: 0.8rem; border-color: var(--accent-red); color: var(--accent-red);" onclick="deleteFace('{{ face.filename }}')">Delete</button>
+      </div>
+    </div>
+    {% else %}
+    <div class="empty-faces">
+      <p>No authorized persons enrolled.</p>
+      <p class="muted">Everyone detected will be flagged as UNAUTHORIZED.</p>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<script>
+let stream = null;
+
+function toggleWebcam() {
+  const section = document.getElementById('webcam-section');
+  const video = document.getElementById('webcam-video');
+  
+  if (section.style.display === 'none') {
+    section.style.display = 'block';
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(s => {
+        stream = s;
+        video.srcObject = stream;
+      })
+      .catch(err => {
+        alert("Webcam error: " + err);
+        section.style.display = 'none';
+      });
+  } else {
+    section.style.display = 'none';
+    if (stream) {
+      stream.getTracks().forEach(t => t.stop());
+      stream = null;
+    }
+  }
+}
+
+function captureWebcam() {
+  const video = document.getElementById('webcam-video');
+  const canvas = document.getElementById('webcam-canvas');
+  const nameInput = document.getElementById('capture-name').value.trim();
+  
+  if (!nameInput) {
+    alert("Please enter a name first.");
+    return;
+  }
+  
+  // Set canvas size to video size
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  
+  canvas.toBlob(blob => {
+    const filename = nameInput.endsWith('.jpg') ? nameInput : nameInput + '.jpg';
+    const file = new File([blob], filename, { type: "image/jpeg" });
+    
+    // Create FileList-like object to use existing upload function
+    const dataTransfer = new DataTransfer();
+    dataTransfer.items.add(file);
+    uploadFace({ files: dataTransfer.files });
+  }, 'image/jpeg', 0.95);
+}
+
+function uploadFace(input) {
+  if (!input.files || input.files.length === 0) return;
+  const file = input.files[0];
+  const formData = new FormData();
+  formData.append("file", file);
+
+  fetch("/authorized/upload", {
+    method: "POST",
+    body: formData
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.status === "ok") {
+      window.location.reload();
+    } else {
+      alert("Upload failed: " + data.detail);
+    }
+  })
+  .catch(err => {
+    alert("Upload error: " + err);
+  });
+}
+
+async function deleteFace(filename) {
+  if(confirm(`Are you sure you want to remove ${filename}?`)) {
+    try {
+      let res = await fetch(`/api/authorized/${filename}`, {method: 'DELETE'});
+      if(res.ok) { 
+        window.location.reload(); 
+      } else {
+        alert("Delete failed.");
+      }
+    } catch(err) {
+      alert("Delete error: " + err);
+    }
+  }
+}
+</script>
+{% endblock %}

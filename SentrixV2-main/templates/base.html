@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}SENTRIX Security{% endblock %}</title>
+  <meta name="description" content="{% block description %}SENTRIX — Intelligent Multimodal Home Security System{% endblock %}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="nav-brand">
+      <span class="nav-icon">⬡</span>
+      <span class="nav-title">SENTRIX</span>
+    </div>
+    <div class="nav-links">
+      <a href="/dashboard" class="nav-link {% if request.url.path == '/dashboard' %}active{% endif %}">Dashboard</a>
+      <a href="/live"      class="nav-link {% if request.url.path == '/live' %}active{% endif %}">Live Feed</a>
+      <a href="/events"    class="nav-link {% if request.url.path == '/events' %}active{% endif %}">Events</a>
+      <a href="/alerts"    class="nav-link {% if request.url.path == '/alerts' %}active{% endif %}">Alerts</a>
+      <a href="/evidence"  class="nav-link {% if request.url.path == '/evidence' %}active{% endif %}">Evidence</a>
+      <a href="/dispatch"  class="nav-link {% if request.url.path == '/dispatch' %}active{% endif %}">Dispatch</a>
+      <a href="/authorized" class="nav-link {% if request.url.path == '/authorized' %}active{% endif %}">Access</a>
+    </div>
+    <div class="nav-status" id="nav-status">
+      <span class="status-dot" id="dot-cloud" title="Cloud AI"></span>
+      <span class="status-dot" id="dot-cam"   title="Camera"></span>
+      <span class="status-dot" id="dot-mic"   title="Microphone"></span>
+      <a href="/logout" class="nav-link" style="margin-left: 1rem; padding: 0.2rem 0.5rem; border: 1px solid var(--border-light); border-radius: 4px;">Logout</a>
+    </div>
+  </nav>
+
+  <main class="main-content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <script src="/static/js/app.js"></script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

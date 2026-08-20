@@ -1,0 +1,10 @@
+{
+  "version": "1.0",
+  "description": "SENTRIX Evaluation Dataset Infrastructure",
+  "counts": {
+    "real_labelled": 0,
+    "unlabelled": 0,
+    "synthetic_demo": 3
+  },
+  "missing": "Real labelled datasets for normal, suspicious, weapon, fire, and mixed classes."
+}

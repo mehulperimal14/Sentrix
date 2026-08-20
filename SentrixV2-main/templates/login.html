@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SENTRIX Security — Login</title>
+  <meta name="description" content="SENTRIX Authentication">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css">
+  <style>
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background-image: radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.1) 0%, transparent 60%);
+    }
+    .login-card {
+      width: 100%;
+      max-width: 400px;
+      padding: 2.5rem;
+      text-align: center;
+      animation: slide-up 0.4s ease-out;
+    }
+    @keyframes slide-up {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .login-logo {
+      font-size: 3rem;
+      color: var(--accent-blue);
+      margin-bottom: 0.5rem;
+    }
+    .login-title {
+      font-weight: 900;
+      letter-spacing: 2px;
+      font-size: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .login-form {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+    .form-group {
+      text-align: left;
+    }
+    .form-input {
+      width: 100%;
+      padding: 1rem;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      font-size: 1rem;
+      transition: border-color 0.3s;
+    }
+    .form-input:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+    }
+    .btn-block {
+      width: 100%;
+      padding: 1rem;
+      font-size: 1.1rem;
+    }
+    .error-msg {
+      color: #ef4444;
+      font-size: 0.9rem;
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card login-card">
+    <div class="login-logo">⬡</div>
+    <div class="login-title">SENTRIX</div>
+    
+    <form class="login-form" action="/login" method="POST">
+      <div class="form-group">
+        <input type="password" name="password" class="form-input" placeholder="Enter Password" required autofocus>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Authenticate</button>
+      
+      {% if error %}
+      <div class="error-msg">{{ error }}</div>
+      {% endif %}
+    </form>
+  </div>
+
+</body>
+</html>

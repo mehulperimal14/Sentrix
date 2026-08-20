@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}SENTRIX — Evidence Vault{% endblock %}
+{% block description %}AES-256-GCM encrypted evidence packages for chain of custody{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Evidence Vault</h1>
+  <div class="page-meta">
+    <span class="badge badge-secure">🔒 AES-256-GCM Encrypted</span>
+    <span class="page-count">{{ items|length }} packages</span>
+  </div>
+</div>
+
+<div class="card evidence-card">
+  <div class="table-wrapper">
+    <table class="data-table" id="evidence-table">
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>Level</th>
+          <th>TCI</th>
+          <th>Incident</th>
+          <th>Camera</th>
+          <th>Objects Detected</th>
+          <th>SHA-256 Hash</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        <tr>
+          <td class="mono">{{ item.timestamp }}</td>
+          <td>
+            <span class="level-chip level-{{ item.level }}">L{{ item.level }}</span>
+          </td>
+          <td class="mono">{{ "%.3f"|format(item.tci) }}</td>
+          <td>{{ item.incident_type }}</td>
+          <td class="mono small">{{ item.camera_id }}</td>
+          <td>
+            {% for obj in item.detected_objects[:3] %}
+            <span class="obj-tag">{{ obj }}</span>
+            {% endfor %}
+            {% if item.detected_objects|length > 3 %}
+            <span class="muted text-small">+{{ item.detected_objects|length - 3 }}</span>
+            {% endif %}
+          </td>
+          <td class="mono hash-cell text-small" title="{{ item.sha256 }}">
+            {{ item.sha256[:16] }}...
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" class="empty-cell">No evidence packages. Encrypted evidence is saved at Level 3+.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

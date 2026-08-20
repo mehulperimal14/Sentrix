@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}SENTRIX — Dispatch Packages{% endblock %}
+{% block description %}Emergency dispatch packages created at threat Level 4 and 5{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Dispatch Packages</h1>
+  <div class="page-meta">
+    <span class="page-count">{{ packages|length }} packages</span>
+  </div>
+</div>
+
+<div class="card dispatch-table-card">
+  <div class="table-wrapper">
+    <table class="data-table" id="dispatch-table">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Level</th>
+          <th>TCI</th>
+          <th>Incident</th>
+          <th>Authority</th>
+          <th>Location</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for pkg in packages %}
+        <tr>
+          <td class="mono">{{ pkg.created_at }}</td>
+          <td>
+            <span class="level-chip level-{{ pkg.level }}">L{{ pkg.level }}</span>
+          </td>
+          <td class="mono">{{ "%.3f"|format(pkg.tci) }}</td>
+          <td>{{ pkg.incident_type|upper }}</td>
+          <td>
+            {% if pkg.recommended_authority == 'FIRE' %}
+            <span class="auth-tag fire">FIRE</span>
+            {% else %}
+            <span class="auth-tag police">POLICE</span>
+            {% endif %}
+          </td>
+          <td class="text-small">{{ pkg.user_address|truncate(30) }}</td>
+          <td>
+            {% if pkg.status == 'PENDING' %}
+            <span class="status-tag pending">PENDING</span>
+            {% elif pkg.status == 'SENT' %}
+            <span class="status-tag sent">SENT</span>
+            {% else %}
+            <span class="status-tag">{{ pkg.status }}</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if pkg.status == 'PENDING' %}
+            <button class="btn btn-sm btn-outline" onclick="manualDispatch('{{ pkg.id }}', '{{ pkg.recommended_authority }}')">
+              Send Now
+            </button>
+            {% else %}
+            <span class="muted text-small">Dispatched</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8" class="empty-cell">No dispatch packages. Packages are auto-created at Level 4+.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+function manualDispatch(id, authority) {
+    if (!confirm(`Dispatch ${authority} for package ${id}?`)) return;
+    fetch(`/api/dispatch/${id}/send/${authority}`, { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'sent') {
+                window.location.reload();
+            } else {
+                alert('Dispatch failed: ' + (data.detail || 'Unknown error'));
+            }
+        });
+}
+</script>
+{% endblock %}
