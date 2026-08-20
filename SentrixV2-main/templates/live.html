@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}SENTRIX — Live Feed{% endblock %}
+{% block description %}Full-screen live camera feed with real-time threat overlay{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Live Camera Feed</h1>
+  <div class="level-pill" id="live-level-pill">Level 1 – Normal</div>
+</div>
+
+<div class="card live-card">
+  <img src="/video" alt="Live camera feed" class="live-full-feed" id="live-full-feed">
+</div>
+
+<div class="live-stats-row">
+  <div class="live-stat">
+    <span class="live-stat-label">TCI</span>
+    <span class="live-stat-val" id="ls-tci">0.00</span>
+  </div>
+  <div class="live-stat">
+    <span class="live-stat-label">Status</span>
+    <span class="live-stat-val" id="ls-status">NORMAL</span>
+  </div>
+  <div class="live-stat">
+    <span class="live-stat-label">Incident</span>
+    <span class="live-stat-val" id="ls-incident">normal</span>
+  </div>
+  <div class="live-stat">
+    <span class="live-stat-label">Audio</span>
+    <span class="live-stat-val" id="ls-audio">—</span>
+  </div>
+  <div class="live-stat">
+    <span class="live-stat-label">Cloud</span>
+    <span class="live-stat-val" id="ls-cloud">Offline</span>
+  </div>
+</div>
+
+<script>
+  // Lightweight WS subscriber for the live page — dynamic protocol for HTTPS
+  const _wsProto2 = location.protocol === "https:" ? "wss:" : "ws:";
+  const ws2 = new WebSocket(_wsProto2 + "//" + location.host + "/ws/threat");
+  ws2.onmessage = (ev) => {
+    const d = JSON.parse(ev.data);
+    document.getElementById("ls-tci").textContent    = (d.tci * 100).toFixed(1) + "%";
+    document.getElementById("ls-status").textContent = d.status;
+    document.getElementById("ls-incident").textContent = d.incident_type;
+    document.getElementById("ls-audio").textContent  = d.audio_label || "—";
+    document.getElementById("ls-cloud").textContent  = d.cloud_online ? "Online" : "Offline";
+    const cfg = LEVEL_CONFIG[d.level] || LEVEL_CONFIG[1];
+    document.getElementById("live-level-pill").textContent = cfg.label;
+    document.getElementById("live-level-pill").style.color = cfg.color;
+  };
+</script>
+{% endblock %}

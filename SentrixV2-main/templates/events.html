@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}SENTRIX — Event Log{% endblock %}
+{% block description %}Paginated log of all security events detected by SENTRIX{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Event Log</h1>
+  <span class="page-count">{{ events|length }} events</span>
+</div>
+
+<div class="card table-card">
+  <div class="table-wrapper">
+    <table class="data-table" id="events-table">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Level</th>
+          <th>TCI</th>
+          <th>Status</th>
+          <th>Incident</th>
+          <th>Reason</th>
+          <th>Camera</th>
+          <th>Snapshot</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ev in events %}
+        <tr class="level-row-{{ ev.level }}">
+          <td class="mono">{{ ev.created_at }}</td>
+          <td>
+            <span class="level-chip level-{{ ev.level }}">L{{ ev.level }}</span>
+          </td>
+          <td class="mono">{{ "%.3f"|format(ev.tci or 0) }}</td>
+          <td>{{ ev.status }}</td>
+          <td>{{ ev.incident_type }}</td>
+          <td class="reason-cell" title="{{ ev.reason }}">{{ ev.reason }}</td>
+          <td class="mono small">{{ ev.camera_id }}</td>
+          <td>
+            {% if ev.snapshot_path %}
+            <a href="{{ ev.snapshot_path }}" target="_blank" class="link-btn">View</a>
+            {% else %}
+            <span class="muted">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8" class="empty-cell">No events logged yet. Events appear at Level 2+.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
