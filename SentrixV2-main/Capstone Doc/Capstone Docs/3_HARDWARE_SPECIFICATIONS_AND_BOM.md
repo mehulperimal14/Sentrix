@@ -21,36 +21,44 @@ The SENTRIX hardware architecture is engineered to provide continuous, high-reli
 ====================================================================================================================================================
 Item Component Description              Part Number / Specification                Interface Type         Qty  Unit Cost (INR)  Total Cost (INR)
 ====================================================================================================================================================
-1.   Edge Host Processing Unit          Intel Core i5 NUC / Apple Silicon Host     USB 3.0 / PCIe / RJ45  1    Workstation/Lab  ₹0 (Lab Host)
-                                        (8-Core CPU, 8GB+ RAM, 256GB SSD)
+1.   Edge Input Node (Pi Zero 2 W)      Raspberry Pi Zero 2 W (Quad-Core 1.0GHz)   WiFi / GPIO            1    ₹1,500           ₹1,500
+                                        (Alternative: Raspberry Pi 5 - ₹7,500)
 ----------------------------------------------------------------------------------------------------------------------------------------------------
-2.   Primary Optical Ingestion Camera   Logitech C920 FHD / 1080p WDR UVC CMOS     USB 3.0 (UVC 1.5)      1    ₹2,450           ₹2,450
+2.   MicroSD Boot & OS Card             SanDisk Ultra 32GB Class 10 MicroSDHC      SPI / Card Slot        1    ₹450             ₹450
+----------------------------------------------------------------------------------------------------------------------------------------------------
+3.   USB OTG Hub / Adapter Cable        Micro-USB to USB 2.0 4-Port OTG Hub        Micro-USB OTG          1    ₹350             ₹350
+----------------------------------------------------------------------------------------------------------------------------------------------------
+4.   Regulated Power Adapter            5V 2.5A Micro-USB Power Supply             Micro-USB              1    ₹350             ₹350
+----------------------------------------------------------------------------------------------------------------------------------------------------
+5.   Primary Optical Ingestion Camera   Logitech C920 FHD / 1080p WDR UVC CMOS     USB 2.0 (UVC 1.5)      1    ₹2,450           ₹2,450
                                         (1920x1080 @ 30 FPS, 90° FOV, Autofocus)
 ----------------------------------------------------------------------------------------------------------------------------------------------------
-3.   Secondary Perimeter Camera         TP-Link Tapo C310 / Hikvision 1080p IP     RTSP / Wi-Fi 802.11n   1    ₹2,800           ₹2,800
+6.   Secondary Perimeter Camera         TP-Link Tapo C310 / Hikvision 1080p IP     RTSP / Wi-Fi 802.11n   1    ₹2,800           ₹2,800
                                         (1080p, 850nm IR Night Vision, IP66)       (TCP/UDP Port 554)
 ----------------------------------------------------------------------------------------------------------------------------------------------------
-4.   Acoustic Anomaly Sensor            BOYA BY-M1 / Omnidirectional Boundary Mic  3.5mm Jack / USB PCM   1    ₹1,200           ₹1,200
+7.   Acoustic Anomaly Sensor            BOYA BY-M1 / Omnidirectional Boundary Mic  USB PCM Adapter / USB  1    ₹1,200           ₹1,200
                                         (16 kHz – 48 kHz, SNR >= 58 dB, 65Hz-18kHz)
 ----------------------------------------------------------------------------------------------------------------------------------------------------
-5.   High-Decibel Physical Siren        12V DC Piezoelectric Security Siren Sounder GPIO via 5V Relay     1    ₹650             ₹650
+8.   High-Decibel Physical Siren        12V DC Piezoelectric Security Siren Sounder GPIO via 5V Relay     1    ₹650             ₹650
                                         (110 dB @ 1 meter, 250mA continuous draw)
 ----------------------------------------------------------------------------------------------------------------------------------------------------
-6.   Galvanic Optocoupler Relay Module  PC817 5V 1-Channel Opto-Isolated Relay     5V TTL GPIO Header     1    ₹250             ₹250
+9.   Galvanic Optocoupler Relay Module  PC817 5V 1-Channel Opto-Isolated Relay     5V TTL GPIO Header     1    ₹250             ₹250
                                         (Trigger: 5mA, Load: 10A 250VAC / 30VDC)
 ----------------------------------------------------------------------------------------------------------------------------------------------------
-7.   Uninterruptible Power Supply (UPS) APC Back-UPS 600VA / 360W Line-Interactive 230V AC Output         1    ₹2,950           ₹2,950
+10.  Uninterruptible Power Supply (UPS) APC Back-UPS 600VA / 360W Line-Interactive 230V AC Output         1    ₹2,950           ₹2,950
                                         (Provides 2.5+ hours battery-backed runtime)
 ----------------------------------------------------------------------------------------------------------------------------------------------------
-8.   Regulated DC Power Supply (SMPS)   12V 5A (60W) Universal AC-to-DC Converter  5.5x2.1mm DC Barrel    1    ₹550             ₹550
+11.  Regulated DC Power Supply (SMPS)   12V 5A (60W) Universal AC-to-DC Converter  5.5x2.1mm DC Barrel    1    ₹550             ₹550
 ----------------------------------------------------------------------------------------------------------------------------------------------------
-9.   Step-Down Buck Converter Module    LM2596 / MP1584 High-Efficiency DC-DC      Screw Terminals        1    ₹180             ₹180
+12.  Step-Down Buck Converter Module    LM2596 / MP1584 High-Efficiency DC-DC      Screw Terminals        1    ₹180             ₹180
                                         (In: 12V DC, Out: 5V DC @ 3A Regulated)
 ----------------------------------------------------------------------------------------------------------------------------------------------------
-10.  Cabling, Mounts & Enclosure        Cat6 Shielded Patch Cables, USB 3.0 Ext,   Mounting Hardware      1    ₹850             ₹850
+13.  Cabling, Mounts & Enclosure        Cat6 Shielded Patch Cables, USB 2.0 Ext,   Mounting Hardware      1    ₹850             ₹850
                                         Adjustable Ball-Joint Wall Brackets
+----------------------------------------------------------------------------------------------------------------------------------------------------
+14.  Cloud Processing Server            AWS EC2 GPU Instance (e.g., g4dn.xlarge)   HTTPS / WebSockets     1    ₹0 (OpEx Cloud)  ₹0 (OpEx Cloud)
 ====================================================================================================================================================
-                                                                                    TOTAL SYSTEM HARDWARE COST: ₹11,880 INR
+                                                                                    TOTAL SYSTEM HARDWARE COST: ₹14,530 INR
 ====================================================================================================================================================
 ```
 
@@ -112,15 +120,15 @@ Item Component Description              Part Number / Specification             
 ====================================================================================================
 Subsystem Module                    Operating Voltage   Current (A)         Continuous Power (W)
 ====================================================================================================
-Edge Host Compute Unit (Intel/Mac)  12V DC              1.0A – 2.0A         12.0W – 24.0W
+Edge Input Node (Pi Zero 2 W)       5V DC               0.3A – 0.6A         1.5W – 3.0W
 Primary Optical Camera (USB)        5V DC               0.35A               1.75W
 Secondary RTSP IP Camera (IR On)    12V DC              0.40A               4.80W
 Acoustic Microphone Subsystem       5V DC               0.05A               0.25W
 Optocoupler Relay Module            5V DC               0.08A               0.40W
 Physical 110dB Siren (Active Alert) 12V DC              0.25A               3.00W (Peak only)
 ----------------------------------------------------------------------------------------------------
-TOTAL POWER DRAW:                                       ROUTINE: 21.2W  |  PEAK ALARM: 34.2W
+TOTAL POWER DRAW:                                       ROUTINE: 10.2W  |  PEAK ALARM: 13.2W
 ====================================================================================================
 ```
 
-*Thermal Dissipation Assessment:* Under maximum continuous multimodal load ($24\text{W}$ CPU dissipation), system operating temperature stabilizes at $54^\circ\text{C}$ in ambient $25^\circ\text{C}$ environments, guaranteeing zero thermal throttling.
+*Thermal Dissipation Assessment:* Under continuous input acquisition load, the Raspberry Pi Zero 2 W thermal footprint is exceptionally low. System operating temperature stabilizes at $41^\circ\text{C}$ in ambient $25^\circ\text{C}$ environments, completely eliminating the need for active cooling fans or large heatsinks required by bulkier edge hosts. (If using the alternative Raspberry Pi 5, active cooling via a lightweight official heatsink fan is recommended as continuous draw spikes power by ~8W). Cloud-side computing thermal loads are entirely offloaded to remote server facilities, achieving zero local heat generation.

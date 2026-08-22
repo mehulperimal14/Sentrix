@@ -39,14 +39,20 @@ class FusionEngine:
     Provides uncertainty estimation and explainability signals.
     """
 
+    # Weighted fusion dimensions (used in fallback path when XGBoost unavailable).
+    # XGBoost path uses its own fixed 5-feature vector — these weights do NOT
+    # affect the XGBoost model.
+    # Weights sum to 1.0.
     WEIGHTS = {
-        "vision":    0.20,
-        "audio":     0.15,
-        "motion":    0.15,
-        "behaviour": 0.15,
-        "identity":  0.15,
-        "weapon":    0.15,
-        "fire":      0.05,
+        "vision":    0.18,
+        "audio":     0.12,
+        "motion":    0.12,
+        "behaviour": 0.12,
+        "identity":  0.12,
+        "weapon":    0.14,
+        "fire":      0.06,
+        "violence":  0.08,   # ResNet18+LSTM classifier (Phase 3)
+        "anomaly":   0.06,   # MobileNetV2 classifier  (Phase 3)
     }
 
     def __init__(self):
@@ -204,10 +210,17 @@ class FusionEngine:
         if behaviour in ("running", "crawling", "loitering"):
             base += 0.12  # Raised from 0.10
 
+        if behaviour == "fighting":
+            base += 0.28  # Hard boost — proximity-confirmed assault
+
         raw_tci = max(0.0, min(1.0, base))
 
         # STEP 4: Temporal Smoothing
         tci = self.apply_temporal_smoothing(raw_tci)
+
+        # Hard override: confirmed fighting must be at least Level 4
+        if behaviour == "fighting":
+            tci = max(tci, 0.76)
 
         # STEP 5: Level mapping
         if tci <= 0.25:
@@ -222,12 +235,18 @@ class FusionEngine:
             level, status, reason = 5, "CRITICAL",  "Critical threat confirmed"
 
         # STEP 6: Derive incident type
+        violence_score = float(scores.get("violence", 0.0))
+        anomaly_score  = float(scores.get("anomaly",  0.0))
         if weapon_score > 0.3:
             incident_type = "weapon"
         elif fire_score > 0.3:
             incident_type = "fire"
+        elif behaviour == "fighting" or violence_score > 0.5:
+            incident_type = "assault"
         elif unauthorized and tci > 0.4:
             incident_type = "intrusion"
+        elif anomaly_score > 0.6:
+            incident_type = "anomaly"
         else:
             incident_type = "normal"
 

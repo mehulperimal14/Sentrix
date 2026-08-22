@@ -14,13 +14,20 @@ opencv-python>=4.8.0
 xgboost>=2.0.0          # Fusion Engine TCI
 scikit-learn>=1.3.0     # Platt scaling & Metrics
 sounddevice>=0.4.6      # Microphone audio anomaly detection
-ultralytics>=8.0.0      # YOLOv8 Vision (optional on Python 3.13)
+ultralytics>=8.0.0      # YOLOv8 Vision
 
-# AI Models (Optional/Hardware dependent)
-# face_recognition>=1.3.0 # Requires dlib/cmake
-# vosk>=0.3.45            # Voice SOS
-# deep-sort-realtime>=1.3 # Tracking
-# torchreid               # ReID (osnet)
+# Audio training dependencies
+librosa>=0.10.0         # Log-Mel Spectrogram for audio CNN
+yt-dlp>=2024.1.0        # AudioSet clip downloader
+
+# PyTorch — NOT included here intentionally.
+# GPU-accelerated torch (CUDA 12.4) is installed automatically
+# when you create the .venv using the setup script:
+#   PowerShell: .\setup_venv.ps1
+# This prevents accidental CPU-only torch installation in other environments.
+# torch>=2.4.0   <-- installed by setup_venv.ps1 only
+# torchvision    <-- installed by setup_venv.ps1 only
+# torchaudio     <-- installed by setup_venv.ps1 only
 
 # Twilio (Optional — falls back to console if not installed)
 twilio>=8.0.0

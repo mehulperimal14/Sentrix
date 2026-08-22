@@ -24,19 +24,21 @@ class LocalFallbackEngine:
         self.model = None
         self.model_type = None
 
-        # Check for ultralytics model first
+        # Check for ultralytics model — Phase 3 name first, then legacy
         try:
             from ultralytics import YOLO
-            pt_path = os.path.join(
-                os.path.dirname(os.path.dirname(__file__)), "models", "weapon.pt"
-            )
-            if os.path.exists(pt_path):
-                try:
-                    self.model = YOLO(pt_path)
-                    self.model_type = "ultralytics"
-                    print("[LocalFallbackEngine] Loaded local weapon model (ultralytics).")
-                except Exception as e:
-                    print(f"[LocalFallbackEngine] Failed to load ultralytics model: {e}")
+            models_dir = os.path.dirname(os.path.dirname(__file__))
+            # Phase 3 trained model takes priority
+            for candidate in ("weapon_detector.pt", "weapon.pt"):
+                pt_path = os.path.join(models_dir, "models", candidate)
+                if os.path.exists(pt_path):
+                    try:
+                        self.model = YOLO(pt_path)
+                        self.model_type = "ultralytics"
+                        print(f"[LocalFallbackEngine] Loaded local weapon model ({candidate}).")
+                    except Exception as e:
+                        print(f"[LocalFallbackEngine] Failed to load {candidate}: {e}")
+                    break
         except Exception:
             pass
 
