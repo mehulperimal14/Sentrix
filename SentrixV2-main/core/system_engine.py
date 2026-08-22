@@ -32,6 +32,7 @@ import statistics
 import threading
 import time
 from collections import deque
+from pathlib import Path
 from typing import Optional
 
 import cv2
@@ -51,6 +52,8 @@ from ai.cloud_engines       import CloudThreatEngine
 from ai.local_fallback_engine import LocalFallbackEngine
 from ai.fusion_engine       import FusionEngine, TCIResult
 from ai.voice_sos_engine    import VoiceSosEngine
+from ai.violence_engine     import ViolenceEngine
+from ai.anomaly_engine      import AnomalyEngine
 from core.escalation        import EscalationEngine
 from core.encrypted_evidence import encrypted_evidence
 from core.alert_service     import alert_service
@@ -60,9 +63,13 @@ from core.health_monitor    import health_monitor
 from hardware.siren         import Siren
 import db.database as database
 
-os.makedirs("static/alerts", exist_ok=True)
-os.makedirs("static/alerts/evidence", exist_ok=True)
-os.makedirs("static/authorized_faces", exist_ok=True)
+# ── Repo-root-anchored runtime directories ───────────────────────────────────
+# core/ is inside backend/, so repo root is two levels up.
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent  # SentrixV2-main/
+_STATIC_ROOT = _REPO_ROOT / "frontend" / "static"
+os.makedirs(_STATIC_ROOT / "alerts", exist_ok=True)
+os.makedirs(_STATIC_ROOT / "alerts" / "evidence", exist_ok=True)
+os.makedirs(_STATIC_ROOT / "authorized_faces", exist_ok=True)
 
 BLANK = np.zeros((480, 640, 3), dtype=np.uint8)
 cv2.putText(BLANK, "No Camera Signal", (120, 240),
@@ -115,38 +122,87 @@ def _tile_frames(frames: list) -> np.ndarray:
 
 def _draw_hud(frame, tci, level, status, detections, authorized,
               weapon_score, fire_score, behaviour_label,
-              latency_p95=0.0, fps=0.0):
-    """Draw semi-transparent HUD overlay with TCI, level, and key scores."""
+              latency_p95=0.0, fps=0.0, incident_type="normal"):
+    """Draw enriched HUD overlay with TCI, level, incident banners."""
     h, w = frame.shape[:2]
     color = LEVEL_COLORS.get(level, (255, 255, 255))
 
-    # Top banner
-    overlay = frame.copy()
-    cv2.rectangle(overlay, (0, 0), (w, 70), (10, 10, 20), -1)
-    cv2.addWeighted(overlay, 0.7, frame, 0.3, 0, frame)
+    # Pulsing red border for Level 4 / 5
+    if level >= 4:
+        border = 6
+        cv2.rectangle(frame, (0, 0), (w - 1, h - 1), (0, 0, 220), border)
+        cv2.rectangle(frame, (border, border), (w - border - 1, h - border - 1), (0, 0, 180), 2)
 
-    cv2.putText(frame, f"SENTRIX  TCI: {tci:.2f}",
-                (12, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
-    cv2.putText(frame, f"L{level} {status}  [{behaviour_label}]",
-                (12, 58), cv2.FONT_HERSHEY_SIMPLEX, 0.65, color, 2)
+    # Top banner background
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (0, 0), (w, 82), (10, 10, 20), -1)
+    cv2.addWeighted(overlay, 0.78, frame, 0.22, 0, frame)
+
+    # TCI + Status line
+    cv2.putText(frame, f"SENTRIX   TCI: {tci * 100:.1f}%",
+                (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.78, color, 2)
+    cv2.putText(frame, f"LEVEL {level}  —  {status}",
+                (12, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.62, color, 2)
 
     # Right info strip
-    info_x = w - 240
-    cv2.putText(frame, f"WPN:{weapon_score:.2f} FIRE:{fire_score:.2f}",
-                (info_x, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
-    auth_text  = "AUTH" if authorized else "UNAUTH"
-    auth_color = (0, 200, 80) if authorized else (0, 0, 220)
-    cv2.putText(frame, auth_text, (info_x, 45),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, auth_color, 2)
-    cv2.putText(frame, f"P95: {latency_p95:.2f}s | FPS: {fps:.1f}",
-                (info_x, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (200, 200, 200), 1)
+    info_x = w - 230
+    cv2.putText(frame, f"WPN:{weapon_score:.2f}  FIRE:{fire_score:.2f}",
+                (info_x, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.48, color, 1)
+    auth_text  = "AUTHORIZED" if authorized else "UNAUTHORIZED"
+    auth_color = (0, 200, 80) if authorized else (0, 60, 220)
+    cv2.putText(frame, auth_text,
+                (info_x, 46), cv2.FONT_HERSHEY_SIMPLEX, 0.50, auth_color, 2)
+    cv2.putText(frame, f"FPS: {fps:.1f}  P95: {latency_p95:.2f}s",
+                (info_x, 68), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (180, 180, 180), 1)
+
+    # Incident banner (Level 3+)
+    INCIDENT_BANNERS = {
+        "weapon":    ("  WEAPON DETECTED  ",   (0, 0, 220)),
+        "assault":   ("  ASSAULT IN PROGRESS  ", (0, 60, 220)),
+        "fire":      ("  FIRE DETECTED  ",      (0, 80, 255)),
+        "intrusion": ("  UNAUTHORIZED ENTRY  ",  (0, 100, 200)),
+        "anomaly":   ("  ANOMALOUS ACTIVITY  ",  (0, 120, 180)),
+    }
+    if level >= 3 and incident_type in INCIDENT_BANNERS:
+        banner_text, banner_color = INCIDENT_BANNERS[incident_type]
+        # Draw filled banner at bottom of frame
+        banner_h = 44
+        boverlay = frame.copy()
+        cv2.rectangle(boverlay, (0, h - banner_h), (w, h), (10, 10, 25), -1)
+        cv2.addWeighted(boverlay, 0.85, frame, 0.15, 0, frame)
+        # Warning icon + text
+        text_size = cv2.getTextSize(banner_text, cv2.FONT_HERSHEY_DUPLEX, 0.80, 2)[0]
+        text_x = (w - text_size[0]) // 2
+        cv2.putText(frame, banner_text,
+                    (text_x, h - 12), cv2.FONT_HERSHEY_DUPLEX, 0.80, banner_color, 2)
+        # Side accent lines
+        cv2.line(frame, (0, h - banner_h), (w, h - banner_h), banner_color, 2)
 
     # Draw detection bounding boxes from YOLO
     for d in detections:
         bbox = d.get("bbox", [])
         if len(bbox) == 4:
             x1, y1, x2, y2 = bbox
-            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+            is_weapon = d.get("is_weapon", False)
+            box_color = (0, 0, 220) if is_weapon else color
+            box_thickness = 3 if is_weapon else 2
+            cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, box_thickness)
+            label = d.get("label", "")
+            if label and label != "person":
+                cv2.putText(frame, label.upper(),
+                            (x1, max(y1 - 8, 14)),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 0, 220), 2)
+
+    # Person count bottom-left
+    person_count = sum(1 for d in detections if not d.get("is_weapon", False))
+    if person_count > 0:
+        cv2.putText(frame, f"Persons: {person_count}",
+                    (12, h - 52),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, (180, 230, 255), 1)
+    if behaviour_label not in ("normal", ""):
+        cv2.putText(frame, f"Behaviour: {behaviour_label}",
+                    (12, h - 32),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, (180, 230, 255), 1)
 
     return frame
 
@@ -171,6 +227,9 @@ class SystemEngine:
         self.voice          = VoiceSosEngine()
         self.smoother       = TemporalSmoother(window=5)
         self.siren          = Siren()
+        # Phase 3 local classifiers
+        self.violence       = ViolenceEngine()
+        self.anomaly        = AnomalyEngine()
 
         self._last_siren_time: float = 0.0
         self._last_call_time:  float = 0.0
@@ -190,6 +249,8 @@ class SystemEngine:
         self._cached_authorized      = False
         self._cached_unauthorized    = False
         self._cached_identity_score  = 0.0
+        self._cached_violence_score  = 0.0   # Phase 3 ResNet+LSTM
+        self._cached_anomaly_score   = 0.0   # Phase 3 MobileNetV2
 
         # ── Async task queue for side-effects ─────────────────────────────────
         # Bounded queue prevents memory buildup during alert storms.
@@ -309,7 +370,8 @@ class SystemEngine:
             # STEP 3: Behaviour (needs tracks from previous frame)
             try:
                 behaviour_score, behaviour_label = self.behaviour.classify(
-                    self._tracks, detections
+                    self._tracks, detections,
+                    scores={"motion": motion_score}   # pass motion for fight detection
                 )
             except Exception as e:
                 print(f"[SystemEngine] Behaviour error: {e}")
@@ -332,6 +394,16 @@ class SystemEngine:
             self._cached_identity_score = identity_score
             self._cached_behaviour_score = behaviour_score
             self._cached_motion_score    = motion_score
+
+            # Phase 3: Violence + Anomaly scoring
+            try:
+                violence_score = self.violence.score(combined_frame)
+                anomaly_score  = self.anomaly.score(combined_frame)
+            except Exception as ve:
+                print(f"[SystemEngine] Violence/Anomaly error: {ve}")
+                violence_score = anomaly_score = 0.0
+            self._cached_violence_score = violence_score
+            self._cached_anomaly_score  = anomaly_score
 
             # STEP 7: ReID tracking
             try:
@@ -368,6 +440,8 @@ class SystemEngine:
             authorized      = self._cached_authorized
             unauthorized    = self._cached_unauthorized
             identity_score  = self._cached_identity_score
+            violence_score  = self._cached_violence_score
+            anomaly_score   = self._cached_anomaly_score
 
             # Draw old tracks without ReID extraction
             for track in self._tracks:
@@ -408,6 +482,11 @@ class SystemEngine:
             from core.instrumentation import log_instrumentation
             log_instrumentation("SystemEngine", "fallback_activation", {"type": "cloud_to_local", "fallback_score": fallback_score, "final_weapon_score": weapon_score})
 
+        # Wire in local YOLO weapon detection (always active, no cloud needed)
+        local_weapon_score = self.vision.get_weapon_score()
+        if local_weapon_score > weapon_score:
+            weapon_score = local_weapon_score
+
         # STEP 8: Build score dictionary
         scores = {
             "vision":          vision_score,
@@ -423,6 +502,8 @@ class SystemEngine:
             "intrusion":       motion_score * 0.5 + identity_score * 0.5,
             "unauthorized":    unauthorized,
             "authorized":      authorized,
+            "violence":        violence_score,   # Phase 3 ResNet+LSTM
+            "anomaly":         anomaly_score,    # Phase 3 MobileNetV2
         }
 
         # AUTH DEBUG: throttled to once per second
@@ -560,6 +641,7 @@ class SystemEngine:
                 behaviour_label = behaviour_label,
                 latency_p95     = p95_latency,
                 fps             = fps,
+                incident_type   = result.incident_type,
             )
         except Exception as e:
             print(f"[SystemEngine] HUD error: {e}")

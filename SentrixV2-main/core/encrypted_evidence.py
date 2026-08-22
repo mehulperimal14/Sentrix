@@ -22,6 +22,7 @@ import json
 import os
 import time
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Optional
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -31,7 +32,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-EVIDENCE_DIR = "static/alerts/evidence"
+# core/ is inside backend/; repo root is two levels up.
+_REPO_ROOT   = Path(__file__).resolve().parent.parent.parent  # SentrixV2-main/
+EVIDENCE_DIR = str(_REPO_ROOT / "frontend" / "static" / "alerts" / "evidence")
 KEY_VERSION  = "v2-hkdf"
 
 # ── Key derivation ─────────────────────────────────────────────────────────────

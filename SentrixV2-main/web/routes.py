@@ -11,11 +11,16 @@
 
 import asyncio
 import os
+import sys
+from pathlib import Path
 
 from fastapi import APIRouter, Request, UploadFile, File, Depends, Form, Cookie, HTTPException, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.websockets import WebSocket, WebSocketDisconnect
+
+# ── Repo root anchoring (handles restructure: web/ → backend/web/) ──────────
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent  # SentrixV2-main/
 
 import db.database as database
 from core.engine_instance  import engine, get_system_engine
@@ -26,10 +31,10 @@ from core.state            import state
 from core.security         import verify_token, generate_token, sanitize_filename, validate_image_upload
 
 router    = APIRouter()
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory=str(_REPO_ROOT / "frontend" / "templates"))
 
-AUTHORIZED_DIR = "static/authorized_faces"
-ALERTS_DIR     = "static/alerts"
+AUTHORIZED_DIR = str(_REPO_ROOT / "frontend" / "static" / "authorized_faces")
+ALERTS_DIR     = str(_REPO_ROOT / "frontend" / "static" / "alerts")
 
 
 # Root redirect

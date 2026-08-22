@@ -10,11 +10,14 @@
 import os
 import time
 import threading
+from pathlib import Path
 from typing import List
 import cv2
 import numpy as np
 
-AUTHORIZED_DIR      = "static/authorized_faces"
+# ai/ lives inside backend/; repo root is two levels up.
+_REPO_ROOT     = Path(__file__).resolve().parent.parent.parent  # SentrixV2-main/
+AUTHORIZED_DIR = str(_REPO_ROOT / "frontend" / "static" / "authorized_faces")
 MATCH_TOLERANCE     = 0.55
 AUTH_HOLD_SECONDS   = 5  # Keep authorized=True for 5s after last match
 
