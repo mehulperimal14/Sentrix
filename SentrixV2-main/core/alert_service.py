@@ -10,6 +10,7 @@ import os
 import time
 import cv2
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -21,6 +22,10 @@ TWILIO_TOKEN  = os.getenv("TWILIO_AUTH_TOKEN", "").strip()
 FROM_NUMBER   = os.getenv("TWILIO_PHONE_NUMBER", "").strip()
 TO_NUMBER     = os.getenv("ALERT_PHONE_NUMBER", "").strip()
 PUBLIC_URL    = os.getenv("PUBLIC_SERVER_URL", "http://127.0.0.1:8000").strip()
+
+# core/ is inside backend/; repo root is two levels up.
+_REPO_ROOT    = Path(__file__).resolve().parent.parent.parent  # SentrixV2-main/
+_ALERTS_DIR   = _REPO_ROOT / "frontend" / "static" / "alerts"
 
 _TWILIO_AVAILABLE = bool(TWILIO_SID and TWILIO_TOKEN and FROM_NUMBER and TO_NUMBER)
 
@@ -55,10 +60,10 @@ class AlertService:
     def save_snapshot(self, frame, result=None) -> Optional[str]:
         """Save annotated frame as JPEG and return the public URL."""
         try:
-            os.makedirs("static/alerts", exist_ok=True)
+            os.makedirs(_ALERTS_DIR, exist_ok=True)
             ts       = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"alert_{ts}.jpg"
-            path     = os.path.join("static", "alerts", filename)
+            path     = str(_ALERTS_DIR / filename)
             cv2.imwrite(path, frame)
             return f"{PUBLIC_URL}/static/alerts/{filename}"
         except Exception as e:

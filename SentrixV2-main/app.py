@@ -8,9 +8,20 @@
 #   then calls SystemEngine.shutdown() to release cameras, audio, and voice threads.
 # Run with: python app.py
 
+import os
+import sys
 import threading
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
+
+# ── Path bootstrap ────────────────────────────────────────────────────────────
+# Resolve the repo root (one level above backend/) and add it to sys.path so
+# all intra-repo imports (ai/, core/, db/, etc.) continue to resolve correctly
+# regardless of the working directory used to launch the app.
+_REPO_ROOT = Path(__file__).resolve().parent.parent  # SentrixV2-main/
+if str(_REPO_ROOT / "backend") not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT / "backend"))
 
 import uvicorn
 from dotenv import load_dotenv
@@ -88,7 +99,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# Static files are now at frontend/static/ relative to the repo root
+_STATIC_DIR = str(_REPO_ROOT / "frontend" / "static")
+app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 app.include_router(main_router)
 app.include_router(streaming_router)
 
