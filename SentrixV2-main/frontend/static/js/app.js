@@ -102,7 +102,7 @@ function updateDashboard(data, lastLevel) {
             cloudStatus.style.color = "#4ade80";
             cloudDot.style.background = "#22c55e";
         } else {
-            cloudStatus.textContent = "Offline (Demo Mode)";
+            cloudStatus.textContent = "Offline (Local AI Mode)";
             cloudStatus.style.color = "#8a9bb8";
             cloudDot.style.background = "#8a9bb8";
         }

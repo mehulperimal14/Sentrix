@@ -43,6 +43,13 @@ class AudioEngine:
         self._lock     = threading.Lock()
         self._stop     = threading.Event()  # Graceful shutdown signal
 
+        # Load trained CNN classifier if available (Phase 3)
+        try:
+            from ai.audio_cnn_engine import AudioCNNEngine
+            self._cnn = AudioCNNEngine()
+        except Exception:
+            self._cnn = None
+
         if not _AUDIO_DEPS:
             self.result = AudioResult(score=0.0, label="mic_unavailable")
             print("[AudioEngine] sounddevice/numpy not available. Audio disabled.")
@@ -52,7 +59,8 @@ class AudioEngine:
         try:
             sd.query_devices(kind="input")
             self.available = True
-            print("[AudioEngine] Microphone detected. Starting audio loop.")
+            cnn_status = "CNN" if (self._cnn and self._cnn.is_available()) else "heuristic"
+            print(f"[AudioEngine] Microphone detected. Classifier: {cnn_status}. Starting audio loop.")
         except Exception as e:
             print(f"[AudioEngine] No microphone: {e}. Audio disabled.")
             self.result = AudioResult(score=0.0, label="mic_unavailable")
@@ -78,23 +86,31 @@ class AudioEngine:
                     dtype="float32",
                 )
                 sd.wait()
-                samples = np.nan_to_num(audio_data.flatten().astype(np.float64))
+                samples = np.nan_to_num(audio_data.flatten().astype(np.float32))
 
-                rms = float(np.sqrt(np.mean(samples ** 2)))
-                zcr = float(np.mean(np.abs(np.diff(np.sign(samples)))))
+                # --- Path A: Trained CNN classifier (Phase 3) ---
+                if self._cnn is not None and self._cnn.is_available():
+                    score, label = self._cnn.classify_samples(samples)
+                    result = AudioResult(score=score, label=label)
 
-                fft_result   = np.abs(np.fft.rfft(samples))
-                peak_bin     = int(np.argmax(fft_result))
-                peak_freq_hz = peak_bin * SAMPLE_RATE / len(samples)
-
-                if rms > RMS_HIGH and peak_freq_hz > PEAK_GUNSHOT:
-                    result = AudioResult(score=0.75, label="gunshot_like")
-                elif rms > RMS_MEDIUM and PEAK_SCREAM_LOW < peak_freq_hz < PEAK_SCREAM_HIGH:
-                    result = AudioResult(score=0.60, label="scream_like")
-                elif zcr > 0.3 and peak_freq_hz > PEAK_GUNSHOT:
-                    result = AudioResult(score=0.55, label="glass_break_like")
+                # --- Path B: Heuristic fallback ---
                 else:
-                    result = AudioResult(score=0.10, label="normal_ambient")
+                    samples_f64 = samples.astype(np.float64)
+                    rms = float(np.sqrt(np.mean(samples_f64 ** 2)))
+                    zcr = float(np.mean(np.abs(np.diff(np.sign(samples_f64)))))
+
+                    fft_result   = np.abs(np.fft.rfft(samples_f64))
+                    peak_bin     = int(np.argmax(fft_result))
+                    peak_freq_hz = peak_bin * SAMPLE_RATE / len(samples_f64)
+
+                    if rms > RMS_HIGH and peak_freq_hz > PEAK_GUNSHOT:
+                        result = AudioResult(score=0.75, label="gunshot_like")
+                    elif rms > RMS_MEDIUM and PEAK_SCREAM_LOW < peak_freq_hz < PEAK_SCREAM_HIGH:
+                        result = AudioResult(score=0.60, label="scream_like")
+                    elif zcr > 0.3 and peak_freq_hz > PEAK_GUNSHOT:
+                        result = AudioResult(score=0.55, label="glass_break_like")
+                    else:
+                        result = AudioResult(score=0.10, label="normal_ambient")
 
                 with self._lock:
                     self.result = result

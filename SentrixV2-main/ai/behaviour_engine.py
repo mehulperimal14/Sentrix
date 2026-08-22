@@ -24,6 +24,8 @@ SPEED_WALK_THRESHOLD   = 12.0   # pixels per frame
 CRAWL_ASPECT_THRESHOLD = 0.2    # h/w < 0.2 → very wide/low → crawling (lowered for webcam)
 LOITER_TIME_THRESHOLD  = 30.0   # seconds in same zone
 LOITER_RADIUS          = 100    # pixels
+FIGHT_PROXIMITY_PX     = 120    # centroids closer than this → potential fight
+FIGHT_MOTION_THRESHOLD = 0.35   # motion_score must also be elevated
 
 
 def _dist(a: tuple, b: tuple) -> float:
@@ -37,17 +39,49 @@ class BehaviourEngine:
         # Per-track history: track_id → list of (centroid, timestamp)
         self.history: Dict[int, List[Tuple[tuple, float]]] = {}
 
-    def classify(self, tracks: list, detections: list) -> Tuple[float, str]:
+    def classify(self, tracks: list, detections: list, scores: dict = None) -> Tuple[float, str]:
         """
         Analyse all active tracks and return dominant (score, label).
         tracks: list of objects with .track_id and .to_ltrb() OR dicts with bbox.
         detections: raw detection list (used as fallback if tracks is empty).
+        scores: optional score dict used for motion_score in fight detection.
         """
         if not tracks:
             return 0.10, "normal"
 
         results: List[BehaviourResult] = []
         now = time.time()
+
+        # --- FIGHTING DETECTION (multi-person proximity + motion) ---
+        # Runs before per-track loop; returns immediately if confident.
+        motion_score = float(scores.get("motion", 0.0)) if isinstance(scores, dict) else 0.0
+        centroids = []
+        for t in tracks:
+            try:
+                if hasattr(t, "to_ltrb"):
+                    x1, y1, x2, y2 = [int(v) for v in t.to_ltrb()]
+                elif isinstance(t, dict):
+                    x1, y1, x2, y2 = t.get("bbox", [0, 0, 50, 100])
+                else:
+                    continue
+                centroids.append(((x1 + x2) / 2.0, (y1 + y2) / 2.0))
+            except Exception:
+                pass
+
+        if len(centroids) >= 2 and motion_score >= FIGHT_MOTION_THRESHOLD:
+            min_dist = min(
+                _dist(centroids[i], centroids[j])
+                for i in range(len(centroids))
+                for j in range(i + 1, len(centroids))
+            )
+            if min_dist < FIGHT_PROXIMITY_PX:
+                from core.instrumentation import log_instrumentation
+                log_instrumentation("BehaviourEngine", "inference", {
+                    "score": 0.80, "label": "fighting",
+                    "proximity_px": round(min_dist, 1), "latency": 0.0
+                })
+                return 0.80, "fighting"
+        # --- END FIGHTING DETECTION ---
 
         for track in tracks:
             try:

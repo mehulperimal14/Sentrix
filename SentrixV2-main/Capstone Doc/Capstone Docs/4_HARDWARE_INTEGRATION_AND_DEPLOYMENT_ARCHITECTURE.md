@@ -1,6 +1,6 @@
 # SENTRIX: Hardware Integration & Complete Electronics Architecture Blueprint
 
-**Technical Blueprint for Multimodal Edge Physical Security Appliance Deployment**  
+**Technical Blueprint for Multimodal Edge-Cloud Physical Security Platform Deployment**  
 **Computer Science and Engineering Department**  
 **Thapar Institute of Engineering and Technology, Patiala**  
 **Group:** **CPG NO. 299** | **Date:** August 2026  
@@ -27,40 +27,56 @@ The SENTRIX hardware architecture is engineered to deliver high-throughput, dete
 ![SENTRIX Electronics Block Diagram](sentrix_hardware_block_diagram.jpg)
 
 ```
-┌───────────────────────────┐     ┌─────────────────────────────────────────────────────────────┐
-│    1. SYSTEM OVERVIEW     │     │           3. OPTICAL INGESTION SUBSYSTEM                    │
-│ • Multi-Camera Inputs     │     │ ┌─────────────────────────┐     ┌─────────────────────────┐ │
-│ • Local Subnet (VLAN 10)  ├────►│ │ Primary 1080p USB 3.0   │     │ Secondary 1080p RTSP    │ │ │
-│ • Cloud Refinement Gateway│     │ │ Wide-Angle UVC Camera   │     │ IP Camera (IR Night Vis)│ │ │
-└─────────────┬─────────────┘     │ └────────────┬────────────┘     └────────────┬────────────┘ │
-              │                   └──────────────┼───────────────────────────────┼──────────────┘
-              │                                  │ (USB 3.0 / <2ms)              │ (RTSP / Port 554)
-              ▼                                  ▼                               ▼
-┌───────────────────────────────────────────────────────────────────────────────────────────────┐
-│                          2. MAIN CONTROLLER & EDGE COMPUTE HOST                               │
-│                   Intel NUC / Apple Silicon Host (8-Core CPU, 8GB+ RAM)                       │
-│                                                                                               │
-│  [USB 3.0 Host Controller] ◄── Ingests 30 FPS raw UVC frame matrix buffers                    │
-│  [Gigabit Ethernet RJ45]   ◄── Ingests H.264 RTSP bitstream (192.168.1.50)                    │
-│  [3.5mm / USB Audio ADC]   ◄── Ingests 16 kHz 16-bit PCM mono acoustic stream                 │
-│  [GPIO Header / USB-Relay] ──► Dispatches 5V TTL trigger to Optocoupler Relay                 │
-│  [Internal NVMe M.2 SSD]   ──► Stores AES-256-GCM encrypted evidence & SQLite WAL database    │
-└─────────────┬──────────────────────────────────┬───────────────────────────────▲──────────────┘
-              │                                  │                               │
-              │ (3.5mm PCM Audio)                │ (5V TTL Signal)               │ (12V DC Power)
-              ▼                                  ▼                               │
-┌───────────────────────────┐     ┌───────────────────────────┐     ┌────────────┴──────────────┐
-│   4. ACOUSTIC SENSING     │     │    5. THREAT ACTUATORS    │     │ 6. POWER DISTRIBUTION SYS │
-│ ┌───────────────────────┐ │     │ ┌───────────────────────┐ │     │ • 230V AC Mains Input     │
-│ │ Omnidirectional Mic   │ │     │ │ 5V Optocoupler Relay  │ │     │ • 600VA Line-Int. UPS     │
-│ │ (16 kHz, SNR >= 58dB) │ │     │ │ Module (PC817 + Diode)│ │     │ • 12V 5A Regulated SMPS   │
-│ └───────────┬───────────┘ │     │ └───────────┬───────────┘ │     │ • 5V 3A Step-Down Buck    │
-│             ▼             │     │             ▼             │     │ • Power Rails:            │
-│ ┌───────────────────────┐ │     │ ┌───────────────────────┐ │     │   - 12V Rail (Host/Siren) │
-│ │ USB/Audio ADC Codec   │ │     │ │ 12V 110dB Siren +     │ │     │   - 5V Rail (USB/Relay)   │
-│ └───────────────────────┘ │     │ │ Strobe Warning Beacon │ │     │   - 3.3V Logic Rail       │
-└───────────────────────────┘     │ └───────────────────────┘ │     └───────────────────────────┘
-                                  └───────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                 LOCAL SECURITY SUBNET (VLAN 10)                              │
+│                                                                                              │
+│ ┌──────────────────────┐    ┌──────────────────────┐         ┌──────────────────────┐        │
+│ │ Logitech C920 USB    │    │ TP-Link Tapo C310 IP │         │ Omnidirectional Mic  │        │
+│ │ Wide-Angle UVC Cam   │    │ Cam (RTSP/850nm IR)  │         │ (16 kHz, SNR >= 58dB)│        │
+│ └──────────┬───────────┘    └──────────┬───────────┘         └──────────┬───────────┘        │
+│            │ (USB 2.0 / <2ms)          │ (RTSP / Port 554)              │ (3.5mm PCM / USB)  │
+│            ▼                           ▼                                ▼                    │
+│ ┌──────────────────────────────────────────────────────────────────────────────────────────┐ │
+│ │                      EDGE INPUT NODE (Raspberry Pi Zero 2 W / Pi 5)                      │ │
+│ │ • Lightweight GStreamer / RTSP Forwarder | Sounddevice Audio Buffer Capturer             │ │
+│ │ • Local Actuator Driver (GPIO TTL Switch Controller)                                     │ │
+│ └──────┬───────────────────────────────────▲───────────────────────────────────────────────┘ │
+│        │                                   │                                                 │
+│        │ (Stream Audio/Video)              │ (Siren Trigger Command)                         │
+│        ▼                                   │                                                 │
+│ ┌──────────────────────────────────────────┴──────────────────────────────────────────────┐ │
+│ │ SECURE SUB-NET GATEWAY / INTERNET ROUTER (AES-128 VPN / HTTPS TLS 1.3 Tunnel)            │ │
+│ └──────┬──────────────────────────────────────────────────────────────────────────────────┘ │
+└────────┼───────────────────────────────────▲─────────────────────────────────────────────────┘
+         │                                   │
+         │ (WAN Internet Uplink)             │ (Escalation Command)
+         ▼                                   │
+┌────────────────────────────────────────────┴─────────────────────────────────────────────────┐
+│                                 CLOUD PROCESSING SERVER                                      │
+│                          Scalable Virtual Machine (e.g., AWS EC2)                            │
+│                                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────────────────────┐  │
+│  │ AI INFERENCE ENGINES (HOT-PATH PIPELINE, ~30 FPS)                                      │  │
+│  │ • VisionEngine (YOLOv8n object detection) | BehaviourEngine (loitering classifier)      │  │
+│  │ • AudioEngine (Acoustic anomaly analysis) | FaceEngine (128-d deep embedding matcher)      │  │
+│  │ • ReIDEngine (DeepSORT cross-frame tracking with 200-node FIFO gallery)                │  │
+│  │ • FusionEngine (XGBoost late fusion model + EMA filter temporal smoothing)             │  │
+│  │ • HUD Overlay Generator (Video stream annotation & telemetry state engine)             │  │
+│  └────────────────────────────────────────┬───────────────────────────────────────────────┘  │
+│                                           │                                                  │
+│                                           ▼                                                  │
+│  ┌────────────────────────────────────────────────────────────────────────────────────────┐  │
+│  │ ASYNCHRONOUS SECURITY CONTROL PLANE (COLD PATH, Bounded Task Queue)                    │  │
+│  │ • SQLite WAL Relational DB persistence & event logging                                 │  │
+│  │ • Forensic Vault: AES-256-GCM secure frame encryption with HKDF key derivation           │  │
+│  │ • Twilio Integration: automated SMS notifications & Twilio voice SOS calls             │  │
+│  │ • Zero-Trust Web Console: FastAPI backend, HMAC-signed session auth, WebSocket telemetry│  │
+│  └────────────────────────────────────────┬───────────────────────────────────────────────┘  │
+│                                           │                                                  │
+│                                           ▼                                                  │
+│                                  [ Twilio REST API ] ──► (Cellular SMS/Voice Dispatch)       │
+│                                  [ FastAPI Web Server] ──► (Remote Operator Web Console)     │
+└──────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -223,44 +239,52 @@ To prevent electrical feedback, high-voltage inductive transients, and back-EMF 
 Electrical Rail     Nominal Voltage Current Capacity  Connected Hardware Modules
 ====================================================================================================
 AC Mains Input      230V AC ± 10%   6A (50 Hz)        Line-Interactive 600VA / 360W UPS
-Unregulated DC Rail 12.0V DC        5.0A (60W Total)  Edge Host Mini PC, RTSP Camera IR, 110dB Siren
-Regulated DC Rail 1 5.0V DC (Buck)  3.0A (15W Total)  USB 3.0 Optical Camera, 5V Relay VCC, Audio ADC
-Logic Signal Rail   3.3V / 5V TTL   0.05A (Signal)    Host GPIO Control Lines, Optocoupler Anode
+DC Output Rail      12.0V DC        5.0A (60W Total)  RTSP IP Camera IR, 110dB Siren, 5V Buck input
+Regulated DC Rail 1 5.0V DC (Buck)  3.0A (15W Total)  Edge Pi Zero 2 W Node, USB Camera, 5V Relay VCC
+Logic Signal Rail   3.3V / 5V TTL   0.05A (Signal)    Pi GPIO Control Lines, Optocoupler Anode
 ====================================================================================================
 ```
 
 ### 5.1 Power Budget Calculation
-* **Edge Host PC (Intel Core i5 / Apple Silicon):** $12\text{W}$ (Idle) / $24\text{W}$ (Full Multimodal Hot Path Load).
+* **Edge Input Node (Raspberry Pi Zero 2 W):** $5\text{V} \times 0.5\text{A} = 2.50\text{W}$ (Average load under video encoding).
 * **Primary USB Optical Camera:** $5\text{V} \times 0.35\text{A} = 1.75\text{W}$.
 * **Secondary RTSP IP Camera (with IR LEDs active):** $12\text{V} \times 0.40\text{A} = 4.80\text{W}$.
 * **Acoustic Microphone Subsystem:** $5\text{V} \times 0.05\text{A} = 0.25\text{W}$.
 * **Relay Coil & Optocoupler:** $5\text{V} \times 0.08\text{A} = 0.40\text{W}$.
 * **Physical Siren (when firing):** $12\text{V} \times 0.25\text{A} = 3.00\text{W}$.
-* **Total Continuous System Consumption:** **$21.2\text{ W}$** (Routine) / **$34.2\text{ W}$** (Peak Level 5 Alarm).
+* **Total Continuous System Consumption:** **$9.7\text{ W}$** (Routine) / **$12.7\text{ W}$** (Peak Level 5 Alarm).
 
 ### 5.2 Battery Backup & UPS Lifecycle Management
 A standard **600VA / 360W Line-Interactive UPS** with a $12\text{V}, 7.2\text{Ah}$ sealed lead-acid (SLA) internal battery provides:
-$$\text{Runtime} = \frac{12\text{V} \times 7.2\text{Ah} \times 0.85 \text{ (Inverter Eff.)} \times 0.80 \text{ (Depth of Discharge)}}{21.2\text{W (Average Load)}} \approx 2.77\text{ Hours of Autonomous Operation}.$$
+$$\text{Runtime} = \frac{12\text{V} \times 7.2\text{Ah} \times 0.85 \text{ (Inverter Eff.)} \times 0.80 \text{ (Depth of Discharge)}}{9.7\text{W (Average Load)}} \approx 6.06\text{ Hours of Autonomous Operation}.$$
 
 ---
 
-## 6. Edge Compute Optimization & System Sizing
+## 6. Sizing & Compute Architecture
 
 ```
 ====================================================================================================
-Deployment Tier       Edge Host Platform             RAM & Storage     FPS Throughput  Mean Latency
+Deployment Unit       Hardware Platform               Memory & OS       Role / Process
 ====================================================================================================
-Tier 1: Lab / Host    Apple Silicon (M-Series Mac)   8GB Unified / SSD 30.0 FPS        3.2ms
-Tier 2: Production    Intel Core i5 / N100 Mini PC   16GB DDR4 / NVMe  30.0 FPS        4.6ms
-Tier 3: Embedded SBC  NVIDIA Jetson Orin Nano (8GB)  8GB LPDDR5 / eMMC 30.0 FPS        2.8ms
+Edge Input Node       Raspberry Pi Zero 2 W           512MB RAM         Local capture, H.264
+                      (Alternative: Raspberry Pi 5)   Debian Lite       encoding, RTMP/RTSP stream
+----------------------------------------------------------------------------------------------------
+Cloud Processing Host AWS EC2 GPU Instance            16GB RAM / NVMe   Heavy AI Model Inference
+                      (e.g., g4dn.xlarge with T4 GPU) Ubuntu 22.04 LTS  (YOLOv8, XGBoost, Web Server)
 ====================================================================================================
 ```
 
-### Thread Affinity & Resource Allocation Blueprint:
-* **Core 0 & Core 1 (Ingestion & Capture Plane):** Dedicated to OpenCV VideoCapture background threads and Sounddevice audio ring-buffer acquisition.
-* **Core 2 & Core 3 (Inference Plane):** Dedicated to YOLOv8-nano tensor inference (SIMD NEON / AVX2 vector extensions).
-* **Core 4 & Core 5 (Fusion & State Plane):** Dedicated to XGBoost late fusion, EMA temporal filtering, and WebSocket broadcast.
-* **Core 6 & Core 7 (Asynchronous Worker Plane):** Dedicated to `_task_worker` executing AES-256-GCM encryption, SQLite commits, and Twilio network requests.
+### Resource Allocation & Process Partitioning Blueprint:
+
+* **Edge Input Node Core Allocation (Pi Zero 2 W):**
+  - **Core 0 & Core 1 (Capture & Ingestion):** Ingestion of local UVC video frame buffers and I2S/USB PCM audio buffers.
+  - **Core 2 (Hardware Compression & Network Transport):** Vectorized H.264 frame compression and encrypted streaming to the cloud gateway.
+  - **Core 3 (Actuation & GPIO Listener):** Bounded background listener thread waiting for siren trigger commands from the cloud control plane.
+
+* **Cloud Processing Host Core/GPU Allocation:**
+  - **GPU Acceleration (Hot Path Inference):** Heavy tensor inference pipelines for spatial object detection (YOLOv8n), person re-identification, and facial verification embeddings.
+  - **CPU Core 0 & Core 1 (Stream Demux & Audio DSP):** Ingestion of RTMP/RTSP inputs, audio decoding, and acoustic anomaly feature extraction (RMS/ZCR/FFT).
+  - **CPU Core 2 & Core 3 (State & Escalation):** XGBoost late fusion model execution, SQLite persistence, and asynchronous worker queue dispatching Twilio API commands.
 
 ---
 
