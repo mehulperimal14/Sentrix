@@ -8,12 +8,12 @@ This document details the finalized neural architectures, dataset splits, evalua
 
 | Model Subsystem | Base Architecture | Training Dataset | Completed Epochs | Benchmark Accuracy / Metrics | Latency (M2 MPS) | Production Weights File |
 |---|---|---|---|---|---|---|
-| **Violence Classifier** | ResNet18 (Deep Vision) | 19,610 frames (`data/violence_data`) | 3 Epochs | **98.72% Train Acc / 82.62% Val Acc** | **4.8 ms** | [`backend/models/violence_classifier.pt`](file:///Users/kartikgarg/Desktop/Sentrix/backend/models/violence_classifier.pt) |
-| **Acoustic Threat Classifier** | 2D Mel Spectrogram CNN | AudioSet security sound signatures | 5 Epochs | **100.00% Validation Accuracy** | **1.2 ms** | [`backend/models/audio_classifier.pt`](file:///Users/kartikgarg/Desktop/Sentrix/backend/models/audio_classifier.pt) |
-| **Anomaly Classifier** | ResNet18 Transfer Learning | 3,200 frames (`data/anomaly_data`) | 5 Epochs | **84.38% Val Acc** | **4.6 ms** | [`backend/models/anomaly_classifier.pt`](file:///Users/kartikgarg/Desktop/Sentrix/backend/models/anomaly_classifier.pt) |
-| **TCI Threat Late Fusion** | XGBoost Tree Booster | Multi-Modal Telemetry Scenarios | Refit | **RMSE: 0.042 / $R^2$: 0.984** | **0.18 ms** | [`backend/models/tci_xgboost.json`](file:///Users/kartikgarg/Desktop/Sentrix/backend/models/tci_xgboost.json) |
-| **Weapon Object Detector** | YOLOv8n Nano | 9,472 images (`data/weapon_data`) | 2 Epochs | **mAP@50: ~78.4% (Trained Weights Active)** | **8.5 ms** | [`backend/models/weapon_detector.pt`](file:///Users/kartikgarg/Desktop/Sentrix/backend/models/weapon_detector.pt) |
-| **Fire & Smoke Detector** | YOLOv8n Nano | 10,000+ images (`data/fire_smoke_data`) | 2 Epochs | **mAP@50: ~81.2% (Trained Weights Active)** | **8.5 ms** | [`backend/models/fire_smoke_detector.pt`](file:///Users/kartikgarg/Desktop/Sentrix/backend/models/fire_smoke_detector.pt) |
+| **Violence Classifier** | ResNet18 (Deep Vision) | 19,610 frames (`data/violence_data`) | 3 Epochs | **98.72% Train Acc / 82.62% Val Acc** | **4.8 ms** | [`backend/models/violence_classifier.pt`](../backend/models/violence_classifier.pt) |
+| **Acoustic Threat Classifier** | 2D Mel Spectrogram CNN | AudioSet security sound signatures | 5 Epochs | **100.00% Validation Accuracy** | **1.2 ms** | [`backend/models/audio_classifier.pt`](../backend/models/audio_classifier.pt) |
+| **Anomaly Classifier** | ResNet18 Transfer Learning | 3,200 frames (`data/anomaly_data`) | 5 Epochs | **84.38% Val Acc** | **4.6 ms** | [`backend/models/anomaly_classifier.pt`](../backend/models/anomaly_classifier.pt) |
+| **TCI Threat Late Fusion** | XGBoost Tree Booster | Multi-Modal Telemetry Scenarios | Refit | **RMSE: 0.042 / $R^2$: 0.984** | **0.18 ms** | [`backend/models/tci_xgboost.json`](../backend/models/tci_xgboost.json) |
+| **Weapon Object Detector** | YOLOv8n Nano | 9,472 images (`data/weapon_data`) | 2 Epochs | **mAP@50: ~78.4% (Trained Weights Active)** | **8.5 ms** | [`backend/models/weapon_detector.pt`](../backend/models/weapon_detector.pt) |
+| **Fire & Smoke Detector** | YOLOv8n Nano | 10,000+ images (`data/fire_smoke_data`) | 2 Epochs | **mAP@50: ~81.2% (Trained Weights Active)** | **8.5 ms** | [`backend/models/fire_smoke_detector.pt`](../backend/models/fire_smoke_detector.pt) |
 
 ---
 
