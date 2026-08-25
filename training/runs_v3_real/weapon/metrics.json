@@ -1,0 +1,13 @@
+{
+  "mAP50": 0.9080398191261255,
+  "mAP50_95": 0.6156288972942143,
+  "precision": 0.9146599229801341,
+  "recall": 0.8516638420752423,
+  "per_class_mAP50": {
+    "knife": 0.5348852531294606,
+    "long_gun": 0.6313061280041318,
+    "pistol": 0.6806953107490508
+  },
+  "training_seconds": 5884.7,
+  "weights": "G:\\Sentrix\\training\\runs_v3_real\\weapon\\train\\weights\\best.pt"
+}

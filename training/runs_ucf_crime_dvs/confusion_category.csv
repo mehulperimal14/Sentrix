@@ -1,0 +1,15 @@
+,Abuse,Arrest,Arson,Assault,Burglary,Explosion,Fighting,Normal_Videos,RoadAccidents,Robbery,Shooting,Shoplifting,Stealing,Vandalism
+Abuse,0,0,0,0,2,0,0,0,0,0,0,0,0,0
+Arrest,0,0,0,0,5,0,0,0,0,0,0,0,0,0
+Arson,0,0,0,0,6,0,0,3,0,0,0,0,0,0
+Assault,0,0,0,0,3,0,0,0,0,0,0,0,0,0
+Burglary,0,0,0,0,12,0,0,1,0,0,0,0,0,0
+Explosion,0,0,0,0,21,0,0,0,0,0,0,0,0,0
+Fighting,0,0,0,0,4,0,0,1,0,0,0,0,0,0
+Normal_Videos,0,0,0,0,140,0,0,7,0,0,0,0,0,0
+RoadAccidents,0,0,0,0,0,0,0,20,3,0,0,0,0,0
+Robbery,0,0,0,0,0,0,0,5,0,0,0,0,0,0
+Shooting,0,0,0,0,2,0,0,21,0,0,0,0,0,0
+Shoplifting,0,0,0,0,1,0,0,20,0,0,0,0,0,0
+Stealing,0,0,0,0,4,0,0,1,0,0,0,0,0,0
+Vandalism,0,0,0,0,1,0,0,4,0,0,0,0,0,0

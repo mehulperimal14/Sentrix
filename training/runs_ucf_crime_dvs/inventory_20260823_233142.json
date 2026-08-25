@@ -1,0 +1,86 @@
+{
+  "Abuse": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\Abuse",
+    "n_files": 50,
+    "bytes": 1682397736,
+    "exists": true
+  },
+  "Arrest": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\Arrest",
+    "n_files": 53,
+    "bytes": 2814677639,
+    "exists": true
+  },
+  "Arson": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\Arson",
+    "n_files": 57,
+    "bytes": 2673229427,
+    "exists": true
+  },
+  "Assault": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\Assault",
+    "n_files": 0,
+    "bytes": 0,
+    "exists": false
+  },
+  "Burglary": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\Burglary",
+    "n_files": 100,
+    "bytes": 3369762838,
+    "exists": true
+  },
+  "Explosion": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\Explosion",
+    "n_files": 54,
+    "bytes": 2172866226,
+    "exists": true
+  },
+  "Fighting": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\Fighting",
+    "n_files": 53,
+    "bytes": 2621104993,
+    "exists": true
+  },
+  "Normal_Videos": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\Normal_Videos",
+    "n_files": 1271,
+    "bytes": 96283176807,
+    "exists": true
+  },
+  "RoadAccidents": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\RoadAccidents",
+    "n_files": 150,
+    "bytes": 2614212115,
+    "exists": true
+  },
+  "Robbery": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\Robbery",
+    "n_files": 151,
+    "bytes": 4787626096,
+    "exists": true
+  },
+  "Shooting": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\Shooting",
+    "n_files": 50,
+    "bytes": 1381451702,
+    "exists": true
+  },
+  "Shoplifting": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\Shoplifting",
+    "n_files": 53,
+    "bytes": 3613840942,
+    "exists": true
+  },
+  "Stealing": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\Stealing",
+    "n_files": 100,
+    "bytes": 3138553089,
+    "exists": true
+  },
+  "Vandalism": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\Vandalism",
+    "n_files": 50,
+    "bytes": 1064371004,
+    "exists": true
+  }
+}

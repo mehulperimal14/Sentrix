@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SENTRIX — Multimodal Threat Intelligence & Command Console</title>
+  <meta name="description" content="Real-time multimodal AI threat detection and physical security command dashboard.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="theme-dark">
+
+  <!-- Top Command Bar -->
+  <header class="command-header">
+    <div class="brand-zone">
+      <div class="brand-symbol">
+        <span class="pulse-ring"></span>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      </div>
+      <div class="brand-text">
+        <h1>SENTRIX <span class="badge-sub">PROTOTYPE V2.0</span></h1>
+        <span class="system-tag">MULTIMODAL NEURAL ORCHESTRATION</span>
+      </div>
+    </div>
+
+    <!-- Live Status Indicators -->
+    <div class="header-metrics">
+      <div class="metric-pill">
+        <span class="dot-online"></span>
+        <span class="pill-label">WS FEED:</span>
+        <span id="ws-status" class="pill-val">CONNECTED</span>
+      </div>
+      <div class="metric-pill">
+        <span class="pill-label">FPS:</span>
+        <span id="fps-counter" class="pill-val">29.4</span>
+      </div>
+      <div class="metric-pill">
+        <span class="pill-label">LATENCY:</span>
+        <span id="latency-val" class="pill-val">16ms</span>
+      </div>
+      <div class="metric-pill">
+        <span class="pill-label">TEMP:</span>
+        <span id="temp-val" class="pill-val">28.4°C</span>
+      </div>
+      <div class="metric-pill alert-pill" id="siren-status-pill">
+        <span class="pill-label">SIREN:</span>
+        <span id="siren-status" class="pill-val">STANDBY</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Grid Layout -->
+  <main class="dashboard-grid">
+
+    <!-- Left Column: Video Feeds & Optical Analytics -->
+    <section class="panel video-panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+          <h2>PRIMARY OPTICAL INGESTION (1080P)</h2>
+        </div>
+        <div class="stream-badge" id="stream-indicator">LIVE FEED</div>
+      </div>
+
+      <div class="video-container">
+        <img id="primary-video" src="/video_feed" alt="Live Security Stream" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'640\' height=\'360\' viewBox=\'0 0 640 360\'><rect width=\'100%\' height=\'100%\' fill=\'%230f141c\'/><text x=\'50%\' y=\'50%\' fill=\'%235e7290\' font-family=\'sans-serif\' font-size=\'16\' text-anchor=\'middle\'>Awaiting Video Stream Initialization...</text></svg>'">
+        
+        <!-- Live HUD Overlay -->
+        <div class="video-hud">
+          <div class="hud-box" id="hud-tracking">
+            <span class="hud-label">TRACKED ENTITIES</span>
+            <span class="hud-val" id="tracked-count">0 Persons</span>
+          </div>
+          <div class="hud-box" id="hud-behavior">
+            <span class="hud-label">BEHAVIOUR MODEL</span>
+            <span class="hud-val" id="hud-behavior-val">Normal</span>
+          </div>
+          <div class="hud-box" id="hud-identity">
+            <span class="hud-label">FACIAL RECOGNITION</span>
+            <span class="hud-val text-success" id="hud-identity-val">Resident Authorized</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Multi-Modality Factor Decomposition Bars -->
+      <div class="factors-grid">
+        <div class="factor-card">
+          <div class="factor-head">
+            <span>VISION / WEAPON</span>
+            <span id="score-vision" class="factor-val">0.05</span>
+          </div>
+          <div class="progress-track"><div id="bar-vision" class="progress-fill" style="width: 5%"></div></div>
+        </div>
+
+        <div class="factor-card">
+          <div class="factor-head">
+            <span>ACOUSTIC CNN</span>
+            <span id="score-audio" class="factor-val">0.10</span>
+          </div>
+          <div class="progress-track"><div id="bar-audio" class="progress-fill" style="width: 10%"></div></div>
+        </div>
+
+        <div class="factor-card">
+          <div class="factor-head">
+            <span>KINEMATICS / VIOLENCE</span>
+            <span id="score-motion" class="factor-val">0.12</span>
+          </div>
+          <div class="progress-track"><div id="bar-motion" class="progress-fill" style="width: 12%"></div></div>
+        </div>
+
+        <div class="factor-card">
+          <div class="factor-head">
+            <span>FIRE / COMBUSTION</span>
+            <span id="score-fire" class="factor-val">0.00</span>
+          </div>
+          <div class="progress-track"><div id="bar-fire" class="progress-fill" style="width: 0%"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Column: Threat Confidence Index & Dispatch Console -->
+    <aside class="panel telemetry-panel">
+      
+      <!-- Primary Threat Confidence Index Gauge -->
+      <div class="tci-gauge-card" id="tci-container">
+        <div class="tci-header">
+          <span>THREAT CONFIDENCE INDEX</span>
+          <span class="tci-level-badge level-1" id="tci-level-badge">LEVEL 1 · NORMAL</span>
+        </div>
+
+        <div class="gauge-center">
+          <div class="gauge-dial">
+            <svg class="gauge-svg" viewBox="0 0 200 200">
+              <circle class="gauge-bg" cx="100" cy="100" r="85" />
+              <circle class="gauge-meter" id="gauge-meter-path" cx="100" cy="100" r="85" stroke-dasharray="534" stroke-dashoffset="480" />
+            </svg>
+            <div class="gauge-numeric">
+              <span id="tci-score-value">0.12</span>
+              <span class="tci-max">/ 1.00</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="tci-reason" id="tci-reason-text">
+          Telemetry nominal. No visual, acoustic, or kinematic anomalies detected.
+        </div>
+      </div>
+
+      <!-- Real-Time Acoustic Spectrogram Visualizer -->
+      <div class="sub-panel acoustic-card">
+        <div class="sub-panel-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          <h3>ACOUSTIC SPECTRUM & ANOMALY RADAR</h3>
+        </div>
+        <div class="spectrogram-canvas-wrap">
+          <canvas id="audio-visualizer-canvas" width="360" height="70"></canvas>
+        </div>
+        <div class="audio-classification-tag">
+          <span>DETECTED ACOUSTIC CLASS:</span>
+          <strong id="audio-class-label">normal_ambient</strong>
+        </div>
+      </div>
+
+      <!-- Emergency Hardware & Cloud Escalation Controls -->
+      <div class="sub-panel controls-card">
+        <div class="sub-panel-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <h3>EMERGENCY ESCALATION CONSOLE</h3>
+        </div>
+
+        <div class="action-buttons-grid">
+          <button id="btn-trigger-siren" class="btn btn-warning" onclick="triggerHardwareSiren()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+            TRIGGER SIREN (PIN 17)
+          </button>
+
+          <button id="btn-dispatch-package" class="btn btn-danger" onclick="executeEmergencyDispatch()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            911 / POLICE DISPATCH
+          </button>
+        </div>
+
+        <div class="quick-nav-links">
+          <a href="/events" class="nav-link">Event Logs</a>
+          <a href="/evidence" class="nav-link">Encrypted Evidence Vault</a>
+          <a href="/authorized" class="nav-link">Face Registry</a>
+          <a href="/alerts" class="nav-link">Snapshot Gallery</a>
+        </div>
+      </div>
+
+    </aside>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

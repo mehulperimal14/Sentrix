@@ -1,0 +1,70 @@
+{
+  "accuracy": 0.72,
+  "per_class": {
+    "speech_normal": {
+      "precision": 0.7,
+      "recall": 0.875,
+      "f1": 0.7777777777777778,
+      "support": 24
+    },
+    "siren": {
+      "precision": 0.9333333333333333,
+      "recall": 0.5384615384615384,
+      "f1": 0.6829268292682927,
+      "support": 26
+    },
+    "fire": {
+      "precision": 0.6842105263157895,
+      "recall": 0.7647058823529411,
+      "f1": 0.7222222222222222,
+      "support": 17
+    },
+    "scream": {
+      "precision": 0.5454545454545454,
+      "recall": 0.75,
+      "f1": 0.631578947368421,
+      "support": 8
+    }
+  },
+  "macro_precision": 0.715749601275917,
+  "macro_recall": 0.7320418552036199,
+  "macro_f1": 0.7036264441591784,
+  "weighted_f1": 0.716708981124899,
+  "confusion_matrix": [
+    [
+      21,
+      0,
+      2,
+      1
+    ],
+    [
+      4,
+      14,
+      4,
+      4
+    ],
+    [
+      4,
+      0,
+      13,
+      0
+    ],
+    [
+      1,
+      1,
+      0,
+      6
+    ]
+  ],
+  "classes": [
+    "speech_normal",
+    "siren",
+    "fire",
+    "scream"
+  ],
+  "pr_auc": null,
+  "report_text": "               precision    recall  f1-score   support\n\nspeech_normal       0.70      0.88      0.78        24\n        siren       0.93      0.54      0.68        26\n         fire       0.68      0.76      0.72        17\n       scream       0.55      0.75      0.63         8\n\n     accuracy                           0.72        75\n    macro avg       0.72      0.73      0.70        75\n weighted avg       0.76      0.72      0.72        75\n",
+  "best_epoch": 10,
+  "epochs_run": 17,
+  "training_seconds": 42.0
+}

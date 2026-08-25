@@ -1,0 +1,129 @@
+{
+    "model_name": "ucf_crime_dvs_anomaly_v1",
+    "created": "2026-08-24T14:35:07",
+    "run_id": "20260824_132146",
+    "architecture": "SpikingEncoder (LIF) + MSFLite multi-scale temporal fusion",
+    "spiking_backend": true,
+    "task": "weakly-supervised video anomaly detection (event / DVS)",
+    "dataset": "G:\\event_frame_duration533326\\event_frame_duration533326",
+    "dataset_copied": false,
+    "split_source": "official train_split.txt / test_split.txt",
+    "train_videos": 1316,
+    "val_videos": 233,
+    "test_videos": 287,
+    "preprocessing": {
+        "input_format": "UCF-Crime-DVS .npz event data",
+        "npz_layout": "frames",
+        "frame_key": "frames",
+        "native_hw": [
+            720,
+            1280
+        ],
+        "polarity_channels": 2,
+        "spatial_resize": [
+            128,
+            128
+        ],
+        "spatial_method": "adaptive MAX pool (sparse-event friendly)",
+        "n_segments": 32,
+        "frames_per_segment": 4,
+        "temporal_sampling": "evenly spaced real frames within each segment",
+        "event_clip": 32.0,
+        "value_scaling": "clip(counts, 0, EVENT_CLIP) / EVENT_CLIP -> [0,1]",
+        "tensor_shape": [
+            32,
+            4,
+            2,
+            128,
+            128
+        ],
+        "augmentation_train_only": [
+            "horizontal_flip",
+            "segment_jitter"
+        ]
+    },
+    "classes": {
+        "binary": {
+            "normal": 0,
+            "anomalous": 1
+        },
+        "categories": [
+            "Abuse",
+            "Arrest",
+            "Arson",
+            "Assault",
+            "Burglary",
+            "Explosion",
+            "Fighting",
+            "Normal_Videos",
+            "RoadAccidents",
+            "Robbery",
+            "Shooting",
+            "Shoplifting",
+            "Stealing",
+            "Vandalism"
+        ],
+        "category_index": {
+            "Abuse": 0,
+            "Arrest": 1,
+            "Arson": 2,
+            "Assault": 3,
+            "Burglary": 4,
+            "Explosion": 5,
+            "Fighting": 6,
+            "Normal_Videos": 7,
+            "RoadAccidents": 8,
+            "Robbery": 9,
+            "Shooting": 10,
+            "Shoplifting": 11,
+            "Stealing": 12,
+            "Vandalism": 13
+        },
+        "normal_category": "Normal_Videos"
+    },
+    "scoring": {
+        "video_score": "mean of the top-3 segment sigmoid scores",
+        "anomaly_threshold": 0.1507003903388977,
+        "threshold_95_recall": 0.012715784832835197,
+        "threshold_selected_on": "validation split only"
+    },
+    "sentrix_contract": {
+        "consumed_by_tci": [
+            "anomaly_score"
+        ],
+        "context_only": [
+            "predicted_category",
+            "confidence"
+        ],
+        "note": "The 14-way category head is trained on weak video-level labels propagated to top-k segments. It must NOT be treated as frame-level ground truth and must NOT be wired directly into the TCI fusion model."
+    },
+    "metrics": {
+        "val_auc": 0.8262536873156343,
+        "val_ap": 0.8586548709885657,
+        "test_auc": 0.19397473275024296,
+        "test_ap": 0.33715320938376314,
+        "test_binary_precision": 0.45384615384615384,
+        "test_binary_recall": 0.8428571428571429,
+        "test_binary_f1": 0.59,
+        "test_false_negative_rate": 0.15714285714285714,
+        "frame_auc": null,
+        "frame_gt_source": null,
+        "category_accuracy_weak": 0.07665505226480836
+    },
+    "training": {
+        "epochs_run": 18,
+        "best_epoch": 10,
+        "lr": 0.0001,
+        "weight_decay": 0.0005,
+        "batch_videos": 2,
+        "loss": "MIL ranking + video BCE + smoothness + sparsity + auxiliary CE",
+        "lambda_smooth": 0.0008,
+        "lambda_sparse": 0.0008,
+        "aux_weight": 0.3,
+        "seed": 42,
+        "device": "cuda",
+        "training_minutes": 72.9
+    },
+    "training_type": "real_data",
+    "synthetic_data": false
+}

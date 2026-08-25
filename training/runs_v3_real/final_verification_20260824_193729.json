@@ -1,0 +1,67 @@
+[
+  {
+    "check": "All real datasets found",
+    "passed": true,
+    "detail": "G:\\Capstone\\data"
+  },
+  {
+    "check": "Anomaly delegated to the event notebook",
+    "passed": true,
+    "detail": "SENTRIX_UCF_CRIME_DVS_TRAINING.ipynb | model present: True"
+  },
+  {
+    "check": "No synthetic dataset classes detected",
+    "passed": true,
+    "detail": "notebook file not found on disk"
+  },
+  {
+    "check": "No random sample generation calls",
+    "passed": true,
+    "detail": "no array/tensor generators used to create samples"
+  },
+  {
+    "check": "No synthetic TCI generation",
+    "passed": true,
+    "detail": "fusion status: SKIPPED (no real event dataset - nothing manufactured)"
+  },
+  {
+    "check": "Models trained",
+    "passed": true,
+    "detail": "violence, audio, weapon, fire_smoke"
+  },
+  {
+    "check": "Validation completed",
+    "passed": true,
+    "detail": "4 metric sets"
+  },
+  {
+    "check": "Model files saved",
+    "passed": true,
+    "detail": "4/4"
+  },
+  {
+    "check": "Metadata saved",
+    "passed": true,
+    "detail": ""
+  },
+  {
+    "check": "Old models untouched",
+    "passed": true,
+    "detail": "7 files verified"
+  },
+  {
+    "check": "New model names unique",
+    "passed": true,
+    "detail": "no collisions"
+  },
+  {
+    "check": "Production preprocessing documented",
+    "passed": true,
+    "detail": "G:\\Sentrix\\backend\\models\\v3_real\\PRODUCTION_PREPROCESSING_CONTRACT.json"
+  },
+  {
+    "check": "Every training sample traceable to a real file",
+    "passed": true,
+    "detail": "4 manifest files"
+  }
+]

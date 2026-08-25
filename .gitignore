@@ -1,5 +1,38 @@
-data/
+# Virtual environment
+.venv/
+venv/
+ENV/
+env/
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# macOS / OS artifacts
 .DS_Store
-SentrixV2-main/evaluation/data/
-SentrixV2-main/.DS_Store
-SentrixV2-main/Capstone Docs/.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+
+# Large raw training dataset folders (downloaded on-demand)
+data/
+
+# Local databases & runtimes
+backend/runtime/*.db
+backend/runtime/*.db-journal
+backend/runtime/*.db-wal
+backend/runtime/vault/*.aes
+backend/runtime/vault/*.sig
+backend/runtime/evidence/*.aes
+
+# Environment secrets
+.env
+.env.local
+
+# Preprocessed training cache & dataset targets
+training/cache_ucf_crime_dvs/
+training/ucf_crime_dvs/

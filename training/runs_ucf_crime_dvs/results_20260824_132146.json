@@ -1,0 +1,25 @@
+{
+  "run_id": "20260824_132146",
+  "split_source": "official train_split.txt / test_split.txt",
+  "val": {
+    "auc": 0.8262536873156343,
+    "ap": 0.8586548709885657,
+    "n": 233
+  },
+  "test": {
+    "auc": 0.19397473275024296,
+    "ap": 0.33715320938376314,
+    "n": 287,
+    "precision": 0.45384615384615384,
+    "recall": 0.8428571428571429,
+    "f1": 0.59,
+    "false_negative_rate": 0.15714285714285714,
+    "frame_auc": null,
+    "frame_gt_source": null
+  },
+  "category_accuracy_weak": 0.07665505226480836,
+  "anomaly_threshold": 0.1507003903388977,
+  "model": "G:\\Sentrix\\backend\\models\\v2_real\\ucf_crime_dvs\\ucf_crime_dvs_anomaly_v1.pt",
+  "metadata": "G:\\Sentrix\\backend\\models\\v2_real\\ucf_crime_dvs\\ucf_crime_dvs_anomaly_v1_metadata.json",
+  "predictions_csv": "G:\\Sentrix\\training\\runs_ucf_crime_dvs\\sentrix_dvs_predictions.csv"
+}

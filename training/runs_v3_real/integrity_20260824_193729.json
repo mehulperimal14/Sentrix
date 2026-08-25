@@ -1,0 +1,110 @@
+{
+  "VIOLENCE": {
+    "valid": 19610,
+    "invalid": 19610,
+    "duplicates": 0,
+    "empty_dirs": 0,
+    "bad_sample": [
+      "G:\\Capstone\\data\\violence_data\\fight\\._rwf_train_fight_-1l5631l3fg_0_00.jpg",
+      "G:\\Capstone\\data\\violence_data\\fight\\._rwf_train_fight_-1l5631l3fg_0_01.jpg",
+      "G:\\Capstone\\data\\violence_data\\fight\\._rwf_train_fight_-1l5631l3fg_0_02.jpg",
+      "G:\\Capstone\\data\\violence_data\\fight\\._rwf_train_fight_-1l5631l3fg_0_03.jpg",
+      "G:\\Capstone\\data\\violence_data\\fight\\._rwf_train_fight_-1l5631l3fg_0_04.jpg",
+      "G:\\Capstone\\data\\violence_data\\fight\\._rwf_train_fight_-1l5631l3fg_0_05.jpg",
+      "G:\\Capstone\\data\\violence_data\\fight\\._rwf_train_fight_-1l5631l3fg_0_06.jpg",
+      "G:\\Capstone\\data\\violence_data\\fight\\._rwf_train_fight_-1l5631l3fg_0_07.jpg",
+      "G:\\Capstone\\data\\violence_data\\fight\\._rwf_train_fight_-1l5631l3fg_0_08.jpg",
+      "G:\\Capstone\\data\\violence_data\\fight\\._rwf_train_fight_-1l5631l3fg_0_09.jpg",
+      "G:\\Capstone\\data\\violence_data\\fight\\._rwf_train_fight_-1l5631l3fg_1_00.jpg",
+      "G:\\Capstone\\data\\violence_data\\fight\\._rwf_train_fight_-1l5631l3fg_1_01.jpg",
+      "G:\\Capstone\\data\\violence_data\\fight\\._rwf_train_fight_-1l5631l3fg_1_02.jpg",
+      "G:\\Capstone\\data\\violence_data\\fight\\._rwf_train_fight_-1l5631l3fg_1_03.jpg",
+      "G:\\Capstone\\data\\violence_data\\fight\\._rwf_train_fight_-1l5631l3fg_1_04.jpg",
+      "G:\\Capstone\\data\\violence_data\\fight\\._rwf_train_fight_-1l5631l3fg_1_05.jpg",
+      "G:\\Capstone\\data\\violence_data\\fight\\._rwf_train_fight_-1l5631l3fg_1_06.jpg",
+      "G:\\Capstone\\data\\violence_data\\fight\\._rwf_train_fight_-1l5631l3fg_1_07.jpg",
+      "G:\\Capstone\\data\\violence_data\\fight\\._rwf_train_fight_-1l5631l3fg_1_08.jpg",
+      "G:\\Capstone\\data\\violence_data\\fight\\._rwf_train_fight_-1l5631l3fg_1_09.jpg",
+      "G:\\Capstone\\data\\violence_data\\fight\\._rwf_train_fight_-1l5631l3fg_2_00.jpg",
+      "G:\\Capstone\\data\\violence_data\\fight\\._rwf_train_fight_-1l5631l3fg_2_01.jpg",
+      "G:\\Capstone\\data\\violence_data\\fight\\._rwf_train_fight_-1l5631l3fg_2_02.jpg",
+      "G:\\Capstone\\data\\violence_data\\fight\\._rwf_train_fight_-1l5631l3fg_2_03.jpg",
+      "G:\\Capstone\\data\\violence_data\\fight\\._rwf_train_fight_-1l5631l3fg_2_04.jpg"
+    ]
+  },
+  "AUDIO": {
+    "valid": 467,
+    "invalid": 9,
+    "bad_sample": [
+      "G:\\Capstone\\data\\audio_data\\audioset_clips\\scream\\aslxfM0T8No_10.0.wav",
+      "G:\\Capstone\\data\\audio_data\\audioset_clips\\scream\\aVdPh-RiNcc_0.0.temp.m4a",
+      "G:\\Capstone\\data\\audio_data\\audioset_clips\\siren\\4lflH2Jvm8k_30.0.temp.m4a",
+      "G:\\Capstone\\data\\audio_data\\audioset_clips\\siren\\NP8qMhyC2N4_0.0.m4a",
+      "G:\\Capstone\\data\\audio_data\\audioset_clips\\speech_normal\\-30H9V1IKps_6.0.temp.m4a",
+      "G:\\Capstone\\data\\audio_data\\audioset_clips\\speech_normal\\-gSxU1ceCLY_30.0.m4a",
+      "G:\\Capstone\\data\\audio_data\\audioset_clips\\speech_normal\\-MZx1np1Ddc_30.0.wav",
+      "G:\\Capstone\\data\\audio_data\\audioset_clips\\speech_normal\\0SypBcVpZ0E_140.0.temp.m4a",
+      "G:\\Capstone\\data\\audio_data\\audioset_clips\\speech_normal\\0TPOLU68O9s_8.0.m4a"
+    ]
+  },
+  "WEAPON": {
+    "images_without_labels": [],
+    "empty_labels": 558,
+    "invalid_boxes": [],
+    "class_ids": {
+      "2": 4788,
+      "1": 1350,
+      "0": 3903
+    },
+    "n_images": 18942,
+    "n_labels": 18942,
+    "leakage": {
+      "train": 7170,
+      "val": 1600,
+      "overlap": 1,
+      "examples": [
+        "G:\\Capstone\\data\\weapon_data\\train\\images\\.__73370092_armedrobbery2_jpg.rf.ec2dc9e49b5098d070f43d6ad529cfa6.jpg"
+      ]
+    }
+  },
+  "FIRE_SMOKE": {
+    "images_without_labels": [],
+    "empty_labels": 5480,
+    "invalid_boxes": [
+      "G:\\Capstone\\data\\fire_smoke_data\\train\\labels\\AoF05470.txt: 0 0.55859375 0.4666666666666667 0.0 0.0",
+      "G:\\Capstone\\data\\fire_smoke_data\\train\\labels\\AoF06155.txt: 0 0.8125 0.3375 0.0 0.0",
+      "G:\\Capstone\\data\\fire_smoke_data\\train\\labels\\AoF06439.txt: 0 0.7125 0.275 0.0 0.0",
+      "G:\\Capstone\\data\\fire_smoke_data\\train\\labels\\AoF06456.txt: 0 0.14765625000000002 0.4375 0.0 0.0",
+      "G:\\Capstone\\data\\fire_smoke_data\\train\\labels\\PublicDataset00056.txt: 1 0.3296875 0.8152777777777778 0.0 0.002777777777777778",
+      "G:\\Capstone\\data\\fire_smoke_data\\train\\labels\\WEB04243.txt: 1 0.2685546875 0.41666666666666663 0.0 0.0",
+      "G:\\Capstone\\data\\fire_smoke_data\\train\\labels\\WEB04742.txt: 1 0.3875 0.4916666666666667 0.0 0.0",
+      "G:\\Capstone\\data\\fire_smoke_data\\train\\labels\\WEB04849.txt: 1 0.1484375 0.4222222222222222 0.0 0.0",
+      "G:\\Capstone\\data\\fire_smoke_data\\train\\labels\\WEB05882.txt: 1 0.65625 0.7055555555555556 0.0 0.0",
+      "G:\\Capstone\\data\\fire_smoke_data\\train\\labels\\WEB07998.txt: 0 0.6468750000000001 0.4715909090909091 0.0 0.0",
+      "G:\\Capstone\\data\\fire_smoke_data\\valid\\labels\\AoF07774.txt: 0 0.443359375 0.3666666666666667 0.00078125 0.0",
+      "G:\\Capstone\\data\\fire_smoke_data\\valid\\labels\\AoF08348.txt: 0 0.9875 0.24166666666666667 0.0 0.0",
+      "G:\\Capstone\\data\\fire_smoke_data\\valid\\labels\\WEB10669.txt: 0 0.6000000000000001 0.26666666666666666 0.0 0.0",
+      "G:\\Capstone\\data\\fire_smoke_data\\valid\\labels\\WEB10770.txt: 0 0.50703125 0.3625 1.0078125 0.7138888888888889",
+      "G:\\Capstone\\data\\fire_smoke_data\\valid\\labels\\WEB10775.txt: 0 0.496875 0.27083333333333337 1.015625 0.5750000000000001",
+      "G:\\Capstone\\data\\fire_smoke_data\\valid\\labels\\WEB10821.txt: 0 0.49843750000000003 0.3388888888888889 1.0093750000000001 0.6166666666666667",
+      "G:\\Capstone\\data\\fire_smoke_data\\valid\\labels\\WEB11090.txt: 0 0.5437500000000001 0.5013888888888889 0.5375 1.0027777777777778",
+      "G:\\Capstone\\data\\fire_smoke_data\\valid\\labels\\WEB11598.txt: 0 0.49921875000000004 0.4013888888888889 1.0359375 0.8138888888888889",
+      "G:\\Capstone\\data\\fire_smoke_data\\valid\\labels\\WEB11600.txt: 0 0.496875 0.4222222222222222 1.0562500000000001 0.8388888888888889",
+      "G:\\Capstone\\data\\fire_smoke_data\\valid\\labels\\WEB11606.txt: 0 0.2578125 0.4986111111111111 0.50625 1.0027777777777778"
+    ],
+    "class_ids": {
+      "0": 6645,
+      "1": 8293
+    },
+    "n_images": 24000,
+    "n_labels": 24000,
+    "leakage": {
+      "train": 10001,
+      "val": 2001,
+      "overlap": 1,
+      "examples": [
+        "G:\\Capstone\\data\\fire_smoke_data\\train\\images\\._WEB09442.jpg"
+      ]
+    }
+  }
+}

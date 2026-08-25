@@ -1,0 +1,7 @@
+path: G:\Capstone\data\fire_smoke_data
+train: G:\Capstone\data\fire_smoke_data\train\images
+val: G:\Capstone\data\fire_smoke_data\valid\images
+names:
+- fire
+- smoke
+nc: 2

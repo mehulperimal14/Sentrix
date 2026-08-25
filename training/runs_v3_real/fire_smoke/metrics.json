@@ -1,0 +1,12 @@
+{
+  "mAP50": 0.7189091521161193,
+  "mAP50_95": 0.4037851023010551,
+  "precision": 0.7231573422905778,
+  "recall": 0.6680465469086685,
+  "per_class_mAP50": {
+    "fire": 0.47299471122846326,
+    "smoke": 0.33457549337364695
+  },
+  "training_seconds": 9613.6,
+  "weights": "G:\\Sentrix\\training\\runs_v3_real\\fire_smoke\\train\\weights\\best.pt"
+}

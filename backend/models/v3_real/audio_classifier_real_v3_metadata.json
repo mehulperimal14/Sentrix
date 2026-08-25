@@ -1,0 +1,116 @@
+{
+    "model_name": "audio_classifier_real_v3",
+    "architecture": "SentrixAudioCNN (log-mel CNN)",
+    "dataset": "G:\\Capstone\\data\\audio_data\\audioset_clips",
+    "manifest": "G:\\Capstone\\data\\audio_data\\download_manifest.csv",
+    "classes": [
+        "speech_normal",
+        "siren",
+        "fire",
+        "scream"
+    ],
+    "class_index_map": {
+        "speech_normal": 0,
+        "siren": 1,
+        "fire": 2,
+        "scream": 3
+    },
+    "sample_rate": 16000,
+    "duration_seconds": 4.0,
+    "n_mels": 64,
+    "n_fft": 1024,
+    "hop_length": 256,
+    "f_min": 20,
+    "f_max": 8000,
+    "top_db": 80,
+    "normalization": "per_sample_mean_std",
+    "input_shape": [
+        1,
+        64,
+        251
+    ],
+    "mel_backend": "torchaudio",
+    "augmentation": [
+        "time_shift",
+        "gain",
+        "real_background_noise_mix",
+        "spec_augment"
+    ],
+    "split_info": {
+        "source": "directory_scan",
+        "resolved": 476,
+        "split": "stratified in-notebook split (seed=42, val=0.2)",
+        "train_size": 300,
+        "val_size": 75,
+        "class_counts": {
+            "speech_normal": 121,
+            "siren": 127,
+            "fire": 86,
+            "scream": 41
+        },
+        "filtered_out": {},
+        "min_audio_seconds": 0.25
+    },
+    "metrics": {
+        "accuracy": 0.72,
+        "macro_f1": 0.7036264441591784,
+        "macro_precision": 0.715749601275917,
+        "macro_recall": 0.7320418552036199,
+        "per_class": {
+            "speech_normal": {
+                "precision": 0.7,
+                "recall": 0.875,
+                "f1": 0.7777777777777778,
+                "support": 24
+            },
+            "siren": {
+                "precision": 0.9333333333333333,
+                "recall": 0.5384615384615384,
+                "f1": 0.6829268292682927,
+                "support": 26
+            },
+            "fire": {
+                "precision": 0.6842105263157895,
+                "recall": 0.7647058823529411,
+                "f1": 0.7222222222222222,
+                "support": 17
+            },
+            "scream": {
+                "precision": 0.5454545454545454,
+                "recall": 0.75,
+                "f1": 0.631578947368421,
+                "support": 8
+            }
+        },
+        "confusion_matrix": [
+            [
+                21,
+                0,
+                2,
+                1
+            ],
+            [
+                4,
+                14,
+                4,
+                4
+            ],
+            [
+                4,
+                0,
+                13,
+                0
+            ],
+            [
+                1,
+                1,
+                0,
+                6
+            ]
+        ]
+    },
+    "training_type": "real_data",
+    "synthetic_data": false,
+    "created": "2026-08-25T00:10:10",
+    "run_id": "20260824_193729"
+}

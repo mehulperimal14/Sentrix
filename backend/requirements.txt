@@ -1,0 +1,55 @@
+# SENTRIX Backend Requirements
+# Python 3.12 recommended (ultralytics has known issues with 3.13)
+# Install: pip install -r requirements.txt
+
+# ── Web Framework ────────────────────────────────────────────────────────────────
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+jinja2>=3.1.2
+python-multipart>=0.0.6
+websocket-client>=1.6.0
+
+# ── Database ─────────────────────────────────────────────────────────────────────
+sqlalchemy>=2.0.0
+
+# ── Configuration & Security ──────────────────────────────────────────────────────
+python-dotenv>=1.0.0
+cryptography>=41.0.0
+
+# ── Vision & Matrix Math ──────────────────────────────────────────────────────────
+numpy>=1.26.0,<2.0.0
+opencv-python-headless>=4.8.0
+
+# ── AI Core: YOLO (Person / Weapon / Fire Detection) ─────────────────────────────
+ultralytics>=8.0.0          # YOLOv8 — person, weapon, fire/smoke detection
+
+# ── AI Core: Threat Fusion ────────────────────────────────────────────────────────
+xgboost>=2.0.0              # TCI fusion engine
+scikit-learn>=1.3.0         # Metrics, Platt scaling
+
+# ── AI Core: Violence & Anomaly Classification (PyTorch) ─────────────────────────
+# macOS M-series: uses MPS acceleration automatically
+# Windows/Linux: uses CUDA if available, else CPU
+torch>=2.1.0
+torchvision>=0.16.0
+torchaudio>=2.1.0
+
+# ── Audio Processing ──────────────────────────────────────────────────────────────
+sounddevice>=0.4.6          # Microphone capture (real-time audio)
+scipy>=1.11.0               # Signal processing & spectrograms (native wheels)
+
+# ── Optional: Twilio Alerts ───────────────────────────────────────────────────────
+twilio>=8.0.0               # SMS + voice call alerts (falls back to console if missing)
+
+# ── Optional: Face Recognition (requires dlib/cmake — see README) ─────────────────
+# face_recognition>=1.3.0
+
+# ── Optional: Voice SOS (offline speech recognition) ─────────────────────────────
+# vosk>=0.3.45
+
+# ── Optional: Person Re-Identification ───────────────────────────────────────────
+# deep-sort-realtime>=1.3    # DeepSORT tracker
+
+# ── Training dependencies (also needed in backend for data loading) ───────────────
+pandas>=2.0.0               # CSV manifest parsing for training
+Pillow>=10.0.0              # Image loading in PyTorch datasets
