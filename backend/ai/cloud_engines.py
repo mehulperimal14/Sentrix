@@ -107,7 +107,7 @@ class CloudThreatEngine:
         # Check custom weapon detector if confidence is high and boxes are distinct
         if self._weapon_model is not None and max_conf < 0.5:
             try:
-                res = self._weapon_model(frame, verbose=False, conf=0.75, iou=0.45)[0]
+                res = self._weapon_model(frame, verbose=False, conf=0.25, iou=0.45)[0]
                 if res.boxes and len(res.boxes) > 0:
                     # Filter out candidate explosion/noise (if > 10 boxes detected at once, it is noise)
                     if len(res.boxes) <= 6:
@@ -118,7 +118,7 @@ class CloudThreatEngine:
                             w_ratio = xywh[2] / frame.shape[1]
                             h_ratio = xywh[3] / frame.shape[0]
                             if 0.03 <= w_ratio <= 0.70 and 0.03 <= h_ratio <= 0.70:
-                                if conf >= 0.75:
+                                if conf >= 0.25:
                                     max_conf = max(max_conf, conf)
             except Exception:
                 pass
@@ -133,9 +133,9 @@ class CloudThreatEngine:
         # 1. Custom fire model inference
         if self._fire_model is not None:
             try:
-                res = self._fire_model(frame, verbose=False, conf=0.75, iou=0.45)[0]
+                res = self._fire_model(frame, verbose=False, conf=0.25, iou=0.45)[0]
                 if res.boxes and len(res.boxes) > 0 and len(res.boxes) <= 6:
-                    confs = [float(b.conf[0]) for b in res.boxes if float(b.conf[0]) >= 0.75]
+                    confs = [float(b.conf[0]) for b in res.boxes if float(b.conf[0]) >= 0.25]
                     if confs:
                         return float(max(confs))
             except Exception:
@@ -147,9 +147,9 @@ class CloudThreatEngine:
             # High-saturation, high-brightness flame mask
             flame_mask = cv2.inRange(hsv, (0, 180, 200), (25, 255, 255))
             ratio = np.count_nonzero(flame_mask) / (frame.shape[0] * frame.shape[1])
-            # Only trigger if concentrated bright flame > 2% of frame area
-            if ratio > 0.02:
-                return float(min(ratio * 10.0, 0.90))
+            # Only trigger if concentrated bright flame > 0.05% of frame area (lighter flame support)
+            if ratio > 0.0005:
+                return float(min(ratio * 200.0, 0.90))
         except Exception:
             pass
 
