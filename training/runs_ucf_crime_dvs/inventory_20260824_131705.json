@@ -1,0 +1,114 @@
+{
+  "Abuse": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\Abuse",
+    "dir_name": "Abuse",
+    "n_files": 50,
+    "bytes": 1682397736,
+    "exists": true,
+    "name_differs": false
+  },
+  "Arrest": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\Arrest",
+    "dir_name": "Arrest",
+    "n_files": 53,
+    "bytes": 2814677639,
+    "exists": true,
+    "name_differs": false
+  },
+  "Arson": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\Arson",
+    "dir_name": "Arson",
+    "n_files": 57,
+    "bytes": 2673229427,
+    "exists": true,
+    "name_differs": false
+  },
+  "Assault": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\Assualt",
+    "dir_name": "Assualt",
+    "n_files": 50,
+    "bytes": 1262043184,
+    "exists": true,
+    "name_differs": true
+  },
+  "Burglary": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\Burglary",
+    "dir_name": "Burglary",
+    "n_files": 100,
+    "bytes": 3369762838,
+    "exists": true,
+    "name_differs": false
+  },
+  "Explosion": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\Explosion",
+    "dir_name": "Explosion",
+    "n_files": 54,
+    "bytes": 2172866226,
+    "exists": true,
+    "name_differs": false
+  },
+  "Fighting": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\Fighting",
+    "dir_name": "Fighting",
+    "n_files": 53,
+    "bytes": 2621104993,
+    "exists": true,
+    "name_differs": false
+  },
+  "Normal_Videos": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\Normal_Videos",
+    "dir_name": "Normal_Videos",
+    "n_files": 1271,
+    "bytes": 96283176807,
+    "exists": true,
+    "name_differs": false
+  },
+  "RoadAccidents": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\RoadAccidents",
+    "dir_name": "RoadAccidents",
+    "n_files": 150,
+    "bytes": 2614212115,
+    "exists": true,
+    "name_differs": false
+  },
+  "Robbery": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\Robbery",
+    "dir_name": "Robbery",
+    "n_files": 151,
+    "bytes": 4787626096,
+    "exists": true,
+    "name_differs": false
+  },
+  "Shooting": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\Shooting",
+    "dir_name": "Shooting",
+    "n_files": 50,
+    "bytes": 1381451702,
+    "exists": true,
+    "name_differs": false
+  },
+  "Shoplifting": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\Shoplifting",
+    "dir_name": "Shoplifting",
+    "n_files": 53,
+    "bytes": 3613840942,
+    "exists": true,
+    "name_differs": false
+  },
+  "Stealing": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\Stealing",
+    "dir_name": "Stealing",
+    "n_files": 100,
+    "bytes": 3138553089,
+    "exists": true,
+    "name_differs": false
+  },
+  "Vandalism": {
+    "dir": "G:\\event_frame_duration533326\\event_frame_duration533326\\Vandalism",
+    "dir_name": "Vandalism",
+    "n_files": 50,
+    "bytes": 1064371004,
+    "exists": true,
+    "name_differs": false
+  }
+}

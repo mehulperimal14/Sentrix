@@ -1,0 +1,46 @@
+{
+  "accuracy": 0.8325699745547074,
+  "per_class": {
+    "nofight": {
+      "precision": 0.8488764044943821,
+      "recall": 0.7952631578947369,
+      "f1": 0.821195652173913,
+      "support": 1900
+    },
+    "fight": {
+      "precision": 0.8190697674418604,
+      "recall": 0.867487684729064,
+      "f1": 0.8425837320574162,
+      "support": 2030
+    }
+  },
+  "macro_precision": 0.8339730859681213,
+  "macro_recall": 0.8313754213119005,
+  "macro_f1": 0.8318896921156647,
+  "weighted_f1": 0.8322434389839668,
+  "confusion_matrix": [
+    [
+      1511,
+      389
+    ],
+    [
+      269,
+      1761
+    ]
+  ],
+  "classes": [
+    "nofight",
+    "fight"
+  ],
+  "pr_auc": 0.8826873918920379,
+  "roc_auc": 0.89414039408867,
+  "false_negative_rate": 0.13251231527093596,
+  "false_positive_rate": 0.20473684210526316,
+  "best_threshold": 0.39758750796318054,
+  "best_threshold_f1": 0.8447146866230123,
+  "threshold_at_95_recall": 0.09649273753166199,
+  "report_text": "              precision    recall  f1-score   support\n\n     nofight       0.85      0.80      0.82      1900\n       fight       0.82      0.87      0.84      2030\n\n    accuracy                           0.83      3930\n   macro avg       0.83      0.83      0.83      3930\nweighted avg       0.83      0.83      0.83      3930\n",
+  "best_epoch": 13,
+  "epochs_run": 15,
+  "training_seconds": 2696.8
+}

@@ -1,0 +1,104 @@
+{
+  "layout": "frames",
+  "frame_key": "frames",
+  "polarity_axis": 1,
+  "H": 720,
+  "W": 1280,
+  "probe": [
+    {
+      "path": "G:\\event_frame_duration533326\\event_frame_duration533326\\Normal_Videos\\Normal_Videos058_x264_61.npz",
+      "size_mb": 4.48,
+      "arrays": {
+        "frames": {
+          "shape": [
+            61,
+            2,
+            720,
+            1280
+          ],
+          "dtype": "float64",
+          "min": 0.0,
+          "max": 35.0,
+          "range_from": "frame 0"
+        }
+      },
+      "category": "Normal_Videos"
+    },
+    {
+      "path": "G:\\event_frame_duration533326\\event_frame_duration533326\\Arrest\\Arrest051_x264_669.npz",
+      "size_mb": 78.02,
+      "arrays": {
+        "frames": {
+          "shape": [
+            669,
+            2,
+            720,
+            1280
+          ],
+          "dtype": "float64",
+          "min": 0.0,
+          "max": 71.0,
+          "range_from": "frame 0"
+        }
+      },
+      "category": "Arrest"
+    },
+    {
+      "path": "G:\\event_frame_duration533326\\event_frame_duration533326\\Normal_Videos\\Normal_Videos560_x264_1137.npz",
+      "size_mb": 203.22,
+      "arrays": {
+        "frames": {
+          "shape": [
+            1137,
+            2,
+            720,
+            1280
+          ],
+          "dtype": "float64",
+          "min": 0.0,
+          "max": 92.0,
+          "range_from": "frame 0"
+        }
+      },
+      "category": "Normal_Videos"
+    },
+    {
+      "path": "G:\\event_frame_duration533326\\event_frame_duration533326\\Normal_Videos\\Normal_Videos491_01_x264_377.npz",
+      "size_mb": 125.8,
+      "arrays": {
+        "frames": {
+          "shape": [
+            377,
+            2,
+            720,
+            1280
+          ],
+          "dtype": "float64",
+          "min": 0.0,
+          "max": 55.0,
+          "range_from": "frame 0"
+        }
+      },
+      "category": "Normal_Videos"
+    },
+    {
+      "path": "G:\\event_frame_duration533326\\event_frame_duration533326\\Normal_Videos\\Normal_Videos432_x264_223.npz",
+      "size_mb": 41.74,
+      "arrays": {
+        "frames": {
+          "shape": [
+            223,
+            2,
+            720,
+            1280
+          ],
+          "dtype": "float64",
+          "min": 0.0,
+          "max": 57.0,
+          "range_from": "frame 0"
+        }
+      },
+      "category": "Normal_Videos"
+    }
+  ]
+}

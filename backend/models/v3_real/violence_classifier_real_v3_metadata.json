@@ -1,0 +1,88 @@
+{
+    "model_name": "violence_classifier_real_v3",
+    "architecture": "ResNet18",
+    "dataset": "G:\\Capstone\\data\\violence_data",
+    "classes": [
+        "nofight",
+        "fight"
+    ],
+    "image_size": 224,
+    "normalization": {
+        "mean": [
+            0.485,
+            0.456,
+            0.406
+        ],
+        "std": [
+            0.229,
+            0.224,
+            0.225
+        ]
+    },
+    "color_space": "RGB",
+    "batch_size": 32,
+    "epochs_configured": 15,
+    "epochs_run": 15,
+    "best_epoch": 13,
+    "learning_rate": 0.0001,
+    "weight_decay": 0.001,
+    "class_weighting": true,
+    "label_smoothing": 0.05,
+    "seed": 42,
+    "device": "cuda",
+    "train_samples": 15680,
+    "val_samples": 3930,
+    "split_info": {
+        "source": "csv",
+        "train_csv": {
+            "rows": 15680,
+            "resolved": 15680,
+            "unresolved_paths": 0,
+            "unmapped_labels": 0,
+            "path_column": "frame_path",
+            "label_column": "label"
+        },
+        "val_csv": {
+            "rows": 3930,
+            "resolved": 3930,
+            "unresolved_paths": 0,
+            "unmapped_labels": 0,
+            "path_column": "frame_path",
+            "label_column": "label"
+        },
+        "train_size": 15680,
+        "val_size": 3930,
+        "train_distribution": {
+            "nofight": 7600,
+            "fight": 8080
+        },
+        "val_distribution": {
+            "nofight": 1900,
+            "fight": 2030
+        }
+    },
+    "metrics": {
+        "accuracy": 0.8325699745547074,
+        "macro_f1": 0.8318896921156647,
+        "macro_precision": 0.8339730859681213,
+        "macro_recall": 0.8313754213119005,
+        "weighted_f1": 0.8322434389839668,
+        "pr_auc": 0.8826873918920379,
+        "false_negative_rate": 0.13251231527093596,
+        "best_threshold": 0.39758750796318054,
+        "confusion_matrix": [
+            [
+                1511,
+                389
+            ],
+            [
+                269,
+                1761
+            ]
+        ]
+    },
+    "training_type": "real_data",
+    "synthetic_data": false,
+    "created": "2026-08-24T20:40:54",
+    "run_id": "20260824_193729"
+}

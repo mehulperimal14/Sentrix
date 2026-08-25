@@ -1,0 +1,30 @@
+{
+  "file": "evidence_20260823_040223_3.enc",
+  "timestamp": "2026-08-23T04:02:23Z",
+  "camera_id": "CAM_COMBINED",
+  "tci": 0.7231,
+  "level": 3,
+  "status": "HIGH",
+  "incident_type": "intrusion",
+  "reason": "Confirmed threat indicators",
+  "engine_scores": {
+    "vision": 0.9079424142837524,
+    "audio": 0.6,
+    "motion": 0.6572717524509804,
+    "behaviour": 0.65,
+    "identity": 0.6,
+    "weapon": 0.0,
+    "fire": 0.0,
+    "theft": 0.0,
+    "harmful": 0.0,
+    "intrusion": 0.6286358762254902,
+    "unauthorized": true,
+    "authorized": false
+  },
+  "detected_objects": [
+    "person"
+  ],
+  "sha256": "3d859f364bdfa7cdf82b46247eca1da6a0dab10719186238e8c1c97cf0ea08c0",
+  "encryption": "AES-256-GCM",
+  "key_version": "v2-hkdf"
+}

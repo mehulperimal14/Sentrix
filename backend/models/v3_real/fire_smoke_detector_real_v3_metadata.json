@@ -1,0 +1,39 @@
+{
+    "model_name": "fire_smoke_detector_real_v3",
+    "architecture": "YOLOv8 (yolov8n.pt)",
+    "dataset": "G:\\Capstone\\data\\fire_smoke_data",
+    "data_yaml": "G:\\Sentrix\\training\\runs_v3_real\\fire_smoke\\data_v2_real.yaml",
+    "classes": [
+        "fire",
+        "smoke"
+    ],
+    "class_id_map": {
+        "0": "fire",
+        "1": "smoke"
+    },
+    "image_size": 640,
+    "batch_size": 16,
+    "epochs_configured": 50,
+    "patience": 10,
+    "validation_during_training": true,
+    "seed": 42,
+    "device": "0",
+    "recommended_conf_threshold": 0.25,
+    "recommended_iou_threshold": 0.45,
+    "metrics": {
+        "mAP50": 0.7189091521161193,
+        "mAP50_95": 0.4037851023010551,
+        "precision": 0.7231573422905778,
+        "recall": 0.6680465469086685,
+        "per_class_mAP50": {
+            "fire": 0.47299471122846326,
+            "smoke": 0.33457549337364695
+        },
+        "training_seconds": 9613.6,
+        "weights": "G:\\Sentrix\\training\\runs_v3_real\\fire_smoke\\train\\weights\\best.pt"
+    },
+    "training_type": "real_data",
+    "synthetic_data": false,
+    "created": "2026-08-25T04:29:29",
+    "run_id": "20260824_193729"
+}

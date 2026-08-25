@@ -1,0 +1,29 @@
+{
+  "source": "csv",
+  "train_csv": {
+    "rows": 15680,
+    "resolved": 15680,
+    "unresolved_paths": 0,
+    "unmapped_labels": 0,
+    "path_column": "frame_path",
+    "label_column": "label"
+  },
+  "val_csv": {
+    "rows": 3930,
+    "resolved": 3930,
+    "unresolved_paths": 0,
+    "unmapped_labels": 0,
+    "path_column": "frame_path",
+    "label_column": "label"
+  },
+  "train_size": 15680,
+  "val_size": 3930,
+  "train_distribution": {
+    "nofight": 7600,
+    "fight": 8080
+  },
+  "val_distribution": {
+    "nofight": 1900,
+    "fight": 2030
+  }
+}

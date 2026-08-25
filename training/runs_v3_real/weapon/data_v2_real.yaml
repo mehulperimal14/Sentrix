@@ -1,0 +1,9 @@
+path: G:\Capstone\data\weapon_data
+train: G:\Capstone\data\weapon_data\train\images
+val: G:\Capstone\data\weapon_data\valid\images
+names:
+- knife
+- long_gun
+- pistol
+nc: 3
+test: G:\Capstone\data\weapon_data\test\images

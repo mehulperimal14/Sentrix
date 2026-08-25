@@ -1,0 +1,79 @@
+{
+  "images_violence": {
+    "resolution": [
+      224,
+      224
+    ],
+    "color_space": "RGB (convert from OpenCV BGR before inference)",
+    "scaling": "ToTensor -> [0,1]",
+    "normalization_mean": [
+      0.485,
+      0.456,
+      0.406
+    ],
+    "normalization_std": [
+      0.229,
+      0.224,
+      0.225
+    ],
+    "tensor_layout": "NCHW float32",
+    "violence_class_order": [
+      "nofight",
+      "fight"
+    ],
+    "positive_index_violence": 1
+  },
+  "anomaly": {
+    "owner": "SENTRIX_UCF_CRIME_DVS_TRAINING.ipynb (event / DVS)",
+    "model": "G:\\Sentrix\\backend\\models\\v2_real\\ucf_crime_dvs\\ucf_crime_dvs_anomaly_v1.pt",
+    "input": "UCF-Crime-DVS .npz event data - NOT RGB images",
+    "consumed_by_fusion": "anomaly_score only"
+  },
+  "audio": {
+    "sample_rate": 16000,
+    "channels": "mono",
+    "clip_seconds": 4.0,
+    "n_samples": 64000,
+    "n_mels": 64,
+    "n_fft": 1024,
+    "hop_length": 256,
+    "f_min": 20,
+    "f_max": 8000,
+    "power": 2.0,
+    "amplitude_to_db": true,
+    "top_db": 80,
+    "normalization": "per-sample (x - mean) / (std + 1e-5)",
+    "input_shape": [
+      1,
+      64,
+      251
+    ],
+    "class_order": [
+      "speech_normal",
+      "siren",
+      "fire",
+      "scream"
+    ],
+    "long_clip_policy": "centre crop at inference; random crop only during training",
+    "short_clip_policy": "symmetric zero padding"
+  },
+  "yolo": {
+    "image_size": 640,
+    "weapon_classes": [
+      "knife",
+      "long_gun",
+      "pistol"
+    ],
+    "fire_smoke_classes": [
+      "fire",
+      "smoke"
+    ],
+    "recommended_conf": 0.25,
+    "recommended_iou": 0.45,
+    "letterbox": "handled internally by ultralytics - pass the raw BGR/RGB frame"
+  },
+  "fusion": {
+    "feature_order": "NOT TRAINED",
+    "target": "NOT TRAINED"
+  }
+}

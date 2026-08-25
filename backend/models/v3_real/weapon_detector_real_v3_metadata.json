@@ -1,0 +1,42 @@
+{
+    "model_name": "weapon_detector_real_v3",
+    "architecture": "YOLOv8 (yolov8n.pt)",
+    "dataset": "G:\\Capstone\\data\\weapon_data",
+    "data_yaml": "G:\\Sentrix\\training\\runs_v3_real\\weapon\\data_v2_real.yaml",
+    "classes": [
+        "knife",
+        "long_gun",
+        "pistol"
+    ],
+    "class_id_map": {
+        "0": "knife",
+        "1": "long_gun",
+        "2": "pistol"
+    },
+    "image_size": 640,
+    "batch_size": 16,
+    "epochs_configured": 50,
+    "patience": 10,
+    "validation_during_training": true,
+    "seed": 42,
+    "device": "0",
+    "recommended_conf_threshold": 0.25,
+    "recommended_iou_threshold": 0.45,
+    "metrics": {
+        "mAP50": 0.9080398191261255,
+        "mAP50_95": 0.6156288972942143,
+        "precision": 0.9146599229801341,
+        "recall": 0.8516638420752423,
+        "per_class_mAP50": {
+            "knife": 0.5348852531294606,
+            "long_gun": 0.6313061280041318,
+            "pistol": 0.6806953107490508
+        },
+        "training_seconds": 5884.7,
+        "weights": "G:\\Sentrix\\training\\runs_v3_real\\weapon\\train\\weights\\best.pt"
+    },
+    "training_type": "real_data",
+    "synthetic_data": false,
+    "created": "2026-08-25T01:48:43",
+    "run_id": "20260824_193729"
+}

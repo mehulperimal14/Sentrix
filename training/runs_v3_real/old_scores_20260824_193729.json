@@ -1,0 +1,142 @@
+{
+  "violence": {
+    "accuracy": 0.8262086513994911,
+    "per_class": {
+      "nofight": {
+        "precision": 0.8228116710875332,
+        "recall": 0.8163157894736842,
+        "f1": 0.8195508586525759,
+        "support": 1900
+      },
+      "fight": {
+        "precision": 0.8293398533007335,
+        "recall": 0.8354679802955665,
+        "f1": 0.8323926380368099,
+        "support": 2030
+      }
+    },
+    "macro_precision": 0.8260757621941333,
+    "macro_recall": 0.8258918848846253,
+    "macro_f1": 0.8259717483446929,
+    "weighted_f1": 0.8261841441869259,
+    "confusion_matrix": [
+      [
+        1551,
+        349
+      ],
+      [
+        334,
+        1696
+      ]
+    ],
+    "classes": [
+      "nofight",
+      "fight"
+    ],
+    "pr_auc": 0.8935648922703121,
+    "roc_auc": 0.8940764843142337,
+    "false_negative_rate": 0.16453201970443349,
+    "false_positive_rate": 0.18368421052631578,
+    "best_threshold": 0.3633361756801605,
+    "best_threshold_f1": 0.8367052023121387,
+    "threshold_at_95_recall": 0.007331598084419966,
+    "report_text": "              precision    recall  f1-score   support\n\n     nofight       0.82      0.82      0.82      1900\n       fight       0.83      0.84      0.83      2030\n\n    accuracy                           0.83      3930\n   macro avg       0.83      0.83      0.83      3930\nweighted avg       0.83      0.83      0.83      3930\n"
+  },
+  "audio": {
+    "accuracy": 0.10666666666666667,
+    "per_class": {
+      "normal_ambient": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 24
+      },
+      "gunshot_like": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 26
+      },
+      "scream_like": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 17
+      },
+      "explosion_like": {
+        "precision": 0.10666666666666667,
+        "recall": 1.0,
+        "f1": 0.1927710843373494,
+        "support": 8
+      },
+      "siren_like": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 0
+      }
+    },
+    "macro_precision": 0.02666666666666667,
+    "macro_recall": 0.25,
+    "macro_f1": 0.04819277108433735,
+    "weighted_f1": 0.020562248995983936,
+    "confusion_matrix": [
+      [
+        0,
+        0,
+        0,
+        24,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        26,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        17,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        8,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    ],
+    "classes": [
+      "normal_ambient",
+      "gunshot_like",
+      "scream_like",
+      "explosion_like",
+      "siren_like"
+    ],
+    "pr_auc": null,
+    "report_text": "                precision    recall  f1-score   support\n\nnormal_ambient       0.00      0.00      0.00        24\n  gunshot_like       0.00      0.00      0.00        26\n   scream_like       0.00      0.00      0.00        17\nexplosion_like       0.11      1.00      0.19         8\n    siren_like       0.00      0.00      0.00         0\n\n      accuracy                           0.11        75\n     macro avg       0.02      0.20      0.04        75\n  weighted avg       0.01      0.11      0.02        75\n"
+  },
+  "weapon": {
+    "mAP50": 1.727961266312514e-05,
+    "mAP50_95": 3.5599882727637387e-06,
+    "precision": 3.358585217250103e-05,
+    "recall": 0.007929831287983228
+  },
+  "fire_smoke": {
+    "mAP50": 0.00012057098589186265,
+    "mAP50_95": 3.167103073499579e-05,
+    "precision": 0.0005711039688896087,
+    "recall": 0.010078603783639756
+  }
+}

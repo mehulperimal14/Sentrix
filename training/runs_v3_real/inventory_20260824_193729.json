@@ -1,0 +1,21 @@
+{
+  "VIOLENCE": {
+    "fight": 20220,
+    "nofight": 19000
+  },
+  "AUDIO": {
+    "speech_normal": 160,
+    "siren": 156,
+    "explosion": 0,
+    "fire": 105,
+    "scream": 55
+  },
+  "FIRE_SMOKE (YOLO)": {
+    "images": 24000,
+    "labels": 24000
+  },
+  "WEAPON (YOLO)": {
+    "images": 18942,
+    "labels": 18946
+  }
+}

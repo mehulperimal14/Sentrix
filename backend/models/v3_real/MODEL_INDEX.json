@@ -1,0 +1,57 @@
+{
+  "run_id": "20260824_193729",
+  "created": "2026-08-25T04:29:30",
+  "project_root": "G:\\Sentrix",
+  "data_root": "G:\\Capstone\\data",
+  "training_type": "real_data",
+  "synthetic_data": false,
+  "models": {
+    "violence": {
+      "status": "TRAINED",
+      "model_file": "G:\\Sentrix\\backend\\models\\v3_real\\violence_classifier_real_v3.pt",
+      "model_exists": true,
+      "model_size_mb": 42.72,
+      "metadata_file": "G:\\Sentrix\\backend\\models\\v3_real\\violence_classifier_real_v3_metadata.json",
+      "metadata_exists": true
+    },
+    "audio": {
+      "status": "TRAINED",
+      "model_file": "G:\\Sentrix\\backend\\models\\v3_real\\audio_classifier_real_v3.pt",
+      "model_exists": true,
+      "model_size_mb": 4.63,
+      "metadata_file": "G:\\Sentrix\\backend\\models\\v3_real\\audio_classifier_real_v3_metadata.json",
+      "metadata_exists": true
+    },
+    "weapon": {
+      "status": "TRAINED",
+      "model_file": "G:\\Sentrix\\backend\\models\\v3_real\\weapon_detector_real_v3.pt",
+      "model_exists": true,
+      "model_size_mb": 5.96,
+      "metadata_file": "G:\\Sentrix\\backend\\models\\v3_real\\weapon_detector_real_v3_metadata.json",
+      "metadata_exists": true
+    },
+    "fire_smoke": {
+      "status": "TRAINED",
+      "model_file": "G:\\Sentrix\\backend\\models\\v3_real\\fire_smoke_detector_real_v3.pt",
+      "model_exists": true,
+      "model_size_mb": 5.94,
+      "metadata_file": "G:\\Sentrix\\backend\\models\\v3_real\\fire_smoke_detector_real_v3_metadata.json",
+      "metadata_exists": true
+    },
+    "fusion": {
+      "status": "SKIPPED",
+      "model_file": "G:\\Sentrix\\backend\\models\\v3_real\\tci_xgboost_real_v3.json",
+      "model_exists": false,
+      "model_size_mb": null,
+      "metadata_file": "G:\\Sentrix\\backend\\models\\v3_real\\tci_xgboost_real_v3_metadata.json",
+      "metadata_exists": false
+    }
+  },
+  "anomaly_module": {
+    "owner_notebook": "G:\\Sentrix\\training\\SENTRIX_UCF_CRIME_DVS_TRAINING.ipynb",
+    "dataset": "G:\\event_frame_duration533326\\event_frame_duration533326",
+    "model": "G:\\Sentrix\\backend\\models\\v2_real\\ucf_crime_dvs\\ucf_crime_dvs_anomaly_v1.pt",
+    "model_exists": true,
+    "note": "event-based; trained separately; supplies anomaly_score to fusion"
+  }
+}

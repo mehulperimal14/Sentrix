@@ -1,0 +1,28 @@
+{
+  "file": "evidence_20260823_035225_5.enc",
+  "timestamp": "2026-08-23T03:52:25Z",
+  "camera_id": "CAM_COMBINED",
+  "tci": 0.95,
+  "level": 5,
+  "status": "CRITICAL",
+  "incident_type": "fire",
+  "reason": "Fire confirmed by cloud engine",
+  "engine_scores": {
+    "vision": 0.0,
+    "audio": 0.6,
+    "motion": 0.03781313827614379,
+    "behaviour": 0.1,
+    "identity": 0.0,
+    "weapon": 1.0,
+    "fire": 1.0,
+    "theft": 0.0,
+    "harmful": 0.0,
+    "intrusion": 0.018906569138071896,
+    "unauthorized": false,
+    "authorized": false
+  },
+  "detected_objects": [],
+  "sha256": "6945929db9b21d1a6312d4f751e53122ffb33e85afe14ada206b7df38da8d0a6",
+  "encryption": "AES-256-GCM",
+  "key_version": "v2-hkdf"
+}

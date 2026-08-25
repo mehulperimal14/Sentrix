@@ -1,0 +1,37 @@
+{
+  "anomaly_classifier.pt": {
+    "size": 44788840,
+    "mtime": 1787471125.981,
+    "sha256_head": "cb47e4c069d97feb8dad44638e6f2655e03656d96de7ac05f5a7a80c790c816f"
+  },
+  "audio_classifier.pt": {
+    "size": 366992,
+    "mtime": 1787471125.997,
+    "sha256_head": "68edd8f61bf092264712e096187310dc385a770c589a99bf77231d53d9b2b657"
+  },
+  "fire_smoke_detector.pt": {
+    "size": 24425498,
+    "mtime": 1787471126.139,
+    "sha256_head": "15dc4bbc0d6c77b1c4d81dd22da0668ef29a45f3a0ea31ac2b10cb4c736fb3a6"
+  },
+  "tci_xgboost.json": {
+    "size": 303650,
+    "mtime": 1787471126.155,
+    "sha256_head": "5a77bcf6cf8b591d4335e431901bb57f551dfe0da7cc96ba55c74da534bfff90"
+  },
+  "violence_classifier.pt": {
+    "size": 44789030,
+    "mtime": 1787471126.428,
+    "sha256_head": "585d5a9c4ff37b0a064c3d2ce06f4434c86210a1483dff2dac78cc9aa641b361"
+  },
+  "weapon_detector.pt": {
+    "size": 24451738,
+    "mtime": 1787471126.584,
+    "sha256_head": "f90cc859b7521519aa40d07e7132530c01852a283a8c3a9bee05d3348fe9b863"
+  },
+  "yolov8n.pt": {
+    "size": 6549796,
+    "mtime": 1787471126.632,
+    "sha256_head": "577ece299e3b2a4075fb9089e82066a70124978ba0eba1cd0faae026fae79a56"
+  }
+}
