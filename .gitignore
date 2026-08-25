@@ -36,3 +36,8 @@ backend/runtime/evidence/*.aes
 # Preprocessed training cache & dataset targets
 training/cache_ucf_crime_dvs/
 training/ucf_crime_dvs/
+
+# Runtime alert evidence, logs, and enrolled faces
+backend/runtime/static/alerts/
+backend/runtime/static/authorized_faces/
+*.log
