@@ -404,18 +404,21 @@ class SystemEngine:
             cloud_result  = self.cloud.process_safe(combined_frame)
             weapon_score  = cloud_result.weapon_score
             fire_score    = cloud_result.fire_score
-            theft_score   = cloud_result.theft_score
-            harmful_score = cloud_result.harmful_score
+            theft_score   = cloud_result.theft_score if cloud_result.theft_score > 0.0 else ((motion_score * 0.7) if unauthorized else 0.0)
+            harmful_score = cloud_result.harmful_score if cloud_result.harmful_score > 0.0 else max(weapon_score, behaviour_score)
             health_monitor.update(cloud_available=cloud_result.cloud_online)
         except Exception as e:
             print(f"[SystemEngine] Cloud error: {e}")
-            weapon_score = fire_score = theft_score = harmful_score = 0.0
+            weapon_score = fire_score = 0.0
+            theft_score = (motion_score * 0.7) if unauthorized else 0.0
+            harmful_score = max(weapon_score, behaviour_score)
             cloud_result = type("CR", (), {"cloud_online": False})()
 
         # Local fallback when cloud has failed repeatedly
         if self.cloud.fail_count >= 5:
             fallback_score = self.fallback.detect_weapon(combined_frame)
             weapon_score = max(weapon_score, fallback_score)
+            harmful_score = max(harmful_score, weapon_score)
             from core.instrumentation import log_instrumentation
             log_instrumentation("SystemEngine", "fallback_activation", {"type": "cloud_to_local", "fallback_score": fallback_score, "final_weapon_score": weapon_score})
 
@@ -649,17 +652,20 @@ class SystemEngine:
                 cloud_result  = self.cloud.process_safe(combined_frame)
                 weapon_score  = cloud_result.weapon_score
                 fire_score    = cloud_result.fire_score
-                theft_score   = cloud_result.theft_score
-                harmful_score = cloud_result.harmful_score
+                theft_score   = cloud_result.theft_score if cloud_result.theft_score > 0.0 else ((motion_score * 0.7) if unauthorized else 0.0)
+                harmful_score = cloud_result.harmful_score if cloud_result.harmful_score > 0.0 else max(weapon_score, behaviour_score)
             except Exception as e:
                 print(f"[EvalFrame] Cloud error: {e}")
-                weapon_score = fire_score = theft_score = harmful_score = 0.0
+                weapon_score = fire_score = 0.0
+                theft_score = (motion_score * 0.7) if unauthorized else 0.0
+                harmful_score = max(weapon_score, behaviour_score)
                 cloud_result = type("CR", (), {"cloud_online": False})()
 
             # Local fallback path (exercises real code; side-effect mocked in EVAL_MODE)
             if self.cloud.fail_count >= 5:
                 fallback_score = self.fallback.detect_weapon(combined_frame)
                 weapon_score   = max(weapon_score, fallback_score)
+                harmful_score  = max(harmful_score, weapon_score)
                 log_instrumentation("SystemEngine", "fallback_activation", {
                     "type": "cloud_to_local",
                     "fallback_score": fallback_score,
