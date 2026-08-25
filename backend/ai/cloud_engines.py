@@ -39,8 +39,8 @@ class CloudThreatEngine:
     Uses YOLOv8 with strict confidence, NMS, and class validation.
     """
 
-    WEAPON_MODEL_NAME = "weapon_detector.pt"
-    FIRE_MODEL_NAME   = "fire_smoke_detector.pt"
+    WEAPON_MODEL_NAME = "v3_real/weapon_detector_real_v3.pt"
+    FIRE_MODEL_NAME   = "v3_real/fire_smoke_detector_real_v3.pt"
 
     def __init__(self):
         self.frame_count    = 0
@@ -107,7 +107,7 @@ class CloudThreatEngine:
         # Check custom weapon detector if confidence is high and boxes are distinct
         if self._weapon_model is not None and max_conf < 0.5:
             try:
-                res = self._weapon_model(frame, verbose=False, conf=0.15, iou=0.45)[0]
+                res = self._weapon_model(frame, verbose=False, conf=0.25, iou=0.45)[0]
                 if res.boxes and len(res.boxes) > 0:
                     print(f"[WeaponEngine] Raw custom detections count: {len(res.boxes)}", flush=True)
                     for b in res.boxes:
@@ -118,7 +118,7 @@ class CloudThreatEngine:
                         h_ratio = xywh[3] / frame.shape[0]
                         print(f"  -> Custom cls: {cls_id}, conf: {conf:.3f}, size ratio: W={w_ratio:.3f}, H={h_ratio:.3f}", flush=True)
                         if 0.01 <= w_ratio <= 0.98 and 0.01 <= h_ratio <= 0.98:
-                            if conf >= 0.20:
+                            if conf >= 0.25:
                                 max_conf = max(max_conf, conf)
             except Exception as e:
                 print(f"[WeaponEngine] Error: {e}", flush=True)
@@ -133,13 +133,13 @@ class CloudThreatEngine:
         # 1. Custom fire model inference
         if self._fire_model is not None:
             try:
-                res = self._fire_model(frame, verbose=False, conf=0.15, iou=0.45)[0]
+                res = self._fire_model(frame, verbose=False, conf=0.25, iou=0.45)[0]
                 if res.boxes and len(res.boxes) > 0:
                     print(f"[FireEngine] Raw custom detections count: {len(res.boxes)}", flush=True)
                     for b in res.boxes:
                         conf = float(b.conf[0])
                         print(f"  -> Custom fire conf: {conf:.3f}", flush=True)
-                        if conf >= 0.20:
+                        if conf >= 0.25:
                             return float(conf)
             except Exception as e:
                 print(f"[FireEngine] Error: {e}", flush=True)

@@ -294,6 +294,7 @@ class SystemEngine:
             return BLANK.copy()
 
         combined_frame = _tile_frames(frames)
+        clean_frame = combined_frame.copy()
 
         # Fast path: Skip ML Inference to boost FPS
         if self._frame_count % self.inference_skip != 0 and self.cached_annotated_frame is not None:
@@ -307,8 +308,8 @@ class SystemEngine:
         if not skip_ml:
             # STEP 2: Vision + Motion
             try:
-                vision_score, detections = self.vision.detect(combined_frame)
-                motion_score = self.vision.motion_score(combined_frame)
+                vision_score, detections = self.vision.detect(clean_frame)
+                motion_score = self.vision.motion_score(clean_frame)
             except Exception as e:
                 print(f"[SystemEngine] Vision error: {e}")
                 vision_score, detections, motion_score = 0.0, [], 0.0
@@ -331,7 +332,7 @@ class SystemEngine:
 
             # STEP 5: Identity
             try:
-                authorized   = self.face.is_authorized(combined_frame)
+                authorized   = self.face.is_authorized(clean_frame)
                 unauthorized = (not authorized) and (len(detections) > 0)
                 identity_score = 0.0 if authorized else (0.6 if unauthorized else 0.0)
             except Exception as e:
@@ -346,7 +347,7 @@ class SystemEngine:
 
             # STEP 7: ReID tracking
             try:
-                self._tracks = self.tracking.update(detections, combined_frame)
+                self._tracks = self.tracking.update(detections, clean_frame)
                 for track in self._tracks:
                     if hasattr(track, "to_ltrb"):
                         x1, y1, x2, y2 = [int(v) for v in track.to_ltrb()]
@@ -357,7 +358,7 @@ class SystemEngine:
                     else:
                         continue
 
-                    crop = combined_frame[
+                    crop = clean_frame[
                         max(0, y1):min(combined_frame.shape[0], y2),
                         max(0, x1):min(combined_frame.shape[1], x2),
                     ]
@@ -401,7 +402,7 @@ class SystemEngine:
 
         # STEP 6: Cloud threat (cached every FRAME_SKIP frames)
         try:
-            cloud_result  = self.cloud.process_safe(combined_frame)
+            cloud_result  = self.cloud.process_safe(clean_frame)
             weapon_score  = cloud_result.weapon_score
             fire_score    = cloud_result.fire_score
             theft_score   = cloud_result.theft_score if cloud_result.theft_score > 0.0 else ((motion_score * 0.7) if unauthorized else 0.0)
@@ -416,7 +417,7 @@ class SystemEngine:
 
         # Local fallback when cloud has failed repeatedly
         if self.cloud.fail_count >= 5:
-            fallback_score = self.fallback.detect_weapon(combined_frame)
+            fallback_score = self.fallback.detect_weapon(clean_frame)
             weapon_score = max(weapon_score, fallback_score)
             harmful_score = max(harmful_score, weapon_score)
             from core.instrumentation import log_instrumentation
