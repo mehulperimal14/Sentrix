@@ -126,62 +126,76 @@ In Indian environments, high-decibel acoustic false alarms commonly occur due to
 * **Indian Traffic & Street Noise Corpus**: Captures high-decibel multi-tone horns, auto-rickshaw engine harmonics, and ambient bazaar noise to maintain high precision.
 * **Regional SOS Keyword Acoustic Model**: Extension of Vosk speech recognition with Indian regional distress keywords (*"Bachao"*, *"Chor"*, *"Aag"*, *"Help"*).
 
-
 ---
 
-## 6. Labeled Dataset Creation, Training & IoT Edge-to-Cloud Integration Plan
+## 6. Labeled Dataset Creation, Training & Active Learning
 
-This section outlines the workflow for creating, labeling, and training custom model versions, as well as integrating physical inputs/outputs with the cloud-hosted Sentrix system.
+This section outlines the step-by-step workflow for creating, labeling, and training custom model versions.
 
-### A. Custom Dataset Creation (Mobile & CCTV)
-To align training data with real deployment environments:
-1. **Negative Samples (Anti-False Positives)**: Record normal actions that look similar to threats:
-   - *Normal*: Holding a black smartphone, wallet, or keychain.
-   - *Threat*: Holding a replica/toy pistol, rifle, or knife.
-   - *Normal*: Lighting a candle, gas stove, or incense.
-   - *Threat*: Lighter flame near curtains, papers, or furniture.
-2. **Environmental Diversity**: Film at different times of day (bright daylight, indoor lighting, low-light night conditions) and camera angles (elevated CCTV overhead vs. eye-level mobile camera).
-3. **Action Clipping**: For behavior/violence models, clip video sequences into short **2 to 4-second** segments centered exactly on the action.
+### A. Custom Dataset Recording Strategy
+To build high-accuracy models, collect visual data matching your specific target environments (mobile cameras & CCTV feeds):
+
+1. **Dangerous Situations**:
+   - Hold a replica gun or knife at different heights, orientations, and distances from the lens.
+   - Light matches, lighters, or simulate smoke under various angles.
+2. **Negative Samples (Anti-False Positives)**:
+   - Record normal actions that visually mimic threats: holding a black smartphone, holding a wallet/keys, lighting incense, or cooking on a gas stove.
+3. **Environmental Variations**:
+   - Collect recordings in diverse conditions: bright daylight, fluorescent indoor lighting, and night-time low-light.
+4. **Temporal Action Clips**:
+   - For behavior classifiers (e.g., violence or altercations), clip video sequences into short **2 to 4-second** segments centered exactly on the action.
 
 ### B. Image Annotation & Labeling Tools
 YOLOv8 expects bounding box label coordinates in the normalized YOLO format (`class_id x_center y_center width height`).
-*   **Roboflow (Web/Cloud)**: Upload raw video clips, auto-extract frames at a custom interval (e.g., 2 FPS), and use polygon or box tools to label objects (knife, gun, fire, smoke). Export in YOLOv8 TXT format.
-*   **CVAT (Desktop/Server)**: Open-source tool. Draw a box at frame 1 and frame 30, and CVAT will **automatically interpolate** bounding boxes for all intermediate frames.
-*   **LabelImg / Labelme**: Simple, desktop-based local annotation tools.
 
-### C. Fine-Tuning the Models on Custom Data
+*   **Roboflow (Cloud/Web Interface)**:
+    - *Workflow*: Upload raw video clips, auto-extract frames at a custom interval (e.g., 2 FPS), and draw bounding boxes around threats.
+    - *Export*: Download the final dataset zipped directly in the **YOLOv8 TXT format**.
+*   **CVAT (Computer Vision Annotation Tool - Local/Server)**:
+    - *Workflow*: Open-source tool. Draw a box at frame 1 and frame 30, and CVAT will **automatically interpolate** bounding boxes for all intermediate frames.
+*   **LabelImg / Labelme**:
+    - *Workflow*: Simple, offline desktop-based local annotation tools.
+
+### C. Active Learning & False-Positive Pruning Loop
+To continuously improve accuracy at runtime:
+1. When the edge sentinel flags a false positive (verified via dashboard user override), the system saves the raw image cache.
+2. These false-positive frames are automatically moved into a local curation folder.
+3. Add these frames back to your training dataset labeled as the background class (no bounding boxes), and retrain. This teaches the model exactly what *not* to trigger on in your environment.
+
+### D. Fine-Tuning the Models on Custom Data
 Place your custom datasets inside the `data/` directory:
 - Weapon: `data/weapon_data/` (with `data.yaml` referencing classes `0: knife`, `1: long_gun`, `2: pistol`).
 - Fire: `data/fire_smoke_data/` (with `data.yaml` referencing classes `0: fire`, `1: smoke`).
 
 Run the provided fast-track training scripts:
 ```bash
-# Weapon Training
+# Fine-tune Custom Weapon Detector
 .venv\Scripts\python.exe training/scripts/train_weapon_detector.py <epochs>
 
-# Fire & Smoke Training
+# Fine-tune Custom Fire & Smoke Detector
 .venv\Scripts\python.exe training/scripts/train_fire_smoke_detector.py <epochs>
 ```
-*Note: The scripts will automatically leverage CUDA GPU acceleration (on Windows/Linux) or Apple Metal MPS (on macOS).*
+> [!TIP]
+> The scripts automatically leverage CUDA GPU acceleration on NVIDIA hardware or Apple Silicon MPS on macOS.
 
-Copy the best weights file (e.g., `best.pt`) to the production folder:
+Once training is complete, copy the best output weights file (`best.pt`) to the production folder:
 `backend/models/v3_real/weapon_detector_real_v3.pt`
 
 ---
 
-## 7. IoT Edge-to-Cloud Integration Protocol
+## 7. IoT Edge-to-Cloud Connection Protocol
 
-To deploy Sentrix in an enterprise edge-to-cloud topology, hardware inputs (PIR sensors, tripwires) and outputs (strobe lights, physical sirens) are wired locally and synced to the cloud.
+To scale Sentrix, deploy the FastAPI backend on a GPU-enabled cloud server (AWS, GCP, or RunPod) and configure your physical devices (Raspberry Pi/ESP32) as Edge Nodes.
 
 ```
-  [ Physical Sensors ]  --(GPIO In)-->  [ Edge Controller ]  --(HTTP POST)-->  [ Cloud Server ]
-(PIR, Tripwires, Mic)                  (Raspberry Pi/ESP32)                  (FastAPI Backend)
-                                                                                    │
-                                                                               (WebSocket)
-                                                                                    │
-                                                                                    ▼
-  [ Physical Actuator ]  <--(GPIO Out)--  [ Edge Controller ]  <───────────  [ Dashboard UI ]
-(12V Siren, Door Lock)                   (Raspberry Pi/ESP32)                  (Browser Client)
+  [ Physical Sensors ]  --(GPIO Input)-->  [ Edge Controller ]  --(HTTP POST)-->  [ Cloud Server ]
+(PIR, Tripwires, Mic)                      (Raspberry Pi/ESP32)                 (FastAPI Backend)
+                                                                                         │
+                                                                                    (WebSocket)
+                                                                                         │
+                                                                                         ▼
+  [ Physical Actuator ]  <--(GPIO Output)--  [ Edge Controller ]  <───────────  [ Dashboard UI ]
+(12V Siren, Door Lock)                      (Raspberry Pi/ESP32)                  (Browser Client)
 ```
 
 ### A. Local Edge Code (RPi GPIO Input)
@@ -201,6 +215,7 @@ GPIO.setup(PIR_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
 def motion_callback(channel):
     print("🚨 Sensor tripped! Ingesting to Cloud...")
     try:
+        # Send event telemetry to cloud server
         requests.post(CLOUD_URL, json={"sensor_id": "entrance_PIR", "status": "tripped"}, timeout=2)
     except Exception as e:
         print("Cloud offline:", e)
@@ -257,4 +272,3 @@ def on_message(ws, message):
 ws = websocket.WebSocketApp("ws://<YOUR_CLOUD_IP>:8000/ws/threat", on_message=on_message)
 ws.run_forever()
 ```
-
