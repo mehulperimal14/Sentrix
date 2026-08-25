@@ -107,21 +107,21 @@ class CloudThreatEngine:
         # Check custom weapon detector if confidence is high and boxes are distinct
         if self._weapon_model is not None and max_conf < 0.5:
             try:
-                res = self._weapon_model(frame, verbose=False, conf=0.25, iou=0.45)[0]
+                res = self._weapon_model(frame, verbose=False, conf=0.15, iou=0.45)[0]
                 if res.boxes and len(res.boxes) > 0:
-                    # Filter out candidate explosion/noise (if > 10 boxes detected at once, it is noise)
-                    if len(res.boxes) <= 6:
-                        for b in res.boxes:
-                            conf = float(b.conf[0])
-                            # Check box dimensions (must be realistic size: 3% to 70% of frame)
-                            xywh = b.xywh[0].cpu().numpy()
-                            w_ratio = xywh[2] / frame.shape[1]
-                            h_ratio = xywh[3] / frame.shape[0]
-                            if 0.03 <= w_ratio <= 0.70 and 0.03 <= h_ratio <= 0.70:
-                                if conf >= 0.25:
-                                    max_conf = max(max_conf, conf)
-            except Exception:
-                pass
+                    print(f"[WeaponEngine] Raw custom detections count: {len(res.boxes)}", flush=True)
+                    for b in res.boxes:
+                        cls_id = int(b.cls[0])
+                        conf = float(b.conf[0])
+                        xywh = b.xywh[0].cpu().numpy()
+                        w_ratio = xywh[2] / frame.shape[1]
+                        h_ratio = xywh[3] / frame.shape[0]
+                        print(f"  -> Custom cls: {cls_id}, conf: {conf:.3f}, size ratio: W={w_ratio:.3f}, H={h_ratio:.3f}", flush=True)
+                        if 0.01 <= w_ratio <= 0.98 and 0.01 <= h_ratio <= 0.98:
+                            if conf >= 0.20:
+                                max_conf = max(max_conf, conf)
+            except Exception as e:
+                print(f"[WeaponEngine] Error: {e}", flush=True)
 
         return float(min(max_conf, 1.0))
 
@@ -133,13 +133,16 @@ class CloudThreatEngine:
         # 1. Custom fire model inference
         if self._fire_model is not None:
             try:
-                res = self._fire_model(frame, verbose=False, conf=0.25, iou=0.45)[0]
-                if res.boxes and len(res.boxes) > 0 and len(res.boxes) <= 6:
-                    confs = [float(b.conf[0]) for b in res.boxes if float(b.conf[0]) >= 0.25]
-                    if confs:
-                        return float(max(confs))
-            except Exception:
-                pass
+                res = self._fire_model(frame, verbose=False, conf=0.15, iou=0.45)[0]
+                if res.boxes and len(res.boxes) > 0:
+                    print(f"[FireEngine] Raw custom detections count: {len(res.boxes)}", flush=True)
+                    for b in res.boxes:
+                        conf = float(b.conf[0])
+                        print(f"  -> Custom fire conf: {conf:.3f}", flush=True)
+                        if conf >= 0.20:
+                            return float(conf)
+            except Exception as e:
+                print(f"[FireEngine] Error: {e}", flush=True)
 
         # 2. Strict HSV Flame Chromaticity Verification
         try:
