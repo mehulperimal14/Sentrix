@@ -126,3 +126,135 @@ In Indian environments, high-decibel acoustic false alarms commonly occur due to
 * **Indian Traffic & Street Noise Corpus**: Captures high-decibel multi-tone horns, auto-rickshaw engine harmonics, and ambient bazaar noise to maintain high precision.
 * **Regional SOS Keyword Acoustic Model**: Extension of Vosk speech recognition with Indian regional distress keywords (*"Bachao"*, *"Chor"*, *"Aag"*, *"Help"*).
 
+
+---
+
+## 6. Labeled Dataset Creation, Training & IoT Edge-to-Cloud Integration Plan
+
+This section outlines the workflow for creating, labeling, and training custom model versions, as well as integrating physical inputs/outputs with the cloud-hosted Sentrix system.
+
+### A. Custom Dataset Creation (Mobile & CCTV)
+To align training data with real deployment environments:
+1. **Negative Samples (Anti-False Positives)**: Record normal actions that look similar to threats:
+   - *Normal*: Holding a black smartphone, wallet, or keychain.
+   - *Threat*: Holding a replica/toy pistol, rifle, or knife.
+   - *Normal*: Lighting a candle, gas stove, or incense.
+   - *Threat*: Lighter flame near curtains, papers, or furniture.
+2. **Environmental Diversity**: Film at different times of day (bright daylight, indoor lighting, low-light night conditions) and camera angles (elevated CCTV overhead vs. eye-level mobile camera).
+3. **Action Clipping**: For behavior/violence models, clip video sequences into short **2 to 4-second** segments centered exactly on the action.
+
+### B. Image Annotation & Labeling Tools
+YOLOv8 expects bounding box label coordinates in the normalized YOLO format (`class_id x_center y_center width height`).
+*   **Roboflow (Web/Cloud)**: Upload raw video clips, auto-extract frames at a custom interval (e.g., 2 FPS), and use polygon or box tools to label objects (knife, gun, fire, smoke). Export in YOLOv8 TXT format.
+*   **CVAT (Desktop/Server)**: Open-source tool. Draw a box at frame 1 and frame 30, and CVAT will **automatically interpolate** bounding boxes for all intermediate frames.
+*   **LabelImg / Labelme**: Simple, desktop-based local annotation tools.
+
+### C. Fine-Tuning the Models on Custom Data
+Place your custom datasets inside the `data/` directory:
+- Weapon: `data/weapon_data/` (with `data.yaml` referencing classes `0: knife`, `1: long_gun`, `2: pistol`).
+- Fire: `data/fire_smoke_data/` (with `data.yaml` referencing classes `0: fire`, `1: smoke`).
+
+Run the provided fast-track training scripts:
+```bash
+# Weapon Training
+.venv\Scripts\python.exe training/scripts/train_weapon_detector.py <epochs>
+
+# Fire & Smoke Training
+.venv\Scripts\python.exe training/scripts/train_fire_smoke_detector.py <epochs>
+```
+*Note: The scripts will automatically leverage CUDA GPU acceleration (on Windows/Linux) or Apple Metal MPS (on macOS).*
+
+Copy the best weights file (e.g., `best.pt`) to the production folder:
+`backend/models/v3_real/weapon_detector_real_v3.pt`
+
+---
+
+## 7. IoT Edge-to-Cloud Integration Protocol
+
+To deploy Sentrix in an enterprise edge-to-cloud topology, hardware inputs (PIR sensors, tripwires) and outputs (strobe lights, physical sirens) are wired locally and synced to the cloud.
+
+```
+  [ Physical Sensors ]  --(GPIO In)-->  [ Edge Controller ]  --(HTTP POST)-->  [ Cloud Server ]
+(PIR, Tripwires, Mic)                  (Raspberry Pi/ESP32)                  (FastAPI Backend)
+                                                                                    │
+                                                                               (WebSocket)
+                                                                                    │
+                                                                                    ▼
+  [ Physical Actuator ]  <--(GPIO Out)--  [ Edge Controller ]  <───────────  [ Dashboard UI ]
+(12V Siren, Door Lock)                   (Raspberry Pi/ESP32)                  (Browser Client)
+```
+
+### A. Local Edge Code (RPi GPIO Input)
+Wired PIR/sensor pins are monitored locally on a Raspberry Pi or ESP32 and uploaded to the cloud server via HTTP:
+```python
+# edge_input.py (Runs on local Raspberry Pi)
+import RPi.GPIO as GPIO
+import time
+import requests
+
+PIR_PIN = 17
+CLOUD_URL = "http://<YOUR_CLOUD_IP>:8000/api/hardware/trigger"
+
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(PIR_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+
+def motion_callback(channel):
+    print("🚨 Sensor tripped! Ingesting to Cloud...")
+    try:
+        requests.post(CLOUD_URL, json={"sensor_id": "entrance_PIR", "status": "tripped"}, timeout=2)
+    except Exception as e:
+        print("Cloud offline:", e)
+
+GPIO.add_event_detect(PIR_PIN, GPIO.RISING, callback=motion_callback, bouncetime=500)
+
+try:
+    while True:
+        time.sleep(1)
+except KeyboardInterrupt:
+    GPIO.cleanup()
+```
+
+### B. Cloud Ingestion Endpoint
+Add an API router endpoint inside `backend/web/routes.py` to process hardware signals and dynamically update system threat indices:
+```python
+# backend/web/routes.py
+@router.post("/api/hardware/trigger")
+async def handle_hardware_trigger(data: dict):
+    sensor_id = data.get("sensor_id")
+    status = data.get("status")
+    
+    if status == "tripped":
+        from core.state import state
+        # Boost the threat metrics dynamically in memory
+        state.update_motion_score(1.0)
+        
+    return {"status": "success", "sensor": sensor_id}
+```
+
+### C. Local Actuator Control (Cloud-to-Edge Feedback)
+The edge controller listens to the real-time websocket thread `/ws/threat` running on the cloud. When a threat level thresholds (e.g. `weapon_score > 0.8`), it trips the physical relay output to sound a 12V local siren:
+```python
+# edge_output.py (Runs on local Raspberry Pi)
+import RPi.GPIO as GPIO
+import websocket
+import json
+
+SIREN_RELAY_PIN = 27
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(SIREN_RELAY_PIN, GPIO.OUT)
+
+def on_message(ws, message):
+    data = json.loads(message)
+    weapon_score = data.get("weapon", 0.0)
+    fire_score = data.get("fire", 0.0)
+    
+    if weapon_score > 0.75 or fire_score > 0.75:
+        print("🚨 Critical threat score received! Sounding physical alarm!")
+        GPIO.output(SIREN_RELAY_PIN, GPIO.HIGH)
+    else:
+        GPIO.output(SIREN_RELAY_PIN, GPIO.LOW)
+
+ws = websocket.WebSocketApp("ws://<YOUR_CLOUD_IP>:8000/ws/threat", on_message=on_message)
+ws.run_forever()
+```
+
