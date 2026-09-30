@@ -263,4 +263,93 @@ class IdentityEngine:
         return self.cfg.unknown_person_score if person_present else 0.0
 
 
-__all__ = ["IdentityEngine", "IdentityResult"]
+class IdentityWorker:
+    """Face recognition off the inference thread (CLAUDE.md M2).
+
+    Recognition was the largest per-tick cost in the live configuration (125 ms
+    p50 with four faces on the laptop CPU). A face verdict does not have to be
+    recomputed every tick - people do not change identity between frames - so
+    the worker re-checks at most once per ``recheck_seconds``, at once when
+    more people come into view, and every ``authorised_recheck_seconds`` while
+    everyone in view is recognised. The pipeline reads the latest verdict and
+    never waits for it.
+
+    Fail-closed: until the first check, and whenever the latest verdict is
+    older than ``verdict_max_age_seconds`` (worker stalled), nobody is
+    authorised.
+    """
+
+    def __init__(self, engine: IdentityEngine, cfg=None) -> None:
+        self.engine = engine
+        self.cfg = cfg or settings.identity
+        self._lock = threading.Lock()
+        self._wake = threading.Event()
+        self._stop = threading.Event()
+        self._job: tuple[np.ndarray, float] | None = None
+        self._busy = False
+        self._result = IdentityResult(authorized=False, degraded=not engine.available)
+        self._result_at: float | None = None
+        self._submitted_at: float | None = None
+        self._persons = 0
+        self._arrival = False
+        self.checks = 0
+        self._thread = threading.Thread(target=self._run, daemon=True,
+                                        name="sentrix-identity")
+        self._thread.start()
+
+    def observe(self, frame: np.ndarray, persons: int, now: float) -> IdentityResult:
+        """The latest verdict; schedules a check on ``frame`` when one is due."""
+        with self._lock:
+            if persons > self._persons:
+                self._arrival = True          # someone new: check as soon as idle
+            self._persons = persons
+            if not self._busy and self._due(persons, now):
+                self._job, self._busy = (frame, now), True
+                self._submitted_at, self._arrival = now, False
+                self._wake.set()
+            return self._current(now)
+
+    def _due(self, persons: int, now: float) -> bool:
+        if self._submitted_at is None or self._arrival:
+            return True
+        r = self._result
+        everyone = (r.authorized and not r.held and r.faces > 0
+                    and r.matched == r.faces and r.faces >= persons)
+        interval = (self.cfg.authorised_recheck_seconds if everyone
+                    else self.cfg.recheck_seconds)
+        return now - self._submitted_at >= interval
+
+    def _current(self, now: float) -> IdentityResult:
+        r = self._result
+        if (self._result_at is not None
+                and now - self._result_at > self.cfg.verdict_max_age_seconds):
+            return IdentityResult(authorized=False, degraded=r.degraded,
+                                  faces=r.faces, matched=0)
+        return r
+
+    def _run(self) -> None:
+        while not self._stop.is_set():
+            if not self._wake.wait(timeout=0.5):
+                continue
+            self._wake.clear()
+            with self._lock:
+                job, self._job = self._job, None
+            if job is None:
+                continue
+            frame, at = job
+            try:
+                result = self.engine.check(frame, at)
+            except Exception as exc:
+                log.error("identity check failed: %s", exc)
+                result = IdentityResult(authorized=False, degraded=True)
+            with self._lock:
+                self._result, self._result_at, self._busy = result, at, False
+                self.checks += 1
+
+    def stop(self) -> None:
+        self._stop.set()
+        self._wake.set()
+        self._thread.join(timeout=5.0)
+
+
+__all__ = ["IdentityEngine", "IdentityResult", "IdentityWorker"]

@@ -303,12 +303,18 @@ class BehaviourConfig:
 class IdentityConfig:
     """Face authorisation.
 
-    ``fail_closed`` is the most important flag in this file. Recognising a
-    resident forces TCI to a floor value and suppresses *all* evidence capture
-    and alerting, so a weak matcher is not a weak feature — it is an
-    authentication bypass. When no real face-embedding backend is installed the
-    system must report "not authorised" rather than fall back to comparing
-    colour histograms, which is what the previous build did.
+    ``fail_closed`` is the most important flag in this file. A recognised
+    resident disarms the armed-mode intrusion rule, so a weak matcher is not a
+    weak feature — it is an authentication bypass. (Identity no longer relaxes
+    weapon or fire evidence at all; CLAUDE.md M1.) When no real face-embedding
+    backend is installed the system must report "not authorised" rather than
+    fall back to comparing colour histograms, which is what the previous build
+    did.
+
+    Live, recognition runs on its own thread (:class:`IdentityWorker`): at most
+    once per ``recheck_seconds``, at once when more people come into view, and
+    every ``authorised_recheck_seconds`` while everyone in view is recognised.
+    A verdict older than ``verdict_max_age_seconds`` is not trusted.
     """
 
     fail_closed: bool = _env_bool("SENTRIX_IDENTITY_FAIL_CLOSED", True)
@@ -336,6 +342,10 @@ class IdentityConfig:
     #: live pipeline ran at 0.32 Hz, and at 4.1 Hz with spinning off alone
     #: (CLAUDE.md §5, M2).
     ort_threads: int = _env_int("SENTRIX_FACE_ORT_THREADS", 4)
+
+    recheck_seconds: float = 1.0
+    authorised_recheck_seconds: float = 5.0
+    verdict_max_age_seconds: float = 6.0
 
 
 @dataclass(frozen=True)

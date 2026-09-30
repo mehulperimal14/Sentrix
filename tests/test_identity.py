@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import threading
+import time
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 from sentrix.config import settings
-from sentrix.perception.identity import IdentityEngine
+from sentrix.perception.identity import IdentityEngine, IdentityResult, IdentityWorker
 
 
 class TestFaceCounts:
@@ -72,3 +73,82 @@ class TestQuietSessions:
 
     def test_only_detection_and_recognition_are_loaded(self):
         assert tuple(settings.identity.face_modules) == ("detection", "recognition")
+
+
+class FakeEngine:
+    """Counts checks; optionally slow; answers with a fixed verdict."""
+
+    available = True
+
+    def __init__(self, result=None, delay=0.0):
+        self.result = result or IdentityResult(authorized=False, faces=1, matched=0)
+        self.delay = delay
+        self.calls = 0
+
+    def check(self, frame, now=None):
+        self.calls += 1
+        time.sleep(self.delay)
+        return self.result
+
+
+def drive(worker, seconds, hz=10.0, persons=lambda t: 1, start=0.0):
+    """Observe at ``hz`` in (scaled) real time; return the last verdict."""
+    frame = np.zeros((4, 4, 3), np.uint8)
+    result, t = None, start
+    while t < start + seconds:
+        result = worker.observe(frame, persons(t), now=t)
+        time.sleep(1.0 / hz)
+        t += 1.0 / hz
+    return result
+
+
+class TestIdentityWorker:
+    """Recognition off the inference thread (CLAUDE.md M2)."""
+
+    def test_observe_never_waits_for_recognition(self):
+        worker = IdentityWorker(FakeEngine(delay=0.5))
+        started = time.perf_counter()
+        worker.observe(np.zeros((4, 4, 3), np.uint8), 1, now=0.0)
+        assert time.perf_counter() - started < 0.05
+        worker.stop()
+
+    def test_fail_closed_before_the_first_verdict(self):
+        resident = IdentityResult(authorized=True, name="res", faces=1, matched=1)
+        worker = IdentityWorker(FakeEngine(resident, delay=0.5))
+        first = worker.observe(np.zeros((4, 4, 3), np.uint8), 1, now=0.0)
+        assert not first.authorized
+        worker.stop()
+
+    def test_rechecks_about_once_a_second_not_every_tick(self):
+        engine = FakeEngine()
+        worker = IdentityWorker(engine)
+        drive(worker, seconds=2.5)
+        worker.stop()
+        assert 2 <= engine.calls <= 4, f"{engine.calls} checks in 2.5 s at 10 Hz"
+
+    def test_someone_new_is_checked_at_once(self):
+        engine = FakeEngine()
+        worker = IdentityWorker(engine)
+        drive(worker, seconds=0.3)                           # first check at t=0
+        before = engine.calls
+        drive(worker, seconds=0.3, persons=lambda t: 2, start=0.3)
+        worker.stop()
+        assert engine.calls == before + 1, "an arrival waited for the 1 s cadence"
+
+    def test_everyone_recognised_is_rechecked_less_often(self):
+        resident = IdentityResult(authorized=True, name="res", faces=1, matched=1)
+        engine = FakeEngine(resident)
+        worker = IdentityWorker(engine)
+        verdict = drive(worker, seconds=2.5)
+        worker.stop()
+        assert verdict.authorized and engine.calls == 1
+
+    def test_a_stalled_worker_stops_authorising(self):
+        resident = IdentityResult(authorized=True, name="res", faces=1, matched=1)
+        worker = IdentityWorker(FakeEngine(resident))
+        drive(worker, seconds=0.2)
+        worker._busy = True                                  # stalled: no new checks
+        late = worker.observe(np.zeros((4, 4, 3), np.uint8), 1,
+                              now=settings.identity.verdict_max_age_seconds + 1.0)
+        worker.stop()
+        assert not late.authorized

@@ -307,6 +307,11 @@ class SceneEngine:
     def available(self) -> bool:
         return self._model is not None
 
+    @property
+    def device(self):
+        """Where the classifier runs (``cuda`` when a CUDA build of torch is installed)."""
+        return self._device
+
     # ── inference ─────────────────────────────────────────────────────────────
     def score_frames(self, frames: list[np.ndarray]) -> np.ndarray:
         """Class probabilities for BGR frames, shape ``(N, len(classes))``."""

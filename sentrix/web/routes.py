@@ -240,6 +240,7 @@ async def api_health() -> JSONResponse:
         "frame_age_ms": live.get("frame_age_ms"),
         "detector": pipeline.detector.available,
         "scene_model": pipeline.scene.weights_name,
+        "scene_device": str(pipeline.scene.device) if pipeline.scene.available else None,
         "scene_thresholds": pipeline.scene.thresholds if pipeline.scene.available else None,
         "threat_sources": settings.threat.sources,
         "armed": settings.threat.armed,

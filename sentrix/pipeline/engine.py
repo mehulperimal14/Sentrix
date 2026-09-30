@@ -51,7 +51,7 @@ from sentrix.io.sources import FrameSource, _placeholder, build_source
 from sentrix.perception.audio import AudioEngine
 from sentrix.perception.behaviour import BehaviourEngine
 from sentrix.perception.detector import Detector
-from sentrix.perception.identity import IdentityEngine
+from sentrix.perception.identity import IdentityEngine, IdentityWorker
 from sentrix.perception.motion import MotionEngine
 from sentrix.perception.reid import ReIDEngine
 from sentrix.perception.scene import SceneEngine
@@ -143,6 +143,7 @@ class Pipeline:
 
     def _init_live(self) -> None:
         """State shared by the capture, inference and preview paths."""
+        self._identity_worker: IdentityWorker | None = None
         self._slot = threading.Condition()
         self._pending: tuple[np.ndarray, float] | None = None
         self._overlay: Overlay | None = None
@@ -217,7 +218,12 @@ class Pipeline:
             violence_score, _ = self.violence.result(now)
             violence = (violence_score, self.violence.threshold, self.violence.fresh)
 
-        identity = self.identity.check(frame, now)
+        if self._identity_worker is not None:
+            # Live: the latest verdict from the recognition thread.
+            identity = self._identity_worker.observe(frame, len(detections.persons), now)
+        else:
+            # Replay and evaluation: synchronous, so results are reproducible.
+            identity = self.identity.check(frame, now)
         identity_score = self.identity.score(identity, person_present)
 
         # Identity never relaxes threat evidence (evidence.py); it only feeds
@@ -399,6 +405,9 @@ class Pipeline:
         never queued. In the first live test the preview was drawn only after
         inference, so the video froze at the AI rate (0.3 Hz, CLAUDE.md §5).
         """
+        identity = getattr(self, "identity", None)
+        if getattr(identity, "available", False) and self._identity_worker is None:
+            self._identity_worker = IdentityWorker(identity)
         worker = threading.Thread(target=self._inference_loop, args=(stop,),
                                   daemon=True, name="sentrix-inference")
         worker.start()
@@ -415,6 +424,9 @@ class Pipeline:
             with self._slot:
                 self._slot.notify_all()
             worker.join(timeout=5.0)
+            if self._identity_worker is not None:
+                self._identity_worker.stop()
+                self._identity_worker = None
 
     def _capture_step(self) -> bool:
         """Publish the newest camera frame as the preview and offer it to AI."""

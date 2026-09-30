@@ -6,7 +6,7 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.4-EE4C2C.svg)](https://pytorch.org/)
 [![YOLOv8](https://img.shields.io/badge/YOLOv8-ultralytics-00BFA5.svg)](https://docs.ultralytics.com/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688.svg)](https://fastapi.tiangolo.com/)
-[![Tests](https://img.shields.io/badge/tests-158%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-164%20passing-brightgreen.svg)](tests/)
 
 > **Capstone Project CPG-299** · Computer Science and Engineering, Thapar Institute of
 > Engineering and Technology, Patiala · Mentor: Dr. Ashutosh Mishra
@@ -34,7 +34,7 @@ adding an ESP32 node or a GPIO relay later is a configuration change, not a rewr
 | Scene classification | **Working** | normal / fire / weapon / assault / robbery; DINOv2 ViT-B/14 trained on the custom dataset (`models/v4_custom/`) |
 | Violence classification | **Superseded** | The RWF-2000 model calls the test corridor a fight; replaced by the scene classifier's assault head whenever a scene model is installed |
 | Acoustic classification | **Working** | Model is under-trained — see *Known limitations* |
-| Face authorisation | **Working** | ArcFace 512-d via `insightface`; fails closed without it |
+| Face authorisation | **Working** | ArcFace 512-d via `insightface` on its own thread (about once a second); fails closed without it |
 | Cross-camera re-identification | **Degraded** | Histogram fallback; install `torchreid` |
 | Voice SOS | **Not wired** | Deferred; Vosk model retained |
 | Hardware actuation | **Interface only** | No hardware attached |
@@ -146,7 +146,7 @@ Sentrix/
 │   └── runs/                   all run outputs (v1_legacy, v2_real, v3_real, ucf_crime_dvs)
 ├── tools/                      doctor, replay, baseline, evaluate, auditors,
 │                               custom-dataset evaluation
-├── tests/                      158 regression tests
+├── tests/                      164 regression tests
 ├── docs/                       specifications
 ├── Capstone Docs/              submissions
 └── var/                        runtime output — gitignored, never web-served
@@ -403,9 +403,10 @@ two videos in two different rooms, which no model generalises across. The latenc
 row comes from the evaluation harness, which stubs identity and audio. The live
 configuration (`python tools/bench_live.py`: real face recognition, a 30 fps video
 as the camera, side effects stubbed) measured on the laptop CPU with four faces in
-view: preview **29.7 fps**, AI **3.6 Hz**, tick p50 292 ms, frame age p50 313 ms
-(identity 125 ms, DINOv2 scene 94 ms, three YOLO heads 71 ms). The first live test
-ran at 0.32 Hz with the video frozen at that rate (CLAUDE.md §5, M2). Protocol,
+view: preview **29.7 fps**, AI **5.6 Hz** (cap 6), tick p50 168 ms, frame age p50
+198 ms (DINOv2 scene 92 ms, three YOLO heads 72 ms; face recognition runs on its own
+thread about once a second). The first live test ran at 0.32 Hz with the video
+frozen at that rate (CLAUDE.md §5, M2). Protocol,
 model selection and the full breakdown are in
 [`docs/6_CUSTOM_DATASET_EVALUATION.md`](docs/6_CUSTOM_DATASET_EVALUATION.md).
 
