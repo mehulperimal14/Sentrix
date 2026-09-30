@@ -358,13 +358,16 @@ Three configurations are kept on separate branches:
 | Test, per image — accuracy / macro-F1 | 0.043 / 0.114 | 0.677 / 0.460 | 0.720 / 0.419 |
 | Test, video replay — episodes detected | 3 of 3 | 3 of 3 | **0 of 3** |
 | False alarms per normal minute, all 10 videos | 13.96 | 7.12 | **0.79** |
+| Pipeline latency per tick on CPU, mean / p95 | 121 / 205 ms | 117 / 132 ms | 213 / 245 ms |
 
 This branch is the most accurate on everything that could be used to choose a
 model (validation, cross-validation, false alarms) and is the recommended
 configuration. Its blind spot is the stick swung in the test corridor, which
 the fine-tuned branch catches: 39 training frames of a stick *carried* did not
 teach a stick *swung*. Assault is not detected by either branch — it appears in
-two videos in two different rooms, which no model generalises across. Protocol,
+two videos in two different rooms, which no model generalises across. On CPU the
+DINOv2 scene model (about 105 ms per frame) holds the live loop to about 4.7 Hz
+instead of 6; with CUDA it runs on the GPU automatically. Protocol,
 model selection and the full breakdown are in
 [`docs/6_CUSTOM_DATASET_EVALUATION.md`](docs/6_CUSTOM_DATASET_EVALUATION.md).
 
