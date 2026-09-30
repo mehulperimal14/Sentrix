@@ -94,6 +94,8 @@ function updateDashboard(data, lastLevel) {
     const audioLabel = document.getElementById("audio-label");
     if (audioLabel) audioLabel.textContent = data.audio_label || "—";
 
+    updateScene(data.scene);
+
     const cloudStatus = document.getElementById("cloud-status-text");
     const cloudDot = document.getElementById("cloud-dot");
     if (cloudStatus && cloudDot) {
@@ -230,6 +232,40 @@ function updateScoreBars(scores) {
             else bar.style.background = "#3b82f6";
         }
     });
+}
+
+// Scene classifier verdict and class probabilities (window-averaged). Built
+// with DOM nodes rather than innerHTML: class names come from the checkpoint.
+function updateScene(scene) {
+    const label = document.getElementById("scene-label");
+    const list = document.getElementById("scene-probs");
+    if (!label || !list) return;
+    if (!scene) {
+        label.textContent = "not installed";
+        list.replaceChildren();
+        return;
+    }
+    label.textContent = scene.label;
+    label.style.color = scene.label === "normal" ? "" : "#ef4444";
+    const rows = Object.entries(scene.probs || {}).map(([name, value]) => {
+        const row = document.createElement("div");
+        row.className = "score-row";
+        const key = document.createElement("span");
+        key.className = "score-label";
+        key.textContent = name;
+        const track = document.createElement("div");
+        track.className = "score-track";
+        const bar = document.createElement("div");
+        bar.className = "score-bar";
+        bar.style.width = (value * 100) + "%";
+        bar.style.background = name === "normal" ? "#3b82f6"
+            : (value > 0.5 ? "#ef4444" : (value > 0.25 ? "#facc15" : "#3b82f6"));
+        bar.textContent = Math.round(value * 100) + "%";
+        track.appendChild(bar);
+        row.append(key, track);
+        return row;
+    });
+    list.replaceChildren(...rows);
 }
 
 function showDispatchPanel(pkg) {
