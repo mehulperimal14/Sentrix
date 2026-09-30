@@ -17,9 +17,9 @@ from torchvision import transforms, models
 
 ROOT_DIR = Path(__file__).parent.parent.parent.resolve()
 DATA_DIR = ROOT_DIR / "data" / "violence_data"
-BACKEND_MODELS_DIR = ROOT_DIR / "backend" / "models"
-BACKEND_MODELS_DIR.mkdir(parents=True, exist_ok=True)
-OUTPUT_MODEL = BACKEND_MODELS_DIR / "violence_classifier.pt"
+MODELS_DIR = ROOT_DIR / "models"
+MODELS_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUT_MODEL = MODELS_DIR / "violence_classifier.pt"
 
 class ViolenceDataset(Dataset):
     def __init__(self, csv_file, data_dir, transform=None):

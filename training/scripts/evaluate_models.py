@@ -21,7 +21,7 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, models
 
 ROOT_DIR = Path(__file__).parent.parent.parent.resolve()
-MODELS_DIR = ROOT_DIR / "backend" / "models"
+MODELS_DIR = ROOT_DIR / "models"
 
 # Ensure repo root is on sys.path for script imports
 if str(ROOT_DIR) not in sys.path:

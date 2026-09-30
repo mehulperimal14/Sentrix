@@ -1,274 +1,289 @@
-# SENTRIX — Future Advancements, Cloud Architecture & Dataset Expansion
+# SENTRIX — Roadmap & Remaining Work
 
-This document serves as the master engineering roadmap for scaling SENTRIX from an on-premise edge prototype into an enterprise-grade, distributed edge-to-cloud surveillance ecosystem.
-
----
-
-## 1. Hardware Integration & Edge Node Engineering
-
-### A. Edge Physical Sentinel BOM (Student Budget: Under ₹20,000 INR)
-* **Compute Engine**: Orange Pi 5 (4GB RAM, Rockchip RK3588S with 6 TOPS NPU) or Raspberry Pi 4 (4GB).
-* **Optical Sensor**: Sony IMX291 / IMX327 1080p @ 30 FPS Low-Light Starvis UVC USB Camera.
-* **Acoustic Sensor**: USB Omnidirectional Boundary Microphone (16 kHz PCM Mono).
-* **Environmental Sensor**: DHT22 (AM2302) Digital Temperature & Humidity Sensor on GPIO 4 (Pin 7).
-* **Acoustic Deterrent**: 12V 110dB Piezo Siren triggered via 5V Optocoupler Relay on GPIO 17 (Pin 11).
-* **Power Subsystem**: 12V 3A DC SMPS adapter with LM2596 DC-DC step-down buck converter (12V $\rightarrow$ 5.15V 3A).
-
-### B. Fail-Safe Offline Edge Mode
-If the edge sentinel loses internet or cloud connectivity:
-1. The local neural pipeline (YOLOv8n + ResNet18 + Acoustic CNN + XGBoost) continues uninterrupted on-device.
-2. If $TCI \ge 0.85$ (Level 5 Critical Threat), the local GPIO directly energizes Relay Pin 17 to sound the 110dB siren immediately without waiting for cloud confirmation.
-3. Encrypted AES-256-GCM evidence snapshots are queued locally on the high-endurance MicroSD card and synced automatically upon network recovery.
+**Version 3.0 · Updated: August 2026**
 
 ---
 
-## 2. Cloud Server Architecture & Scalable Hosting
+## 1. Current Status
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│             Physical Edge Sentinel Nodes (1..N)            │
-│  • Local Inference • GPIO Siren • Local SQLite Sync Buffer  │
-└──────────────────────────────┬──────────────────────────────┘
-                               │ TLS 1.3 / mTLS WebSocket & WebRTC
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│               Cloud Ingestion & Gateway Layer               │
-│  • NGINX Reverse Proxy / Traefik Load Balancer             │
-│  • WebRTC Media Server (Janus / MediaSoup) for Video Feeds  │
-│  • WebSocket Gateway (FastAPI / Golang Goroutines)          │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│                 Distributed Processing Mesh                 │
-│  ┌────────────────────────┐     ┌────────────────────────┐  │
-│  │   Redis Pub/Sub & MQ   │     │ High-Density GPU Nodes │  │
-│  │ (Threat Event Fan-out) │     │ (YOLOv8x / SlowFast)   │  │
-│  └───────────┬────────────┘     └───────────┬────────────┘  │
-│              │                              │               │
-│              ▼                              ▼               │
-│  ┌────────────────────────┐     ┌────────────────────────┐  │
-│  │ PostgreSQL + Timescale │     │ S3 / MinIO Object Vault│  │
-│  │ (TCI Telemetry & Logs) │     │ (AES-256-GCM Evidence) │  │
-│  └────────────────────────┘     └────────────────────────┘  │
-└──────────────────────────────┬──────────────────────────────┘
-                               │ WebSocket State Feed (/ws/threat @ 30 FPS)
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│            Next.js Cloud Command & Control Center           │
-│  • Live Video Wall • Multi-Site Map • Automated Dispatch    │
-└─────────────────────────────────────────────────────────────┘
-```
+Version 2.1 of this document contained a capability matrix marking eleven
+subsystems "✅ Operational". Six of them were inert. The table below is generated
+in substance by `python tools/doctor.py`; run it rather than trusting any table.
 
-### Hosting Strategy for Ultra-Low Latency & High Efficiency
-1. **Edge-Assisted Inference**: Run lightweight Nano/Small models on the edge to detect candidate anomalies. Only stream full uncompressed video to the cloud when $TCI > 0.25$. This reduces bandwidth consumption by **90%**.
-2. **WebRTC Video Pipeline**: Replace HTTP MJPEG with WebRTC (VP8/H.264 hardware encoding) to reduce glass-to-glass latency from 500ms down to **<80ms**.
-3. **Database Architecture**:
-   - **TimescaleDB**: Time-series storage for continuous temperature, acoustic energy, and TCI history.
-   - **PostgreSQL**: Relational storage for incidents, residents, and dispatch logs.
-   - **MinIO / AWS S3**: Immutable object storage for encrypted forensic snapshots with SHA-256 manifests.
+### Working
 
----
+| Capability | Notes |
+|---|---|
+| YOLOv8 person, weapon, fire/smoke detection | One component, three heads, one load each |
+| ByteTrack multi-object tracking | Built into ultralytics; replaced the DeepSORT dependency |
+| TCI fusion with hard overrides | Empty room 0.012, knife 0.920, fire 0.950 |
+| Hysteresis and incident grouping | 0.6 s up, 5.0 s down; side effects bind to incidents |
+| Time-based EMA | `α = 1 − exp(−dt/τ)`, identical at 3 Hz and 30 Hz |
+| Violence classification | 16 frames over 2.0 s, re-scored at 1 Hz |
+| Acoustic classification | 4.0 s log-mel window, 1.0 s hop, RMS-gated |
+| Face authorisation | ArcFace 512-d **when `insightface` is installed**; fails closed otherwise |
+| AES-256-GCM evidence vault | HMAC hash-chained manifest, collision-free naming |
+| Session auth, rate limiting, upload validation | Magic-byte checks, path confinement |
+| Incident database with operator verdicts | One row per episode |
+| JSONL event log | Audit trail, fusion training set, evaluation input |
+| Structured telemetry | Always on, not gated behind an eval flag |
 
-## 3. Acceleration & Latency Optimization Roadmap
+### Not working, or not wired
 
-| Optimization Technique | Target Subsystem | Expected Latency Gain | Implementation Path |
-|---|---|---|---|
-| **RKNN / NPU Acceleration** | Rockchip RK3588 NPU | **3.2x faster inference** | Convert YOLOv8 and ResNet18 to `.rknn` format using RKNN-Toolkit2. |
-| **TensorRT / ONNX FP16** | Cloud NVIDIA GPUs | **4.5x faster inference** | Quantize models to FP16 / INT8 with calibration caches. |
-| **CoreML / Apple Neural Engine (ANE)** | macOS / iOS edge clients | **2.8x faster inference** | Export with `coremltools` targeting the Apple Neural Engine. |
-| **Temporal Sliding Window Voting** | Violence & Anomaly Classifiers | **+5–8% Precision gain** | Aggregate predictions across an $N=8$ frame FIFO queue. |
+| Item | State | Why it matters |
+|---|---|---|
+| **TCI fusion trained on real data** | Synthetic labels | The central scientific claim of the project |
+| **Re-identification** | Histogram fallback | `torchreid` not installed; approved objective is rank-1 ≥ 85% |
+| **UCF-Crime anomaly** | Not wired; polarity bug | Doc 2 §6 |
+| **Voice SOS** | Not wired | Vosk model retained in `models/vosk-model/` |
+| **Thermal telemetry** | No sensor | Deliberately absent from the feature contract |
+| **GPIO siren** | Interface only | No hardware attached |
+| **Pose estimation** | `PoseEstimator` written, not wired | Needs evaluation first |
+
+### Corrections to v2.1's status table
+
+Marked "✅ Operational" but inert at the time of the mid-semester submission:
+
+- **UCF-Crime anomaly** — no `anomaly` key in the score dict; neither checkpoint was ever loaded
+- **Face recognition** — no backend installed; the live path compared HSV colour histograms
+- **Voice SOS** — model path resolved relative to the working directory and never found the model
+- **GPIO siren relay** — no GPIO code existed in the repository
+- **ReID tracking** — threshold of 120.0 against unit vectors; every person collapsed to `GID-1`
+- **Instrumentation telemetry** — no-op unless `SENTRIX_EVAL_MODE=1`
 
 ---
 
-## 4. Curated Datasets for Further Training & Accuracy Scaling
+## 2. The Critical Path
 
-To push model accuracy, recall, and mAP into the 95%+ tier, train on these open-access benchmarks:
+Everything below is ordered by how much it moves the three claims that actually
+matter: **≥ 60% false-alarm reduction versus a motion-only baseline**,
+**< 2 s detection-to-alert**, and **tamper-evident evidence**.
 
-### A. Weapon & Concealed Threat Detection
-* **Roboflow Gun and Knife Dataset**: [https://universe.roboflow.com/roboflow-universe-projects/gun-and-knife-detection](https://universe.roboflow.com/roboflow-universe-projects/gun-and-knife-detection) (30,000+ labeled images with pistols, knives, shotguns).
-* **OpenImages V7 (Weapons Split)**: [https://storage.googleapis.com/openimages/web/index.html](https://storage.googleapis.com/openimages/web/index.html) (Massive real-world diversity).
-* **US Military Small Arms Dataset**: High-resolution tactical firearms in varying lighting and occlusions.
+### 2.1 Record a boring set — the blocker for three KPIs
 
-### B. Violence, Altercation & Fight Detection
-* **RWF-2000 (Real World Fight Dataset)**: [https://github.com/m-h-g/RWF-2000](https://github.com/m-h-g/RWF-2000) (2,000 high-definition surveillance fight videos specifically filmed on CCTV cameras).
-* **UCF-Crime Dataset**: [https://www.crcv.ucf.edu/research/projects/anomaly-detection-in-surveillance-videos/](https://www.crcv.ucf.edu/research/projects/anomaly-detection-in-surveillance-videos/) (128 hours of real CCTV footage covering Fighting, Assault, Robbery, and Arson).
-* **CCTV-Fight-2023**: Modern benchmark for multi-person scuffles and sudden aggressive motions.
+Nothing else on this list is more important, and it needs no ML work.
 
-### C. Fire, Smoke & Thermal Combustion
-* **D-Fire Dataset**: [https://github.com/gaiasd/DFireDataset](https://github.com/gaiasd/DFireDataset) (21,000+ labeled fire and smoke frames under night and day conditions).
-* **Corsican Fire Database**: [https://smoke.u-corsica.fr/](https://smoke.u-corsica.fr/) (Calibrated outdoor and indoor combustion images).
-* **FLAME (Fire Luminosity Airborne-based Machine Learning Evaluation)**: Aerial and ground optical fire sequences.
+The abstract opens by attacking a 94–98% false-alarm rate. That claim is
+unfalsifiable until false alarms per hour have been measured on continuous,
+unattended footage — and no public dataset can supply it. UCF-Crime, VIRAT and
+ShanghaiTech normal clips are trimmed and curated; they cannot give a rate per
+hour of an empty room, because they were never unattended rooms.
 
-### D. Acoustic Threat & Security Sounds
-* **Google AudioSet (Security Split)**: [https://research.google.com/audioset/](https://research.google.com/audioset/) (Over 2 million labeled 10-second clips, filterable for Gunshot, Screaming, Explosion, and Alarm).
-* **ESC-50 (Environmental Sound Classification)**: [https://github.com/karolpiczak/ESC-50](https://github.com/karolpiczak/ESC-50) (Standard 2,000 environmental audio recordings).
-* **MIVIA Audio Events**: Benchmark for surveillance acoustics (glass breaking, gunshots, screams).
+**What is needed:** 8–10 hours of continuous recording. Two overnight sessions
+plus a few study-session recordings. It contains, deliberately, nothing
+interesting: an empty room, someone at a desk, a ceiling fan, curtains, a TV
+changing scenes, lights switching, a phone ringing, a pet if available.
 
-### E. Anomaly Detection in Surveillance
-* **ShanghaiTech Campus Dataset**: [https://svip-lab.github.io/dataset/campus_dataset.html](https://svip-lab.github.io/dataset/campus_dataset.html) (13 scenes, 437 videos with diverse anomalous behaviors).
-* **CUHK Avenue Dataset**: [http://www.ee.cuhk.edu.hk/~xgwang/CUHK_pedestrian/](http://www.ee.cuhk.edu.hk/~xgwang/CUHK_pedestrian/) (Pedestrian surveillance anomalies).
+**Practical note that materially affects results.** Your models were trained on
+CCTV — RWF-2000 is surveillance footage, the weapon set contains mounted-camera
+frames. A laptop webcam at desk height, with a face filling the frame at under a
+metre, is the one geometry they have never seen. **Put the laptop on a shelf or
+cupboard angled down across the room.** Person bounding boxes drop to CCTV-like
+scale, the training and test domains converge, and it also matches the mounted
+IMX291 geometry planned for Architecture B. This costs nothing.
 
----
+Then:
 
-## 5. Indian Context & Local Scenario Datasets
-
-Deploying SENTRIX in Indian residential, institutional, and commercial environments presents unique visual, acoustic, and environmental challenges (e.g., dense crowd dynamics, varied street lighting, festival firecrackers vs gunshots, and regional soundscapes). The following Indian-specific datasets are integrated into the expansion roadmap:
-
-### A. Indian Visual & Surveillance Datasets
-* **India Driving & Surveillance Dataset (IDD - IIIT Hyderabad)**: [https://idd.insaan.iiit.ac.in/](https://idd.insaan.iiit.ac.in/) (Massive dataset capturing unstructured Indian road, pedestrian, and perimeter surveillance conditions across varied lighting, weather, and congestion).
-* **IIT Mandi Surveillance Action Dataset**: Benchmark capturing Indian outdoor movement, aggressive crowd gatherings, and physical altercations.
-* **Smart Cities Mission CCTV Open Corpus**: Real-world municipal surveillance footage featuring Indian public spaces, mixed-use commercial corridors, and low-light street scenes.
-
-### B. Indian Acoustic Soundscape Benchmark (False Positive Suppression)
-In Indian environments, high-decibel acoustic false alarms commonly occur due to festive firecrackers, vehicle pressure horns, and street celebrations. The acoustic classifier requires training on specialized regional subsets:
-* **Indian Urban Acoustic Soundscapes (IUAS)**: Audio recordings of festive firecrackers (Diwali/New Year) vs actual gunshot/explosion waveforms, enabling the Acoustic CNN to distinguish recreational pyrotechnics from ballistics.
-* **Indian Traffic & Street Noise Corpus**: Captures high-decibel multi-tone horns, auto-rickshaw engine harmonics, and ambient bazaar noise to maintain high precision.
-* **Regional SOS Keyword Acoustic Model**: Extension of Vosk speech recognition with Indian regional distress keywords (*"Bachao"*, *"Chor"*, *"Aag"*, *"Help"*).
-
----
-
-## 6. Labeled Dataset Creation, Training & Active Learning
-
-This section outlines the step-by-step workflow for creating, labeling, and training custom model versions.
-
-### A. Custom Dataset Recording Strategy
-To build high-accuracy models, collect visual data matching your specific target environments (mobile cameras & CCTV feeds):
-
-1. **Dangerous Situations**:
-   - Hold a replica gun or knife at different heights, orientations, and distances from the lens.
-   - Light matches, lighters, or simulate smoke under various angles.
-2. **Negative Samples (Anti-False Positives)**:
-   - Record normal actions that visually mimic threats: holding a black smartphone, holding a wallet/keys, lighting incense, or cooking on a gas stove.
-3. **Environmental Variations**:
-   - Collect recordings in diverse conditions: bright daylight, fluorescent indoor lighting, and night-time low-light.
-4. **Temporal Action Clips**:
-   - For behavior classifiers (e.g., violence or altercations), clip video sequences into short **2 to 4-second** segments centered exactly on the action.
-
-### B. Image Annotation & Labeling Tools
-YOLOv8 expects bounding box label coordinates in the normalized YOLO format (`class_id x_center y_center width height`).
-
-*   **Roboflow (Cloud/Web Interface)**:
-    - *Workflow*: Upload raw video clips, auto-extract frames at a custom interval (e.g., 2 FPS), and draw bounding boxes around threats.
-    - *Export*: Download the final dataset zipped directly in the **YOLOv8 TXT format**.
-*   **CVAT (Computer Vision Annotation Tool - Local/Server)**:
-    - *Workflow*: Open-source tool. Draw a box at frame 1 and frame 30, and CVAT will **automatically interpolate** bounding boxes for all intermediate frames.
-*   **LabelImg / Labelme**:
-    - *Workflow*: Simple, offline desktop-based local annotation tools.
-
-### C. Active Learning & False-Positive Pruning Loop
-To continuously improve accuracy at runtime:
-1. When the edge sentinel flags a false positive (verified via dashboard user override), the system saves the raw image cache.
-2. These false-positive frames are automatically moved into a local curation folder.
-3. Add these frames back to your training dataset labeled as the background class (no bounding boxes), and retrain. This teaches the model exactly what *not* to trigger on in your environment.
-
-### D. Fine-Tuning the Models on Custom Data
-Place your custom datasets inside the `data/` directory:
-- Weapon: `data/weapon_data/` (with `data.yaml` referencing classes `0: knife`, `1: long_gun`, `2: pistol`).
-- Fire: `data/fire_smoke_data/` (with `data.yaml` referencing classes `0: fire`, `1: smoke`).
-
-Run the provided fast-track training scripts:
 ```bash
-# Fine-tune Custom Weapon Detector
-.venv\Scripts\python.exe training/scripts/train_weapon_detector.py <epochs>
-
-# Fine-tune Custom Fire & Smoke Detector
-.venv\Scripts\python.exe training/scripts/train_fire_smoke_detector.py <epochs>
+python tools/baseline.py --clips data/clips          # the comparator
+python tools/replay.py  --clips data/clips --no-audio
+python tools/evaluate.py --json report.json
 ```
-> [!TIP]
-> The scripts automatically leverage CUDA GPU acceleration on NVIDIA hardware or Apple Silicon MPS on macOS.
 
-Once training is complete, copy the best output weights file (`best.pt`) to the production folder:
-`backend/models/v3_real/weapon_detector_real_v3.pt`
+Unblocks: false-alarm reduction, detection-to-alert latency, and the labelled
+event logs that everything in §2.2 depends on.
+
+### 2.2 Train the fusion model on real data
+
+`models/tci_xgboost.json` is fitted on labels generated by a formula. Its
+`R² = 0.984` measures memorisation of that formula.
+
+The V3 notebook was right to refuse to fabricate this dataset. The way to
+produce a real one:
+
+1. `tools/replay.py` over labelled clips → `var/events/*.jsonl`. One hour at 6 Hz
+   is ~21,600 labelled rows.
+2. **Or** run live and mark incidents `TRUE`/`FALSE` via
+   `POST /api/incidents/{id}/verdict`. Slower, but it is real deployment data.
+3. `notebooks/02_tci_calibration.ipynb` — fit isotonic calibration, report ECE.
+4. `notebooks/03_tci_thresholds.ipynb` — derive the level bands from a cost
+   matrix instead of asserting them.
+
+**Train against `CONTRACT_V2` (8 features), not the legacy 5.** Doing so also
+removes the `contract == "v1"` compensation branch in `fusion/tci.py`.
+
+Reframe the target while you are there. Rather than regressing an invented
+continuous TCI, define it as a calibrated `P(threat | features)`. Then
+"TCI = 0.7" has a statable meaning, a reliability diagram becomes a figure, and
+ECE becomes the headline metric. That is a stronger contribution than R² on
+self-generated labels.
+
+### 2.3 Re-split every dataset and re-measure
+
+Doc 2 §3. Split by **source video** for violence, and de-duplicate images for the
+two detectors. Then re-run and report the corrected figures with the
+de-duplication step described — that reads as rigour.
+
+The weapon dataset also has an unused `test/` split of 703 images. Evaluating on
+it, post-de-duplication, is the cheapest credible improvement available.
+
+### 2.4 Fix the UCF-Crime polarity bug
+
+`python tools/diagnose_anomaly.py`. Likely a one-line fix that recovers
+AUC ≈ 0.806. Only after that is ruled out should an architecture change be
+considered. Version 2.1 proposed a SpikingJelly → MobileNetV3 rewrite; that would
+have been roughly a month spent on a sign error.
 
 ---
 
-## 7. IoT Edge-to-Cloud Connection Protocol
+## 3. Model Work — what needs training, and on what
 
-To scale Sentrix, deploy the FastAPI backend on a GPU-enabled cloud server (AWS, GCP, or RunPod) and configure your physical devices (Raspberry Pi/ESP32) as Edge Nodes.
+Ordered by value per unit effort. Nothing here has been started.
 
-```
-  [ Physical Sensors ]  --(GPIO Input)-->  [ Edge Controller ]  --(HTTP POST)-->  [ Cloud Server ]
-(PIR, Tripwires, Mic)                      (Raspberry Pi/ESP32)                 (FastAPI Backend)
-                                                                                         │
-                                                                                    (WebSocket)
-                                                                                         │
-                                                                                         ▼
-  [ Physical Actuator ]  <--(GPIO Output)--  [ Edge Controller ]  <───────────  [ Dashboard UI ]
-(12V Siren, Door Lock)                      (Raspberry Pi/ESP32)                  (Browser Client)
-```
+### 3.1 Acoustic classifier — retrain (highest priority)
 
-### A. Local Edge Code (RPi GPIO Input)
-Wired PIR/sensor pins are monitored locally on a Raspberry Pi or ESP32 and uploaded to the cloud server via HTTP:
-```python
-# edge_input.py (Runs on local Raspberry Pi)
-import RPi.GPIO as GPIO
-import time
-import requests
+**Why:** the current model is the weakest link. 375 clips across 4 classes,
+`scream` with 8 validation samples, and a reported macro-F1 that is a
+single-epoch spike (doc 2 §4).
 
-PIR_PIN = 17
-CLOUD_URL = "http://<YOUR_CLOUD_IP>:8000/api/hardware/trigger"
+**Taxonomy.** Drop `explosion` — near-zero base rate in a home, training audio
+would come from film sound design, and it is acoustically confusable with
+firecrackers. But note that the current V3 model has **no `gunshot` class and no
+`glass_break` class either**, while the proposal promises both, and research
+gap RG-5 — distinguishing festive firecrackers from ballistic detonations — is
+unaddressable without `gunshot`.
 
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(PIR_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+Recommended 6 classes:
 
-def motion_callback(channel):
-    print("🚨 Sensor tripped! Ingesting to Cloud...")
-    try:
-        # Send event telemetry to cloud server
-        requests.post(CLOUD_URL, json={"sensor_id": "entrance_PIR", "status": "tripped"}, timeout=2)
-    except Exception as e:
-        print("Cloud offline:", e)
+| Class | Sources |
+|---|---|
+| `ambient` | room tone, speech, appliances, TV |
+| `scream` | AudioSet, MIVIA |
+| `glass_break` | MIVIA, ESC-50 — **promised, never implemented** |
+| `gunshot` | UrbanSound8K `gun_shot`, MIVIA, AudioSet |
+| `alarm_siren` | UrbanSound8K `siren`, AudioSet smoke alarm |
+| **`nuisance_impulsive`** | **firecrackers, car horns, door slams, dropped objects** |
 
-GPIO.add_event_detect(PIR_PIN, GPIO.RISING, callback=motion_callback, bouncetime=500)
+That last class is the design idea worth keeping: rather than binary
+threat/not-threat, give the model somewhere to put loud-but-harmless impulsive
+sounds. It is what actually delivers RG-5, and a firecracker-vs-gunshot confusion
+matrix is one of the strongest figures available for the report.
 
-try:
-    while True:
-        time.sleep(1)
-except KeyboardInterrupt:
-    GPIO.cleanup()
-```
+**Data:** target ≥ 200 clips per class (~1,200 total, versus 375 today). AudioSet
++ UrbanSound8K + MIVIA cover all six without a recording session. AudioSet has
+`Fireworks` and `Firecracker` ontology classes directly.
 
-### B. Cloud Ingestion Endpoint
-Add an API router endpoint inside `backend/web/routes.py` to process hardware signals and dynamically update system threat indices:
-```python
-# backend/web/routes.py
-@router.post("/api/hardware/trigger")
-async def handle_hardware_trigger(data: dict):
-    sensor_id = data.get("sensor_id")
-    status = data.get("status")
-    
-    if status == "tripped":
-        from core.state import state
-        # Boost the threat metrics dynamically in memory
-        state.update_motion_score(1.0)
-        
-    return {"status": "success", "sensor": sensor_id}
-```
+**Architecture — the strongest ViT case in this project.** **AST (Audio
+Spectrogram Transformer)** is a ViT over mel-spectrogram patches, pretrained on
+AudioSet, which is the corpus this task draws from. Fine-tuning from AudioSet
+weights needs far less data than training a CNN from scratch — with 375 clips
+that is not a preference, it is the only realistic path. `perception/audio.py`
+builds architecture from checkpoint parameter names, so an AST checkpoint drops
+in behind the same interface.
 
-### C. Local Actuator Control (Cloud-to-Edge Feedback)
-The edge controller listens to the real-time websocket thread `/ws/threat` running on the cloud. When a threat level thresholds (e.g. `weapon_score > 0.8`), it trips the physical relay output to sound a 12V local siren:
-```python
-# edge_output.py (Runs on local Raspberry Pi)
-import RPi.GPIO as GPIO
-import websocket
-import json
+`THREAT_WEIGHTS` in that module is keyed by class *name*, so adding or removing a
+class needs no code change.
 
-SIREN_RELAY_PIN = 27
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(SIREN_RELAY_PIN, GPIO.OUT)
+### 3.2 Violence classifier — retrain with a temporal head
 
-def on_message(ws, message):
-    data = json.loads(message)
-    weapon_score = data.get("weapon", 0.0)
-    fire_score = data.get("fire", 0.0)
-    
-    if weapon_score > 0.75 or fire_score > 0.75:
-        print("🚨 Critical threat score received! Sounding physical alarm!")
-        GPIO.output(SIREN_RELAY_PIN, GPIO.HIGH)
-    else:
-        GPIO.output(SIREN_RELAY_PIN, GPIO.LOW)
+**Why:** the current model is per-frame, and a still of two people standing close
+is genuinely ambiguous. The runtime aggregates 16 frames over 2 s at inference,
+which recovers some benefit, but it is not a trained temporal model.
 
-ws = websocket.WebSocketApp("ws://<YOUR_CLOUD_IP>:8000/ws/threat", on_message=on_message)
-ws.run_forever()
-```
+**Data:** RWF-2000 — **re-split by video** — plus **XD-Violence**, which is the
+other major recommendation in this document. XD-Violence (Wu et al., ECCV 2020)
+is 4,754 untrimmed videos, ~217 hours, with **aligned audio and video**, weakly
+labelled across 6 categories. It is the multimodal event dataset the V3 notebook
+searched for and could not find. Caveat for the report: it is sourced from films
+and YouTube rather than pure CCTV, so pair it with UCF-Crime for camera realism.
+
+**Architecture:** the proposal's original ResNet-18 + LSTM is the minimum. Better:
+**VideoMAE** or **TimeSformer**. For edge, **MobileViT** or **EfficientFormer** —
+a ViT-B is roughly 10× ResNet-18 and will not hold 6 Hz on an Orange Pi. A
+cascade also works: run the heavy model only on frames the cheap path flagged.
+
+### 3.3 Weapon and fire detectors — re-measure, probably not retrain
+
+These are the strongest models in the project. The work is de-duplication and
+honest re-measurement, not retraining. Retrain only if the corrected numbers
+fall below the KPI targets.
+
+If retraining does become necessary, the same weights fine-tune on Indian-context
+data — IDD (IIIT Hyderabad) for pedestrian and lighting variation.
+
+### 3.4 Re-identification — no training needed
+
+Install `torchreid` and evaluate against **Market-1501**, which gives a published
+rank-1 protocol an examiner recognises; OSNet reaches ~94% there, comfortably
+above the ≥ 85% objective. That is far stronger evidence than home-made clips.
+
+Use a phone as a second camera for the live demo — free, and it makes the
+cross-camera handoff real rather than simulated.
+
+Upgrade path: **CLIP-ReID** or DINOv2 embeddings outperform OSNet and need no
+ReID-specific training. `ReIDEngine` already normalises and cosine-matches, so
+swapping the embedding function is a one-line change.
+
+### 3.5 Pose estimation — no training needed
+
+`yolov8n-pose.pt` is pretrained; `PoseEstimator` is written and unwired. Keypoints
+beat bounding-box centroids for aggression detection because the signal is limb
+velocity and body configuration. It also fixes the crawl heuristic, which
+currently infers "crawling" from box aspect ratio and therefore fires on anyone
+the detector clips at the frame edge.
+
+### Where ViTs do *not* belong
+
+Object detection. YOLOv8 at 640 px is faster and more accurate than DETR-family
+detectors at this scale, and small-object recall — a knife at three metres — is
+exactly where transformer detectors are weakest.
+
+---
+
+## 4. Deferred
+
+| Item | Effort | Notes |
+|---|---|---|
+| Voice SOS | Small | Vosk model retained; wire behind a `VoiceEngine` |
+| Mobile companion | Small | A Telegram bot gives push, images and inline confirm/dismiss in ~2 days and satisfies the mobile objective |
+| Thermal telemetry | Medium | Needs the sensor first, then a contract version bump |
+| Multi-node ESP-NOW mesh | Large | Hardware scope |
+| INT8 edge quantisation | Medium | Only meaningful once running on the SBC |
+| Federated learning | Large | Beyond this project |
+
+---
+
+## 5. Cloud Deployment
+
+Unchanged in substance from v2.1 and still accurate, with two corrections:
+
+- The Dockerfile in v2.1 copied `backend/`. The layout is now a single `sentrix/`
+  package, so `COPY sentrix/ ./sentrix/` plus `models/` and `pyproject.toml`.
+- The quantisation example referenced `backend/models/...`; weights are now at
+  `models/`.
+
+Instance guidance (AWS `g4dn.xlarge`, RunPod RTX 3080, GCP T4) is unchanged.
+
+**Scale note.** `MultiSource` tiles feeds into one inference pass, which quarters
+effective resolution at four cameras and materially hurts small-object recall.
+Beyond two cameras, run one pipeline process per camera and aggregate at the
+dashboard.
+
+---
+
+## 6. Indian Deployment Context
+
+The strongest research contribution available to this project, and it survives
+independent of everything above.
+
+**Acoustic false-positive suppression** is the concrete one: festive
+pyrotechnics, multi-tone pressure horns and street celebrations. The
+`nuisance_impulsive` class in §3.1 is the mechanism, and AudioSet supplies the
+data without a recording trip. A confusion matrix showing firecracker versus
+gunshot separation closes RG-5 with evidence rather than assertion.
+
+**Visual domain adaptation** — IDD (IIIT Hyderabad) for unstructured scenes and
+lighting; Smart Cities Mission municipal footage where obtainable.
+
+**Regional SOS keywords** — Hindi *bachao*, *chor*, *aag* — remain a good idea and
+depend on Voice SOS being wired first.

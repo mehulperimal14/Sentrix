@@ -1,21 +1,67 @@
+# SENTRIX runtime dependencies
+# Python 3.10-3.12. Install:  pip install -r requirements.txt
+#
+# The previous root requirements.txt could not start the application: it was
+# missing jinja2, sqlalchemy, python-dotenv, cryptography, scipy, sounddevice
+# and pandas, and shipped pycryptodome (unused) instead of cryptography (which
+# the evidence vault actually imports). `run.bat` and `run.sh` also never
+# installed anything, so the documented one-command quickstart could not work
+# on a fresh clone.
+
+# ── web ───────────────────────────────────────────────────────────────────────
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.6
+jinja2>=3.1.4
+python-multipart>=0.0.9
 websockets>=13.0
+
+# ── configuration & security ──────────────────────────────────────────────────
+python-dotenv>=1.0.1
+cryptography>=43.0.0          # AES-256-GCM + HKDF for the evidence vault
+
+# ── storage ───────────────────────────────────────────────────────────────────
+sqlalchemy>=2.0.30
+
+# ── vision ────────────────────────────────────────────────────────────────────
+numpy>=1.26.4,<2.0.0
+opencv-python>=4.10.0
+ultralytics>=8.3.0            # YOLOv8 detection + ByteTrack tracking
+
+# ── deep learning ─────────────────────────────────────────────────────────────
+# CPU wheels by default. For CUDA, install torch separately FIRST:
+#   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 torch>=2.4.0
 torchvision>=0.19.0
-ultralytics>=8.3.0
-librosa>=0.10.2
+torchaudio>=2.4.0             # log-mel front end for the V3 audio model
+
+# ── fusion & analysis ─────────────────────────────────────────────────────────
 xgboost>=2.1.1
-scikit-learn>=1.5.1
-numpy>=1.26.4
-opencv-python>=4.10.0.84
-pycryptodome>=3.20.0
-pydantic>=2.8.2
-python-multipart>=0.0.9
-pypdf>=4.3.1
-python-docx>=1.1.2
-reportlab>=4.2.2
-matplotlib>=3.9.2
-pillow>=10.4.0
+scikit-learn>=1.5.1           # calibration, split tooling, metrics
+scipy>=1.14.0
+pandas>=2.2.0                 # event-log tooling and notebooks
+
+# ── audio ─────────────────────────────────────────────────────────────────────
+sounddevice>=0.4.7            # microphone capture
 soundfile>=0.12.1
-requests>=2.32.3
+librosa>=0.10.2               # fallback mel front end
+
+# ── notifications (optional, degrades to console) ─────────────────────────────
+twilio>=9.0.0
+
+# ── development ───────────────────────────────────────────────────────────────
+pytest>=8.0.0
+
+# ── optional, install explicitly ──────────────────────────────────────────────
+# Face recognition. Without one of these, identity FAILS CLOSED: nobody is
+# authorised and no alert is ever suppressed. Prefer insightface on Windows —
+# it needs no C++ build chain and is more accurate than dlib's 128-d model.
+#   pip install insightface onnxruntime
+#
+# Appearance re-identification across cameras:
+#   pip install torchreid
+#
+# Offline voice SOS:
+#   pip install vosk
+#
+# Notebook environment:
+#   pip install jupyterlab matplotlib

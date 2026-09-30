@@ -1,43 +1,54 @@
-# Virtual environment
+# ── secrets ───────────────────────────────────────────────────────────────────
+.env
+.env.local
+*.pem
+*.key
+
+# ── runtime output ────────────────────────────────────────────────────────────
+# Everything the running system produces. Never commit this: the previous
+# layout accumulated 642 MB of alert snapshots and evidence bundles inside
+# backend/runtime/ and 2,801 of those files were committed to the repository.
+var/
+
+# ── python ────────────────────────────────────────────────────────────────────
 .venv/
 venv/
 ENV/
-env/
-
-# Python bytecode & cache
 __pycache__/
 *.py[cod]
-*$py.class
+*.egg-info/
+build/
+dist/
 .pytest_cache/
+.ruff_cache/
 .coverage
 htmlcov/
 
-# macOS / OS artifacts
-.DS_Store
-.AppleDouble
-.LSOverride
-Thumbs.db
+# ── notebooks ─────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
 
-# Large raw training dataset folders (downloaded on-demand)
+# ── datasets ──────────────────────────────────────────────────────────────────
+# Raw and preprocessed data stays out of git. Record provenance in
+# docs/ and the sample manifests under training/runs/ instead.
 data/
-
-# Local databases & runtimes
-backend/runtime/*.db
-backend/runtime/*.db-journal
-backend/runtime/*.db-wal
-backend/runtime/vault/*.aes
-backend/runtime/vault/*.sig
-backend/runtime/evidence/*.aes
-
-# Environment secrets
-.env
-.env.local
-
-# Preprocessed training cache & dataset targets
 training/cache_ucf_crime_dvs/
 training/ucf_crime_dvs/
+*.npz
+*.npy
 
-# Runtime alert evidence, logs, and enrolled faces
-backend/runtime/static/alerts/
-backend/runtime/static/authorized_faces/
-*.log
+# ── large training artefacts ──────────────────────────────────────────────────
+# Checkpoints are tracked deliberately (the deployed weights live in models/),
+# but intermediate epoch dumps are not.
+training/runs/**/last.pt
+training/runs/**/epoch*.pt
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+Thumbs.db
+desktop.ini
+
+# ── editors ───────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp

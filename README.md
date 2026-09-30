@@ -1,221 +1,490 @@
-# SENTRIX — Intelligent Multimodal Edge Threat Intelligence and Physical Security System
+# SENTRIX
 
-[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](https://www.python.org/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.4.0-EE4C2C.svg)](https://pytorch.org/)
+**Multimodal edge threat intelligence and physical security system**
+
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.4-EE4C2C.svg)](https://pytorch.org/)
+[![YOLOv8](https://img.shields.io/badge/YOLOv8-ultralytics-00BFA5.svg)](https://docs.ultralytics.com/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688.svg)](https://fastapi.tiangolo.com/)
-[![XGBoost](https://img.shields.io/badge/XGBoost-2.1.1-EB7A26.svg)](https://xgboost.readthedocs.io/)
-[![AES-256-GCM](https://img.shields.io/badge/Security-AES--256--GCM-green.svg)](https://csrc.nist.gov/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-46%20passing-brightgreen.svg)](tests/)
 
-> **Capstone Project — Mid-Semester Review (CPG No: 299)**  
-> **Institution**: Computer Science and Engineering Department, Thapar Institute of Engineering and Technology (TIET), Patiala  
-> **Team**: Kartik Garg (102303478), Akshay Ranveer (102303453), Prashant Gagneja (102353011), Harshit Mishra (102319039), Mehul Perimal (102315144)  
-> **Faculty Mentor**: Dr. Ashutosh Mishra (Associate Professor, CSED)
+> **Capstone Project CPG-299** · Computer Science and Engineering, Thapar Institute of
+> Engineering and Technology, Patiala · Mentor: Dr. Ashutosh Mishra
 
----
+SENTRIX watches a camera and a microphone, runs a stack of neural models over both,
+and fuses their outputs into a single continuous **Threat Confidence Index (TCI)** in
+`[0, 1]`. The TCI drives a five-level escalation ladder — from passive logging through
+encrypted evidence capture to siren, SMS and a pre-populated emergency dispatch package.
 
-## 📌 Executive Summary
-
-**SENTRIX** is an edge-to-cloud physical security intelligence appliance designed to eliminate the commercial false-alarm epidemic (**94%–98% false-positive rate** in traditional PIR and dumb CCTV cameras) while addressing high emergency response latencies (**15–45 minutes** in Indian metropolitan areas).
-
-Rather than relying on brittle heuristic thresholding, SENTRIX unifies real-time **optical entity localization**, **deep behavioral altercation kinematics**, **2D Log-Mel acoustic frequency spectrograms**, **biometric facial identity authorization**, and **ambient environmental telemetry**. Feature vectors are aggregated through an **XGBoost Late-Fusion Regressor ($R^2 = 0.984$)** into a continuous scalar **Threat Confidence Index ($\text{TCI} \in [0.00, 1.00]$)**. 
-
-The computed TCI maps across a **5-tier escalation matrix**, actuating autonomous physical deterrents (**110 dB piezo siren relay**) and sealing court-admissible forensic packages encrypted with **AES-256-GCM** and authenticated with **SHA-256** sidecar fingerprints.
-
-![SENTRIX System Architecture: Hardware, Cloud & Dashboard](docs/sentrix_architecture_diagram.jpg)
+Everything runs locally. There is no cloud inference and no subscription.
 
 ---
 
-## 🚀 Key Performance & Empirical Benchmarks
+## Status
 
-| Subsystem / Metric | Architecture / Model | Empirical Score | Inference Latency | Target Status |
-|---|---|---|---|---|
-| **Violence & Fight Classifier** | Deep ResNet-18 (19,610 frames) | **98.72% Train / 82.62% Val Acc** | **4.80 ms** | MET (PASS) |
-| **Acoustic Threat Classifier** | 2D Mel-Spectrogram CNN | **100.00% Validation Acc** | **1.20 ms** | MET (PASS) |
-| **Behavioral Anomaly Model** | MobileNetV3 Feature Extractor | **84.38% Validation Acc** | **4.60 ms** | MET (PASS) |
-| **Weapon & Fire Localization** | YOLOv8n (Nano) | **0.884 mAP@50 / 0.891 Recall** | **5.05 ms** | MET (PASS) |
-| **Late-Fusion TCI Regressor** | XGBoost Regressor | **$R^2 = 0.984$ (RMSE = 0.042)** | **0.18 ms** | MET (PASS) |
-| **Complete Hot-Path Pipeline** | Full Asynchronous Stream | **~63 FPS Throughput** | **15.83 ms Total** | **PASS ($\le 20\text{ ms}$)** |
+Software-only. Testing runs on a laptop webcam; no hardware is required or attached.
+The hardware interfaces (`sentrix/io/`) are written and selected automatically, so
+adding an ESP32 node or a GPIO relay later is a configuration change, not a rewrite.
 
----
+| Subsystem | State | Notes |
+|---|---|---|
+| Person / weapon / fire detection | **Working** | One YOLOv8 component, three heads, ByteTrack |
+| TCI fusion + escalation | **Working** | Hysteresis, incident grouping, time-based smoothing |
+| Encrypted evidence vault | **Working** | AES-256-GCM, HMAC hash-chained manifest |
+| Violence classification | **Working** | Windowed; needs a temporal head for real gains |
+| Acoustic classification | **Working** | Model is under-trained — see *Known limitations* |
+| Face authorisation | **Working** | ArcFace 512-d via `insightface`; fails closed without it |
+| Cross-camera re-identification | **Degraded** | Histogram fallback; install `torchreid` |
+| Voice SOS | **Not wired** | Deferred; Vosk model retained |
+| Hardware actuation | **Interface only** | No hardware attached |
 
-## 📊 Training Datasets
-
-The model subsystems in SENTRIX were trained on the following datasets (all raw data and preprocessing caches are excluded from this repository via `.gitignore` to maintain a clean codebase):
-
-1. **UCF-Crime DVS Dataset**: Used for training the event-based behavioral anomaly models, preprocessed into a 7.34 GB event tensor cache of temporal frames.
-2. **Violence & Altercation Dataset**: 19,610 frames of fight and non-fight video sequences, training a deep ResNet-18 classifier.
-3. **Weapon Localization Dataset**: 9,472 annotated images of handguns, knives, and long guns, training a YOLOv8n object detection model.
-4. **Fire & Smoke Dataset**: 10,000+ annotated combustion frames, training a YOLOv8n detector.
-5. **Acoustic Threat Dataset**: High-fidelity sound signatures derived from AudioSet (containing gunshots, explosions, sirens, screams, and ambient baselines) to train a 2D Mel-Spectrogram CNN classifier.
-6. **Facial Authorization & Re-ID Database**: Custom facial database for authorized identity verification and Re-ID tracking.
+Run `python tools/doctor.py` to see the live state of your own install rather than
+trusting this table.
 
 ---
 
-## 🛡️ 5-Tier Escalation Matrix
+## Quickstart
 
-| Threat Level | TCI Range | System State | Automated Response & Actuation | Cryptographic Action |
-|---|---|---|---|---|
-| **Level 1** | $0.00 \le \text{TCI} < 0.20$ | **SECURE** | Passive 30 FPS monitoring, ring buffer sync | No persistent storage |
-| **Level 2** | $0.20 \le \text{TCI} < 0.40$ | **SUSPICIOUS** | Soft UI warning badge, frame rate lock | Console logging, event creation |
-| **Level 3** | $0.40 \le \text{TCI} < 0.65$ | **ELEVATED** | Amber HUD alert, SMS warning dispatch | Encrypted snapshot capture (AES-256-GCM) |
-| **Level 4** | $0.65 \le \text{TCI} < 0.85$ | **HIGH THREAT** | Emergency dispatch pre-population, UI glow | Encrypted video clip + SHA-256 sidecar |
-| **Level 5** | $0.85 \le \text{TCI} \le 1.00$ | **CRITICAL** | **110 dB Piezo Siren ON**, Police/Fire packet | Full forensic evidence package sealed |
-
----
-
-## 🛠️ Dual Hardware Bill of Materials (BOM Under ₹20,000 INR)
-
-SENTRIX provides two flexible hardware deployment tiers, both strictly under the student budget limit of **₹20,000 INR**:
-
-1. **Architecture A: Ultra-Budget Wi-Fi Sentinel Node (`₹3,240 INR`)**
-   * Compute: ESP32-S3-WROOM-1 (8MB PSRAM, Wi-Fi/BLE) @ ₹1,150
-   * Optics: OV2640 2MP Camera Module (Included)
-   * Audio: INMP441 I2S Omnidirectional Digital Microphone @ ₹220
-   * Actuation: 5V Optocoupler Relay + 12V 110dB Piezo Siren @ ₹570
-   * Telemetry: DHT22 Digital Sensor + Power & ABS Enclosure @ ₹1,300
-
-2. **Architecture B: Autonomous Edge SBC Node (`₹14,850 INR`)**
-   * Compute: Orange Pi 5 (4GB RAM, 6 TOPS NPU) / Raspberry Pi 4 @ ₹7,500
-   * Optics: Sony IMX291 Low-Light Starvis 1080p UVC Camera @ ₹3,200
-   * Audio: Mini USB Boundary Microphone @ ₹850
-   * Storage: SanDisk Extreme 64GB U3 A2 MicroSD @ ₹750
-   * Actuation & Enclosure: 110dB Siren, Optocoupler Relay, SMPS Power & IP65 Enclosure @ ₹2,550
-
----
-
-## 📁 Repository Structure
-
-```
-Sentrix/
-├── backend/                       # Python FastAPI backend & AI inference core
-│   ├── ai/                        # Vision, Audio, Behaviour, Face, Cloud & Fusion engines
-│   ├── core/                      # Orchestrator, TCI state, AES-256 evidence vault
-│   ├── db/                        # SQLite WAL database models & event repositories
-│   ├── hardware/                  # Camera auto-discovery, microphone ingestion, siren drivers
-│   ├── models/                    # Production neural weights (.pt, .json, vosk-model)
-│   ├── runtime/                   # Local evidence vault & SQLite database (sentrix.db)
-│   ├── web/                       # FastAPI REST endpoints & /ws/threat WebSocket route
-│   └── app.py                     # Main backend server entry point
-│
-├── frontend/                      # Glassmorphic Real-Time Command Console
-│   ├── index.html                 # 1080p video canvas, SVG TCI dial & emergency HUD
-│   ├── styles.css                 # Dark glassmorphic stylesheet
-│   └── app.js                     # 30Hz WebSocket telemetry client & audio visualizer
-│
-├── Capstone Docs/                 # Official Mid-Semester Submissions & Deliverables
-│   ├── Initial Proposal/          # Evaluated initial Capstone project proposals
-│   ├── Mid_Sem/                   # Official Evaluated Deliverables & Presentation Assets
-│   │   ├── CPG299-2026.docx       # Official Mid-Semester Report (Word Document)
-│   │   ├── CPG299-2026.pdf        # Official Mid-Semester Report (PDF Document)
-│   │   ├── SENTRIX_CAPSTONE_POSTER.pdf # High-visibility vector presentation poster
-│   │   └── SENTRIX_CAPSTONE_POSTER.png # High-resolution 300 DPI poster image
-│   ├── Reference_for_mid_sem/     # IEEE referencing guide & TIET template specifications
-│   ├── SENTRIX_MID_SEMESTER_REPORT.md   # Master full report markdown source
-│   └── tiet_logo.png                    # Official college emblem
-│
-├── training/                      # Deep learning training pipelines & benchmarks
-│   ├── scripts/                   # Model training, evaluation & late-fusion fitting scripts
-│   ├── runs/                      # Training loss curves, confusion matrices & weights
-│   ├── cache_ucf_crime_dvs/       # Preprocessed event tensor cache (Excluded via .gitignore)
-│   └── ucf_crime_dvs/             # UCF-Crime DVS dataset targets & splits (Excluded via .gitignore)
-│
-├── data/                          # Dataset directory (Excluded via .gitignore)
-│   ├── weapon_data/               # Handgun, knife, long gun datasets (9,472 items)
-│   ├── fire_smoke_data/           # 10,000+ annotated combustion frames
-│   ├── violence_data/             # 19,610 fight vs non-fight video frames
-│   ├── anomaly_data/              # Surveillance anomaly frames
-│   └── audio_data/                # Acoustic threat WAV audio samples
-│
-├── docs/                          # Master technical specifications & architecture diagrams
-│   ├── 1_SYSTEM_ARCHITECTURE.md
-│   ├── 2_MODEL_BENCHMARKS_AND_KPIS.md
-│   ├── 3_HARDWARE_SPECIFICATION_AND_BOM.md
-│   ├── 4_DEPLOYMENT_AND_RUNBOOK.md
-│   ├── 5_FUTURE_ADVANCEMENTS_AND_CLOUD_DEPLOYMENT.md
-│   └── sentrix_architecture_diagram.jpg
-│
-├── .env.example                   # Environment configuration template
-├── .gitignore                     # Git exclusion rules
-├── requirements.txt               # Python package dependencies
-├── run.sh                         # Unified startup script (macOS / Linux)
-├── run.bat                        # Unified startup script (Windows)
-└── README.md                      # Master project README
-```
-
----
-
-## ⚡ Quickstart Guide
-
-### 1. Launch System Locally
-
-#### macOS / Linux:
 ```bash
-./run.sh
+git clone <repo> && cd Sentrix
 ```
 
-#### Windows:
-```cmd
+**Windows**
+
+```bash
 run.bat
 ```
 
-Access the interactive Command Console at: **`http://127.0.0.1:8000/dashboard`**
-
----
-
-### 2. Model Training & Evaluation Suite
-
-> [!NOTE]
-> The preprocessed training caches (`training/cache_ucf_crime_dvs/`) and dataset split metadata (`training/ucf_crime_dvs/`) are excluded from this repository via `.gitignore` to keep the codebase clean and lightweight.
-
-To retrain individual models or execute the full test suite:
+**macOS / Linux**
 
 ```bash
-# Activate virtual environment
-source .venv/bin/activate
+chmod +x run.sh && ./run.sh
+```
 
-# 1. Weapon Localization (YOLOv8n)
-python training/scripts/train_weapon_detector.py 3
+Both scripts create `.venv`, install dependencies, seed `.env`, run pre-flight
+checks and start the server. Set `SENTRIX_PASSWORD` in `.env`, then open
+**http://127.0.0.1:8000/dashboard**.
 
-# 2. Fire & Smoke Detector (YOLOv8n)
-python training/scripts/train_fire_smoke_detector.py 3
+Manual install:
 
-# 3. Violence Altercation Classifier (ResNet-18)
-python training/scripts/train_violence_classifier.py 3
+```bash
+python -m venv .venv && .venv/Scripts/activate
+pip install -r requirements.txt
+cp .env.example .env          # then set SENTRIX_PASSWORD
+python tools/doctor.py
+python -m sentrix
+```
 
-# 4. Behavioral Anomaly Model (MobileNetV3)
-python training/scripts/train_anomaly_classifier.py 5
+Strongly recommended — without a face-embedding backend, nobody can ever be
+authorised:
 
-# 5. Acoustic Threat Spectrogram Classifier (2D Mel CNN)
-python training/scripts/train_audio_classifier.py 5
-
-# 6. Refit TCI Late-Fusion Regressor (XGBoost)
-python training/scripts/refit_xgboost.py
-
-# 7. Execute Full Empirical Test Suite & Verification
-python training/scripts/evaluate_models.py
+```bash
+pip install insightface onnxruntime
 ```
 
 ---
 
-## 📜 Regulatory & Statutory Standards
+## Project layout
 
-SENTRIX is designed in strict compliance with national and international security standards:
-* **Bureau of Indian Standards (BIS) IS 16910 / IEC 62676**: Video Surveillance Systems for use in Security Applications.
-* **MoHUA Smart Cities Mission**: Integrated Command & Control Centre (ICCC) Video Analytics Guidelines.
-* **CERT-In Cybersecurity Directions**: Cryptographic integrity and zero-trust data-at-rest encryption.
-* **NIST SP 800-38D / FIPS 197**: Advanced Encryption Standard in Galois/Counter Mode (AES-256-GCM).
-* **FIPS 180-4**: Secure Hash Algorithm (SHA-256) for digital forensic sidecars.
-* **OSHA 1910.95 / NFPA 72**: Audible acoustic alarm sound pressure specifications (110 dB @ 1 meter).
+```
+Sentrix/
+├── sentrix/                    importable package — all runtime code
+│   ├── config.py               ★ every tunable, in seconds not frames
+│   ├── paths.py                filesystem layout
+│   ├── app.py                  FastAPI factory + live loop
+│   ├── io/                     ★ hardware seams
+│   │   ├── sources.py          webcam | file | RTSP | multi-camera
+│   │   └── actuators.py        console | sound | GPIO relay
+│   ├── perception/             one score per modality
+│   │   ├── detector.py         ★ YOLOv8: person + weapon + fire + tracking
+│   │   ├── violence.py         sliding-window action classification
+│   │   ├── audio.py            checkpoint-adaptive acoustic CNN
+│   │   ├── identity.py         ★ fail-closed face authorisation
+│   │   ├── behaviour.py        kinematics, resolution-independent
+│   │   ├── reid.py             appearance re-identification
+│   │   └── motion.py           frame differencing + is_night
+│   ├── fusion/
+│   │   ├── features.py         ★ the versioned feature contract
+│   │   ├── calibration.py      Platt / isotonic, fitted not guessed
+│   │   ├── tci.py              ★ TCI computation
+│   │   └── policy.py           ★ level bands + hysteresis
+│   ├── pipeline/
+│   │   ├── engine.py           ★ single process() path — live and replay
+│   │   ├── incidents.py        ★ incident grouping
+│   │   ├── events.py           ★ JSONL event log
+│   │   ├── escalation.py       level → action plan
+│   │   └── state.py            live telemetry
+│   ├── evidence/vault.py       ★ AES-256-GCM + hash-chained manifest
+│   ├── alerting/               Twilio SMS, voice, dispatch packages
+│   ├── storage/                SQLite, one row per incident
+│   ├── web/                    routes, streaming, security, templates, static
+│   └── utils/                  logging and telemetry
+│
+├── models/                     deployed weights
+├── notebooks/                  ★ TCI analysis (contract, calibration, thresholds)
+├── training/
+│   ├── scripts/                training as .py
+│   ├── notebooks/              training as .ipynb
+│   └── runs/                   all run outputs (v1_legacy, v2_real, v3_real, ucf_crime_dvs)
+├── tools/                      doctor, replay, baseline, evaluate, auditors
+├── tests/                      46 regression tests
+├── docs/                       specifications
+├── Capstone Docs/              submissions
+└── var/                        runtime output — gitignored, never web-served
+```
+
+★ marks files that carry the fixes described below.
 
 ---
 
-## 👥 Capstone Project Group (CPG No: 299)
+## Configuration: the numbers, and why
 
-* **Kartik Garg** (102303478) — *System Architecture, Vision Engines & Backend Core*
-* **Akshay Ranveer** (102303453) — *Biometric Identity, ReID & Kinematic Tracking*
-* **Prashant Gagneja** (102353011) — *Acoustic Threat Classifier & Digital Signal Processing*
-* **Harshit Mishra** (102319039) — *Behavioral Intelligence & Anomaly Classification*
-* **Mehul Perimal** (102315144) — *Evidence Cryptography, Database & Dashboard UI*
+Every tunable lives in [`sentrix/config.py`](sentrix/config.py), expressed in
+**seconds or fractions of the frame diagonal** — never in frames or pixels. That
+matters: the previous build used a per-frame EMA coefficient and pixel-per-frame
+speed thresholds, so changing the inference rate or the camera resolution silently
+changed the system's behaviour.
 
-**Faculty Mentor**: **Dr. Ashutosh Mishra** (Associate Professor, Computer Science and Engineering Department, TIET Patiala)
+### Sliding windows
+
+| Window | Value | Rationale |
+|---|---|---|
+| Violence clip | **2.0 s, 16 frames** | Action recognition converged on 2–3 s clips. I3D uses 64 frames @ 25 fps (2.56 s); VideoMAE and TimeSformer use 16 frames; RWF-2000 is built from 5 s clips |
+| Violence hop | **1.0 s** (50% overlap) | An action straddling a boundary is still caught whole by the neighbouring window |
+| Audio window | **4.0 s** | Fixed by `PRODUCTION_PREPROCESSING_CONTRACT.json`. Long enough to identify tonal events (siren, alarm) |
+| Audio hop | **1.0 s** (75% overlap) | Short enough that an impulsive event (gunshot, glass break) lands fully inside at least one window |
+| Inference rate | **6 Hz** | Human actions play out over hundreds of ms. 30 Hz of YOLO buys nothing and starves the edge device |
+
+### Temporal thresholds
+
+| Parameter | Value | Rationale |
+|---|---|---|
+| EMA time constant `τ` | **1.2 s** | `α = 1 − exp(−Δt/τ)`, recomputed from real elapsed time. The old fixed `α = 0.30` at ~5 Hz was `τ = 0.56 s` |
+| Escalate dwell | **0.6 s** | Response latency is a product requirement — confirm fast |
+| De-escalate dwell | **5.0 s** | Asymmetric on purpose: an intruder stepping behind a pillar must not clear the alarm |
+| Loiter dwell | **30 s** | Video-analytics convention is 30–60 s stationary in a zone |
+| Incident close | **20 s** quiet | Groups a contiguous episode into one incident |
+| Evidence re-capture | **30 s** | Caps bundles within a long incident |
+| Evidence pre/post roll | **8 s / 15 s** | VMS convention (5–10 s before, 10–30 s after) |
+| SMS cooldown | **300 s** | Plus once-per-incident claiming |
+
+**Hysteresis is what actually suppresses false alarms, not smoothing.** A single
+large spike still drags an EMA across a threshold; it only takes slightly longer.
+Requiring the candidate level to persist for a dwell period rejects it outright.
+
+### Detection confidence
+
+| Head | Threshold | Rationale |
+|---|---|---|
+| Person | 0.35 | Cheap to get wrong either way |
+| Weapon | **0.55** | Feeds a hard override that can trigger a siren. The previous build shipped 0.25 |
+| Fire / smoke | **0.50** | Same reasoning |
+
+### Escalation ladder
+
+| Level | TCI | Actions |
+|---|---|---|
+| 1 SECURE | 0.00–0.20 | Log only |
+| 2 SUSPICIOUS | 0.20–0.40 | + snapshot, incident opened |
+| 3 ELEVATED | 0.40–0.65 | + AES-256-GCM encrypted evidence |
+| 4 HIGH | 0.65–0.85 | + SMS, dispatch package prepared |
+| 5 CRITICAL | 0.85–1.00 | + siren, voice call |
+
+The bands are currently asserted, matching the mid-semester report.
+[`notebooks/03_tci_thresholds.ipynb`](notebooks/03_tci_thresholds.ipynb) derives them
+from an explicit cost matrix instead, which is the defensible version.
+
+---
+
+## Why YOLOv8 does most of the vision work
+
+One model family covers nearly the whole vision surface, and consolidating onto it
+removed a lot of redundant machinery:
+
+| Task | How |
+|---|---|
+| Person localisation | `yolov8n.pt`, class 0 |
+| Weapon localisation | fine-tuned 3-class head — knife, long_gun, pistol |
+| Fire & smoke localisation | fine-tuned 2-class head |
+| **Multi-object tracking** | `model.track(persist=True)` with **ByteTrack**, built in |
+| Pose / keypoints | `yolov8n-pose.pt` — implemented in `PoseEstimator`, not yet wired |
+
+The tracking row replaced an entire dependency. `deep-sort-realtime` was never
+installed, so the old tracker silently degraded to `id = index + 1` per frame —
+track IDs were reused by different people between frames, which corrupted every
+kinematic feature downstream. Loitering and running were computed over trajectories
+that mixed several people together.
+
+Consolidation also fixed a straightforward waste: the old code loaded `yolov8n.pt`
+**twice** (once in `VisionEngine`, once as a COCO fallback inside
+`CloudThreatEngine`) plus two custom detectors — four model loads for three jobs,
+on separate schedules, so a weapon could be attributed to a frame in which the
+person had already moved.
+
+**Next step:** wire up `PoseEstimator`. Bounding-box centroids are a weak proxy for
+what a person is doing; 17 keypoints make limb velocity and body configuration
+directly observable. It also fixes the crawl heuristic, which currently infers
+"crawling" from box aspect ratio and therefore fires on anyone the detector clips at
+the frame edge.
+
+---
+
+## Where Vision Transformers fit
+
+Short answer: **yes, in three specific places, and one of them is a clear win.**
+
+### 1. Audio — the strongest case
+
+**AST (Audio Spectrogram Transformer)** is a ViT applied to mel-spectrogram patches,
+pretrained on AudioSet — which is exactly the corpus this project's audio classifier
+is trained on. AST reports ~0.485 mAP on AudioSet against a 3-layer CNN's far lower
+ceiling, and fine-tuning from AudioSet weights needs far less data than training from
+scratch. With only 375 usable clips, transfer learning is not a nice-to-have; it is
+the only realistic path to a usable acoustic model.
+
+`sentrix/perception/audio.py` builds its architecture from the checkpoint's own
+parameter names, so an AST checkpoint drops in behind the same interface.
+
+### 2. Violence / action recognition
+
+**VideoMAE** or **TimeSformer** are the SOTA replacements for the current per-frame
+ResNet-18 — they model time directly instead of aggregating independent frames.
+The caveat is real: a ViT-B is roughly 10× the compute of ResNet-18 and will not hold
+6 Hz on an Orange Pi. Practical middle ground for edge: **MobileViT** or
+**EfficientFormer**, or run VideoMAE only on frames the cheap path already flagged
+(cascade).
+
+### 3. Re-identification
+
+**CLIP-ReID** and DINOv2 embeddings outperform OSNet on cross-camera matching and
+need no ReID-specific training. `ReIDEngine` already normalises and cosine-matches,
+so swapping the embedding function is a one-line change.
+
+### Where ViTs do *not* belong here
+
+Object detection. YOLOv8 at 640px is faster and more accurate than DETR-family
+detectors at this scale, and small-object recall — a knife at 3 m — is precisely
+where transformer detectors are weakest.
+
+**Recommended order:** AST for audio (biggest gain per unit effort) → pose keypoints
+for behaviour → temporal head for violence → ViT re-id last.
+
+---
+
+## Evaluation workflow
+
+No training is involved. The point is to measure what already exists, honestly.
+
+```bash
+# 1. Is anything actually broken or missing?
+python tools/doctor.py
+
+# 2. Check your datasets for train/val contamination BEFORE quoting any metric
+python tools/audit_splits.py manifest \
+    --train training/runs/v3_real/violence/sample_manifest_train.csv \
+    --val   training/runs/v3_real/violence/sample_manifest_val.csv
+
+python tools/audit_splits.py images \
+    --train data/weapon_data/train/images \
+    --val   data/weapon_data/valid/images
+
+# 3. Measure the motion-only baseline — the thing you claim to beat
+python tools/baseline.py --clips data/clips
+
+# 4. Run the same footage through SENTRIX, writing labelled event logs
+python tools/replay.py --clips data/clips --no-audio
+
+# 5. Produce the metrics table
+python tools/evaluate.py --json report.json
+
+# 6. Analyse
+jupyter lab notebooks/
+```
+
+`tools/replay.py` uses the identical `Pipeline.process` that the live camera uses.
+There is deliberately no separate evaluation path — the previous build had one, and
+it had already drifted, which meant every published number came from code that was
+not the product.
+
+### The TCI notebooks
+
+| Notebook | What it does |
+|---|---|
+| [`01_tci_feature_contract.ipynb`](notebooks/01_tci_feature_contract.ipynb) | Documents the 8-feature contract, verifies the deployed booster, and reproduces the train/serve skew |
+| [`02_tci_calibration.ipynb`](notebooks/02_tci_calibration.ipynb) | Fits an isotonic calibrator so TCI becomes a probability; reliability diagram and ECE |
+| [`03_tci_thresholds.ipynb`](notebooks/03_tci_thresholds.ipynb) | Derives level bands from a cost matrix; computes false alarms per hour |
+
+Both 02 and 03 refuse to write anything when no real labelled event logs are present.
+They fall back to a synthetic demo set and say so loudly.
+
+---
+
+## What changed in v3
+
+Fifteen defects, each pinned by a regression test in [`tests/`](tests/).
+
+### Critical
+
+**1. TCI alarmed on an empty room.** The booster was fitted on raw scores in `[0, 1]`
+but served through an unfitted sigmoid (`A=-1.5, B=0.5`, its own docstring called them
+"dummy params") that compressed inputs to `[0.378, 0.731]`. The model never saw its
+own training distribution.
+
+| Scene | Before | After |
+|---|---|---|
+| Empty room, day | 0.422 → **L2 SUSPICIOUS** | **0.012 → L1 SECURE** |
+| Unknown person present | 0.437 | 0.292 |
+| Usable range | `[0.42, 0.84]` | `[0.01, 0.95]` |
+
+An empty room and an occupied one differed by **0.015**. TCI was effectively a
+constant.
+
+**2. Alert storm.** Level 2 sent an SMS and level 3 sounded the siren — two steps more
+aggressive than every document — while the system sat permanently at level 2. Result
+on disk: **1,489 evidence bundles, 2,415 snapshots, 642 MB.** Side effects now bind to
+**incidents**, not frames, and each fires once per incident.
+
+**3. Evidence was destroying itself.** Filenames had one-second resolution, so writes
+inside the same second silently overwrote each other. Now millisecond + counter + random
+suffix, plus an HMAC hash-chained manifest — deleting or altering a bundle breaks the
+chain at that point and everywhere after it.
+
+**4. Everything under `/static` was unauthenticated.** FastAPI applies no auth to static
+mounts, and the mount contained the evidence vault, incident snapshots and enrolled face
+photographs. Runtime output moved to `var/` and is served only through authenticated
+`/media/*` routes.
+
+**5. Face "recognition" was a colour histogram.** With `face_recognition` not installed,
+the live path compared a 512-bin HSV histogram of the centre of the frame at cosine
+≥ 0.68. Two frames of the same room routinely pass that. Since authorisation suppresses
+*all* alerting, it was an authentication bypass. Now fails closed.
+
+### Correctness
+
+**6.** The violence classifier was never invoked — `classify()` ran it only
+`if frame is not None`, and both call sites passed two arguments. 42 MB loaded, zero
+inferences. Now windowed and wired.
+
+**7.** `is_night` — one of five model inputs — was never computed. Always zero.
+
+**8.** Weapon, fire and behaviour could not reach the score. With the 5-feature booster,
+a knife at 0.5 confidence and no knife at all produced an identical TCI.
+
+**9.** EMA smoothing was frame-rate dependent, and every hard override returned early
+without updating the smoother, so the EMA resumed from a stale pre-incident value.
+
+**10.** Re-identification compared unit vectors against an L2 distance threshold of
+120.0 — unreachable, since unit vectors are at most 2.0 apart. Every person collapsed
+onto `GID-1`.
+
+**11.** Tracking degraded to per-frame indices, corrupting all kinematics.
+
+**12.** `process()` and `process_eval_frame()` were duplicated and had drifted.
+
+**13.** Telemetry no-opped unless `SENTRIX_EVAL_MODE=1`, so the "operational per-engine
+logging" produced nothing in normal operation.
+
+### Infrastructure
+
+**14.** `requirements.txt` could not start the app — missing `jinja2`, `sqlalchemy`,
+`python-dotenv`, `cryptography`, `scipy`, `sounddevice`, `pandas`; shipped
+`pycryptodome` (unused) instead of `cryptography` (imported). `run.bat`/`run.sh` never
+created a venv or installed anything, despite the docs saying they did.
+
+**15.** `hardware/siren.py` contained no GPIO code at all — it was a desktop beep player
+whose sound path pointed at a pre-restructure directory. `docs/3` showed a GPIO snippet
+captioned as that file's contents.
+
+### Removed
+
+`frontend/` (stale duplicate of a Next.js app that does not exist), `next_prompt.md`,
+`anomaly_classifier.pt` (a ResNet-18 with `val_acc = 0.39` at epoch 1, never loaded by
+anything), and 642 MB of false-positive runtime output.
+
+---
+
+## Known limitations
+
+Stated plainly, because they will come up in review.
+
+**The TCI fusion model is still synthetic.** `training/scripts/refit_xgboost.py`
+generates its own labels from a formula, so its `R² = 0.984` measures only that XGBoost
+can memorise that formula. It is not a model result. The path out is
+`tools/replay.py` → `notebooks/02` — and note that the V3 retraining notebook was right
+to refuse to fabricate this dataset.
+
+**Every model was measured on a contaminated split.** `tools/audit_splits.py`
+reproduces it:
+
+| Dataset | Contamination |
+|---|---|
+| Violence (RWF-2000) | **52.7% of validation rows** come from source videos also in training |
+| Weapon | 12.2% of validation images have a train near-duplicate at cos > 0.99 |
+| Fire / smoke | 20.0% at cos > 0.99 |
+
+The published mAP and accuracy figures are optimistic by an unknown margin. Re-split by
+source and re-measure before the final report.
+
+**The audio model is under-trained.** 375 usable clips across 4 classes; `scream` has 8
+validation samples. The reported macro-F1 of 0.7036 is a single-epoch spike selected
+from a noisy series whose surrounding epochs average ~0.58 — selection on a 75-sample
+validation set, not a converged result. It also has no `gunshot` and no `glass_break`
+class, both of which the proposal promises, and `gunshot` is required for the
+firecracker-discrimination research gap. See `docs/5` §3.1.
+
+**The UCF-Crime anomaly model is not wired in, and its test metric is a sign error.**
+`python tools/diagnose_anomaly.py` shows normal footage scoring 0.923 and anomalous
+footage 0.685 — the ranking is inverted. Inverted, AUC is 0.806 against a validation
+AUC of 0.826.
+
+**"Court-admissible" is not a claim this system can make.** Admissibility is a legal
+determination about process and custody, not a property a cipher confers. The
+defensible term is **tamper-evident**, and the docs should be softened accordingly.
+
+**The false-alarm reduction claim is not yet measured.** `tools/baseline.py` provides
+the comparator, but the missing ingredient is hours of continuous unattended footage
+from a real deployment. Public CCTV datasets are trimmed and curated and cannot give a
+rate per hour of an empty room.
+
+---
+
+## Documentation
+
+| Document | Contents |
+|---|---|
+| [`docs/1_SYSTEM_ARCHITECTURE.md`](docs/1_SYSTEM_ARCHITECTURE.md) | Architecture and data flow |
+| [`docs/2_MODEL_BENCHMARKS_AND_KPIS.md`](docs/2_MODEL_BENCHMARKS_AND_KPIS.md) | Training results |
+| [`docs/3_HARDWARE_SPECIFICATION_AND_BOM.md`](docs/3_HARDWARE_SPECIFICATION_AND_BOM.md) | Bill of materials, pinouts |
+| [`docs/4_DEPLOYMENT_AND_RUNBOOK.md`](docs/4_DEPLOYMENT_AND_RUNBOOK.md) | Deployment and operations |
+| [`docs/5_FUTURE_ADVANCEMENTS_AND_CLOUD_DEPLOYMENT.md`](docs/5_FUTURE_ADVANCEMENTS_AND_CLOUD_DEPLOYMENT.md) | Roadmap |
+
+All five were rewritten for v3. Each carries explicit **"Corrected from v2.1"**
+callouts where the previous version stated something that was not true of the
+code — those corrections need to be carried into the final report, because an
+examiner comparing the docs against `training/runs/` will find them.
+
+---
+
+## Team
+
+| Member | Roll No. | Subsystem |
+|---|---|---|
+| Kartik Garg | 102303478 | System architecture, vision engines, backend core |
+| Akshay Ranveer | 102303453 | Biometric identity, re-identification, tracking |
+| Prashant Gagneja | 102353011 | Acoustic classification, digital signal processing |
+| Harshit Mishra | 102319039 | Behavioural intelligence, anomaly classification |
+| Mehul Perimal | 102315144 | Evidence cryptography, database, dashboard |
+
+**Mentor:** Dr. Ashutosh Mishra, Associate Professor, CSED, TIET Patiala
+
+---
+
+## Standards
+
+BIS IS 16910 / IEC 62676 (video surveillance) · NIST SP 800-38D / FIPS 197 (AES-GCM) ·
+FIPS 180-4 (SHA-256) · CERT-In cybersecurity directions · MoHUA Smart Cities ICCC
+video-analytics guidelines · OSHA 1910.95 / NFPA 72 (audible alarm levels)
+
+## License
+
+MIT

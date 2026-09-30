@@ -10,9 +10,9 @@ from pathlib import Path
 import xgboost as xgb
 
 ROOT_DIR = Path(__file__).parent.parent.parent.resolve()
-BACKEND_MODELS_DIR = ROOT_DIR / "backend" / "models"
-BACKEND_MODELS_DIR.mkdir(parents=True, exist_ok=True)
-OUTPUT_MODEL = BACKEND_MODELS_DIR / "tci_xgboost.json"
+MODELS_DIR = ROOT_DIR / "models"
+MODELS_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUT_MODEL = MODELS_DIR / "tci_xgboost.json"
 
 def generate_multimodal_dataset(n_samples=5000):
     """

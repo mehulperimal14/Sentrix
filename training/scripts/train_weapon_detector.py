@@ -15,11 +15,11 @@ os.environ["POLARS_SKIP_CPU_CHECK"] = "1"
 import torch
 
 ROOT_DIR = Path(__file__).parent.parent.parent.resolve()
-BACKEND_MODELS_DIR = ROOT_DIR / "backend" / "models"
-BACKEND_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+MODELS_DIR = ROOT_DIR / "models"
+MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
 DATA_YAML = ROOT_DIR / "data" / "weapon_data" / "data.yaml"
-OUTPUT_MODEL = BACKEND_MODELS_DIR / "weapon_detector.pt"
+OUTPUT_MODEL = MODELS_DIR / "weapon_detector.pt"
 
 def get_device():
     if torch.backends.mps.is_available():
@@ -39,7 +39,7 @@ def train(epochs=3, batch=16, imgsz=416):
 
     from ultralytics import YOLO
     
-    base_model_path = BACKEND_MODELS_DIR / "yolov8n.pt"
+    base_model_path = MODELS_DIR / "yolov8n.pt"
     if not base_model_path.exists():
         model = YOLO("yolov8n.pt")
     else:

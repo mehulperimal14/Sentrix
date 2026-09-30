@@ -15,9 +15,9 @@ from torch.utils.data import Dataset, DataLoader
 
 ROOT_DIR = Path(__file__).parent.parent.parent.resolve()
 DATA_DIR = ROOT_DIR / "data" / "audio_data"
-BACKEND_MODELS_DIR = ROOT_DIR / "backend" / "models"
-BACKEND_MODELS_DIR.mkdir(parents=True, exist_ok=True)
-OUTPUT_MODEL = BACKEND_MODELS_DIR / "audio_classifier.pt"
+MODELS_DIR = ROOT_DIR / "models"
+MODELS_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUT_MODEL = MODELS_DIR / "audio_classifier.pt"
 
 CLASSES = ["normal_ambient", "gunshot_like", "scream_like", "explosion_like", "siren_like"]
 NUM_CLASSES = len(CLASSES)
