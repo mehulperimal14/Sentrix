@@ -26,6 +26,8 @@ sqlalchemy>=2.0.30
 numpy>=1.26.4,<2.0.0
 opencv-python>=4.10.0
 ultralytics>=8.3.0            # YOLOv8 detection + ByteTrack tracking
+lap>=0.5.12                   # ByteTrack assignment; without it track() fails and
+                              # detection silently falls back to untracked predict()
 
 # ── deep learning ─────────────────────────────────────────────────────────────
 # CPU wheels by default. For CUDA, install torch separately FIRST:

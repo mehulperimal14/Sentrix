@@ -1,0 +1,11 @@
+video_id,video_file,split,n_segments,dominant_class,classes_present,confident_seconds,review_seconds
+gun,gun.mov,val,3,weapon,normal|weapon,12.0,2.3
+vid02,vid02.mov,train,4,weapon,normal|weapon,16.0,3.9
+vid03,vid03.mov,train,7,weapon,normal|weapon,9.4,7.3
+vid04,vid04.mov,val,4,fire,fire|normal,7.7,10.9
+vid05,vid05.mov,train,4,assault,assault|weapon,10.5,3.2
+vid06,vid06.mov,train,6,fire,fire|normal,11.7,8.0
+vid07,vid07.mov,train,9,weapon,normal|weapon,82.3,19.8
+wa01,wa01.mp4,train,6,weapon,normal|weapon,34.6,13.5
+wa02,wa02.mp4,test,7,weapon,normal|weapon,31.8,27.0
+wa03,wa03.mp4,train,4,normal,normal,25.0,4.0

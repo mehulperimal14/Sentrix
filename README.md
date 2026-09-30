@@ -6,7 +6,7 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.4-EE4C2C.svg)](https://pytorch.org/)
 [![YOLOv8](https://img.shields.io/badge/YOLOv8-ultralytics-00BFA5.svg)](https://docs.ultralytics.com/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688.svg)](https://fastapi.tiangolo.com/)
-[![Tests](https://img.shields.io/badge/tests-46%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-65%20passing-brightgreen.svg)](tests/)
 
 > **Capstone Project CPG-299** · Computer Science and Engineering, Thapar Institute of
 > Engineering and Technology, Patiala · Mentor: Dr. Ashutosh Mishra
@@ -118,16 +118,19 @@ Sentrix/
 │   ├── alerting/               Twilio SMS, voice, dispatch packages
 │   ├── storage/                SQLite, one row per incident
 │   ├── web/                    routes, streaming, security, templates, static
+│   ├── evaluation/             ★ custom-dataset ground truth, metrics, harness
 │   └── utils/                  logging and telemetry
 │
 ├── models/                     deployed weights
 ├── notebooks/                  ★ TCI analysis (contract, calibration, thresholds)
 ├── training/
+│   ├── datasets/sentrix_custom/ ground truth of the custom frame dataset
 │   ├── scripts/                training as .py
 │   ├── notebooks/              training as .ipynb
 │   └── runs/                   all run outputs (v1_legacy, v2_real, v3_real, ucf_crime_dvs)
-├── tools/                      doctor, replay, baseline, evaluate, auditors
-├── tests/                      46 regression tests
+├── tools/                      doctor, replay, baseline, evaluate, auditors,
+│                               custom-dataset evaluation
+├── tests/                      65 regression tests
 ├── docs/                       specifications
 ├── Capstone Docs/              submissions
 └── var/                        runtime output — gitignored, never web-served
@@ -306,6 +309,25 @@ There is deliberately no separate evaluation path — the previous build had one
 it had already drifted, which meant every published number came from code that was
 not the product.
 
+### Custom dataset evaluation
+
+The team's own footage — 765 reviewed frames from 10 videos, classes `normal`,
+`fire`, `weapon`, `assault`, `robbery` — is the one evaluation set that looks
+like a real deployment. It is scored two ways, both through the product
+pipeline with every side effect disabled:
+
+```bash
+python tools/eval_custom_frames.py --splits train,val,test   # per image
+python tools/replay_custom_videos.py --videos all            # source videos, end to end
+python tools/custom_eval_table.py                            # markdown tables
+```
+
+On this footage the shipped v3 models score **0.043 accuracy on the test video**:
+the violence classifier calls the entire test corridor a fight, the weapon
+detector is near chance (AUROC 0.54) and the fire detector finds none of the
+flame jets. Protocol, metric definitions and the full breakdown are in
+[`docs/6_CUSTOM_DATASET_EVALUATION.md`](docs/6_CUSTOM_DATASET_EVALUATION.md).
+
 ### The TCI notebooks
 
 | Notebook | What it does |
@@ -457,6 +479,7 @@ rate per hour of an empty room.
 | [`docs/3_HARDWARE_SPECIFICATION_AND_BOM.md`](docs/3_HARDWARE_SPECIFICATION_AND_BOM.md) | Bill of materials, pinouts |
 | [`docs/4_DEPLOYMENT_AND_RUNBOOK.md`](docs/4_DEPLOYMENT_AND_RUNBOOK.md) | Deployment and operations |
 | [`docs/5_FUTURE_ADVANCEMENTS_AND_CLOUD_DEPLOYMENT.md`](docs/5_FUTURE_ADVANCEMENTS_AND_CLOUD_DEPLOYMENT.md) | Roadmap |
+| [`docs/6_CUSTOM_DATASET_EVALUATION.md`](docs/6_CUSTOM_DATASET_EVALUATION.md) | Custom-dataset protocol and results |
 
 All five were rewritten for v3. Each carries explicit **"Corrected from v2.1"**
 callouts where the previous version stated something that was not true of the

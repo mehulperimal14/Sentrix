@@ -1,0 +1,27 @@
+{
+  "input_dir": "/home/claude/sentrix_ds/pipeline/videos",
+  "annotations": "/home/claude/sentrix_ds/pipeline/annotations/segments_source.csv",
+  "output_dir": "/home/claude/sentrix_ds/pipeline/dataset",
+  "fps": 3.0,
+  "fast_class_fps": 6.0,
+  "fast_classes": [
+    "assault",
+    "weapon"
+  ],
+  "blur_threshold": 12.0,
+  "dark_threshold": 6.0,
+  "bright_threshold": 249.0,
+  "min_std": 4.0,
+  "phash_distance": 2,
+  "dedup_scope": "video",
+  "min_keep_interval": 1.0,
+  "cross_split_corr": 0.985,
+  "confidence_threshold": 0.7,
+  "train_ratio": 0.7,
+  "val_ratio": 0.15,
+  "test_ratio": 0.15,
+  "seed": 42,
+  "jpeg_quality": 95,
+  "contact_sheet_cols": 6,
+  "contact_sheet_max": 24
+}

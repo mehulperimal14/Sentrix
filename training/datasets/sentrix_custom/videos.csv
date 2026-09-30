@@ -1,0 +1,11 @@
+video_id,file,split,fps,frames,duration_s
+vid02,2.mov,train,29.75,592,19.9
+vid03,3.mov,train,29.65,506,17.1
+vid04,4.mov,val,29.68,555,18.7
+vid05,5.mov,train,25.91,355,13.7
+vid06,6.mov,train,26.04,513,19.7
+vid07,7.mov,train,29.66,3038,102.4
+gun,gun.mov,val,29.58,424,14.3
+wa01,WhatsApp Video 2026-09-19 at 7.04.16 PM.mp4,train,25.00,1203,48.1
+wa02,WhatsApp Video 2026-09-19 at 7.04.16 PM (2).mp4,test,25.00,1470,58.8
+wa03,WhatsApp Video 2026-09-19 at 7.04.16 PM (3).mp4,train,25.00,726,29.0

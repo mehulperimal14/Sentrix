@@ -1,0 +1,31 @@
+{
+  "note": "Canonical class indices. normal=0 is fixed by choice. The folder names in train/val/test are prefixed with the index (0_normal, 1_fire, ...) so that an alphabetical directory listing - which is what torchvision ImageFolder uses - reproduces this exact mapping.",
+  "classes": [
+    "normal",
+    "fire",
+    "weapon",
+    "assault",
+    "robbery"
+  ],
+  "class_to_idx": {
+    "normal": 0,
+    "fire": 1,
+    "weapon": 2,
+    "assault": 3,
+    "robbery": 4
+  },
+  "idx_to_class": {
+    "0": "normal",
+    "1": "fire",
+    "2": "weapon",
+    "3": "assault",
+    "4": "robbery"
+  },
+  "folder_names": {
+    "normal": "0_normal",
+    "fire": "1_fire",
+    "weapon": "2_weapon",
+    "assault": "3_assault",
+    "robbery": "4_robbery"
+  }
+}

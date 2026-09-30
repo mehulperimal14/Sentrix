@@ -1,0 +1,327 @@
+{
+  "commit": "f74996f",
+  "branch": "sentrix/baseline-v3",
+  "splits": {
+    "train": {
+      "n": 588,
+      "accuracy": 0.5663,
+      "macro_f1": 0.2798,
+      "balanced_accuracy": 0.3241,
+      "classes_scored": [
+        "normal",
+        "fire",
+        "weapon",
+        "assault",
+        "robbery"
+      ],
+      "per_class": {
+        "normal": {
+          "precision": 0.7938,
+          "recall": 0.6917,
+          "f1": 0.7393,
+          "support": 373,
+          "predicted": 325
+        },
+        "fire": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 11,
+          "predicted": 0
+        },
+        "weapon": {
+          "precision": 0.5618,
+          "recall": 0.3472,
+          "f1": 0.4292,
+          "support": 144,
+          "predicted": 89
+        },
+        "assault": {
+          "precision": 0.1437,
+          "recall": 0.5814,
+          "f1": 0.2304,
+          "support": 43,
+          "predicted": 174
+        },
+        "robbery": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 17,
+          "predicted": 0
+        }
+      },
+      "confusion": {
+        "labels": [
+          "normal",
+          "fire",
+          "weapon",
+          "assault",
+          "robbery"
+        ],
+        "matrix": [
+          [
+            258,
+            0,
+            32,
+            83,
+            0
+          ],
+          [
+            1,
+            0,
+            2,
+            8,
+            0
+          ],
+          [
+            53,
+            0,
+            50,
+            41,
+            0
+          ],
+          [
+            13,
+            0,
+            5,
+            25,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            17,
+            0
+          ]
+        ]
+      },
+      "threat_detection": {
+        "tp": 148,
+        "fp": 115,
+        "fn": 67,
+        "tn": 258,
+        "precision": 0.5627,
+        "recall": 0.6884,
+        "f1": 0.6192,
+        "false_positive_rate": 0.3083
+      }
+    },
+    "val": {
+      "n": 84,
+      "accuracy": 0.4167,
+      "macro_f1": 0.2808,
+      "balanced_accuracy": 0.4061,
+      "classes_scored": [
+        "normal",
+        "fire",
+        "weapon"
+      ],
+      "per_class": {
+        "normal": {
+          "precision": 0.3194,
+          "recall": 1.0,
+          "f1": 0.4842,
+          "support": 23,
+          "predicted": 72
+        },
+        "fire": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 6,
+          "predicted": 0
+        },
+        "weapon": {
+          "precision": 1.0,
+          "recall": 0.2182,
+          "f1": 0.3582,
+          "support": 55,
+          "predicted": 12
+        },
+        "assault": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0,
+          "predicted": 0
+        },
+        "robbery": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0,
+          "predicted": 0
+        }
+      },
+      "confusion": {
+        "labels": [
+          "normal",
+          "fire",
+          "weapon",
+          "assault",
+          "robbery"
+        ],
+        "matrix": [
+          [
+            23,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            6,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            43,
+            0,
+            12,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ]
+      },
+      "threat_detection": {
+        "tp": 12,
+        "fp": 0,
+        "fn": 49,
+        "tn": 23,
+        "precision": 1.0,
+        "recall": 0.1967,
+        "f1": 0.3288,
+        "false_positive_rate": 0.0
+      }
+    },
+    "test": {
+      "n": 93,
+      "accuracy": 0.043,
+      "macro_f1": 0.1143,
+      "balanced_accuracy": 0.0769,
+      "classes_scored": [
+        "normal",
+        "weapon"
+      ],
+      "per_class": {
+        "normal": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 67,
+          "predicted": 0
+        },
+        "fire": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0,
+          "predicted": 0
+        },
+        "weapon": {
+          "precision": 0.4444,
+          "recall": 0.1538,
+          "f1": 0.2286,
+          "support": 26,
+          "predicted": 9
+        },
+        "assault": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0,
+          "predicted": 84
+        },
+        "robbery": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0,
+          "predicted": 0
+        }
+      },
+      "confusion": {
+        "labels": [
+          "normal",
+          "fire",
+          "weapon",
+          "assault",
+          "robbery"
+        ],
+        "matrix": [
+          [
+            0,
+            0,
+            5,
+            62,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            4,
+            22,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ]
+      },
+      "threat_detection": {
+        "tp": 26,
+        "fp": 67,
+        "fn": 0,
+        "tn": 0,
+        "precision": 0.2796,
+        "recall": 1.0,
+        "f1": 0.437,
+        "false_positive_rate": 1.0
+      }
+    }
+  },
+  "models": {
+    "person": "yolov8n.pt",
+    "weapon": "weapon_detector_real_v3.pt",
+    "fire": "fire_smoke_detector_real_v3.pt",
+    "violence": "violence_classifier_real_v3.pt",
+    "scene": null,
+    "fusion": "xgboost"
+  }
+}
