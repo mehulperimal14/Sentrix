@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% block title %}SENTRIX — Event Log{% endblock %}
-{% block description %}Paginated log of all security events detected by SENTRIX{% endblock %}
+{% block description %}Incidents detected by SENTRIX, with evidence and operator verdicts{% endblock %}
 
 {% block content %}
 <div class="page-header">
   <h1 class="page-title">Event Log</h1>
-  <span class="page-count">{{ events|length }} events</span>
+  <span class="page-count">{{ events|length }} incidents</span>
 </div>
 
 <div class="card table-card">
@@ -13,43 +13,90 @@
     <table class="data-table" id="events-table">
       <thead>
         <tr>
-          <th>Time</th>
-          <th>Level</th>
-          <th>TCI</th>
-          <th>Status</th>
-          <th>Incident</th>
-          <th>Reason</th>
-          <th>Camera</th>
+          <th>Started (local)</th>
+          <th>Peak level</th>
+          <th>Peak TCI</th>
+          <th>Type</th>
+          <th>Why (peak tick)</th>
+          <th>Duration</th>
+          <th>Identity</th>
           <th>Snapshot</th>
+          <th>Evidence</th>
+          <th>Verdict</th>
         </tr>
       </thead>
       <tbody>
         {% for ev in events %}
-        <tr class="level-row-{{ ev.level }}">
-          <td class="mono">{{ ev.created_at }}</td>
+        <tr class="level-row-{{ ev.level }}" data-incident="{{ ev.id }}">
+          <td class="mono local-time" data-iso="{{ ev.started_iso or '' }}">{{ ev.created_at }}</td>
           <td>
             <span class="level-chip level-{{ ev.level }}">L{{ ev.level }}</span>
           </td>
           <td class="mono">{{ "%.3f"|format(ev.tci or 0) }}</td>
-          <td>{{ ev.status }}</td>
           <td>{{ ev.incident_type }}</td>
           <td class="reason-cell" title="{{ ev.reason }}">{{ ev.reason }}</td>
-          <td class="mono small">{{ ev.camera_id }}</td>
+          <td class="mono small">
+            {% if ev.ended_at %}{{ "%.0f"|format(ev.duration_seconds or 0) }} s{% else %}ongoing{% endif %}
+          </td>
+          <td class="small">{{ "authorised" if ev.authorized else "unknown" }}</td>
           <td>
             {% if ev.snapshot_path %}
-            <a href="{{ ev.snapshot_path }}" target="_blank" class="link-btn">View</a>
+            <a href="/media/snapshot/{{ ev.snapshot_path }}" target="_blank" class="link-btn">View</a>
             {% else %}
             <span class="muted">—</span>
             {% endif %}
           </td>
+          <td>
+            {% if ev.evidence_bundle %}
+            <a href="/media/evidence/{{ ev.evidence_bundle }}" target="_blank" class="link-btn">Open</a>
+            {% else %}
+            <span class="muted">—</span>
+            {% endif %}
+          </td>
+          <td class="verdict-cell">
+            <button class="link-btn verdict-btn{% if ev.verdict == 'TRUE' %} active{% endif %}"
+                    data-verdict="TRUE" title="A real threat">Real</button>
+            <button class="link-btn verdict-btn{% if ev.verdict == 'FALSE' %} active{% endif %}"
+                    data-verdict="FALSE" title="A false alarm (cancels a pending dispatch)">False alarm</button>
+          </td>
         </tr>
         {% else %}
         <tr>
-          <td colspan="8" class="empty-cell">No events logged yet. Events appear at Level 2+.</td>
+          <td colspan="10" class="empty-cell">No incidents yet. An incident opens at Level 2 and above.</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
+
+<style>
+  .verdict-btn { margin-right: 0.25rem; opacity: 0.6; }
+  .verdict-btn.active { opacity: 1; outline: 1px solid currentColor; }
+</style>
+
+<script>
+  // Stored in UTC; shown in the browser's time zone.
+  document.querySelectorAll(".local-time").forEach(td => {
+    const iso = td.dataset.iso;
+    if (iso) td.textContent = new Date(iso).toLocaleString();
+  });
+
+  // Operator verdicts: every labelled incident is training data (CLAUDE.md M8).
+  document.querySelectorAll(".verdict-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const row = btn.closest("tr");
+      const body = new FormData();
+      body.append("verdict", btn.dataset.verdict);
+      const res = await fetch(`/api/incidents/${row.dataset.incident}/verdict`,
+                              {method: "POST", body});
+      if (res.ok) {
+        row.querySelectorAll(".verdict-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+      } else {
+        alert("Could not save the verdict.");
+      }
+    });
+  });
+</script>
 {% endblock %}

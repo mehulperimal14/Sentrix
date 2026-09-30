@@ -54,7 +54,8 @@ async def lifespan(app: FastAPI):
         log.warning("SENTRIX_PASSWORD is not set — the dashboard will refuse "
                     "to authenticate. Copy .env.example to .env and set it.")
 
-    get_pipeline()          # build eagerly so startup failures surface here
+    pipeline = get_pipeline()   # build eagerly so startup failures surface here
+    database.close_interrupted(pipeline.session_id)
     try:
         database.prune(int(os.getenv("RETENTION_DAYS", "30")))
     except Exception as exc:

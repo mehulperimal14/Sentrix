@@ -102,7 +102,8 @@ class EvidenceRecord:
     incident_type: str
     reason: str
     features: dict[str, Any]
-    detections: list[str]
+    #: Each box as {label, conf, bbox, track_id} (older bundles: label strings).
+    detections: list[Any]
     sha256: str
     prev_sha256: str
     encryption: str = "AES-256-GCM"
@@ -172,8 +173,14 @@ class EvidenceVault:
 
     def save(self, frame, result, level: int, status: str,
              incident_id: str | None = None, detections: list | None = None,
-             camera_id: str = "CAM_0") -> EvidenceRecord | None:
-        """Encrypt one frame and chain it into the manifest."""
+             camera_id: str = "CAM_0",
+             context: dict[str, Any] | None = None) -> EvidenceRecord | None:
+        """Encrypt one frame and chain it into the manifest.
+
+        ``context`` is the decision behind the frame - the evidence votes, the
+        scene probabilities, the identity verdict and the pipeline session -
+        so a reviewer can see *why* it was sealed, not only what it shows.
+        """
         if cv2 is None or frame is None:
             return None
         try:
@@ -195,9 +202,16 @@ class EvidenceVault:
                 enc_path = self.dir / f"{base}.enc"
                 enc_path.write_bytes(blob)
 
-                labels = []
+                labels: list[Any] = []
                 for det in (detections or []):
-                    labels.append(det.label if hasattr(det, "label") else str(det))
+                    if isinstance(det, dict):
+                        labels.append({k: det.get(k) for k in
+                                       ("label", "conf", "bbox", "track_id")})
+                    elif hasattr(det, "to_dict"):
+                        labels.append(det.to_dict())
+                    else:
+                        labels.append(str(det))
+                context = dict(context or {})
 
                 record = EvidenceRecord(
                     file=enc_path.name,
@@ -214,9 +228,11 @@ class EvidenceVault:
                     detections=labels,
                     sha256=digest,
                     prev_sha256=self._tip,
-                    extras={"session": self.session_id,
+                    extras={"session": context.pop("session", None) or self.session_id,
+                            "vault_session": self.session_id,
                             "fusion_source": result.source,
-                            "persistent_key": self.persistent},
+                            "persistent_key": self.persistent,
+                            **context},
                 )
                 chain = self._append_manifest(record)
                 self._tip = chain

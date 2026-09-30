@@ -34,6 +34,30 @@ from sentrix.utils.logging import get_logger
 log = get_logger("incidents")
 
 
+@dataclass(frozen=True)
+class PeakSnapshot:
+    """The tick that defines an incident, every field taken from that one tick.
+
+    The first live test's incident rows mixed ticks: the type was frozen at the
+    first non-normal frame, the reason and TCI came from the peak, and the
+    authorisation flag was hard-coded (CLAUDE.md section 5). A reviewer could
+    not reconstruct what the system saw. Frozen, so a reader on another thread
+    always sees one consistent tick.
+    """
+
+    tci: float = 0.0
+    level: int = 1
+    incident_type: str = "normal"
+    reason: str = ""
+    features: dict = field(default_factory=dict)
+    authorized: bool = False
+    person_present: bool = False
+    #: The evidence behind the TCI at that tick (per-class votes).
+    trigger: dict = field(default_factory=dict)
+    at: float = 0.0
+    wall: float = 0.0
+
+
 @dataclass
 class Incident:
     """One contiguous threat episode."""
@@ -43,9 +67,8 @@ class Incident:
     started_wall: float
     level: int
     peak_level: int
-    peak_tci: float
-    incident_type: str
     last_active: float
+    peak: PeakSnapshot = field(default_factory=PeakSnapshot)
     ended_at: float | None = None
     frames: int = 0
     evidence_count: int = 0
@@ -61,11 +84,29 @@ class Incident:
     evidence_bundle: str | None = None
     evidence_hash: str | None = None
 
-    #: Feature vector at the moment of peak TCI. The database stored whichever
-    #: frame happened to be current when the incident closed, which is usually
-    #: the quiet frame that ended it rather than the one that mattered.
-    peak_features: dict[str, float] = field(default_factory=dict)
-    peak_reason: str = ""
+    #: Monotonic time the row was last written, and the peak it wrote. The
+    #: row is saved when the incident opens and again when the peak moves, so
+    #: a hard kill keeps the incident (CLAUDE.md M3).
+    saved_at: float | None = None
+    saved_peak: PeakSnapshot | None = None
+    saved_level: int = 0
+
+    # The peak tick's fields, read by storage, evidence and tools.
+    @property
+    def peak_tci(self) -> float:
+        return self.peak.tci
+
+    @property
+    def incident_type(self) -> str:
+        return self.peak.incident_type
+
+    @property
+    def peak_reason(self) -> str:
+        return self.peak.reason
+
+    @property
+    def peak_features(self) -> dict:
+        return self.peak.features
 
     @property
     def duration(self) -> float:
@@ -109,39 +150,46 @@ class IncidentManager:
 
     def update(self, level: int, tci: float, incident_type: str,
                now: float | None = None, features: dict | None = None,
-               reason: str = "") -> tuple[Incident | None, Incident | None]:
+               reason: str = "", authorized: bool = False,
+               person_present: bool = False,
+               trigger: dict | None = None) -> tuple[Incident | None, Incident | None]:
         """Advance incident state.
 
         Returns ``(active, just_closed)``. ``active`` is None when the scene is
-        quiet; ``just_closed`` is set only on the tick an incident ends.
+        quiet; ``just_closed`` is set only on the tick an incident ends. The
+        incident's type, reason, TCI, features and authorisation all come from
+        its peak tick (highest TCI; the first such tick on a tie).
         """
         now = time.monotonic() if now is None else now
         closed: Incident | None = None
 
         if level <= 1:
             if self._current is not None:
+                # Quiet ticks inside an open incident still belong to it.
+                self._current.frames += 1
+                self._current.level = level
                 quiet = now - self._current.last_active
                 if quiet >= self.cfg.close_after_quiet_seconds:
                     closed = self._close(now)
             return self._current, closed
 
+        tick = PeakSnapshot(tci=tci, level=level, incident_type=incident_type,
+                            reason=reason, features=dict(features or {}),
+                            authorized=bool(authorized),
+                            person_present=bool(person_present),
+                            trigger=dict(trigger or {}), at=now, wall=time.time())
         if self._current is None:
             self._current = Incident(
                 id=str(uuid.uuid4()), started_at=now, started_wall=time.time(),
-                level=level, peak_level=level, peak_tci=tci,
-                incident_type=incident_type, last_active=now,
-                # The opening tick may be the peak: record why, or the reason
-                # of an incident that only declines from here stays empty.
-                peak_features=dict(features or {}), peak_reason=reason,
-            )
+                level=level, peak_level=level, last_active=now, peak=tick)
             log.info("incident %s opened (level %d, %s)",
                      self._current.short_id, level, incident_type)
         elif now - self._current.started_at > self.cfg.max_duration_seconds:
             # Cap runaway incidents so one continuous event does not become an
             # unbounded evidence bundle.
             closed = self._close(now)
-            return (self.update(level, tci, incident_type, now, features,
-                                reason)[0], closed)
+            return (self.update(level, tci, incident_type, now, features, reason,
+                                authorized, person_present, trigger)[0], closed)
 
         incident = self._current
         incident.frames += 1
@@ -149,14 +197,8 @@ class IncidentManager:
         incident.last_active = now
         if level > incident.peak_level:
             incident.peak_level = level
-        if tci > incident.peak_tci:
-            incident.peak_tci = tci
-            if features is not None:
-                incident.peak_features = dict(features)
-                incident.peak_reason = reason
-        # Let the type escalate but never silently downgrade mid-incident.
-        if incident_type != "normal" and incident.incident_type == "normal":
-            incident.incident_type = incident_type
+        if tci > incident.peak.tci:
+            incident.peak = tick
         return incident, closed
 
     def _close(self, now: float) -> Incident | None:
@@ -165,7 +207,7 @@ class IncidentManager:
         if incident is None:
             return None
         incident.ended_at = now
-        if incident.duration < self.cfg.min_duration_seconds:
+        if incident.duration < self.cfg.min_duration_seconds and incident.saved_at is None:
             log.debug("incident %s discarded (%.2fs, below minimum)",
                       incident.short_id, incident.duration)
             return None

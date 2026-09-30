@@ -42,8 +42,23 @@ def _configure_sqlite(dbapi_connection, _record) -> None:
     cursor.close()
 
 
+#: Columns added after the first release, as (table, column, SQL type). An
+#: existing database gains them on start-up; nothing is dropped or rewritten.
+_ADDED_COLUMNS = (("incidents", "trigger_json", "TEXT"),)
+
+
+def _migrate() -> None:
+    with engine.begin() as conn:
+        for table, column, sql_type in _ADDED_COLUMNS:
+            present = {row[1] for row in conn.exec_driver_sql(f"PRAGMA table_info({table})")}
+            if present and column not in present:
+                conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {sql_type}")
+                log.info("database: added %s.%s", table, column)
+
+
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
+    _migrate()
     log.info("database ready: %s (WAL)", DB_PATH)
 
 
@@ -61,14 +76,16 @@ def session_scope():
 
 
 # ── incidents ─────────────────────────────────────────────────────────────────
-def save_incident(incident, session_id: str) -> None:
-    """Persist a closed incident. One row per episode, not per frame.
+def save_incident(incident, session_id: str, ongoing: bool = False) -> None:
+    """Persist an incident. One row per episode, not per frame.
 
-    Every field comes from the incident itself, which accumulated them as the
-    episode ran. The previous signature took the *current* TCIResult, so the
-    row recorded whichever frame happened to close the incident — usually the
-    quiet one that ended it, not the one that mattered.
+    Called when the incident opens (``ongoing=True``, no end time), again when
+    its peak moves, and when it closes, so a crash or ``taskkill /F`` keeps the
+    row. Type, reason, TCI, features, authorisation and trigger all come from
+    one :class:`~sentrix.pipeline.incidents.PeakSnapshot`, read once, so a row
+    never mixes ticks.
     """
+    peak = incident.peak
     try:
         with session_scope() as session:
             session.merge(IncidentRecord(
@@ -76,24 +93,49 @@ def save_incident(incident, session_id: str) -> None:
                 session_id=session_id,
                 started_at=datetime.fromtimestamp(incident.started_wall,
                                                   tz=timezone.utc),
-                ended_at=datetime.now(timezone.utc),
+                ended_at=None if ongoing else datetime.now(timezone.utc),
                 duration_seconds=round(incident.duration, 2),
                 peak_level=incident.peak_level,
-                peak_tci=round(incident.peak_tci, 4),
-                incident_type=incident.incident_type,
-                reason=incident.peak_reason,
+                peak_tci=round(peak.tci, 4),
+                incident_type=peak.incident_type,
+                reason=(peak.reason or "")[:255],
                 frames=incident.frames,
                 evidence_count=incident.evidence_count,
                 snapshot_path=incident.snapshot_path,
                 evidence_bundle=incident.evidence_bundle,
                 evidence_hash=incident.evidence_hash,
-                person_present=bool(incident.peak_features.get("vision", 0) > 0),
-                authorized=False,
-                peak_features_json=json.dumps(incident.peak_features),
+                person_present=peak.person_present,
+                authorized=peak.authorized,
+                peak_features_json=json.dumps(peak.features),
+                trigger_json=json.dumps(peak.trigger, default=str),
                 actions_json=json.dumps(sorted(incident.actions)),
             ))
     except Exception as exc:
         log.error("save_incident failed: %s", exc)
+
+
+def close_interrupted(current_session: str) -> int:
+    """End rows left open by a session that crashed or was killed.
+
+    Their end is the last time they were written (start + saved duration).
+    """
+    try:
+        with session_scope() as session:
+            rows = (session.query(IncidentRecord)
+                    .filter(IncidentRecord.ended_at.is_(None),
+                            IncidentRecord.session_id != current_session).all())
+            for row in rows:
+                start = row.started_at
+                if start is not None and start.tzinfo is None:
+                    start = start.replace(tzinfo=timezone.utc)
+                row.ended_at = (start + timedelta(seconds=row.duration_seconds or 0.0)
+                                if start is not None else datetime.now(timezone.utc))
+            if rows:
+                log.info("closed %d incident(s) interrupted by a previous shutdown", len(rows))
+            return len(rows)
+    except Exception as exc:
+        log.error("close_interrupted failed: %s", exc)
+        return 0
 
 
 def recent_incidents(limit: int = 100) -> list[dict[str, Any]]:
@@ -105,6 +147,9 @@ def recent_incidents(limit: int = 100) -> list[dict[str, Any]]:
             return [{
                 "id": r.id,
                 "started_at": str(r.started_at),
+                # Stored as naive UTC; the page renders it in local time.
+                "started_iso": (r.started_at.replace(tzinfo=timezone.utc).isoformat()
+                                if r.started_at else None),
                 "duration_seconds": r.duration_seconds,
                 "peak_level": r.peak_level,
                 "peak_tci": r.peak_tci,
@@ -115,6 +160,9 @@ def recent_incidents(limit: int = 100) -> list[dict[str, Any]]:
                 "evidence_bundle": r.evidence_bundle,
                 "authorized": r.authorized,
                 "verdict": r.verdict,
+                "ended_at": str(r.ended_at) if r.ended_at else None,
+                "session_id": r.session_id,
+                "trigger": json.loads(r.trigger_json) if r.trigger_json else None,
                 # Legacy aliases for the existing events.html template.
                 "created_at": str(r.started_at),
                 "level": r.peak_level,
@@ -143,6 +191,15 @@ def set_verdict(incident_id: str, verdict: str, note: str | None = None) -> bool
             if row is None:
                 return False
             row.verdict, row.verdict_note = verdict, note
+            if verdict == "FALSE":
+                # A false alarm must not leave an emergency package waiting
+                # for someone to press "send".
+                cancelled = (session.query(DispatchRecord)
+                             .filter_by(incident_id=incident_id, status="PENDING")
+                             .update({"status": "CANCELLED"}))
+                if cancelled:
+                    log.info("cancelled %d dispatch package(s) for false alarm %s",
+                             cancelled, incident_id[:8])
             return True
     except Exception as exc:
         log.error("set_verdict failed: %s", exc)

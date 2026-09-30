@@ -119,8 +119,9 @@ class EventLog:
                 return
             try:
                 handle.write(json.dumps(row, default=str) + "\n")
-                if self._rows % 50 == 0:
-                    handle.flush()
+                # Every row: a hard kill used to lose up to 49 of them. At the
+                # inference rate this is a few small writes a second.
+                handle.flush()
             except (OSError, TypeError) as exc:
                 log.debug("event write failed: %s", exc)
 

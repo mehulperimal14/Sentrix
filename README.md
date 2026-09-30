@@ -6,7 +6,7 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.4-EE4C2C.svg)](https://pytorch.org/)
 [![YOLOv8](https://img.shields.io/badge/YOLOv8-ultralytics-00BFA5.svg)](https://docs.ultralytics.com/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688.svg)](https://fastapi.tiangolo.com/)
-[![Tests](https://img.shields.io/badge/tests-164%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-178%20passing-brightgreen.svg)](tests/)
 
 > **Capstone Project CPG-299** · Computer Science and Engineering, Thapar Institute of
 > Engineering and Technology, Patiala · Mentor: Dr. Ashutosh Mishra
@@ -30,7 +30,8 @@ adding an ESP32 node or a GPIO relay later is a configuration change, not a rewr
 |---|---|---|
 | Person / weapon / fire detection | **Working** | One YOLO component, three heads, ByteTrack; weapon and fire heads are YOLO11n trained on the custom dataset and draw boxes, but by default do not drive the alarm (see *Custom dataset evaluation*) |
 | TCI fusion + escalation | **Working** | Confirmed per-class evidence, hysteresis, incident grouping |
-| Encrypted evidence vault | **Working** | AES-256-GCM, HMAC hash-chained manifest |
+| Encrypted evidence vault | **Working** | AES-256-GCM, HMAC hash-chained manifest; each sidecar records the evidence votes, scene probabilities and identity behind the frame |
+| Incident records | **Working** | Every field from the incident's peak tick; written at open so a crash keeps it; operator verdicts on the Events page (a false alarm cancels its pending dispatch) |
 | Scene classification | **Working** | normal / fire / weapon / assault / robbery; DINOv2 ViT-B/14 trained on the custom dataset (`models/v4_custom/`) |
 | Violence classification | **Superseded** | The RWF-2000 model calls the test corridor a fight; replaced by the scene classifier's assault head whenever a scene model is installed |
 | Acoustic classification | **Working** | Model is under-trained — see *Known limitations* |
@@ -146,7 +147,7 @@ Sentrix/
 │   └── runs/                   all run outputs (v1_legacy, v2_real, v3_real, ucf_crime_dvs)
 ├── tools/                      doctor, replay, baseline, evaluate, auditors,
 │                               custom-dataset evaluation
-├── tests/                      164 regression tests
+├── tests/                      178 regression tests
 ├── docs/                       specifications
 ├── Capstone Docs/              submissions
 └── var/                        runtime output — gitignored, never web-served

@@ -143,6 +143,32 @@ class TestEvidenceVault:
         assert vault.decrypt(record.bundle_id) is not None
         assert vault.verify_chain()["ok"]
 
+    def test_sidecar_records_why_the_frame_was_sealed(self, tmp_path):
+        """Live sidecars held only repr strings of YOLO boxes (CLAUDE.md M3)."""
+        pytest.importorskip("cv2")
+        import numpy as np
+        from sentrix.evidence.vault import EvidenceVault
+        from sentrix.fusion.features import FeatureVector
+        from sentrix.fusion.tci import TCIResult
+
+        vault = EvidenceVault(directory=tmp_path)
+        result = TCIResult(tci=0.5, raw_tci=0.5, incident_type="weapon",
+                           reason="weapon confirmed: scene 0.83/0.50 (3/3 ticks)",
+                           source="evidence", features=FeatureVector(weapon=0.5))
+        box = {"label": "person", "conf": 0.9, "bbox": [1, 2, 3, 4], "track_id": 7,
+               "global_id": 1}
+        context = {"session": "pipe123", "trigger": {"weapon": {"state": "confirmed"}},
+                   "scene": {"probs": {"weapon": 0.83}}}
+        record = vault.save(np.zeros((32, 32, 3), np.uint8), result, 3, "ELEVATED",
+                            incident_id="i1", detections=[box], context=context)
+        sidecar = json.loads((tmp_path / f"{record.bundle_id}.json").read_text())
+        assert sidecar["detections"] == [{"label": "person", "conf": 0.9,
+                                          "bbox": [1, 2, 3, 4], "track_id": 7}]
+        assert sidecar["extras"]["session"] == "pipe123"
+        assert sidecar["extras"]["trigger"]["weapon"]["state"] == "confirmed"
+        assert sidecar["extras"]["scene"]["probs"]["weapon"] == 0.83
+        assert vault.verify_chain()["ok"]
+
     def test_tampering_breaks_the_chain(self, tmp_path):
         pytest.importorskip("cv2")
         import numpy as np

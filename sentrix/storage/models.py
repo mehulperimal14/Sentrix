@@ -51,6 +51,8 @@ class IncidentRecord(Base):
     camera_id = Column(String(32), default="CAM_0")
 
     peak_features_json = Column(Text, nullable=True)
+    #: Per-class evidence votes at the peak tick (added by migration).
+    trigger_json = Column(Text, nullable=True)
     actions_json = Column(Text, nullable=True)
 
     #: Operator feedback. This column is what turns the deployment into a

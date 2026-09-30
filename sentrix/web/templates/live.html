@@ -43,11 +43,13 @@
     const d = JSON.parse(ev.data);
     document.getElementById("ls-tci").textContent    = (d.tci * 100).toFixed(1) + "%";
     document.getElementById("ls-status").textContent = d.status;
-    document.getElementById("ls-incident").textContent = d.incident_type;
+    const alarm = d.alarm || {level: d.level, incident_type: d.incident_type};
+    document.getElementById("ls-incident").textContent =
+      alarm.level > 1 ? alarm.incident_type : d.incident_type;
     document.getElementById("ls-audio").textContent  = d.audio_label || "—";
     document.getElementById("ls-rates").textContent  =
       `${(d.video_fps || 0).toFixed(0)} fps / ${(d.ai_hz || 0).toFixed(1)} Hz`;
-    const cfg = LEVEL_CONFIG[d.level] || LEVEL_CONFIG[1];
+    const cfg = LEVEL_CONFIG[alarm.level || d.level] || LEVEL_CONFIG[1];
     document.getElementById("live-level-pill").textContent = cfg.label;
     document.getElementById("live-level-pill").style.color = cfg.color;
   };

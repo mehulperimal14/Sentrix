@@ -34,6 +34,7 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
@@ -288,14 +289,45 @@ class Pipeline:
             incident.snapshot_path = path.name
 
     def _capture_evidence(self, incident, frame: np.ndarray, result: TCIResult,
-                          level: int, status: str, detections: list) -> None:
+                          level: int, status: str, detections: list,
+                          context: dict | None = None) -> None:
         """Seal an evidence bundle and record its identifiers on the incident."""
-        record = vault.save(frame, result, level, status, incident.id, detections)
+        record = vault.save(frame, result, level, status, incident.id, detections,
+                            context=context)
         if record is not None and incident.evidence_bundle is None:
             # Keep the first bundle of the incident: it is the one closest to
             # the trigger, which is what a reviewer wants to see first.
             incident.evidence_bundle = record.bundle_id
             incident.evidence_hash = record.sha256
+
+    @staticmethod
+    def _create_dispatch(incident, result: TCIResult, level: int) -> None:
+        evidence = None
+        if incident.evidence_bundle is not None:
+            evidence = SimpleNamespace(bundle_id=incident.evidence_bundle,
+                                       sha256=incident.evidence_hash)
+        dispatch_service.create(result, level, incident.id, evidence=evidence)
+
+    def _evidence_context(self, result: TCIResult) -> dict:
+        """Why this frame is being sealed, from the same tick (CLAUDE.md M3).
+
+        The first live test's sidecars held only YOLO boxes as repr strings,
+        so a "weapon" bundle showed three person boxes and nothing about the
+        scene classifier that had raised it.
+        """
+        features = result.features
+        extras = features.extras
+        return {
+            "session": self.session_id,
+            "trigger": extras.get("evidence"),
+            "scene": extras.get("scene"),
+            "person_recent": extras.get("person_recent"),
+            "identity": {"authorized": features.authorized,
+                         "name": extras.get("identity_name"),
+                         "degraded": features.identity_degraded,
+                         "faces": extras.get("faces"),
+                         "faces_matched": extras.get("faces_matched")},
+        }
 
     def _act(self, incident, plan, frame: np.ndarray, result: TCIResult,
              level: int, status: str, now: float) -> None:
@@ -310,9 +342,10 @@ class Pipeline:
         if plan.evidence and self.incidents.should_capture_evidence(incident, now):
             incident.evidence_count += 1
             incident.last_evidence_at = now
-            detections = result.features.extras.get("detections", {}).get("all", [])
+            extras = result.features.extras
+            detections = extras.get("detections", {}).get("all", [])
             self._submit(self._capture_evidence, incident, frame.copy(), result,
-                         level, status, detections)
+                         level, status, detections, self._evidence_context(result))
 
         if plan.sms and claim(incident, "sms"):
             self._submit(notifier.send_sms, result, level, status)
@@ -325,7 +358,9 @@ class Pipeline:
                 log.error("siren failed: %s", exc)
 
         if plan.dispatch and claim(incident, "dispatch"):
-            self._submit(dispatch_service.create, result, level, incident.id)
+            # Queued after the evidence capture above (one FIFO worker), so the
+            # package carries the sealed bundle instead of "n/a".
+            self._submit(self._create_dispatch, incident, result, level)
 
         if plan.call and claim(incident, "call"):
             self._submit(notifier.make_call, result, level, status)
@@ -349,7 +384,11 @@ class Pipeline:
 
         incident, closed = self.incidents.update(
             level, result.tci, result.incident_type, now,
-            features=features.model_features(), reason=result.reason)
+            features=features.model_features(), reason=result.reason,
+            authorized=features.authorized, person_present=features.person_present,
+            trigger=features.extras.get("evidence"))
+        if incident is not None and closed is None:
+            self._persist_open(incident, now)
         plan = plan_for(level)
         if incident is not None and plan.any_side_effect:
             self._act(incident, plan, clean, result, level, status, now)
@@ -365,6 +404,9 @@ class Pipeline:
         p95 = ordered[min(len(ordered) - 1, int(len(ordered) * 0.95))]
 
         state.update(
+            alarm=self._alarm_block(level, status, level_state, incident, now),
+            evidence_state=(features.extras.get("evidence") or {}).get(
+                result.incident_type, {}).get("state", "none"),
             tci=result.tci, raw_tci=result.raw_tci, level=level, status=status,
             reason=result.reason, incident_type=result.incident_type,
             incident_id=incident.id if incident else None,
@@ -393,6 +435,43 @@ class Pipeline:
                 "incident_type": result.incident_type,
                 "features": features.model_features(), "latency": latency,
                 "incident_id": incident.id if incident else None}
+
+    def _persist_open(self, incident, now: float) -> None:
+        """Write the open incident when it opens, escalates, or its peak moves.
+
+        A row existed only once an incident closed, so a crash or a hard kill
+        lost it (CLAUDE.md section 5). A higher level is written at once; other
+        peak moves at most every ``persist_interval_seconds``.
+        """
+        moved = incident.saved_peak is not incident.peak
+        escalated = incident.peak_level != incident.saved_level
+        due = (incident.saved_at is None or escalated or
+               (moved and now - incident.saved_at >= self.cfg.incident.persist_interval_seconds))
+        if due:
+            incident.saved_at, incident.saved_peak = now, incident.peak
+            incident.saved_level = incident.peak_level
+            self._submit(database.save_incident, incident, self.session_id, True)
+
+    def _alarm_block(self, level: int, status: str, level_state, incident,
+                     now: float) -> dict:
+        """The committed alarm, kept apart from the per-tick reading.
+
+        The dashboard showed the committed level next to the latest tick's TCI
+        and reason ("TCI 0.11 L4 HIGH"). The alarm block is what the level
+        means: since when, which incident, its peak type and reason, and when
+        it may step down.
+        """
+        peak = incident.peak if incident is not None else None
+        return {
+            "level": level, "status": status,
+            "since_s": round(max(0.0, now - level_state.since), 1),
+            "incident_id": incident.id if incident is not None else None,
+            "incident_type": peak.incident_type if peak is not None else "normal",
+            "headline": peak.reason if peak is not None else "",
+            "peak_tci": round(peak.tci, 4) if peak is not None else 0.0,
+            "deescalate_in": (round(level_state.deescalate_in, 1)
+                              if level_state.deescalate_in is not None else None),
+        }
 
     # ── live loop: capture, inference and preview are decoupled ──────────────
     def run_live(self, stop: threading.Event) -> None:
@@ -621,6 +700,9 @@ class Pipeline:
         log.info("shutting down pipeline")
         self._stop.set()
         self._worker.join(timeout=3.0)
+        if self.incidents.current is not None:
+            # Keep the open incident: it would otherwise vanish on restart.
+            database.save_incident(self.incidents.current, self.session_id)
         if self.audio is not None:
             self.audio.stop()
         self.source.release()

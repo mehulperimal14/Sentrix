@@ -140,11 +140,13 @@ class ClassEvidence:
     experimental: bool = False
     votes: list[Vote] = field(default_factory=list)
     reason: str = ""
+    #: ``unconfirmed``, ``confirmed`` (one source) or ``corroborated``.
+    state: str = "unconfirmed"
 
     def to_dict(self) -> dict[str, Any]:
         return {"score": round(self.score, 4), "confirmed": self.confirmed,
-                "experimental": self.experimental, "reason": self.reason,
-                "votes": [v.to_dict() for v in self.votes]}
+                "state": self.state, "experimental": self.experimental,
+                "reason": self.reason, "votes": [v.to_dict() for v in self.votes]}
 
 
 def strength(vote: Vote) -> float:
@@ -305,7 +307,8 @@ class EvidenceAccumulator:
         reason = f"{cls} {state}: {detail}"
         if experimental:
             reason += " [experimental: capped at L2]"
-        return ClassEvidence(cls, score, bool(confirmed), experimental, votes, reason)
+        return ClassEvidence(cls, score, bool(confirmed), experimental, votes, reason,
+                             state)
 
     def reset(self) -> None:
         self._windows.clear()

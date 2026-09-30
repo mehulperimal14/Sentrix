@@ -83,8 +83,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function updateDashboard(data, lastLevel) {
     updateGauge(data.tci);
-    updateLevelBadge(data.level, data.status);
-    updateReason(data.reason, data.incident_type);
+    // The badge and headline describe the committed alarm (its incident's
+    // peak), not the latest tick; the gauge still shows the live TCI.
+    const alarm = data.alarm || {level: data.level, status: data.status,
+                                 incident_type: data.incident_type, headline: data.reason};
+    updateLevelBadge(alarm.level, alarm.status);
+    if (alarm.level > 1) {
+        let text = alarm.headline || data.reason;
+        if (alarm.deescalate_in !== null && alarm.deescalate_in !== undefined) {
+            text += ` — clear for ${Math.ceil(alarm.deescalate_in)} s more to step down`;
+        }
+        updateReason(text, alarm.incident_type);
+    } else {
+        updateReason(data.reason, data.incident_type);
+    }
     updateScoreBars(data.scores);
     updateExplainability(data);
 
@@ -153,16 +165,15 @@ function updateExplainability(data) {
         }).join("");
     }
 
-    // Uncertainty / confidence badge
+    // Evidence state of the typed class: the TCI is a transparent rule, so
+    // what matters is how many independent sources back it (CLAUDE.md M1).
     const badge = document.getElementById("uncertainty-badge");
-    if (badge && typeof data.uncertainty === "number") {
-        const u = data.uncertainty;
-        let label, color;
-        if (u < 0.25)       { label = "HIGH";   color = "#22c55e"; }
-        else if (u < 0.55)  { label = "MEDIUM"; color = "#facc15"; }
-        else                { label = "LOW";    color = "#f97316"; }
-        badge.textContent = label;
-        badge.style.color = color;
+    if (badge) {
+        const stateColors = {corroborated: "#ef4444", confirmed: "#f97316",
+                             unconfirmed: "#8a9bb8", none: "#22c55e"};
+        const st = data.evidence_state || "none";
+        badge.textContent = st === "none" ? "NONE" : st.toUpperCase();
+        badge.style.color = stateColors[st] || "#8a9bb8";
     }
 
     // Confidence band

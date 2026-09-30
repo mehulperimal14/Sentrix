@@ -449,6 +449,8 @@ class IncidentConfig:
     max_duration_seconds: float = 300.0
     #: Re-capture evidence within a long-running incident at most this often.
     evidence_interval_seconds: float = 30.0
+    #: An open incident's row is rewritten at most this often as its peak moves.
+    persist_interval_seconds: float = 5.0
 
 
 @dataclass(frozen=True)
