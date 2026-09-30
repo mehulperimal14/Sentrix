@@ -83,15 +83,33 @@ def check_dependencies(report: Report) -> None:
 
 
 def check_models(report: Report) -> None:
-    from sentrix.paths import MODELS_DIR
+    """Report the file each engine will actually load, not a fixed list.
 
-    report.section("model weights")
+    Engines resolve weights from preference lists (v4 before v3 before
+    legacy), so a hardcoded list here would report files that are present but
+    never served.
+    """
+    from sentrix.paths import MODELS_DIR
+    from sentrix.perception import detector, scene, violence
+
+    report.section("model weights (as resolved by each engine)")
+    roles = [
+        ("person detection", detector._resolve(detector._PERSON_WEIGHTS), True),
+        ("weapon detection", detector._resolve(detector._WEAPON_WEIGHTS), True),
+        ("fire/smoke detection", detector._resolve(detector._FIRE_WEIGHTS), True),
+        ("scene classifier", scene._resolve(), False),
+        ("violence (used only without a scene model)", violence._resolve(), False),
+    ]
+    for role, path, critical in roles:
+        if path is not None:
+            relative = path.relative_to(MODELS_DIR).as_posix()
+            report.add(OK, role, f"{relative}, {path.stat().st_size / 1e6:.1f} MB")
+        elif critical:
+            report.add(FAIL, role, "MISSING")
+        else:
+            report.add(WARN, role, "not present")
+
     expected = {
-        "yolov8n.pt": ("person detection", True),
-        "v3_real/weapon_detector_real_v3.pt": ("weapon detection", True),
-        "v3_real/fire_smoke_detector_real_v3.pt": ("fire/smoke detection", True),
-        "v3_real/violence_classifier_real_v3.pt": ("violence (V3)", False),
-        "violence_classifier.pt": ("violence (V2 fallback)", False),
         "v3_real/audio_classifier_real_v3.pt": ("audio (V3)", False),
         "audio_classifier.pt": ("audio (V2 fallback)", False),
         "tci_xgboost.json": ("TCI fusion booster", False),
@@ -169,6 +187,22 @@ def check_engines(report: Report) -> None:
     else:
         report.add(FAIL, "empty-scene TCI",
                    f"{result.tci:.3f} — the system will alarm on an empty room")
+
+    # Loading is the real check: a delta checkpoint also verifies the public
+    # base weights it was trained on, and needs them cached when offline.
+    from sentrix.perception.scene import SceneEngine, _resolve as scene_weights
+    if scene_weights() is not None:
+        scene = SceneEngine()
+        if scene.available:
+            report.add(OK, "scene classifier", f"{scene.weights_name} loaded, "
+                                               f"fusion={scene.cfg.fusion}")
+        else:
+            report.add(FAIL, "scene classifier",
+                       "weights present but failed to load — see the log (a delta "
+                       "checkpoint needs its public base weights cached)")
+    else:
+        report.add(WARN, "scene classifier",
+                   "not installed — the RWF-2000 violence model is used instead")
 
     from sentrix.perception.identity import IdentityEngine
     identity = IdentityEngine()
