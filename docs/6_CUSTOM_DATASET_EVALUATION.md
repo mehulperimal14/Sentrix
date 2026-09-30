@@ -297,6 +297,10 @@ overfitting; quote val and test.
   20.4 to 5.8 per normal minute.
 * **Handguns in a new context** (the `gun` video): weapon F1 on val rises from
   0.36 to 0.63.
+* **Faster and steadier**: pipeline latency per tick on CPU is 117 ms mean /
+  132 ms p95 against the baseline's 121 / 205 ms (test video replayed alone,
+  294 ticks). The 15 ms scene model replaces the v3 violence model's
+  once-a-second 16-frame window, which caused the baseline's p95 spikes.
 * **The stick is still mostly missed** (test threat recall 0.08 per image, 0.23
   in replay; 3/3 episodes are caught, but late — median 1.0 s). 23 training boxes
   of a stick carried at the side do not teach a stick swung overhead, and val

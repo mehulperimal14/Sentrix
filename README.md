@@ -341,6 +341,7 @@ fire YOLO heads are fine-tuned on reviewed boxes:
 | Test, video replay — accuracy / macro-F1 | 0.052 / 0.157 | **0.824 / 0.606** |
 | Test false alarms per normal minute | 20.4 | **5.8** |
 | Val, per image — accuracy / macro-F1 | 0.417 / 0.281 | **0.583 / 0.401** |
+| Pipeline latency per tick on CPU, mean / p95 | 121 / 205 ms | **117 / 132 ms** |
 
 Still weak: the stick in the test corridor (threat recall 0.08 per image), fire
 on held-out video, and assault, which no model learns across the two rooms it
