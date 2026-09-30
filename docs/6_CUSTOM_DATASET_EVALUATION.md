@@ -473,6 +473,30 @@ automatically. The fine-tuned branch is the fastest of the three: its ResNet-18
 scene model (15 ms per tick) replaces the v3 violence model's once-a-second
 16-frame window, which is also what produced the baseline's 205 ms p95.
 
+## 6.9 After the end-to-end repair (M1–M5, branch `sentrix/e2e-repair`)
+
+The first live test showed that per-tick accuracy was the wrong thing to
+optimise: one tick over threshold raised an alarm. The pipeline now confirms
+evidence over fresh observations and this evaluation measures what the product
+does — the **committed level** — with statistical bounds
+(`python tools/replay_custom_videos.py --videos all --tag m5 [--hz 2]`).
+
+| All 10 videos (partly in-sample) | 6 Hz | 2 Hz |
+|---|---|---|
+| Episodes caught at any level | 13 / 18 | 13 / 18 |
+| False onsets at L2 / L3 / L4 / L5 | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
+| Upper 95 % bound on false L3 onsets per hour | 60 | 60 |
+| Caught at L3: weapon / fire / robbery / assault | 9/12, 3/3, 0/1, 0/2 | 9/12, 3/3, 0/1, 0/2 |
+| Caught at L5 (siren): weapon / fire | 2/12, 2/3 | 2/12, 2/3 |
+
+3.7 minutes of normal footage bounds the false-alarm rate only at ≤ 60/hour:
+the dataset cannot show the rate a home system needs. That, and 30 episodes per
+class, are what the demo gates ask for (`python tools/gate_report.py`): on this
+data G1 passes (frame AUROC weapon 0.93, fire 0.999), G2 fails (weapon 8/12
+caught within 2 s) and G4 fails on latency (onset → L3 p95 4.0 s; the loop
+itself runs at 5.6 Hz). G0, G3 and G5 need the deployment-room recordings of
+CLAUDE.md M6.
+
 ## 6.8 Reproducing
 
 ```bash

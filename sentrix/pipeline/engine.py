@@ -443,7 +443,13 @@ class Pipeline:
         return {"tci": result.tci, "level": level, "status": status,
                 "incident_type": result.incident_type,
                 "features": features.model_features(), "latency": latency,
-                "incident_id": incident.id if incident else None}
+                "incident_id": incident.id if incident else None,
+                "sources": features.extras.get("sources") or {}}
+
+    def _save_open_incident(self, incident) -> None:
+        """Synchronous save at shutdown. Measurement pipelines replace it with a
+        no-op (like ``_submit``), so a replay never writes the user's database."""
+        database.save_incident(incident, self.session_id)
 
     def _persist_open(self, incident, now: float) -> None:
         """Write the open incident when it opens, escalates, or its peak moves.
@@ -720,7 +726,7 @@ class Pipeline:
         self._worker.join(timeout=3.0)
         if self.incidents.current is not None:
             # Keep the open incident: it would otherwise vanish on restart.
-            database.save_incident(self.incidents.current, self.session_id)
+            self._save_open_incident(self.incidents.current)
         if self.audio is not None:
             self.audio.stop()
         self.source.release()

@@ -175,6 +175,133 @@ def event_report(rows_by_video: dict[str, list[dict]],
     }
 
 
+# ── bounds ────────────────────────────────────────────────────────────────────
+def clopper_pearson(k: int, n: int, alpha: float = 0.05) -> tuple[float, float]:
+    """Exact two-sided binomial interval for k successes in n trials."""
+    if n <= 0:
+        return 0.0, 1.0
+    from scipy.stats import beta
+    lo = 0.0 if k == 0 else float(beta.ppf(alpha / 2, k, n - k + 1))
+    hi = 1.0 if k == n else float(beta.ppf(1 - alpha / 2, k + 1, n - k))
+    return round(lo, 4), round(hi, 4)
+
+
+def poisson_rate_interval(k: int, exposure: float,
+                          alpha: float = 0.05) -> tuple[float, float]:
+    """Exact two-sided interval for a Poisson rate: k events over ``exposure``.
+
+    With zero events the upper bound is the familiar ~3.69/exposure (two-sided
+    95 %), which is why "no false alarms in 20 minutes" still allows ~11/hour.
+    """
+    if exposure <= 0:
+        return 0.0, float("inf")
+    from scipy.stats import chi2
+    lo = 0.0 if k == 0 else float(chi2.ppf(alpha / 2, 2 * k)) / 2
+    hi = float(chi2.ppf(1 - alpha / 2, 2 * k + 2)) / 2
+    return round(lo / exposure, 4), round(hi / exposure, 4)
+
+
+# ── committed levels ──────────────────────────────────────────────────────────
+def level_report(rows_by_video: dict[str, list[dict]],
+                 episodes_by_video: dict[str, list[tuple[str, float, float]]],
+                 grace: float = 1.0, min_episode: float = 0.3,
+                 levels: tuple[int, ...] = (2, 3, 4, 5),
+                 within: float = 2.0) -> dict:
+    """What the product did, measured on the committed level (CLAUDE.md M5).
+
+    Per level k:
+
+    * **onsets** - transitions into >= k; a *false onset* starts outside
+      ``grace`` of every threat episode, on a normal tick. Reported per hour of
+      normal footage with an exact Poisson 95 % interval.
+    * **time at level on normal** - share of normal ticks, away from every
+      episode, spent at >= k.
+    * **episodes** - an episode is *caught at k* when a tick in
+      ``[start, end + grace]`` is at >= k *and* typed as the episode's class;
+      recall per class with a Clopper-Pearson interval, median latency, and
+      how many were caught within ``within`` seconds of the start (gate G2).
+
+    Rows need ``t``, ``gt``, ``pred`` and ``level``. A row with ``gt`` None (a
+    negative session) counts as normal.
+    """
+    out: dict[str, dict] = {}
+    normal_seconds, normal_ticks = 0.0, 0
+    per_video = []
+    for video, rows in rows_by_video.items():
+        rows = sorted(rows, key=lambda r: r["t"])
+        if not rows:
+            continue
+        tick = (float(np.median(np.diff([r["t"] for r in rows])))
+                if len(rows) > 1 else 0.0)
+        episodes = [(lab, s, e) for lab, s, e in episodes_by_video.get(video, [])
+                    if lab in THREAT_CLASSES and e - s >= min_episode]
+        near = [(s - grace, e + grace) for _, s, e in
+                episodes_by_video.get(video, []) if _ in THREAT_CLASSES]
+
+        def normal(r, near=near):
+            return ((r.get("gt") or "normal") == "normal"
+                    and not any(a <= r["t"] <= b for a, b in near))
+
+        n_normal = sum(normal(r) for r in rows)
+        normal_ticks += n_normal
+        normal_seconds += tick * n_normal
+        per_video.append((video, rows, episodes, normal))
+
+    hours = normal_seconds / 3600.0
+    for k in levels:
+        onsets = false_onsets = at_level = 0
+        caught: dict[str, list] = {}
+        for video, rows, episodes, normal in per_video:
+            for i, r in enumerate(rows):
+                if r["level"] >= k and (i == 0 or rows[i - 1]["level"] < k):
+                    onsets += 1
+                    false_onsets += normal(r)
+                at_level += normal(r) and r["level"] >= k
+            for lab, start, end in episodes:
+                hits = [r["t"] for r in rows if start <= r["t"] <= end + grace
+                        and r["level"] >= k and r["pred"] == lab]
+                caught.setdefault(lab, []).append(
+                    round(hits[0] - start, 3) if hits else None)
+        by_class = {}
+        for lab, latencies in caught.items():
+            n = len(latencies)
+            got = [x for x in latencies if x is not None]
+            by_class[lab] = {
+                "episodes": n, "caught": len(got),
+                "recall": round(_safe(len(got), n), 4),
+                "recall_ci95": clopper_pearson(len(got), n),
+                "median_latency": round(float(np.median(got)), 3) if got else None,
+                "p95_latency": (round(float(np.percentile(got, 95)), 3)
+                                if got else None),
+                f"within_{within:g}s": sum(x <= within for x in got),
+            }
+        out[f"L{k}"] = {
+            "onsets": onsets, "false_onsets": false_onsets,
+            "false_onsets_per_hour": round(_safe(false_onsets, hours), 3),
+            "false_onsets_per_hour_ci95": poisson_rate_interval(false_onsets, hours),
+            "normal_time_at_level": round(_safe(at_level, normal_ticks), 4),
+            "episodes": by_class,
+        }
+    out["normal_hours"] = round(hours, 4)
+    return out
+
+
+def format_levels(report: dict) -> str:
+    """One line per level, then caught episodes per class."""
+    lines = [f"  committed levels over {report['normal_hours'] * 60:.1f} normal min:"]
+    for key, m in report.items():
+        if not key.startswith("L"):
+            continue
+        lo, hi = m["false_onsets_per_hour_ci95"]
+        caught = ", ".join(f"{lab} {c['caught']}/{c['episodes']}"
+                           for lab, c in m["episodes"].items())
+        lines.append(f"    {key}+ false onsets {m['false_onsets']:3d} "
+                     f"({m['false_onsets_per_hour']:.2f}/h, 95% <= {hi:.2f}/h); "
+                     f"normal time at level {m['normal_time_at_level']:.3f}; "
+                     f"caught {caught or '-'}")
+    return "\n".join(lines)
+
+
 def format_report(name: str, report: dict) -> str:
     """Compact human-readable table for one classification report."""
     lines = [f"{name}: n={report['n']}  acc={report['accuracy']:.3f}  "

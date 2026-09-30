@@ -1,0 +1,46 @@
+{
+  "video": "C:\\Users\\PC\\OneDrive\\Desktop\\Videos\\7.mov",
+  "source_fps": 29.7,
+  "seconds": 25.0,
+  "inference_fps_cap": 6.0,
+  "preview_fps": 29.7,
+  "ai_hz": 5.6,
+  "tick_ms": {
+    "p50": 168.0,
+    "p95": 226.0
+  },
+  "frame_age_ms": {
+    "p50": 197.7,
+    "p95": 258.5
+  },
+  "faces_last_tick": 4,
+  "identity_backend": "insightface",
+  "scene_model": "scene_classifier_custom_v4.pt",
+  "stages": {
+    "identity": {
+      "p50_ms": 156.4,
+      "p95_ms": 286.7,
+      "n": 28
+    },
+    "scene": {
+      "p50_ms": 92.0,
+      "p95_ms": 121.9,
+      "n": 140
+    },
+    "detector.person": {
+      "p50_ms": 25.4,
+      "p95_ms": 40.3,
+      "n": 140
+    },
+    "detector.weapon": {
+      "p50_ms": 23.8,
+      "p95_ms": 34.3,
+      "n": 140
+    },
+    "detector.fire": {
+      "p50_ms": 23.2,
+      "p95_ms": 29.7,
+      "n": 140
+    }
+  }
+}

@@ -9,6 +9,7 @@ database tests run on a temporary SQLite file, never on ``var/sentrix.db``.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -203,3 +204,21 @@ class TestVerdictsAndDispatch:
         Pipeline._create_dispatch(incident, SimpleNamespace(), 4)
         assert made["evidence"].bundle_id == "ev_1" and made["evidence"].sha256 == "abc"
         assert made["incident"] == incident.id
+
+
+class TestMeasurementNeverWritesTheDatabase:
+    def test_eval_pipeline_stubs_every_incident_write(self, monkeypatch):
+        """The shutdown save once reached var/sentrix.db from a replay (M5 run)."""
+        from sentrix.evaluation import harness
+        calls = []
+        monkeypatch.setattr(database, "save_incident", lambda *a, **k: calls.append(a))
+        fake = Pipeline.__new__(Pipeline)
+        fake.session_id = "s"
+        for attr in ("_act", "_submit", "_save_open_incident"):
+            setattr(fake, attr, lambda *a, **k: calls.append(attr))
+        # build_eval_pipeline must override the same three hooks.
+        source = Path(harness.__file__).read_text(encoding="utf-8")
+        for attr in ("_act", "_submit", "_save_open_incident"):
+            assert f"pipeline.{attr} = _noop" in source
+        bench = (Path(__file__).parent.parent / "tools" / "bench_live.py").read_text(encoding="utf-8")
+        assert "pipeline._save_open_incident = noop" in bench

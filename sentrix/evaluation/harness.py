@@ -76,6 +76,7 @@ def build_eval_pipeline():
     pipeline.identity = _UnknownIdentity()
     pipeline._act = _noop            # snapshots, evidence, SMS, siren, dispatch, call
     pipeline._submit = _noop         # background writes, incl. incident DB rows
+    pipeline._save_open_incident = _noop     # the shutdown save as well
     return pipeline
 
 
@@ -133,13 +134,21 @@ def still_record(still: StillResult) -> dict[str, Any]:
     return record
 
 
+#: Raw per-source values recorded on every replayed row (gate G1 AUROC).
+SOURCE_COLUMNS = ("scene_weapon", "scene_fire", "scene_assault", "scene_robbery",
+                  "detector_weapon", "detector_fire", "violence_assault")
+
+
 def replay_video(pipeline, path, fps: float | None = None,
                  on_frame: Callable[[float, dict], dict] | None = None,
-                 max_seconds: float | None = None) -> list[dict]:
+                 max_seconds: float | None = None,
+                 period: float | None = None) -> list[dict]:
     """Replay one video at the pipeline inference rate with true timestamps.
 
     Frames between inference ticks are decoded and discarded, exactly as the
     live loop discards frames that arrive faster than ``inference_fps``.
+    ``period`` overrides the inference period (multi-rate replay: the first
+    live test ran at 0.5 Hz, not 6).
     """
     import cv2
 
@@ -147,7 +156,7 @@ def replay_video(pipeline, path, fps: float | None = None,
     if not cap.isOpened():
         raise FileNotFoundError(f"cannot open video {path}")
     native = fps or float(cap.get(cv2.CAP_PROP_FPS) or 25.0)
-    period = settings.pipeline.inference_period
+    period = period or settings.pipeline.inference_period
 
     pipeline.reset()
     rows: list[dict] = []
@@ -172,6 +181,11 @@ def replay_video(pipeline, path, fps: float | None = None,
                    "fire": round(out["features"].get("fire", 0.0), 4),
                    "behaviour": round(out["features"].get("behaviour", 0.0), 4),
                    "latency_ms": round(out["latency"] * 1000, 1)}
+            for source, per_class in (out.get("sources") or {}).items():
+                for cls, vote in per_class.items():
+                    column = f"{source}_{cls}"
+                    if column in SOURCE_COLUMNS:
+                        row[column] = round(float(vote[0]), 4)
             if on_frame is not None:
                 row = on_frame(t, row) or row
             rows.append(row)

@@ -127,7 +127,20 @@ The product did not work as a whole — see section 5.
 | `sentrix/baseline-v3` | `ab01e84` | staged rewrite committed (`f74996f`) + evaluation harness (`ebc1349`) + doc fixes |
 | `sentrix/finetuned-v3` | `321cf7c` | baseline + scene integration + training tooling + fine-tuned v3 models |
 | `sentrix/custom-v4` | `cfef092` | baseline + scene integration + training tooling + new DINOv2/YOLO11n models (recommended) |
-| `sentrix/e2e-repair` | (this branch) | custom-v4 + this plan + the repair work |
+| `sentrix/e2e-repair` | (this branch) | custom-v4 + this plan + M1–M5 (commits below) |
+
+Commits on `sentrix/e2e-repair` since `custom-v4` (not pushed):
+
+```
+(M5)    feat(eval): committed-level metrics, negative sessions, multi-rate replay, gate report
+d067d4f feat(identity): M4 - enrol from the monitoring camera, fixed uploads, per-track identity
+47bdbd3 feat(records): M3 - incident rows from one tick, crash-safe logs, committed alarm, usable events page
+dc9b089 perf(identity): run face recognition on its own thread in the live loop
+ca42a54 feat(live): decouple capture, inference and preview; report video and AI rates separately
+fd893ce perf(identity): stop onnxruntime spin-waiting and load only the face models used
+e50e7a3 fix(fusion): M1 containment - confirmed per-class evidence replaces single-frame overrides
+518dc76 docs: CLAUDE.md - project memory, live diagnosis and end-to-end repair plan
+```
 
 Commits on `sentrix/custom-v4` since `main`:
 
@@ -291,9 +304,11 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done (with commit).
 - [ ] **Acceptance** (needs the team): enrol everyone while monitoring; 5-minute team sit-in → 0 incidents in home mode, identity flicker < 0.1 flips/person-minute. Unit tests cover tailgating, turning away, track swaps, one bad look, stale checks (196 tests); live bench unchanged at 5.5 Hz.
 
 **M5 — Evaluation that matches the product (days 6–8)**
-- [ ] Replay metrics per **committed level**: onsets, false onsets/hour, time-at-level on normal, episode recall and latency per level.
-- [ ] **Negative-session replay** mode (hours of normal footage → FA/h with Poisson 95 % bound); multi-rate replay (6/2/0.5 Hz); optional real identity in the harness.
-- [ ] Gate report tool (G0–G5 below) with Clopper-Pearson / Poisson bounds.
+- [x] Replay metrics per **committed level** (`metrics.level_report`, in every `replay_custom_videos.py` report): onsets, false onsets/hour with an exact Poisson 95 % interval, normal time at level, episodes caught at each level *with the right type*, Clopper-Pearson recall intervals, median/p95 latency, caught within 2 s. Raw per-source values (scene/detector/violence) now in the replay CSV.
+- [x] **Negative-session replay** (`--negatives DIR`: every video normal, FA/h with Poisson bound) and multi-rate replay (`--hz`). *Deferred: real identity in the harness (needs enrolled team footage).*
+- [x] Gate report tool `tools/gate_report.py` (G0 manifest, G1 AUROC, G2 27/30 with a "cannot reach" early FAIL, G3 hours + onsets, G4 bench + onset→L3 p95, G5 scripted dry run) → PASS / FAIL / INSUFFICIENT / NOT RUN.
+- [x] **Results** (`training/runs/custom_eval/m5/`, all 10 custom videos — partly in-sample, *not* the S4 gate set): committed-level false onsets **0** at every level over 3.7 normal minutes (95 % bound still ≤ 60/h: far too little normal footage to claim a rate); caught at L3 weapon 9/12, fire 3/3, robbery 0/1 (L2 1/1), assault 0/2; at L5 weapon 2/12, fire 2/3. At **2 Hz** the same episodes are caught (13/18) with 0 false onsets. Gates: G1 PASS (weapon scene AUROC 0.93, fire 0.999), **G2 FAIL** (weapon 8/12 within 2 s), **G4 FAIL** (5.6 Hz OK, but onset → L3 p95 4.0 s), G0/G3/G5 need the S4 recordings. These are the M6–M7 targets.
+- Found by the M5 run and fixed: the eval harness and `bench_live` stubbed `_submit` but the pipeline's *shutdown* save still reached `var/sentrix.db`. It failed on the not-yet-migrated column, so no row was written (verified read-only: newest incident is the user's live run, schema unchanged); the connection close did checkpoint the user's own WAL into the main file. The shutdown save is now a hook both stub.
 
 **M6 — Deployment-room data (team, weeks 1–3)** — protocol in the strategy
 findings: demo room R1 + one other room R2; camera mounted 1.8–2.2 m, tilted
@@ -331,6 +346,8 @@ M9) · Harshit — recording protocol, fusion (M6, M8) · Prashant — audio to
 log-only, gunshot/glass-break data track (non-gating).
 
 ### Open questions for the team
+
+**Owner decisions surfaced by M1–M5:** (1) CUDA torch in the app env (Python 3.14 needs a cp314 CUDA wheel, or move the app env to 3.11/3.12) — moves DINOv2 to the RTX 4060; not needed for 5 Hz on CPU. (2) A folder of ≥ 3 h normal footage from the demo room for `--negatives` (G3). (3) Pre-roll evidence clips need a multi-frame vault format (M3 deferral). (4) Re-test live on the real webcam: video should now run at camera rate and the TCI should match the level.
 
 Demo date and room; which camera (laptop webcam vs a mounted USB camera — data
 must be recorded with it); permission for replica weapons and flames on campus;

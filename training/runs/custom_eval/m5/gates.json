@@ -1,0 +1,80 @@
+{
+  "classes": [
+    "weapon",
+    "fire"
+  ],
+  "overall": "FAIL",
+  "gates": {
+    "G0 gate data untouched": {
+      "status": "NOT RUN",
+      "detail": "no --data folder"
+    },
+    "G1 frame AUROC >= 0.90": {
+      "status": "PASS",
+      "detail": "weapon: scene_weapon 0.9265; fire: scene_fire 0.9993",
+      "per_class": {
+        "weapon": {
+          "auroc": {
+            "scene_weapon": 0.9265,
+            "detector_weapon": 0.6621,
+            "weapon": 0.9249
+          },
+          "best": "scene_weapon",
+          "best_auroc": 0.9265,
+          "positives": 376,
+          "ticks": 1759
+        },
+        "fire": {
+          "auroc": {
+            "scene_fire": 0.9993,
+            "detector_fire": 0.8276,
+            "fire": 0.9988
+          },
+          "best": "scene_fire",
+          "best_auroc": 0.9993,
+          "positives": 64,
+          "ticks": 1759
+        }
+      },
+      "floor": 0.9
+    },
+    "G2 >= 27/30 episodes at L3+ within 2 s": {
+      "status": "FAIL",
+      "detail": "weapon: 8/12 within 2s; fire: 3/3 within 2s (needs >= 27/30)",
+      "per_class": {
+        "weapon": {
+          "episodes": 12,
+          "within_2s": 8,
+          "caught": 9,
+          "recall_ci95": [
+            0.4281,
+            0.9451
+          ]
+        },
+        "fire": {
+          "episodes": 3,
+          "within_2s": 3,
+          "caught": 3,
+          "recall_ci95": [
+            0.2924,
+            1.0
+          ]
+        }
+      }
+    },
+    "G3 no L4/L5 in >= 3 h normal, <= 1 L3/h": {
+      "status": "NOT RUN",
+      "detail": "no --negatives"
+    },
+    "G4 >= 5 Hz, onset -> L3 p95 <= 2 s": {
+      "status": "FAIL",
+      "detail": "AI 5.6 Hz (needs 5); onset -> L3 p95 4.04s + frame age p95 0.26s = 4.30s (needs <= 2s)",
+      "ai_hz": 5.6,
+      "worst_seconds": 4.296
+    },
+    "G5 30-min scripted dry run": {
+      "status": "NOT RUN",
+      "detail": "needs --dry-run-log and --script"
+    }
+  }
+}
