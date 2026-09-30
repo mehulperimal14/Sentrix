@@ -1,0 +1,89 @@
+{
+  "custom_val": {
+    "mAP50": 0.6904,
+    "mAP50_95": 0.398,
+    "precision": 0.8215,
+    "recall": 0.523,
+    "per_class_mAP50": {
+      "pistol": 0.6904
+    }
+  },
+  "frame_level": {
+    "val": {
+      "n_pos": 55,
+      "n_neg": 23,
+      "auroc": 0.7067,
+      "recall@0.25": 0.3636,
+      "fpr@0.25": 0.0435,
+      "recall@0.4": 0.2727,
+      "fpr@0.4": 0.0,
+      "recall@0.5": 0.2545,
+      "fpr@0.5": 0.0,
+      "recall@0.55": 0.2,
+      "fpr@0.55": 0.0,
+      "recall@0.7": 0.1273,
+      "fpr@0.7": 0.0
+    },
+    "test": {
+      "n_pos": 26,
+      "n_neg": 67,
+      "auroc": 0.4466,
+      "recall@0.25": 0.1154,
+      "fpr@0.25": 0.0896,
+      "recall@0.4": 0.0385,
+      "fpr@0.4": 0.0597,
+      "recall@0.5": 0.0385,
+      "fpr@0.5": 0.0597,
+      "recall@0.55": 0.0385,
+      "fpr@0.55": 0.0597,
+      "recall@0.7": 0.0,
+      "fpr@0.7": 0.0448
+    }
+  },
+  "training_minutes": 6.7,
+  "dataset": {
+    "train_negative": 384,
+    "train_positive": 91,
+    "train_excluded": 113,
+    "val_negative": 29,
+    "val_positive": 44,
+    "val_excluded": 11,
+    "test_negative": 67,
+    "test_positive": 15,
+    "test_excluded": 11,
+    "train_rehearsal": 1500
+  },
+  "custom_test": {
+    "mAP50": 0.0081,
+    "mAP50_95": 0.0025,
+    "precision": 0.0137,
+    "recall": 0.2667,
+    "per_class_mAP50": {
+      "stick": 0.0081
+    }
+  },
+  "retention": {
+    "finetuned": {
+      "mAP50": 0.8484,
+      "mAP50_95": 0.5378,
+      "precision": 0.8544,
+      "recall": 0.7869,
+      "per_class_mAP50": {
+        "knife": 0.8595,
+        "long_gun": 0.8248,
+        "pistol": 0.8608
+      }
+    },
+    "initial": {
+      "mAP50": 0.9387,
+      "mAP50_95": 0.6465,
+      "precision": 0.914,
+      "recall": 0.9019,
+      "per_class_mAP50": {
+        "knife": 0.9543,
+        "long_gun": 0.9179,
+        "pistol": 0.9438
+      }
+    }
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "custom_val": {
+    "mAP50": 0.4983,
+    "mAP50_95": 0.3892,
+    "precision": 0.7319,
+    "recall": 0.4637,
+    "per_class_mAP50": {
+      "fire": 0.4983
+    }
+  },
+  "frame_level": {
+    "val": {
+      "n_pos": 6,
+      "n_neg": 23,
+      "auroc": 0.9058,
+      "recall@0.25": 0.1667,
+      "fpr@0.25": 0.0,
+      "recall@0.4": 0.1667,
+      "fpr@0.4": 0.0,
+      "recall@0.5": 0.1667,
+      "fpr@0.5": 0.0,
+      "recall@0.55": 0.1667,
+      "fpr@0.55": 0.0,
+      "recall@0.7": 0.0,
+      "fpr@0.7": 0.0
+    }
+  },
+  "training_minutes": 14.4,
+  "dataset": {
+    "train_negative": 517,
+    "train_positive": 11,
+    "train_excluded": 60,
+    "val_negative": 78,
+    "val_positive": 6,
+    "test_negative": 93,
+    "train_rehearsal": 1500
+  },
+  "retention": {
+    "finetuned": {
+      "mAP50": 0.6482,
+      "mAP50_95": 0.3146,
+      "precision": 0.6918,
+      "recall": 0.5992,
+      "per_class_mAP50": {
+        "fire": 0.64,
+        "smoke": 0.6564
+      }
+    },
+    "initial": {
+      "mAP50": 0.7216,
+      "mAP50_95": 0.3841,
+      "precision": 0.7229,
+      "recall": 0.6665,
+      "per_class_mAP50": {
+        "fire": 0.7479,
+        "smoke": 0.6953
+      }
+    }
+  }
+}

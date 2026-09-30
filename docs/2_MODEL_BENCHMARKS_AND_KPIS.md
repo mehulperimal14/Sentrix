@@ -235,9 +235,10 @@ behaviour. See doc 1 §5.
 | Engine | File actually loaded | Size |
 |---|---|---|
 | Person detection | `yolov8n.pt` | 6.5 MB |
-| Weapon | `v3_real/weapon_detector_real_v3.pt` | 6.2 MB |
-| Fire & smoke | `v3_real/fire_smoke_detector_real_v3.pt` | 6.2 MB |
-| Violence | `v3_real/violence_classifier_real_v3.pt` | 44.8 MB |
+| Weapon | `v4_finetuned/weapon_detector_ft_v4.pt` (fine-tuned from v3) | 6.2 MB |
+| Fire & smoke | `v4_finetuned/fire_smoke_detector_ft_v4.pt` (fine-tuned from v3) | 6.2 MB |
+| Scene (normal/fire/weapon/assault/robbery) | `v4_finetuned/scene_classifier_ft_v4.pt` (fine-tuned from the v3 violence ResNet-18) | 44.8 MB |
+| Violence | `v3_real/violence_classifier_real_v3.pt` — **not loaded** while a scene model is present | 44.8 MB |
 | Audio | `v3_real/audio_classifier_real_v3.pt` | 4.9 MB |
 | TCI fusion | `tci_xgboost.json` (synthetic) | 0.3 MB |
 
@@ -257,6 +258,19 @@ Retained but **not loaded by anything**: `violence_classifier.pt` and
 > `perception/audio.py` now builds its architecture from the checkpoint's own
 > parameter names, so both load. **The V3 audio and violence models are serving
 > for the first time.**
+
+---
+
+### v4: fine-tuned on the custom dataset
+
+The v3 weapon, fire/smoke and violence models were fine-tuned on the team's own
+labelled footage (765 frames, 10 videos). Every metric above is measured on the
+corpus each model was trained on; on the custom footage the v3 models score
+0.043 test accuracy. The fine-tuned set reaches 0.677 per image and 0.824 in
+end-to-end replay on the held-out test video, and keeps its original skills
+through rehearsal (RWF-2000 fight AUROC 0.886 vs 0.881; weapon mAP50 0.848 vs
+0.939 and fire/smoke 0.648 vs 0.722 on the original validation sets). Full
+protocol and results: [doc 6](6_CUSTOM_DATASET_EVALUATION.md).
 
 ---
 

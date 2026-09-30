@@ -93,7 +93,13 @@ class DetectionConfig:
     """
 
     person_conf: float = _env_float("SENTRIX_PERSON_CONF", 0.35)
-    weapon_conf: float = _env_float("SENTRIX_WEAPON_CONF", 0.55)
+    #: 0.35 for the fine-tuned v4 weapon head, which scores lower than v3 did:
+    #: on the validation frames 0.35 keeps zero false positives while lifting
+    #: weapon recall from 0.20 (at 0.55) to 0.31. This is the *detection*
+    #: floor only — the siren-capable weapon override is still
+    #: ``FusionConfig.weapon_override_high`` (0.55), so a 0.35-0.55 detection
+    #: types a weapon incident without forcing the TCI to HIGH.
+    weapon_conf: float = _env_float("SENTRIX_WEAPON_CONF", 0.35)
     fire_conf: float = _env_float("SENTRIX_FIRE_CONF", 0.50)
     iou: float = 0.45
     imgsz: int = 640

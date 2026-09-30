@@ -6,7 +6,7 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.4-EE4C2C.svg)](https://pytorch.org/)
 [![YOLOv8](https://img.shields.io/badge/YOLOv8-ultralytics-00BFA5.svg)](https://docs.ultralytics.com/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688.svg)](https://fastapi.tiangolo.com/)
-[![Tests](https://img.shields.io/badge/tests-65%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-85%20passing-brightgreen.svg)](tests/)
 
 > **Capstone Project CPG-299** · Computer Science and Engineering, Thapar Institute of
 > Engineering and Technology, Patiala · Mentor: Dr. Ashutosh Mishra
@@ -28,10 +28,11 @@ adding an ESP32 node or a GPIO relay later is a configuration change, not a rewr
 
 | Subsystem | State | Notes |
 |---|---|---|
-| Person / weapon / fire detection | **Working** | One YOLOv8 component, three heads, ByteTrack |
+| Person / weapon / fire detection | **Working** | One YOLOv8 component, three heads, ByteTrack; weapon and fire heads fine-tuned on the custom dataset |
 | TCI fusion + escalation | **Working** | Hysteresis, incident grouping, time-based smoothing |
 | Encrypted evidence vault | **Working** | AES-256-GCM, HMAC hash-chained manifest |
-| Violence classification | **Working** | Windowed; needs a temporal head for real gains |
+| Scene classification | **Working** | normal / fire / weapon / assault / robbery; ResNet-18 fine-tuned from the v3 violence model on the custom dataset (`models/v4_finetuned/`) |
+| Violence classification | **Superseded** | The RWF-2000 model calls the test corridor a fight; replaced by the scene classifier's assault head whenever a scene model is installed |
 | Acoustic classification | **Working** | Model is under-trained — see *Known limitations* |
 | Face authorisation | **Working** | ArcFace 512-d via `insightface`; fails closed without it |
 | Cross-camera re-identification | **Degraded** | Histogram fallback; install `torchreid` |
@@ -97,7 +98,8 @@ Sentrix/
 │   │   └── actuators.py        console | sound | GPIO relay
 │   ├── perception/             one score per modality
 │   │   ├── detector.py         ★ YOLOv8: person + weapon + fire + tracking
-│   │   ├── violence.py         sliding-window action classification
+│   │   ├── scene.py            ★ 5-class scene classifier, threshold-aligned to fusion
+│   │   ├── violence.py         sliding-window action classification (fallback)
 │   │   ├── audio.py            checkpoint-adaptive acoustic CNN
 │   │   ├── identity.py         ★ fail-closed face authorisation
 │   │   ├── behaviour.py        kinematics, resolution-independent
@@ -125,12 +127,13 @@ Sentrix/
 ├── notebooks/                  ★ TCI analysis (contract, calibration, thresholds)
 ├── training/
 │   ├── datasets/sentrix_custom/ ground truth of the custom frame dataset
+│   ├── custom/                 ★ custom-dataset box annotation, training, screening
 │   ├── scripts/                training as .py
 │   ├── notebooks/              training as .ipynb
 │   └── runs/                   all run outputs (v1_legacy, v2_real, v3_real, ucf_crime_dvs)
 ├── tools/                      doctor, replay, baseline, evaluate, auditors,
 │                               custom-dataset evaluation
-├── tests/                      65 regression tests
+├── tests/                      85 regression tests
 ├── docs/                       specifications
 ├── Capstone Docs/              submissions
 └── var/                        runtime output — gitignored, never web-served
@@ -180,7 +183,7 @@ Requiring the candidate level to persist for a dwell period rejects it outright.
 | Head | Threshold | Rationale |
 |---|---|---|
 | Person | 0.35 | Cheap to get wrong either way |
-| Weapon | **0.55** | Feeds a hard override that can trigger a siren. The previous build shipped 0.25 |
+| Weapon | **0.35** | Detection floor for the fine-tuned v4 head, chosen on the validation frames (zero false positives there, recall 0.20 → 0.31). The siren-capable override stays at 0.55 (`FusionConfig.weapon_override_high`) |
 | Fire / smoke | **0.50** | Same reasoning |
 
 ### Escalation ladder
@@ -325,7 +328,23 @@ python tools/custom_eval_table.py                            # markdown tables
 On this footage the shipped v3 models score **0.043 accuracy on the test video**:
 the violence classifier calls the entire test corridor a fight, the weapon
 detector is near chance (AUROC 0.54) and the fire detector finds none of the
-flame jets. Protocol, metric definitions and the full breakdown are in
+flame jets.
+
+This branch (`sentrix/finetuned-v3`) fine-tunes those notebook models on the
+custom data — the violence ResNet-18 becomes a five-class scene classifier (with
+RWF-2000 rehearsal, so its fight AUROC is unchanged at 0.886), and the weapon and
+fire YOLO heads are fine-tuned on reviewed boxes:
+
+| Held-out result | v3 baseline | fine-tuned (this branch) |
+|---|---|---|
+| Test, per image — accuracy / macro-F1 | 0.043 / 0.114 | **0.677 / 0.460** |
+| Test, video replay — accuracy / macro-F1 | 0.052 / 0.157 | **0.824 / 0.606** |
+| Test false alarms per normal minute | 20.4 | **5.8** |
+| Val, per image — accuracy / macro-F1 | 0.417 / 0.281 | **0.583 / 0.401** |
+
+Still weak: the stick in the test corridor (threat recall 0.08 per image), fire
+on held-out video, and assault, which no model learns across the two rooms it
+appears in. Protocol, model selection and the full breakdown are in
 [`docs/6_CUSTOM_DATASET_EVALUATION.md`](docs/6_CUSTOM_DATASET_EVALUATION.md).
 
 ### The TCI notebooks
