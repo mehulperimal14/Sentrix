@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import threading
+from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from sentrix.config import settings
 from sentrix.perception.identity import IdentityEngine
@@ -40,3 +42,33 @@ class TestFaceCounts:
         engine._embed_all = lambda frame: []
         result = engine.check(np.zeros((4, 4, 3), np.uint8), now=1.0)
         assert result.authorized and result.held and result.faces == 0
+
+
+class TestQuietSessions:
+    """InsightFace sessions are rebuilt without ORT spin-waiting (M2)."""
+
+    def test_every_model_gets_a_non_spinning_session(self, monkeypatch):
+        ort = pytest.importorskip("onnxruntime")
+        built = []
+
+        def fake_session(path, sess_options=None, providers=None):
+            built.append((path, sess_options, providers))
+            return SimpleNamespace(path=path)
+
+        monkeypatch.setattr(ort, "InferenceSession", fake_session)
+        models = {"detection": SimpleNamespace(model_file="det.onnx", session=None),
+                  "recognition": SimpleNamespace(model_file="rec.onnx", session=None)}
+        engine = IdentityEngine.__new__(IdentityEngine)
+        engine.cfg = settings.identity
+        engine._quiet_sessions(SimpleNamespace(models=models))
+
+        assert [b[0] for b in built] == ["det.onnx", "rec.onnx"]
+        for _, options, providers in built:
+            assert options.get_session_config_entry("session.intra_op.allow_spinning") == "0"
+            assert options.get_session_config_entry("session.inter_op.allow_spinning") == "0"
+            assert options.intra_op_num_threads == settings.identity.ort_threads
+            assert providers == ["CPUExecutionProvider"]
+        assert models["detection"].session.path == "det.onnx"
+
+    def test_only_detection_and_recognition_are_loaded(self):
+        assert tuple(settings.identity.face_modules) == ("detection", "recognition")

@@ -318,6 +318,20 @@ class IdentityConfig:
     #: Identity score fed to fusion when an unknown person is present.
     unknown_person_score: float = 0.60
 
+    #: InsightFace modules actually used: detection (for the 5-point alignment)
+    #: and recognition (the ArcFace embedding). buffalo_l also ships 3D/2D
+    #: landmark and gender/age models that cost CPU on every face and are unused.
+    face_modules: tuple = ("detection", "recognition")
+    #: Detector input size. 640 finds small CCTV-distance faces; 320-480 is
+    #: enough for a close-range laptop webcam and ~2x cheaper.
+    det_size: int = _env_int("SENTRIX_FACE_DET_SIZE", 640)
+    #: onnxruntime intra-op threads per face model. Spinning is always disabled:
+    #: with ORT's default busy-wait, the 5 buffalo_l sessions held ~20 of 24
+    #: cores after every call and made the next YOLO pass 10-30x slower; the
+    #: live pipeline ran at 0.32 Hz, and at 4.1 Hz with spinning off alone
+    #: (CLAUDE.md §5, M2).
+    ort_threads: int = _env_int("SENTRIX_FACE_ORT_THREADS", 4)
+
 
 @dataclass(frozen=True)
 class ReIDConfig:

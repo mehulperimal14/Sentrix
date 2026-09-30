@@ -115,10 +115,15 @@ class IdentityEngine:
         try:
             from insightface.app import FaceAnalysis
             app = FaceAnalysis(name="buffalo_l",
+                               allowed_modules=list(self.cfg.face_modules),
                                providers=["CPUExecutionProvider"])
-            app.prepare(ctx_id=-1, det_size=(640, 640))
+            self._quiet_sessions(app)
+            size = int(self.cfg.det_size)
+            app.prepare(ctx_id=-1, det_size=(size, size))
             self._app = app
-            log.info("identity backend: insightface buffalo_l (ArcFace, 512-d)")
+            log.info("identity backend: insightface buffalo_l (ArcFace, 512-d; "
+                     "modules %s, det %d, ORT %d threads, no spinning)",
+                     "+".join(sorted(app.models)), size, self.cfg.ort_threads)
         except Exception as exc:
             log.error("insightface init failed (%s) — falling back", exc)
             self._app = None
@@ -129,6 +134,25 @@ class IdentityEngine:
             except ImportError:
                 self.backend = None
                 log.warning("no identity backend available — failing closed")
+
+    def _quiet_sessions(self, app) -> None:
+        """Rebuild every ORT session without busy-wait spinning.
+
+        insightface forwards only providers to onnxruntime, so the session
+        options cannot be passed through FaceAnalysis; the sessions are rebuilt
+        from their own model files with identical graphs, so outputs are
+        unchanged. ORT's default spin-wait kept its thread pools burning the
+        cores that the next torch (YOLO) call needed.
+        """
+        import onnxruntime as ort
+        for model in app.models.values():
+            options = ort.SessionOptions()
+            options.add_session_config_entry("session.intra_op.allow_spinning", "0")
+            options.add_session_config_entry("session.inter_op.allow_spinning", "0")
+            options.intra_op_num_threads = max(1, int(self.cfg.ort_threads))
+            model.session = ort.InferenceSession(
+                model.model_file, sess_options=options,
+                providers=["CPUExecutionProvider"])
 
     @property
     def available(self) -> bool:
