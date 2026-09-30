@@ -346,6 +346,20 @@ class IdentityConfig:
     recheck_seconds: float = 1.0
     authorised_recheck_seconds: float = 5.0
     verdict_max_age_seconds: float = 6.0
+    #: A match stays with the person's *track* this long without a new look at
+    #: the face (turning away, looking down), unless that track's face then
+    #: fails to match twice in a row. Bound to the track, a stranger arriving
+    #: next to a resident never inherits it.
+    track_hold_seconds: float = 60.0
+    #: Tracks not seen for this long are forgotten.
+    track_forget_seconds: float = 30.0
+
+    #: Enrolment quality gates: exactly one face, at least this many pixels
+    #: across, sharp enough (variance of the Laplacian of the face crop) and
+    #: neither dark nor blown out (mean grey level of the crop).
+    enrol_min_face_px: int = 80
+    enrol_min_sharpness: float = 40.0
+    enrol_luma_range: tuple = (40.0, 220.0)
 
 
 @dataclass(frozen=True)

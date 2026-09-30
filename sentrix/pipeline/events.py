@@ -125,6 +125,25 @@ class EventLog:
             except (OSError, TypeError) as exc:
                 log.debug("event write failed: %s", exc)
 
+    def audit(self, event: str, **detail: Any) -> None:
+        """Record an operator action (gallery changes) in the session log.
+
+        Audit rows carry ``event`` and no ``features``, so replay and dataset
+        loaders skip them.
+        """
+        row = {"schema": SCHEMA_VERSION, "session": self.session_id,
+               "source": self.source, "ts": round(time.time(), 3),
+               "event": event, **detail}
+        with self._lock:
+            handle = self._open()
+            if handle is None:
+                return
+            try:
+                handle.write(json.dumps(row, default=str) + "\n")
+                handle.flush()
+            except (OSError, TypeError) as exc:
+                log.debug("audit write failed: %s", exc)
+
     @property
     def rows(self) -> int:
         return self._rows
@@ -165,6 +184,8 @@ def load_dataset(directory: Path | None = None):
     rows: list[dict[str, Any]] = []
     for path in sorted(Path(directory).glob("events_*.jsonl")):
         for row in read_events(path):
+            if "features" not in row:
+                continue                        # audit rows (gallery changes)
             flat = {k: v for k, v in row.items()
                     if k not in ("features", "context", "extra", "votes")}
             flat.update(row.get("features", {}))

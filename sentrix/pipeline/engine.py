@@ -52,7 +52,8 @@ from sentrix.io.sources import FrameSource, _placeholder, build_source
 from sentrix.perception.audio import AudioEngine
 from sentrix.perception.behaviour import BehaviourEngine
 from sentrix.perception.detector import Detector
-from sentrix.perception.identity import IdentityEngine, IdentityWorker
+from sentrix.perception.identity import (FaceCheck, IdentityEngine, IdentityWorker,
+                                         TrackIdentity)
 from sentrix.perception.motion import MotionEngine
 from sentrix.perception.reid import ReIDEngine
 from sentrix.perception.scene import SceneEngine
@@ -114,6 +115,8 @@ class Pipeline:
         self.violence = None if self.scene.available else ViolenceEngine()
         self.behaviour = BehaviourEngine()
         self.identity = IdentityEngine()
+        self.track_identity = TrackIdentity()
+        self._settled = False
         self.reid = ReIDEngine()
         self.audio = AudioEngine() if enable_audio else None
         self.evidence = EvidenceAccumulator()
@@ -145,6 +148,7 @@ class Pipeline:
     def _init_live(self) -> None:
         """State shared by the capture, inference and preview paths."""
         self._identity_worker: IdentityWorker | None = None
+        self._raw: np.ndarray | None = None
         self._slot = threading.Condition()
         self._pending: tuple[np.ndarray, float] | None = None
         self._overlay: Overlay | None = None
@@ -219,12 +223,17 @@ class Pipeline:
             violence_score, _ = self.violence.result(now)
             violence = (violence_score, self.violence.threshold, self.violence.fresh)
 
+        persons = tuple((p.track_id, tuple(p.bbox)) for p in detections.persons)
         if self._identity_worker is not None:
-            # Live: the latest verdict from the recognition thread.
-            identity = self._identity_worker.observe(frame, len(detections.persons), now)
+            # Live: the latest face check from the recognition thread.
+            check = self._identity_worker.observe(frame, persons, now,
+                                                  settled=self._settled)
         else:
             # Replay and evaluation: synchronous, so results are reproducible.
-            identity = self.identity.check(frame, now)
+            check = FaceCheck(tuple(self.identity.match_faces(frame)), persons, now,
+                              degraded=not getattr(self.identity, "available", False))
+        identity = self.track_identity.update(check, persons, now)
+        self._settled = identity.authorized
         identity_score = self.identity.score(identity, person_present)
 
         # Identity never relaxes threat evidence (evidence.py); it only feeds
@@ -265,7 +274,7 @@ class Pipeline:
             audio_label=audio_label,
             person_count=len(detections.persons),
             identity_degraded=identity.degraded,
-            extras={"detections": detections.to_dict(),
+            extras={"detections": _with_identity(detections.to_dict(), identity.tracks),
                     "identity_name": identity.name,
                     "violence_score": round(violence[0], 4) if violence else None,
                     "scene": scene.to_dict() if scene is not None else None,
@@ -520,6 +529,7 @@ class Pipeline:
             return False
         self._offline = False
         self._last_seq = seq
+        self._raw = frame
         self._video_times.append(now)
         with self._slot:
             self._pending = (frame, captured_at)
@@ -561,6 +571,12 @@ class Pipeline:
             done = time.monotonic()
             self._ai_times.append(done)
             state.update(frame_age_ms=round((done - captured_at) * 1000, 1))
+
+    def latest_raw(self) -> np.ndarray | None:
+        """The newest camera frame without the HUD, for enrolment from the
+        server's own camera (the browser cannot open a webcam the server holds)."""
+        frame = self._raw
+        return None if frame is None else frame.copy()
 
     def _publish(self, frame: np.ndarray) -> None:
         with self._preview_lock:
@@ -616,6 +632,8 @@ class Pipeline:
         self.motion.reset()
         self.scene.reset()
         self.evidence.reset()
+        self.track_identity.reset()
+        self._settled = False
         self._last_person_at = None
         if self.violence is not None:
             self.violence.reset()
@@ -679,7 +697,7 @@ class Pipeline:
                 for det in detections.get(group, []):
                     x1, y1, x2, y2 = det["bbox"]
                     cv2.rectangle(frame, (x1, y1), (x2, y2), box_colour, 2)
-                    tag = det["label"]
+                    tag = det.get("identity") or det["label"]
                     if det.get("track_id") is not None:
                         tag += f" #{det['track_id']}"
                     cv2.putText(frame, f"{tag} {det['conf']:.2f}",
@@ -709,6 +727,15 @@ class Pipeline:
         self.events.close()
         telemetry.close()
         log.info("pipeline stopped")
+
+
+def _with_identity(detections: dict, tracks: dict) -> dict:
+    """Label each person box with its track's identity for the HUD and logs."""
+    for person in detections.get("persons", []):
+        verdict = tracks.get(person.get("track_id"))
+        if verdict is not None:
+            person["identity"] = verdict["name"] or verdict["state"]
+    return detections
 
 
 def _rate(times: deque, now: float, window: float = 3.0) -> float:

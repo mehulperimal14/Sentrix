@@ -6,28 +6,36 @@
 <div class="page-header">
   <h1 class="page-title">Access Control</h1>
   <div class="page-meta" style="display: flex; gap: 1rem;">
-    <button class="btn btn-outline" onclick="toggleWebcam()">
-      📷 Live Capture
+    <button class="btn btn-outline" onclick="toggleCapture()">
+      📷 Capture from camera
     </button>
     <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">
-      + Upload File
+      + Upload photos
     </button>
-    <input type="file" id="file-input" style="display:none" accept="image/jpeg, image/png" onchange="uploadFace(this)">
+    <input type="file" id="file-input" style="display:none" accept="image/jpeg, image/png"
+           multiple onchange="uploadFaces(this)">
   </div>
 </div>
 
-<div class="card auth-card" id="webcam-section" style="display: none; margin-bottom: 1.5rem; border-color: var(--accent-blue);">
-  <div class="card-label">Enroll via Webcam</div>
+<div class="card auth-card" id="capture-section" style="display: none; margin-bottom: 1.5rem; border-color: var(--accent-blue);">
+  <div class="card-label">Enrol from the monitoring camera</div>
+  <p class="muted" style="margin: 0 0 0.75rem 0; font-size: 0.8rem;">
+    The system's own camera frame is used, so enrolment matches what the
+    monitor sees. One face, facing the camera, well lit. Capture 2–3 photos
+    per person from slightly different angles.
+  </p>
   <div style="display: flex; gap: 1.5rem; align-items: stretch; flex-wrap: wrap;">
-    <video id="webcam-video" autoplay playsinline style="width: 100%; max-width: 400px; aspect-ratio: 4/3; border-radius: 8px; background: #000; object-fit: cover;"></video>
+    <img id="capture-preview" alt="Camera preview"
+         style="width: 100%; max-width: 400px; aspect-ratio: 4/3; border-radius: 8px; background: #000; object-fit: cover;">
     <div style="display: flex; flex-direction: column; justify-content: center; gap: 1rem; flex: 1; min-width: 250px;">
-      <input type="text" id="capture-name" style="padding: 0.75rem; background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); color: #fff; border-radius: 6px; font-family: var(--font-sans);" placeholder="Enter Name (e.g. alice)">
-      <button class="btn btn-primary" onclick="captureWebcam()">📸 Take Snapshot & Save</button>
-      <button class="btn btn-cancel" onclick="toggleWebcam()">Cancel</button>
+      <input type="text" id="capture-name" style="padding: 0.75rem; background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); color: #fff; border-radius: 6px; font-family: var(--font-sans);" placeholder="Name (e.g. alice)">
+      <button class="btn btn-primary" id="capture-btn" onclick="captureFace()">📸 Capture and enrol</button>
+      <button class="btn btn-cancel" onclick="toggleCapture()">Close</button>
     </div>
   </div>
-  <canvas id="webcam-canvas" style="display:none;"></canvas>
 </div>
+
+<div id="enrol-status" class="card" style="display: none; margin-bottom: 1rem; font-size: 0.85rem;"></div>
 
 <div class="card auth-card">
   <div class="card-label">Authorized Faces</div>
@@ -35,9 +43,13 @@
     {% for face in faces %}
     <div class="face-item">
       <img src="{{ face.url }}" alt="{{ face.filename }}" class="face-img">
-        <span class="face-name" title="{{ face.filename }}">{{ face.filename }}</span>
-        <button class="btn btn-outline" style="padding: 2px 6px; font-size: 0.8rem; border-color: var(--accent-red); color: var(--accent-red);" onclick="deleteFace('{{ face.filename }}')">Delete</button>
-      </div>
+      <span class="face-name" title="{{ face.filename }}">{{ face.person }}</span>
+      {% if face.enrolled %}
+      <span class="small" style="color: #4ade80;">enrolled</span>
+      {% else %}
+      <span class="small" style="color: #f97316;" title="No usable face in this image">not enrolled</span>
+      {% endif %}
+      <button class="btn btn-outline" style="padding: 2px 6px; font-size: 0.8rem; border-color: var(--accent-red); color: var(--accent-red);" onclick="deleteFace('{{ face.filename }}')">Delete</button>
     </div>
     {% else %}
     <div class="empty-faces">
@@ -49,95 +61,85 @@
 </div>
 
 <script>
-let stream = null;
+let previewTimer = null;
 
-function toggleWebcam() {
-  const section = document.getElementById('webcam-section');
-  const video = document.getElementById('webcam-video');
-  
+function showStatus(lines) {
+  const box = document.getElementById('enrol-status');
+  box.style.display = 'block';
+  box.innerHTML = lines.map(l =>
+    `<div style="color:${l.ok ? '#4ade80' : '#f97316'}">${l.text}</div>`).join('');
+}
+
+function refreshPreview() {
+  document.getElementById('capture-preview').src = '/api/authorized/preview.jpg?t=' + Date.now();
+}
+
+function toggleCapture() {
+  const section = document.getElementById('capture-section');
   if (section.style.display === 'none') {
     section.style.display = 'block';
-    navigator.mediaDevices.getUserMedia({ video: true })
-      .then(s => {
-        stream = s;
-        video.srcObject = stream;
-      })
-      .catch(err => {
-        alert("Webcam error: " + err);
-        section.style.display = 'none';
-      });
+    refreshPreview();
+    previewTimer = setInterval(refreshPreview, 500);
   } else {
     section.style.display = 'none';
-    if (stream) {
-      stream.getTracks().forEach(t => t.stop());
-      stream = null;
-    }
+    clearInterval(previewTimer);
+    previewTimer = null;
   }
 }
 
-function captureWebcam() {
-  const video = document.getElementById('webcam-video');
-  const canvas = document.getElementById('webcam-canvas');
-  const nameInput = document.getElementById('capture-name').value.trim();
-  
-  if (!nameInput) {
-    alert("Please enter a name first.");
-    return;
-  }
-  
-  // Set canvas size to video size
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  
-  canvas.toBlob(blob => {
-    const filename = nameInput.endsWith('.jpg') ? nameInput : nameInput + '.jpg';
-    const file = new File([blob], filename, { type: "image/jpeg" });
-    
-    // Create FileList-like object to use existing upload function
-    const dataTransfer = new DataTransfer();
-    dataTransfer.items.add(file);
-    uploadFace({ files: dataTransfer.files });
-  }, 'image/jpeg', 0.95);
-}
-
-function uploadFace(input) {
-  if (!input.files || input.files.length === 0) return;
-  const file = input.files[0];
-  const formData = new FormData();
-  formData.append("file", file);
-
-  fetch("/authorized/upload", {
-    method: "POST",
-    body: formData
-  })
-  .then(res => res.json())
-  .then(data => {
-    if (data.status === "ok") {
-      window.location.reload();
+async function captureFace() {
+  const person = document.getElementById('capture-name').value.trim();
+  if (!person) { alert("Enter a name first."); return; }
+  const btn = document.getElementById('capture-btn');
+  btn.disabled = true;
+  const body = new FormData();
+  body.append('person', person);
+  try {
+    const res = await fetch('/api/authorized/capture', {method: 'POST', body});
+    const data = await res.json();
+    if (res.ok && data.status === 'ok') {
+      showStatus([{ok: true, text: `Enrolled ${data.person} (${data.filename}). Capture another angle, or reload to see the gallery.`}]);
     } else {
-      alert("Upload failed: " + data.detail);
+      showStatus([{ok: false, text: `Not enrolled: ${data.detail || res.statusText}`}]);
     }
-  })
-  .catch(err => {
-    alert("Upload error: " + err);
-  });
+  } catch (err) {
+    showStatus([{ok: false, text: 'Capture error: ' + err}]);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function uploadFaces(input) {
+  if (!input.files || input.files.length === 0) return;
+  const lines = [];
+  for (const file of input.files) {
+    const body = new FormData();
+    body.append('file', file);
+    try {
+      const res = await fetch('/authorized/upload', {method: 'POST', body});
+      const data = await res.json();
+      if (res.ok && data.status === 'ok') {
+        lines.push({ok: true, text: `${file.name}: enrolled as ${data.person}`});
+      } else {
+        lines.push({ok: false, text: `${file.name}: ${data.detail || res.statusText}`});
+      }
+    } catch (err) {
+      lines.push({ok: false, text: `${file.name}: ${err}`});
+    }
+    showStatus(lines);
+  }
+  input.value = '';
+  if (lines.some(l => l.ok)) setTimeout(() => window.location.reload(), 1500);
 }
 
 async function deleteFace(filename) {
-  if(confirm(`Are you sure you want to remove ${filename}?`)) {
-    try {
-      let res = await fetch(`/api/authorized/${filename}`, {method: 'DELETE'});
-      if(res.ok) { 
-        window.location.reload(); 
-      } else {
-        alert("Delete failed.");
-      }
-    } catch(err) {
-      alert("Delete error: " + err);
-    }
+  if (!confirm(`Remove ${filename}?`)) return;
+  try {
+    const res = await fetch(`/api/authorized/${encodeURIComponent(filename)}`, {method: 'DELETE'});
+    if (res.ok) window.location.reload();
+    else alert("Delete failed.");
+  } catch (err) {
+    alert("Delete error: " + err);
   }
 }
 </script>

@@ -113,7 +113,7 @@ Sentrix/
 │                  the weapon/fire/violence/robbery scales              │
 │   violence.py    16 frames over 2.0 s (only without a scene model)    │
 │   audio.py       4.0 s log-mel window, 1.0 s hop, RMS-gated           │
-│   identity.py    ArcFace 512-d against the enrolled gallery           │
+│   identity.py    ArcFace 512-d, per tracked person, own thread        │
 │   behaviour.py   kinematics in frame-diagonals per second             │
 │   motion.py      frame differencing + luminance -> is_night           │
 │   reid.py        cosine matching over an appearance gallery           │
@@ -184,11 +184,15 @@ CLAUDE.md §5 and M1; `ThreatConfig`):
 | a non-finite value, or a threshold outside (0, 1) | recorded as gated, contributes nothing |
 | armed mode, person unrecognised for 3 s | intrusion at 0.45 → L3 (a missed detection within 2 s does not restart it) |
 
-Identity has no input into threat evidence: frame-level identity says only that
-*some* face matched, so a stranger standing next to a resident would inherit the
-resident's authorisation. It feeds only the armed-mode intrusion rule, where a
-degraded backend never authorises (fail closed). Presence alone never raises the
-level in home mode.
+Identity has no input into threat evidence. It feeds only the armed-mode
+intrusion rule and the display. It is **per tracked person**: each face is
+attached to the ByteTrack person box that contains it, and each track is
+`authorised` (matched, held on that track for 60 s unless its face then fails to
+match twice), `unknown` (face seen, no match) or `unverified` (no look at the face
+yet). The frame counts as authorised only when everyone in view is, so a stranger
+beside a resident, or someone who never shows their face, keeps the intrusion rule
+live; a degraded backend never authorises (fail closed). Presence alone never
+raises the level in home mode.
 
 > **Corrected from v2.1.** The previous matrix said level 2 was a UI badge only,
 > level 3 saved evidence, level 4 sent SMS and level 5 fired the siren. The

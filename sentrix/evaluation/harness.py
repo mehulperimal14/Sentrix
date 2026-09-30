@@ -56,6 +56,9 @@ class _UnknownIdentity:
         return IdentityResult(authorized=False, name=None, similarity=0.0,
                               degraded=False)
 
+    def match_faces(self, frame) -> list:
+        return []                   # no face is ever recognised
+
     def score(self, result: IdentityResult, person_present: bool) -> float:
         return settings.identity.unknown_person_score if person_present else 0.0
 

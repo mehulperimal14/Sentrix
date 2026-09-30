@@ -40,7 +40,8 @@ from sentrix.pipeline.engine import get_pipeline
 from sentrix.pipeline.state import state
 from sentrix.storage import database
 from sentrix.utils.logging import get_logger, telemetry
-from sentrix.web.security import (generate_token, login_limiter,
+from sentrix.perception.identity import person_name
+from sentrix.web.security import (RateLimiter, generate_token, login_limiter,
                                   sanitize_filename, validate_image,
                                   verify_token)
 
@@ -188,7 +189,9 @@ async def dispatch_page(request: Request) -> HTMLResponse:
 @router.get("/authorized", response_class=HTMLResponse,
             dependencies=[Depends(require_auth)])
 async def authorized(request: Request) -> HTMLResponse:
-    faces = [{"filename": p.name, "url": f"/media/face/{p.name}"}
+    enrolled = get_pipeline().identity.enrolled_files
+    faces = [{"filename": p.name, "url": f"/media/face/{p.name}",
+              "person": person_name(p.stem), "enrolled": p.name in enrolled}
              for p in sorted(FACES_DIR.iterdir())
              if p.suffix.lower() in (".jpg", ".jpeg", ".png")]
     return templates.TemplateResponse(
@@ -309,8 +312,46 @@ async def api_dispatch_send(package_id: str, authority: str) -> JSONResponse:
 
 
 # ── enrolment ─────────────────────────────────────────────────────────────────
+capture_limiter = RateLimiter(max_attempts=20, window_seconds=60.0)
+
+
+def _enrol_filename(person: str, suffix: str = ".jpg") -> str:
+    """A free file name for another photo of ``person``: alice.jpg, alice__2.jpg ..."""
+    stem = sanitize_filename(person).replace(" ", "_").strip("._-")[:60] or "person"
+    candidate, n = f"{stem}{suffix}", 2
+    while (FACES_DIR / candidate).exists():
+        candidate, n = f"{stem}__{n}{suffix}", n + 1
+    return candidate
+
+
+async def _enrol_image(image, person: str, payload: bytes | None, suffix: str,
+                       via: str) -> JSONResponse:
+    """Assess, store and enrol one image; the gallery is updated in place."""
+    pipeline = get_pipeline()
+    check = await asyncio.to_thread(pipeline.identity.assess, image, person)
+    if not check.ok:
+        pipeline.events.audit("gallery_rejected", person=person, via=via,
+                              reason=check.reason)
+        return JSONResponse({"status": "rejected", "person": person,
+                             "detail": check.reason}, status_code=422)
+    FACES_DIR.mkdir(parents=True, exist_ok=True)
+    filename = _enrol_filename(person, suffix)
+    if payload is None:
+        import cv2
+        ok, buffer = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, 95])
+        if not ok:
+            raise HTTPException(status_code=500, detail="could not encode the frame")
+        payload = buffer.tobytes()
+    (FACES_DIR / filename).write_bytes(payload)
+    name = pipeline.identity.enrol(filename, check.embedding)
+    pipeline.events.audit("gallery_enrolled", person=name, file=filename, via=via)
+    log.info("enrolled %s from %s (%s)", name, via, filename)
+    return JSONResponse({"status": "ok", "person": name, "filename": filename})
+
+
 @router.post("/authorized/upload", dependencies=[Depends(require_auth)])
-async def upload_face(file: UploadFile = File(...)) -> JSONResponse:
+async def upload_face(file: UploadFile = File(...),
+                      person: str = Form(None)) -> JSONResponse:
     payload = await file.read()
     if len(payload) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="File exceeds 10 MB")
@@ -318,29 +359,60 @@ async def upload_face(file: UploadFile = File(...)) -> JSONResponse:
     ok, reason = validate_image(file.filename or "", file.content_type, payload)
     if not ok:
         raise HTTPException(status_code=400, detail=reason)
-
     name = sanitize_filename(file.filename or "")
     if not name:
         raise HTTPException(status_code=400, detail="Invalid filename")
 
-    FACES_DIR.mkdir(parents=True, exist_ok=True)
-    (FACES_DIR / name).write_bytes(payload)
+    import cv2
+    import numpy as np
+    image = cv2.imdecode(np.frombuffer(payload, np.uint8), cv2.IMREAD_COLOR)
+    if image is None:
+        raise HTTPException(status_code=400, detail="could not decode the image")
+    who = person_name(Path(person or name).stem)
+    return await _enrol_image(image, who, payload, Path(name).suffix.lower(), "upload")
 
-    pipeline = get_pipeline()
-    pipeline.identity.reload()
-    if name not in [f"{n}" for n in pipeline.identity.enrolled]:
-        # Surfaced rather than silently accepted: an image with no detectable
-        # face is stored but contributes nothing to authorisation.
-        return JSONResponse({"status": "warning", "filename": name,
-                             "detail": "No face detected; not enrolled."})
-    return JSONResponse({"status": "ok", "filename": name})
+
+@router.post("/api/authorized/capture", dependencies=[Depends(require_auth)])
+async def capture_face(request: Request, person: str = Form(...)) -> JSONResponse:
+    """Enrol from the monitoring camera's current frame.
+
+    The page used to ask the browser for the webcam, which the server already
+    holds, so it failed with NotReadableError on the same machine.
+    """
+    client = request.client.host if request.client else "unknown"
+    if not capture_limiter.allow(client):
+        raise HTTPException(status_code=429, detail="Too many captures; wait a minute")
+    who = person_name(sanitize_filename(person).replace(" ", "_").strip("._-"))
+    if not who:
+        raise HTTPException(status_code=400, detail="Enter a name first")
+    frame = get_pipeline().latest_raw()
+    if frame is None:
+        raise HTTPException(status_code=409, detail="No camera frame available")
+    return await _enrol_image(frame, who, None, ".jpg", "camera")
+
+
+@router.get("/api/authorized/preview.jpg", dependencies=[Depends(require_auth)])
+async def capture_preview() -> Response:
+    """The camera frame enrolment would capture, without the HUD."""
+    import cv2
+    frame = get_pipeline().latest_raw()
+    if frame is None:
+        raise HTTPException(status_code=404, detail="No camera frame available")
+    ok, buffer = await asyncio.to_thread(cv2.imencode, ".jpg", frame,
+                                         [cv2.IMWRITE_JPEG_QUALITY, 80])
+    if not ok:
+        raise HTTPException(status_code=500, detail="encode failed")
+    return Response(buffer.tobytes(), media_type="image/jpeg",
+                    headers={"Cache-Control": "no-store"})
 
 
 @router.delete("/api/authorized/{filename}", dependencies=[Depends(require_auth)])
 async def delete_face(filename: str) -> JSONResponse:
     path = _safe_path(FACES_DIR, filename)
     path.unlink()
-    get_pipeline().identity.reload()
+    pipeline = get_pipeline()
+    pipeline.identity.remove(path.name)
+    pipeline.events.audit("gallery_removed", person=person_name(path.stem), file=path.name)
     return JSONResponse({"status": "ok"})
 
 

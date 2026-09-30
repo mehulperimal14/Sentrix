@@ -6,7 +6,7 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.4-EE4C2C.svg)](https://pytorch.org/)
 [![YOLOv8](https://img.shields.io/badge/YOLOv8-ultralytics-00BFA5.svg)](https://docs.ultralytics.com/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688.svg)](https://fastapi.tiangolo.com/)
-[![Tests](https://img.shields.io/badge/tests-178%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-196%20passing-brightgreen.svg)](tests/)
 
 > **Capstone Project CPG-299** · Computer Science and Engineering, Thapar Institute of
 > Engineering and Technology, Patiala · Mentor: Dr. Ashutosh Mishra
@@ -35,7 +35,7 @@ adding an ESP32 node or a GPIO relay later is a configuration change, not a rewr
 | Scene classification | **Working** | normal / fire / weapon / assault / robbery; DINOv2 ViT-B/14 trained on the custom dataset (`models/v4_custom/`) |
 | Violence classification | **Superseded** | The RWF-2000 model calls the test corridor a fight; replaced by the scene classifier's assault head whenever a scene model is installed |
 | Acoustic classification | **Working** | Model is under-trained — see *Known limitations* |
-| Face authorisation | **Working** | ArcFace 512-d via `insightface` on its own thread (about once a second); fails closed without it |
+| Face authorisation | **Working** | ArcFace 512-d via `insightface`, per tracked person, on its own thread (about once a second); enrol from the monitoring camera with quality checks; fails closed without it |
 | Cross-camera re-identification | **Degraded** | Histogram fallback; install `torchreid` |
 | Voice SOS | **Not wired** | Deferred; Vosk model retained |
 | Hardware actuation | **Interface only** | No hardware attached |
@@ -147,7 +147,7 @@ Sentrix/
 │   └── runs/                   all run outputs (v1_legacy, v2_real, v3_real, ucf_crime_dvs)
 ├── tools/                      doctor, replay, baseline, evaluate, auditors,
 │                               custom-dataset evaluation
-├── tests/                      178 regression tests
+├── tests/                      196 regression tests
 ├── docs/                       specifications
 ├── Capstone Docs/              submissions
 └── var/                        runtime output — gitignored, never web-served
