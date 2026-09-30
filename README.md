@@ -6,7 +6,7 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.4-EE4C2C.svg)](https://pytorch.org/)
 [![YOLOv8](https://img.shields.io/badge/YOLOv8-ultralytics-00BFA5.svg)](https://docs.ultralytics.com/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688.svg)](https://fastapi.tiangolo.com/)
-[![Tests](https://img.shields.io/badge/tests-88%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-89%20passing-brightgreen.svg)](tests/)
 
 > **Capstone Project CPG-299** · Computer Science and Engineering, Thapar Institute of
 > Engineering and Technology, Patiala · Mentor: Dr. Ashutosh Mishra
@@ -146,7 +146,7 @@ Sentrix/
 │   └── runs/                   all run outputs (v1_legacy, v2_real, v3_real, ucf_crime_dvs)
 ├── tools/                      doctor, replay, baseline, evaluate, auditors,
 │                               custom-dataset evaluation
-├── tests/                      88 regression tests
+├── tests/                      89 regression tests
 ├── docs/                       specifications
 ├── Capstone Docs/              submissions
 └── var/                        runtime output — gitignored, never web-served
