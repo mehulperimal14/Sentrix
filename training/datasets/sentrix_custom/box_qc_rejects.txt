@@ -1,0 +1,21 @@
+# Boxes proposed by training/custom/annotate_boxes.py and rejected on visual
+# review of the QC contact sheets (training/runs/custom/annotation_qc/).
+# Listed frames are excluded from detector training/evaluation, never used as
+# negatives. Reason in the trailing comment.
+vid03_t00010.422_f000309.jpg  # box mostly on a trouser leg
+vid03_t00014.537_f000431.jpg  # box on the black shirt, gun not inside
+vid05_t00008.645_f000224.jpg  # motion smear, object not identifiable
+vid07_t00068.302_f002026.jpg  # white blur
+vid07_t00092.508_f002744.jpg  # mark on skin
+vid07_t00093.317_f002768.jpg  # box on the black shirt
+gun_t00011.832_f000350.jpg    # grey motion smear
+wa01_t00025.001_f000625.jpg   # arm against the floor, no stick
+wa01_t00029.481_f000737.jpg   # on the person's back
+wa02_t00040.161_f001004.jpg   # thin light rod at the bicycle, not the stick
+wa02_t00040.481_f001012.jpg   # same rod
+wa02_t00044.841_f001121.jpg   # bicycle frame
+# second pass, after the person gate also used GroundingDINO person boxes
+wa01_t00024.681_f000617.jpg   # dark silhouette, no stick visible
+wa01_t00029.001_f000725.jpg   # beside the head, object not identifiable
+wa02_t00040.681_f001017.jpg   # thin light rod at the bicycle again
+wa02_t00041.321_f001033.jpg   # hands overhead, stick not resolvable
