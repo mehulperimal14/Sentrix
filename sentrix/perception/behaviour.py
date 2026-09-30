@@ -49,11 +49,14 @@ class BehaviourEngine:
 
     def classify(self, persons: list[Detection], frame_shape,
                  violence: tuple[float, str] | None = None,
-                 now: float | None = None) -> tuple[float, str]:
+                 now: float | None = None,
+                 robbery: tuple[float, str] | None = None) -> tuple[float, str]:
         """Return the dominant ``(score, label)`` across all tracked people.
 
-        ``violence`` is the windowed classifier output, passed in rather than
-        computed here so this module stays free of model dependencies.
+        ``violence`` and ``robbery`` are classifier outputs, passed in rather
+        than computed here so this module stays free of model dependencies.
+        A theft is an act (an object lifted and carried off), not a trajectory,
+        so like a fight it comes from the scene classifier, not kinematics.
         """
         now = time.monotonic() if now is None else now
         self._prune(now)
@@ -66,6 +69,8 @@ class BehaviourEngine:
             if label == "fighting":
                 candidates.append((max(score, self.cfg.scores["fighting"]),
                                    "fighting"))
+        if robbery is not None and robbery[1] == "robbery":
+            candidates.append((max(robbery[0], self.cfg.scores["robbery"]), "robbery"))
 
         height, width = frame_shape[:2]
         diagonal = math.hypot(width, height) or 1.0
@@ -121,6 +126,7 @@ class BehaviourEngine:
 #: Labels that earn the contextual TCI booster. ``fighting`` is included here;
 #: the previous fusion engine boosted only running/crawling/loitering, so a
 #: detected fight received no boost at all.
-SUSPICIOUS_LABELS = frozenset({"fighting", "running", "crawling", "loitering"})
+SUSPICIOUS_LABELS = frozenset({"fighting", "robbery", "running", "crawling",
+                               "loitering"})
 
 __all__ = ["BehaviourEngine", "SUSPICIOUS_LABELS"]

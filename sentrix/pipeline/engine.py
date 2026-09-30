@@ -9,7 +9,8 @@ Per-frame order:
 
 1. acquire frame, keep a pristine copy for inference
 2. detect (people, weapons, fire) in one YOLOv8 component
-3. push the frame into the violence window; read the windowed score
+3. scene classification (normal/fire/weapon/assault/robbery), or - when no
+   scene model is installed - the windowed RWF-2000 violence score
 4. behaviour kinematics from tracked people
 5. identity check (fail-closed)
 6. audio (read from the capture thread, never blocking)
@@ -49,6 +50,7 @@ from sentrix.perception.detector import Detector
 from sentrix.perception.identity import IdentityEngine
 from sentrix.perception.motion import MotionEngine
 from sentrix.perception.reid import ReIDEngine
+from sentrix.perception.scene import SceneEngine, SceneResult
 from sentrix.perception.violence import ViolenceEngine
 from sentrix.pipeline.escalation import plan_for
 from sentrix.pipeline.events import EventLog
@@ -82,7 +84,12 @@ class Pipeline:
         self.source = source or build_source()
         self.detector = Detector()
         self.motion = MotionEngine()
-        self.violence = ViolenceEngine()
+        self.scene = SceneEngine()
+        # The scene classifier's assault head supersedes the RWF-2000 violence
+        # model: on this deployment's footage that model scores an empty CCTV
+        # corridor as a fight (docs/6). Loading both would cost 42 MB and a
+        # 16-frame window of inference per second for a signal that is ignored.
+        self.violence = None if self.scene.available else ViolenceEngine()
         self.behaviour = BehaviourEngine()
         self.identity = IdentityEngine()
         self.reid = ReIDEngine()
@@ -105,8 +112,9 @@ class Pipeline:
                                         name="sentrix-tasks")
         self._worker.start()
 
-        log.info("pipeline ready — detector=%s identity=%s audio=%s siren=%s "
-                 "fusion=%s", self.detector.available,
+        log.info("pipeline ready — detector=%s scene=%s identity=%s audio=%s "
+                 "siren=%s fusion=%s", self.detector.available,
+                 self.scene.weights_name or "off",
                  self.identity.backend or "FAIL-CLOSED",
                  bool(self.audio and self.audio.available),
                  self.siren.name, self.tci.model_source)
@@ -132,14 +140,34 @@ class Pipeline:
             log.warning("task queue full — dropping %s", getattr(func, "__name__", func))
 
     # ── perception ────────────────────────────────────────────────────────────
+    def _fuse(self, detections, scene: SceneResult | None) -> tuple[float, float]:
+        """Weapon and fire scores from the detectors and the scene classifier."""
+        weapon, fire = detections.weapon_score, detections.fire_score
+        if scene is None:
+            return weapon, fire
+        mode = self.cfg.scene.fusion
+        if mode == "scene":
+            return scene.signals["weapon"], scene.signals["fire"]
+        if mode == "detector":
+            return weapon, fire
+        return max(weapon, scene.signals["weapon"]), max(fire, scene.signals["fire"])
+
     def _observe(self, frame: np.ndarray, now: float) -> FeatureVector:
         detections = self.detector.detect(frame)
 
-        self.violence.observe(frame, now)
-        violence_score, violence_label = self.violence.result(now)
+        scene = self.scene.observe(frame, now) if self.scene.available else None
+        if self.violence is not None:
+            self.violence.observe(frame, now)
+            violence_score, violence_label = self.violence.result(now)
+        elif scene is not None:
+            violence_score, violence_label = scene.violence
+        else:
+            violence_score, violence_label = 0.0, "normal"
 
         behaviour_score, behaviour_label = self.behaviour.classify(
-            detections.persons, frame.shape, (violence_score, violence_label), now)
+            detections.persons, frame.shape, (violence_score, violence_label), now,
+            robbery=scene.robbery if scene is not None else None)
+        weapon_score, fire_score = self._fuse(detections, scene)
 
         identity = self.identity.check(frame, now)
         person_present = bool(detections.persons)
@@ -164,8 +192,8 @@ class Pipeline:
             motion=self.motion.score(frame),
             behaviour=behaviour_score,
             identity=identity_score,
-            weapon=detections.weapon_score,
-            fire=detections.fire_score,
+            weapon=weapon_score,
+            fire=fire_score,
             is_night=1.0 if self.motion.is_night(frame) else 0.0,
             authorized=identity.authorized,
             person_present=person_present,
@@ -175,7 +203,8 @@ class Pipeline:
             identity_degraded=identity.degraded,
             extras={"detections": detections.to_dict(),
                     "identity_name": identity.name,
-                    "violence_score": round(violence_score, 4)},
+                    "violence_score": round(violence_score, 4),
+                    "scene": scene.to_dict() if scene is not None else None},
         )
 
     # ── side effects ──────────────────────────────────────────────────────────
@@ -276,6 +305,7 @@ class Pipeline:
             fusion_source=result.source, audio_label=features.audio_label,
             behaviour_label=features.behaviour_label,
             person_count=features.person_count, authorized=features.authorized,
+            scene=features.extras.get("scene"),
             identity_degraded=features.identity_degraded,
             fps=round(fps, 1), latency_ms=round(latency * 1000, 2),
             latency_p95_ms=round(p95 * 1000, 2),
@@ -333,7 +363,9 @@ class Pipeline:
         self.tci.reset()
         self.policy.reset()
         self.motion.reset()
-        self.violence.reset()
+        self.scene.reset()
+        if self.violence is not None:
+            self.violence.reset()
         self.behaviour.reset()
         self.reid.reset()
         self.detector.reset_tracks()

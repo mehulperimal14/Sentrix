@@ -251,6 +251,8 @@ class TCIEngine:
             return "fire"
         if features.behaviour_label == "fighting":
             return "assault"
+        if features.behaviour_label == "robbery":
+            return "robbery"
         if (features.person_present and not features.trusted_authorization
                 and score > 0.4):
             return "intrusion"
@@ -262,6 +264,7 @@ class TCIEngine:
             "weapon": "Possible weapon in frame",
             "fire": "Possible combustion detected",
             "assault": f"Violent behaviour ({features.behaviour_label})",
+            "robbery": "Property being carried off (theft)",
             "intrusion": "Unrecognised person on premises",
             "normal": "Routine activity",
         }.get(incident, "Routine activity")
