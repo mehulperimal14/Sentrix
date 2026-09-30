@@ -303,10 +303,12 @@ overfitting; quote val and test.
   in replay; 3/3 episodes are caught, but late — median 1.0 s). 23 training boxes
   of a stick carried at the side do not teach a stick swung overhead, and val
   contains no stick, so nothing in selection rewards it.
-* **Fire on held-out video is not detected** by the system (0/1 val episode):
-  the fine-tuned classifier calls the flame-jet frames `weapon` (a can held out
-  like a gun), and weapon outranks fire in incident typing. The fire detector
-  itself separates them (AUROC 0.91) but rarely clears its 0.50 gate.
+* **Fire on held-out video is not detected** by the system (0/1 val episode).
+  Out of fold the fine-tuned classifier's fire predictions were never right, so
+  its tuned fire threshold is 0.85 (effectively off) while its weapon threshold
+  is 0.25 — and it calls the flame-jet frames `weapon` (a can held out like a
+  gun), which outranks fire in incident typing. The fire detector itself
+  separates them (AUROC 0.91) but rarely clears its 0.50 gate.
 * **Assault is never predicted.** Out of fold every assault prediction was
   wrong, so its tuned threshold (0.85) is effectively off. That is the honest
   outcome for a class that exists in two videos in two different rooms.
@@ -446,7 +448,8 @@ Held-out numbers only (val = `gun`, `vid04`; test = `wa02`):
 | Test replay accuracy / macro-F1 | 0.052 / 0.157 | **0.824 / 0.606** | **0.824** / 0.452 |
 | Test episodes detected | 3 of 3 (and everything else) | **3 of 3** | 0 of 3 |
 | False alarms per normal minute, all 10 videos | 13.96 | 7.12 | **0.79** |
-| Scene model size / CPU cost per frame | — | 44.8 MB / 15 ms | 57 MB (+ cached base) / 105 ms |
+| Pipeline latency per tick, CPU — mean / p95 | 120.6 / 205.3 ms | **117.2 / 132.0 ms** | 213.2 / 244.5 ms |
+| Scene model on disk | — | 44.8 MB | 57.1 MB (+ cached public base) |
 
 **`sentrix/custom-v4` is the most accurate configuration** on everything that
 could be used to choose — val, cross-validation, false alarms — and is the
@@ -461,10 +464,14 @@ fine-tuned YOLO heads, `max` fusion) is the obvious candidate, but choosing it
 on this dataset would mean choosing on the test video, so it is left as a
 recommendation rather than shipped as a result.
 
-**Latency.** The DINOv2 scene model costs about 105 ms per frame on the
-laptop CPU, which puts a full pipeline tick near 190-200 ms: the live loop runs
-at about 5 Hz instead of 6 on CPU. With CUDA available the scene model runs on
-the GPU automatically.
+**Latency** was measured by replaying the test video (294 ticks) on each
+branch with nothing else running, CPU only (Intel, 24 threads). The DINOv2
+scene model costs about 105 ms per frame, so a custom-v4 tick (213 ms mean)
+overruns the 167 ms budget of the 6 Hz inference rate and the live loop runs at
+about 4.7 Hz on CPU; with CUDA available the scene model moves to the GPU
+automatically. The fine-tuned branch is the fastest of the three: its ResNet-18
+scene model (15 ms per tick) replaces the v3 violence model's once-a-second
+16-frame window, which is also what produced the baseline's 205 ms p95.
 
 ## 6.8 Reproducing
 
