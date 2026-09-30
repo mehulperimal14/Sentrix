@@ -151,3 +151,45 @@ class TestRobberyRoute:
     def test_weapon_outranks_robbery(self):
         features = FeatureVector(weapon=0.6, behaviour=0.85, behaviour_label="robbery")
         assert TCIEngine().compute(features, now=0.0).incident_type == "weapon"
+
+
+class TestDeltaCheckpoint:
+    """A delta checkpoint must reproduce the trained model exactly, and must
+    refuse to load onto public weights other than the ones it was trained on."""
+
+    @staticmethod
+    def models():
+        torch = pytest.importorskip("torch")
+        import copy
+        torch.manual_seed(0)
+        base = torch.nn.Sequential(torch.nn.Linear(4, 4), torch.nn.Linear(4, 2))
+        trained = copy.deepcopy(base)
+        with torch.no_grad():
+            trained[1].weight += 1.0            # only the "head" was trained
+        delta = {k: v for k, v in trained.state_dict().items() if k.startswith("1.")}
+        return torch, base, trained, delta, copy
+
+    def test_merge_reproduces_the_trained_model(self):
+        from sentrix.perception.scene import base_fingerprint, merge_delta
+        torch, base, trained, delta, copy = self.models()
+        fingerprint = base_fingerprint(base.state_dict(), frozenset(delta))
+        fresh = copy.deepcopy(base)             # stands in for the public download
+        merge_delta(fresh, delta, fingerprint)
+        for key, value in trained.state_dict().items():
+            assert torch.equal(fresh.state_dict()[key], value)
+
+    def test_a_different_base_is_refused(self):
+        from sentrix.perception.scene import base_fingerprint, merge_delta
+        torch, base, _, delta, copy = self.models()
+        fingerprint = base_fingerprint(base.state_dict(), frozenset(delta))
+        drifted = copy.deepcopy(base)
+        with torch.no_grad():
+            drifted[0].bias += 1e-3
+        with pytest.raises(ValueError, match="fingerprint"):
+            merge_delta(drifted, delta, fingerprint)
+
+    def test_fingerprint_ignores_the_delta_tensors(self):
+        from sentrix.perception.scene import base_fingerprint
+        torch, base, trained, delta, _ = self.models()
+        assert (base_fingerprint(base.state_dict(), frozenset(delta))
+                == base_fingerprint(trained.state_dict(), frozenset(delta)))
