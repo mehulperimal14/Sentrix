@@ -71,13 +71,10 @@ document.addEventListener("DOMContentLoaded", () => {
     // Fetch initial health status (for pages other than dashboard to set dots quickly)
     fetch('/api/health')
         .then(r => r.json())
-        .then(data => {
-            if (document.getElementById("dot-cam")) {
-                document.getElementById("dot-cam").className = "status-dot " + (data.camera_available ? "online" : "");
-                document.getElementById("dot-mic").className = "status-dot " + (data.mic_available ? "online" : "");
-                document.getElementById("dot-cloud").className = "status-dot " + (data.cloud_available ? "online" : "");
-            }
-        }).catch(() => {});
+        .then(data => updateHealthStatus({
+            camera_online: data.camera, mic_available: data.audio, ai_hz: data.ai_hz,
+        }))
+        .catch(() => {});
 });
 
 
@@ -96,17 +93,31 @@ function updateDashboard(data, lastLevel) {
 
     updateScene(data.scene);
 
-    const cloudStatus = document.getElementById("cloud-status-text");
-    const cloudDot = document.getElementById("cloud-dot");
-    if (cloudStatus && cloudDot) {
-        if (data.cloud_online) {
-            cloudStatus.textContent = "Online & Monitoring";
-            cloudStatus.style.color = "#4ade80";
-            cloudDot.style.background = "#22c55e";
+    // Video and AI rates are reported separately: the preview runs at the
+    // camera's rate, the neural stack at its own (CLAUDE.md M2).
+    const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    };
+    setText("rate-video", (data.video_fps || 0).toFixed(0));
+    setText("rate-ai", (data.ai_hz || 0).toFixed(1));
+    setText("frame-age", data.frame_age_ms != null ? Math.round(data.frame_age_ms) : "—");
+    const aiStatus = document.getElementById("ai-status-text");
+    const aiDot = document.getElementById("ai-dot");
+    if (aiStatus && aiDot) {
+        const running = (data.ai_hz || 0) > 0;
+        if (!data.camera_online) {
+            aiStatus.textContent = "No camera signal";
+            aiStatus.style.color = "#f97316";
+            aiDot.style.background = "#f97316";
+        } else if (running) {
+            aiStatus.textContent = "Analysing live video";
+            aiStatus.style.color = "#4ade80";
+            aiDot.style.background = "#22c55e";
         } else {
-            cloudStatus.textContent = "Offline (Demo Mode)";
-            cloudStatus.style.color = "#8a9bb8";
-            cloudDot.style.background = "#8a9bb8";
+            aiStatus.textContent = "AI not running";
+            aiStatus.style.color = "#8a9bb8";
+            aiDot.style.background = "#8a9bb8";
         }
     }
 
@@ -172,13 +183,13 @@ function updateExplainability(data) {
 }
 
 function updateHealthStatus(data) {
-    const dotCam = document.getElementById("dot-cam");
-    const dotCloud = document.getElementById("dot-cloud");
-    // Assume camera is online if we are receiving frames/scores (heuristics based on ws data)
-    if (dotCam) dotCam.className = "status-dot online";
-    if (dotCloud) {
-        dotCloud.className = "status-dot " + (data.cloud_online ? "online" : "");
-    }
+    const dot = (id, on) => {
+        const el = document.getElementById(id);
+        if (el) el.className = "status-dot " + (on ? "online" : "");
+    };
+    dot("dot-cam", data.camera_online);
+    dot("dot-mic", data.mic_available);
+    dot("dot-ai", (data.ai_hz || 0) > 0);
 }
 
 function updateGauge(tci) {

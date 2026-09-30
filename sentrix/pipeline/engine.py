@@ -33,6 +33,7 @@ import queue
 import threading
 import time
 from collections import deque
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -76,6 +77,23 @@ LEVEL_COLOURS = {
 TASK_QUEUE_MAX = 64
 
 
+@dataclass(frozen=True)
+class Overlay:
+    """What the last inference said, drawn onto every captured frame."""
+
+    tci: float
+    level: int
+    status: str
+    behaviour_label: str
+    weapon: float
+    fire: float
+    authorized: bool
+    identity_degraded: bool
+    detections: dict
+    #: Capture time of the frame the overlay was computed on.
+    at: float
+
+
 class Pipeline:
     """Owns every engine and runs the per-frame loop."""
 
@@ -107,9 +125,8 @@ class Pipeline:
         self.session_id = self.events.session_id
 
         self._latencies: deque[float] = deque(maxlen=200)
-        self._annotated: np.ndarray | None = None
-        self._last_inference = 0.0
         self._frame_count = 0
+        self._init_live()
 
         self._tasks: queue.Queue = queue.Queue(maxsize=TASK_QUEUE_MAX)
         self._stop = threading.Event()
@@ -123,6 +140,23 @@ class Pipeline:
                  self.identity.backend or "FAIL-CLOSED",
                  bool(self.audio and self.audio.available),
                  self.siren.name, self.tci.model_source)
+
+    def _init_live(self) -> None:
+        """State shared by the capture, inference and preview paths."""
+        self._slot = threading.Condition()
+        self._pending: tuple[np.ndarray, float] | None = None
+        self._overlay: Overlay | None = None
+        self._preview_lock = threading.Lock()
+        self._preview: np.ndarray | None = None
+        self._preview_seq = 0
+        self._jpeg: tuple[int, bytes] | None = None
+        self._last_seq = -1
+        self._video_times: deque[float] = deque(maxlen=90)
+        self._ai_times: deque[float] = deque(maxlen=30)
+        self._video_fps = 0.0
+        self._ai_hz = 0.0
+        self._rates_at = 0.0
+        self._offline = False
 
     # ── background side effects ───────────────────────────────────────────────
     def _task_loop(self) -> None:
@@ -321,7 +355,6 @@ class Pipeline:
         self.events.write(result, level, status,
                           incident.id if incident else None, latency, label)
 
-        fps = 1.0 / max(float(np.mean(self._latencies)), 1e-6)
         ordered = sorted(self._latencies)
         p95 = ordered[min(len(ordered) - 1, int(len(ordered) * 0.95))]
 
@@ -337,35 +370,132 @@ class Pipeline:
             person_count=features.person_count, authorized=features.authorized,
             scene=features.extras.get("scene"),
             identity_degraded=features.identity_degraded,
-            fps=round(fps, 1), latency_ms=round(latency * 1000, 2),
+            latency_ms=round(latency * 1000, 2),
             latency_p95_ms=round(p95 * 1000, 2),
             queue_depth=self._tasks.qsize(), camera_online=self.source.online,
             events_logged=self.events.rows,
         )
         telemetry.record("pipeline", "frame", None, latency)
 
-        self._annotated = self._draw(frame.copy(), result, level, status, features)
+        self._overlay = Overlay(
+            tci=result.tci, level=level, status=status,
+            behaviour_label=features.behaviour_label, weapon=features.weapon,
+            fire=features.fire, authorized=features.authorized,
+            identity_degraded=features.identity_degraded,
+            detections=features.extras.get("detections", {}), at=now)
         return {"tci": result.tci, "level": level, "status": status,
                 "incident_type": result.incident_type,
                 "features": features.model_features(), "latency": latency,
                 "incident_id": incident.id if incident else None}
 
-    # ── live loop ─────────────────────────────────────────────────────────────
-    def tick(self) -> None:
-        """One iteration of the live loop, rate-limited to the inference rate."""
-        ok, frame = self.source.read()
-        if not ok or frame is None:
-            state.update(camera_online=False, reason="No camera signal")
-            self._annotated = _placeholder()
-            return
-        now = time.monotonic()
-        if now - self._last_inference < self.cfg.pipeline.inference_period:
-            return
-        self._last_inference = now
+    # ── live loop: capture, inference and preview are decoupled ──────────────
+    def run_live(self, stop: threading.Event) -> None:
+        """Capture loop; runs until ``stop`` is set.
+
+        Every captured frame is composited with the latest inference overlay and
+        becomes the preview, so the video runs at the camera's rate whatever the
+        AI rate is. Inference runs on its own thread and always takes the newest
+        frame through a single slot: frames it cannot keep up with are dropped,
+        never queued. In the first live test the preview was drawn only after
+        inference, so the video froze at the AI rate (0.3 Hz, CLAUDE.md §5).
+        """
+        worker = threading.Thread(target=self._inference_loop, args=(stop,),
+                                  daemon=True, name="sentrix-inference")
+        worker.start()
         try:
-            self.process(frame, now)
-        except Exception as exc:
-            log.error("frame processing failed: %s", exc, exc_info=True)
+            while not stop.is_set():
+                try:
+                    fresh = self._capture_step()
+                except Exception as exc:
+                    log.error("capture step failed (non-fatal): %s", exc)
+                    fresh = False
+                if not fresh:
+                    stop.wait(0.004)
+        finally:
+            with self._slot:
+                self._slot.notify_all()
+            worker.join(timeout=5.0)
+
+    def _capture_step(self) -> bool:
+        """Publish the newest camera frame as the preview and offer it to AI."""
+        frame, seq, captured_at = self.source.latest(self._last_seq)
+        now = time.monotonic()
+        if frame is None:
+            if not self.source.online and not self._offline:
+                self._offline = True
+                state.update(camera_online=False, reason="No camera signal",
+                             video_fps=0.0)
+                self._publish(_placeholder())
+            return False
+        self._offline = False
+        self._last_seq = seq
+        self._video_times.append(now)
+        with self._slot:
+            self._pending = (frame, captured_at)
+            self._slot.notify()
+        self._publish(self._draw(frame.copy(), self._overlay, now))
+        if now - self._rates_at >= 1.0:
+            self._rates_at = now
+            self._video_fps = _rate(self._video_times, now)
+            self._ai_hz = _rate(self._ai_times, now)
+            state.update(video_fps=round(self._video_fps, 1),
+                         ai_hz=round(self._ai_hz, 2), fps=round(self._ai_hz, 2),
+                         camera_online=True)
+        return True
+
+    def _inference_loop(self, stop: threading.Event) -> None:
+        """Run the neural stack on the newest frame, at most ``inference_fps``."""
+        period = self.cfg.pipeline.inference_period
+        next_at = 0.0
+        while not stop.is_set():
+            delay = next_at - time.monotonic()
+            if delay > 0:
+                stop.wait(delay)
+                continue
+            with self._slot:
+                if self._pending is None:
+                    self._slot.wait(timeout=0.5)
+                job, self._pending = self._pending, None
+            if job is None:
+                continue
+            frame, captured_at = job
+            next_at = time.monotonic() + period
+            try:
+                # Pipeline time is the capture time: evidence windows and dwell
+                # timers measure the scene, not the queue.
+                self.process(frame, now=captured_at)
+            except Exception as exc:
+                log.error("frame processing failed: %s", exc, exc_info=True)
+                continue
+            done = time.monotonic()
+            self._ai_times.append(done)
+            state.update(frame_age_ms=round((done - captured_at) * 1000, 1))
+
+    def _publish(self, frame: np.ndarray) -> None:
+        with self._preview_lock:
+            self._preview = frame
+            self._preview_seq += 1
+
+    @property
+    def preview_seq(self) -> int:
+        return self._preview_seq
+
+    def latest_jpeg(self, quality: int = 70) -> tuple[int, bytes | None]:
+        """The preview as JPEG, encoded once per frame however many viewers."""
+        with self._preview_lock:
+            seq, frame, cached = self._preview_seq, self._preview, self._jpeg
+        if cached is not None and cached[0] == seq:
+            return cached
+        if frame is None or cv2 is None:
+            return seq, None
+        ok, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
+        if not ok:
+            return seq, None
+        encoded = (seq, buffer.tobytes())
+        with self._preview_lock:
+            if self._preview_seq == seq:
+                self._jpeg = encoded
+        return encoded
 
     def replay(self, source: FrameSource, label: str | None = None,
                max_frames: int | None = None) -> list[dict[str, Any]]:
@@ -405,40 +535,53 @@ class Pipeline:
         self._frame_count = 0
 
     # ── presentation ──────────────────────────────────────────────────────────
-    def _draw(self, frame, result, level, status, features):
+    def _draw(self, frame, overlay: "Overlay | None", now: float):
+        """Composite the latest inference overlay onto a captured frame."""
         if cv2 is None or frame is None:
             return frame
         try:
             height, width = frame.shape[:2]
-            colour = LEVEL_COLOURS.get(level, (255, 255, 255))
+            # Darken the banner strip only: this runs on every captured frame,
+            # and blending a full-frame copy cost ~10 ms at 1080p.
+            top = frame[:75]
+            cv2.addWeighted(np.full_like(top, (10, 10, 20)), 0.7, top, 0.3, 0, top)
+            info_x = max(width - 250, 10)
+            rates = f"VIDEO {self._video_fps:.0f} fps  AI {self._ai_hz:.1f} Hz"
+            if overlay is None:
+                cv2.putText(frame, "SENTRIX  starting analysis", (12, 30),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200, 200, 200), 2)
+                cv2.putText(frame, rates, (info_x, 66), cv2.FONT_HERSHEY_SIMPLEX,
+                            0.45, (200, 200, 200), 1)
+                return frame
 
-            banner = frame.copy()
-            cv2.rectangle(banner, (0, 0), (width, 74), (10, 10, 20), -1)
-            cv2.addWeighted(banner, 0.7, frame, 0.3, 0, frame)
-
-            cv2.putText(frame, f"SENTRIX  TCI {result.tci:.2f}", (12, 30),
+            colour = LEVEL_COLOURS.get(overlay.level, (255, 255, 255))
+            age = now - overlay.at
+            cv2.putText(frame, f"SENTRIX  TCI {overlay.tci:.2f}", (12, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.8, colour, 2)
             cv2.putText(frame,
-                        f"L{level} {status}  [{features.behaviour_label}]",
+                        f"L{overlay.level} {overlay.status}  [{overlay.behaviour_label}]",
                         (12, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, colour, 2)
-
-            info_x = max(width - 250, 10)
             cv2.putText(frame,
-                        f"WPN {features.weapon:.2f}  FIRE {features.fire:.2f}",
+                        f"WPN {overlay.weapon:.2f}  FIRE {overlay.fire:.2f}",
                         (info_x, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.5, colour, 1)
-            if features.identity_degraded:
+            if overlay.identity_degraded:
                 auth_text, auth_colour = "ID N/A", (0, 165, 255)
-            elif features.authorized:
+            elif overlay.authorized:
                 auth_text, auth_colour = "AUTHORISED", (0, 200, 80)
             else:
                 auth_text, auth_colour = "UNKNOWN", (0, 0, 220)
             cv2.putText(frame, auth_text, (info_x, 46),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.55, auth_colour, 2)
-            cv2.putText(frame, f"{state.get().get('fps', 0):.1f} FPS",
-                        (info_x, 66), cv2.FONT_HERSHEY_SIMPLEX, 0.45,
+            if age > self.cfg.pipeline.stale_overlay_seconds:
+                # Boxes this old describe a scene that has moved on.
+                cv2.putText(frame, f"AI STALLED {age:.0f}s  VIDEO {self._video_fps:.0f} fps",
+                            (info_x, 66), cv2.FONT_HERSHEY_SIMPLEX, 0.45,
+                            (0, 165, 255), 1)
+                return frame
+            cv2.putText(frame, rates, (info_x, 66), cv2.FONT_HERSHEY_SIMPLEX, 0.45,
                         (200, 200, 200), 1)
 
-            detections = features.extras.get("detections", {})
+            detections = overlay.detections
             palette = {"persons": colour, "weapons": (0, 0, 255),
                        "fires": (0, 140, 255)}
             for group, box_colour in palette.items():
@@ -457,7 +600,9 @@ class Pipeline:
             return frame
 
     def latest_frame(self) -> np.ndarray:
-        return self._annotated if self._annotated is not None else _placeholder()
+        with self._preview_lock:
+            frame = self._preview
+        return frame if frame is not None else _placeholder()
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
     def shutdown(self) -> None:
@@ -470,6 +615,14 @@ class Pipeline:
         self.events.close()
         telemetry.close()
         log.info("pipeline stopped")
+
+
+def _rate(times: deque, now: float, window: float = 3.0) -> float:
+    """Events per second over the last ``window`` seconds."""
+    recent = [t for t in times if now - t <= window]
+    if len(recent) < 2:
+        return 0.0
+    return (len(recent) - 1) / max(recent[-1] - recent[0], 1e-6)
 
 
 _pipeline: Pipeline | None = None

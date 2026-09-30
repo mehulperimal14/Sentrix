@@ -267,13 +267,13 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done (with commit).
 
 **M2 — Real time: smooth video, honest rates (days 2–4)**
 - [x] **ORT spinning off** for every InsightFace session (`session.intra_op.allow_spinning=0`, intra-op 4 threads, `SENTRIX_FACE_ORT_THREADS`), only `detection`+`recognition` loaded, `SENTRIX_FACE_DET_SIZE`. Measured on vid07 with 4 faces: person detector after identity 315 → 67 ms, identity + detector 912 → 387 ms (the diagnosis measured the full live tick 3086 → 243 ms).
-- [ ] Decouple **capture / inference / preview**: inference on its own thread with a single-slot latest-frame handoff; `PreviewBroadcaster` composites the latest overlay on every captured frame, encodes once, wakes clients event-driven; `replay()`/harness stay synchronous.
-- [ ] `CaptureSource`: no sleep after a blocking device read; frame seq + timestamp; request 640×480@30.
+- [x] Decouple **capture / inference / preview** (`Pipeline.run_live`): inference on its own thread with a single-slot newest-frame handoff (frames it cannot keep up with are dropped, never queued); every captured frame is composited with the latest overlay, JPEG-encoded once per frame for all viewers, streamed by sequence number; pipeline time = capture time; `replay()`/harness stay synchronous. `tests/test_live.py` drives it with a fake camera and a slow `process`.
+- [x] `CaptureSource`: no sleep after a blocking device read; frame seq + timestamp (`FrameSource.latest`); requests 640×480@30; a file used as the camera is paced at the capture rate.
 - [ ] CPU budget: log torch/ORT threads at startup (ultralytics forces torch to 8 — `set_num_threads` is not a lever); scene model every 2nd tick on CPU; weapon/fire heads only when a scene vote is near threshold or every 3rd tick.
 - [ ] Use the GPU when present: CUDA torch in the app env (needs a cp314 wheel or a 3.11/3.12 app env — decide), fp16 DINOv2 (6 ms), explicit device in config and `/api/health`.
-- [ ] `tools/bench_live.py`: live configuration (real identity, synthetic audio, fake camera thread, side effects stubbed) → per-stage p50/p95, ticks/s, preview fps, frame age. Replaces the harness latency numbers in the docs.
+- [x] `tools/bench_live.py`: live configuration (real identity and gallery, a video file as a 30 fps camera thread, no audio, side effects stubbed, event log to a temp dir) → preview fps, AI Hz, tick and frame-age p50/p95, per-stage p50/p95. After the decoupling, vid07 (4 faces): **preview 29.7 fps, AI 3.56 Hz**, tick p50 292 / p95 368 ms, frame age p50 313 ms; identity 125 ms, scene 94 ms, YOLO person/weapon/fire 25/23/22 ms.
 - [ ] Identity off the hot path: `allowed_modules=['detection','recognition']`, head-crop at det_size 320, per-track cache (new tracks / every 1 s unknown / every 10 s authorised), worker thread.
-- [ ] HUD/state report **VIDEO fps · AI Hz · latency** separately; stale boxes hidden after 3 s; fix navbar health keys.
+- [x] HUD/state report **VIDEO fps · AI Hz · latency · frame age** separately (`video_fps`, `ai_hz`, `frame_age_ms` in state and `/api/health`); boxes older than 3 s are not drawn ("AI STALLED"); navbar dots read real keys (camera, mic, AI engine — the "cloud" dot and card were always-on placeholders).
 - [ ] **Acceptance**: preview ≥ 25 distinct fps; AI ≥ 3 Hz with 2 people on the idle laptop CPU; identity ≤ 5 ms p95 on the pipeline thread.
 
 **M3 — Coherent state and trustworthy records (days 4–6)**

@@ -25,20 +25,27 @@ JPEG_QUALITY = 70
 
 
 async def _frames():
+    """Yield each new preview frame once.
+
+    The pipeline encodes a preview once however many viewers there are; this
+    only polls its sequence number, so an unchanged frame is never re-sent and
+    a new one goes out within half a capture period.
+    """
     pipeline = get_pipeline()
-    interval = 1.0 / max(settings.pipeline.capture_fps, 1.0)
+    poll = 0.5 / max(settings.pipeline.capture_fps, 1.0)
+    sent = None
     while True:
         try:
-            frame = pipeline.latest_frame()
-            if cv2 is not None and frame is not None and frame.size:
-                ok, buffer = cv2.imencode(".jpg", frame,
-                                          [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
-                if ok:
+            if pipeline.preview_seq != sent:
+                seq, data = await asyncio.to_thread(pipeline.latest_jpeg, JPEG_QUALITY)
+                if data is not None and seq != sent:
+                    sent = seq
                     yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n"
-                           + buffer.tobytes() + b"\r\n")
+                           + data + b"\r\n")
+                    continue
         except Exception as exc:
             log.debug("stream encode failed: %s", exc)
-        await asyncio.sleep(interval)
+        await asyncio.sleep(poll)
 
 
 @router.get("/video")

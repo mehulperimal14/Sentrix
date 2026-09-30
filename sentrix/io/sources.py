@@ -52,6 +52,25 @@ class FrameSource(ABC):
     def read(self) -> tuple[bool, np.ndarray | None]:
         """Return ``(ok, frame)``. ``ok=False`` means no frame is available."""
 
+    def latest(self, after_seq: int = -1) -> tuple[np.ndarray | None, int, float]:
+        """The newest frame as ``(frame, seq, captured_at)`` for the live loop.
+
+        ``frame`` is None when there is nothing newer than ``after_seq``.
+        ``captured_at`` is ``time.monotonic()`` at capture. This default paces
+        a pull-based source (a video file used as a camera) at the capture
+        rate; :class:`CaptureSource` overrides it with its reader thread's frame.
+        """
+        now = time.monotonic()
+        seq = getattr(self, "_live_seq", 0)
+        if now < getattr(self, "_live_next", 0.0):
+            return None, seq, getattr(self, "_live_at", 0.0)
+        ok, frame = self.read()
+        if not ok or frame is None:
+            return None, seq, getattr(self, "_live_at", 0.0)
+        self._live_seq, self._live_at = seq + 1, now
+        self._live_next = now + settings.pipeline.capture_period
+        return frame, self._live_seq, now
+
     @property
     def online(self) -> bool:
         return True
@@ -79,6 +98,8 @@ class CaptureSource(FrameSource):
         self._reconnect = reconnect_seconds
         self._cap = None
         self._frame: np.ndarray | None = None
+        self._seq = 0
+        self._stamp = 0.0
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._online = False
@@ -107,6 +128,11 @@ class CaptureSource(FrameSource):
                 return False
             try:
                 cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                if isinstance(self.source, int):
+                    cfg = settings.pipeline
+                    cap.set(cv2.CAP_PROP_FRAME_WIDTH, cfg.capture_width)
+                    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, cfg.capture_height)
+                    cap.set(cv2.CAP_PROP_FPS, cfg.capture_fps)
             except Exception:
                 pass
             self._cap = cap
@@ -117,8 +143,13 @@ class CaptureSource(FrameSource):
             return False
 
     def _loop(self) -> None:
-        period = settings.pipeline.capture_period
+        # read() blocks until the device delivers the next frame, so the loop
+        # runs at the camera's own rate. It used to sleep a full capture period
+        # after each read as well, which halved the rate and aged every frame.
+        # The floor only guards a backend that returns instantly.
+        floor = 1.0 / 120.0
         while not self._stop.is_set():
+            began = time.monotonic()
             if self._cap is None or not self._cap.isOpened():
                 self._online = self._open()
                 if not self._online:
@@ -136,14 +167,24 @@ class CaptureSource(FrameSource):
                 continue
             with self._lock:
                 self._frame = frame
+                self._seq += 1
+                self._stamp = time.monotonic()
                 self._online = True
-            time.sleep(period)
+            spare = floor - (time.monotonic() - began)
+            if spare > 0:
+                time.sleep(spare)
 
     def read(self) -> tuple[bool, np.ndarray | None]:
         with self._lock:
             if self._frame is None:
                 return False, None
             return True, self._frame.copy()
+
+    def latest(self, after_seq: int = -1) -> tuple[np.ndarray | None, int, float]:
+        with self._lock:
+            if self._frame is None or self._seq == after_seq:
+                return None, self._seq, self._stamp
+            return self._frame.copy(), self._seq, self._stamp
 
     @property
     def online(self) -> bool:

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import threading
-import time
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
@@ -26,24 +25,18 @@ _thread: threading.Thread | None = None
 
 
 def _loop() -> None:
-    """Live capture loop.
+    """Live loop: capture and preview on this thread, inference on its own.
 
-    Sleeps on the *capture* period; ``Pipeline.tick`` internally rate-limits
-    inference to ``inference_fps``. Separating the two keeps the MJPEG preview
-    smooth without running the neural stack at 30 Hz.
+    ``Pipeline.run_live`` publishes every camera frame (with the latest
+    overlay) to the preview and hands the newest one to the inference thread,
+    which runs at most ``inference_fps``. The video never waits for the AI.
     """
-    from sentrix.config import settings
     from sentrix.pipeline.engine import get_pipeline
 
-    pipeline = get_pipeline()
-    period = settings.pipeline.capture_period
-    while not _stop.is_set():
-        started = time.perf_counter()
-        try:
-            pipeline.tick()
-        except Exception as exc:
-            log.error("loop error (non-fatal): %s", exc)
-        time.sleep(max(0.0, period - (time.perf_counter() - started)))
+    try:
+        get_pipeline().run_live(_stop)
+    except Exception as exc:
+        log.error("live loop stopped: %s", exc, exc_info=True)
     log.info("processing loop exited")
 
 

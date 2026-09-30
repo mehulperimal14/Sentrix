@@ -231,9 +231,13 @@ async def api_metrics() -> JSONResponse:
 @router.get("/api/health", dependencies=[Depends(require_auth)])
 async def api_health() -> JSONResponse:
     pipeline = get_pipeline()
+    live = state.get()
     return JSONResponse({
         "camera": pipeline.source.online,
         "camera_source": pipeline.source.name,
+        "video_fps": live.get("video_fps", 0.0),
+        "ai_hz": live.get("ai_hz", 0.0),
+        "frame_age_ms": live.get("frame_age_ms"),
         "detector": pipeline.detector.available,
         "scene_model": pipeline.scene.weights_name,
         "scene_thresholds": pipeline.scene.thresholds if pipeline.scene.available else None,

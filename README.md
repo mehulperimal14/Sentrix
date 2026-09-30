@@ -6,7 +6,7 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.4-EE4C2C.svg)](https://pytorch.org/)
 [![YOLOv8](https://img.shields.io/badge/YOLOv8-ultralytics-00BFA5.svg)](https://docs.ultralytics.com/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688.svg)](https://fastapi.tiangolo.com/)
-[![Tests](https://img.shields.io/badge/tests-151%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-158%20passing-brightgreen.svg)](tests/)
 
 > **Capstone Project CPG-299** · Computer Science and Engineering, Thapar Institute of
 > Engineering and Technology, Patiala · Mentor: Dr. Ashutosh Mishra
@@ -146,7 +146,7 @@ Sentrix/
 │   └── runs/                   all run outputs (v1_legacy, v2_real, v3_real, ucf_crime_dvs)
 ├── tools/                      doctor, replay, baseline, evaluate, auditors,
 │                               custom-dataset evaluation
-├── tests/                      151 regression tests
+├── tests/                      158 regression tests
 ├── docs/                       specifications
 ├── Capstone Docs/              submissions
 └── var/                        runtime output — gitignored, never web-served
@@ -172,7 +172,7 @@ changed the system's behaviour.
 | Violence hop | **1.0 s** (50% overlap) | An action straddling a boundary is still caught whole by the neighbouring window |
 | Audio window | **4.0 s** | Fixed by `PRODUCTION_PREPROCESSING_CONTRACT.json`. Long enough to identify tonal events (siren, alarm) |
 | Audio hop | **1.0 s** (75% overlap) | Short enough that an impulsive event (gunshot, glass break) lands fully inside at least one window |
-| Inference rate | **6 Hz** | Human actions play out over hundreds of ms. 30 Hz of YOLO buys nothing and starves the edge device |
+| Inference rate | **6 Hz** cap | Human actions play out over hundreds of ms. 30 Hz of YOLO buys nothing and starves the edge device. Inference runs on its own thread and always takes the newest frame; the preview runs at the camera's rate whatever the AI rate |
 
 ### Temporal thresholds
 
@@ -399,9 +399,13 @@ model (validation, cross-validation, false alarms) and is the recommended
 configuration. Its blind spot is the stick swung in the test corridor, which
 the fine-tuned branch catches: 39 training frames of a stick *carried* did not
 teach a stick *swung*. Assault is not detected by either branch — it appears in
-two videos in two different rooms, which no model generalises across. On CPU the
-DINOv2 scene model (about 105 ms per frame) holds the live loop to about 4.7 Hz
-instead of 6; with CUDA it runs on the GPU automatically. Protocol,
+two videos in two different rooms, which no model generalises across. The latency
+row comes from the evaluation harness, which stubs identity and audio. The live
+configuration (`python tools/bench_live.py`: real face recognition, a 30 fps video
+as the camera, side effects stubbed) measured on the laptop CPU with four faces in
+view: preview **29.7 fps**, AI **3.6 Hz**, tick p50 292 ms, frame age p50 313 ms
+(identity 125 ms, DINOv2 scene 94 ms, three YOLO heads 71 ms). The first live test
+ran at 0.32 Hz with the video frozen at that rate (CLAUDE.md §5, M2). Protocol,
 model selection and the full breakdown are in
 [`docs/6_CUSTOM_DATASET_EVALUATION.md`](docs/6_CUSTOM_DATASET_EVALUATION.md).
 

@@ -58,7 +58,12 @@ class PipelineConfig:
     """
 
     capture_fps: float = _env_float("SENTRIX_CAPTURE_FPS", 30.0)
+    #: Requested webcam mode; the driver may pick the nearest it supports.
+    capture_width: int = _env_int("SENTRIX_CAPTURE_WIDTH", 640)
+    capture_height: int = _env_int("SENTRIX_CAPTURE_HEIGHT", 480)
     inference_fps: float = _env_float("SENTRIX_INFERENCE_FPS", 6.0)
+    #: Detection boxes older than this are not drawn on the preview.
+    stale_overlay_seconds: float = 3.0
 
     #: Hard ceiling on one pipeline pass. Exceeding it is logged, not fatal.
     frame_budget_seconds: float = 0.20
