@@ -106,7 +106,7 @@ out of sample for the baseline.
 | baseline | test | 250 | 0.052 | 0.157 | 1.000 | 0.976 | 3/3 | 20.39 |
 | baseline | train | 1356 | 0.528 | 0.248 | 0.755 | 0.398 | 10/13 | 13.34 |
 
-Pipeline latency during replay: mean 96.8 ms, p95 185.9 ms per tick (CPU).
+Pipeline latency: mean 120.6 ms, p95 205.3 ms per tick on CPU (test video replayed alone, 294 ticks). The p95 comes from the violence model re-scoring a 16-frame window once a second.
 
 ### What goes wrong, per model
 
