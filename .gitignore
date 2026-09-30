@@ -52,3 +52,7 @@ desktop.ini
 .vscode/
 .idea/
 *.swp
+
+# per-run weight dumps of custom-dataset detector training; the promoted
+# copy lives in models/
+training/runs/custom/detector/*/weights/
