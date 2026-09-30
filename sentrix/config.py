@@ -166,28 +166,92 @@ class WindowConfig:
 # ──────────────────────────────────────────────────────────────────────────────
 @dataclass(frozen=True)
 class SceneConfig:
-    """The five-class scene classifier and how its output meets the detectors.
+    """The five-class scene classifier.
 
-    ``window_seconds`` averages class probabilities over the last few ticks
-    (three at 6 Hz). One ambiguous frame then cannot flip the incident type,
-    and a weapon brandished for a second is still caught; the TCI's EMA and
-    hysteresis apply on top.
-
-    ``fusion`` decides how the classifier's weapon and fire scores combine with
-    the YOLO detectors': ``max`` takes the stronger of the two, ``scene`` lets
-    the classifier alone drive them (boxes are still drawn), ``detector``
-    ignores the classifier for weapon and fire. Assault and robbery always come
-    from the classifier — no detector produces them. The default was chosen on
-    the validation videos; see ``docs/6_CUSTOM_DATASET_EVALUATION.md``.
+    ``window_ticks`` averages class probabilities over the last few
+    *observations*, not seconds: at 0.5-2 Hz on a loaded CPU a 0.5 s window held
+    a single frame, so every frame decided alone (CLAUDE.md §5). Temporal
+    confirmation proper lives in :class:`ThreatConfig` (k of n ticks).
     """
 
     enabled: bool = _env_bool("SENTRIX_SCENE_ENABLED", True)
-    window_seconds: float = _env_float("SENTRIX_SCENE_WINDOW", 0.5)
-    #: ``scene`` for the v4_custom models: ``max`` and ``scene`` tied exactly on
-    #: the validation images and videos, and the custom-only YOLO heads validate
-    #: weakly on their own (frame AUROC 0.65 weapon, 0.62 fire), so they draw
-    #: boxes but do not drive the alarm.
-    fusion: str = os.getenv("SENTRIX_SCENE_FUSION", "scene").strip().lower() or "scene"
+    window_ticks: int = _env_int("SENTRIX_SCENE_WINDOW_TICKS", 1)
+    #: Observations older than this are dropped from the window.
+    max_age_seconds: float = 3.0
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Threat evidence — confirmation and escalation caps (CLAUDE.md M1, D1-D3)
+# ──────────────────────────────────────────────────────────────────────────────
+@dataclass(frozen=True)
+class ThreatConfig:
+    """How per-class evidence is confirmed and how far each source may escalate.
+
+    The first live run showed every false alarm came from one tick of the scene
+    classifier barely over its threshold, in a room it had never seen. The rules
+    here make that impossible without making real threats undetectable:
+
+    * **Confirmation in observations.** A source only counts for a class once it
+      crossed that class's threshold on ``confirm_k`` of the last ``confirm_n``
+      ticks, with no gap longer than ``confirm_max_gap_seconds``.
+    * **A weapon needs a person.** Weapon votes only count if a person was seen
+      in the last ``person_memory_seconds`` (65 % of the live false weapon
+      alarms had nobody in frame).
+    * **One source is capped below L4.** A single confirmed source lands in the
+      L3 band (``confirmed_floor``..``single_source_cap``): snapshot and evidence,
+      never SMS or siren. The scene classifier and a detector box together can
+      reach L4, and at full strength L5.
+    * **Experimental classes never escalate past L2** (assault, robbery — they
+      exist in 1-3 clips and cannot be validated; D1).
+    * **Presence is context, not threat** (D2). In home mode an unknown person
+      is logged only; in armed mode a person not recognised for
+      ``intrusion_dwell_seconds`` opens an intrusion at ``intrusion_level`` (L3).
+
+    Scene thresholds are the checkpoint's, raised to at least
+    ``scene_threshold_floor`` (the checkpoint's were tuned for macro-F1 at 41 %
+    threat prevalence), unless a deployment calibration file sets them
+    (``var/calibration/scene.json`` or ``SENTRIX_SCENE_THRESHOLDS`` as JSON).
+    """
+
+    confirm_k: int = _env_int("SENTRIX_CONFIRM_K", 2)
+    confirm_n: int = _env_int("SENTRIX_CONFIRM_N", 3)
+    confirm_max_gap_seconds: float = 3.0
+    person_memory_seconds: float = 2.0
+
+    scene_threshold_floor: dict = field(default_factory=lambda: {
+        "weapon": 0.50, "fire": 0.45, "assault": 0.60, "robbery": 0.60,
+    })
+
+    #: TCI-scale evidence for one confirmed source: floor at its threshold,
+    #: cap at certainty. Both below the L4 band (0.65).
+    confirmed_floor: float = 0.45
+    single_source_cap: float = 0.62
+    #: Unconfirmed evidence stays under the L2 band (0.20): shown, never acted on.
+    unconfirmed_ceiling: float = 0.19
+    #: Experimental classes stop in the L2 band.
+    experimental_cap: float = 0.35
+    #: A classifier and a detector both confirmed: floor in the L4 band, cap in
+    #: L5. The weaker side sets the value, so L5 (0.85) needs both about 60 % of
+    #: the way from threshold to certainty (e.g. scene fire 0.78, box 0.80).
+    #: Noisy-OR of the single-source scores needed both at ~0.98, so no class
+    #: could ever reach the siren with the current models.
+    corroborated_floor: float = 0.70
+    corroborated_cap: float = 0.95
+
+    experimental_classes: tuple = ("assault", "robbery")
+    #: Which sources vote: ``both`` (default), ``scene`` or ``detector``.
+    sources: str = os.getenv("SENTRIX_THREAT_SOURCES", "both").strip().lower() or "both"
+    #: Detector labels that count as fire. Smoke is dropped from the alarm path
+    #: (D1): public-data smoke heads read a backlit webcam as smoke.
+    detector_fire_labels: tuple = ("fire",)
+    #: Detector labels that count as a weapon. The custom head's ``stick`` class
+    #: (test mAP50 0.003) is experimental (D1): drawn and logged, never a vote.
+    detector_weapon_labels: tuple = ("pistol", "knife", "long_gun", "handgun",
+                                     "gun", "rifle")
+
+    armed: bool = _env_bool("SENTRIX_ARMED", False)
+    intrusion_dwell_seconds: float = 3.0
+    intrusion_level: float = 0.45
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -278,48 +342,21 @@ class ReIDConfig:
 class FusionConfig:
     """TCI computation.
 
-    ``ema_tau_seconds`` replaces the old per-frame ``alpha``. The relationship
-    is ``alpha = 1 - exp(-dt / tau)``, recomputed from the true elapsed time on
-    every tick, so smoothing is identical whether inference runs at 3 Hz or
-    30 Hz. The old fixed ``alpha = 0.30`` at 5 Hz corresponded to tau = 0.56 s.
+    The TCI is the strongest per-class threat evidence (:mod:`sentrix.fusion.
+    evidence`), a transparent rule a reader can reproduce from any event row.
+    The previous XGBoost booster was fitted to a synthetic formula in which
+    ``identity`` meant familiarity while the runtime feeds unfamiliarity: it
+    scored an authorised resident about 5x higher than a stranger, and on
+    labelled replay it ranked threats worse than its own inputs (CLAUDE.md §5,
+    D6). A fitted, calibrated model returns only once real session logs exist
+    (M8).
 
-    ``calibrate_inputs`` defaults to False. The shipped booster was fitted on
-    raw modality scores in [0, 1]; the serving path additionally squashed them
-    through a sigmoid with hardcoded constants, compressing the input range to
-    [0.378, 0.731]. The model therefore never saw an input resembling its
-    training distribution, and an empty room scored 0.425 instead of 0.012.
-    Feeding raw scores restores the contract the model was actually trained on.
+    There is no smoothing. The evidence is already confirmed over several
+    observations, so the TCI that is displayed, logged, texted and recorded on
+    the incident is the value the level policy decides on. A display EMA made
+    the gauge lag the committed level by more than a second at every onset
+    ("TCI 0.37, L3"), which is what the first live test reported as a laggy TCI.
     """
-
-    model_filename: str = "tci_xgboost.json"
-    calibrate_inputs: bool = _env_bool("SENTRIX_CALIBRATE_INPUTS", False)
-    ema_tau_seconds: float = _env_float("SENTRIX_EMA_TAU", 1.2)
-
-    #: Additive contextual boosters, applied after the model.
-    unknown_person_boost: float = 0.15
-    suspicious_behaviour_boost: float = 0.12
-
-    #: Hard overrides. These bypass fusion entirely, so they must be high.
-    fire_override: float = 0.70
-    weapon_override_critical: float = 0.70
-    weapon_override_high: float = 0.55
-    intrusion_override: float = 0.80
-
-    #: TCI forced when an enrolled resident is recognised and unarmed.
-    authorised_floor: float = 0.10
-
-    #: Weights for the transparent linear fallback used when no booster loads.
-    #: Deliberately published rather than hidden: a reader can reproduce the
-    #: fallback TCI by hand from the score vector in any evidence sidecar.
-    fallback_weights: dict = field(default_factory=lambda: {
-        "weapon": 0.28,
-        "fire": 0.22,
-        "behaviour": 0.16,
-        "vision": 0.10,
-        "audio": 0.10,
-        "identity": 0.08,
-        "motion": 0.06,
-    })
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -333,18 +370,24 @@ class PolicyConfig:
     *derived* from a cost matrix on held-out data rather than asserted; see
     ``notebooks/03_tci_thresholds.ipynb``, which does exactly that.
 
-    Hysteresis is deliberately asymmetric: escalate after a short confirmation
-    (0.6 s) so response stays fast, de-escalate only after a long quiet period
-    (5 s) so an intruder stepping behind a pillar does not clear the alarm.
-    This is standard alarm-system practice and it is what actually suppresses
-    single-frame false positives — EMA smoothing alone cannot, because one large
-    spike still drags the average across a threshold.
+    Hysteresis is deliberately asymmetric: escalate quickly, de-escalate only
+    after a long quiet period (5 s) so an intruder stepping behind a pillar does
+    not clear the alarm.
+
+    Escalation dwell is per threshold (L2, L3, L4, L5). The TCI only leaves the
+    L1 band on evidence the evidence layer has already confirmed over several
+    observations, so L2 and L3 (dashboard, snapshot, evidence) trust it at once
+    — counting persistence twice made L3 take 4 s at 0.5 Hz. L4 and L5 (SMS,
+    dispatch, siren) keep 0.6 s and two observations as a second, independent
+    guard.
     """
 
     thresholds: tuple = (0.20, 0.40, 0.65, 0.85)
 
-    escalate_dwell_seconds: float = 0.6
+    escalate_dwell_seconds: tuple = (0.0, 0.0, 0.6, 0.6)
     deescalate_dwell_seconds: float = 5.0
+    #: Observations at or above each threshold before it commits.
+    min_escalate_observations: tuple = (1, 1, 2, 2)
 
     names: dict = field(default_factory=lambda: {
         1: "SECURE", 2: "SUSPICIOUS", 3: "ELEVATED", 4: "HIGH", 5: "CRITICAL",
@@ -392,6 +435,8 @@ class EvidenceConfig:
     jpeg_quality: int = 90
     #: Minimum level that produces an encrypted bundle.
     min_level: int = 3
+    #: Minimum level that saves a plaintext incident snapshot (D4).
+    snapshot_min_level: int = 3
     #: Write a signed manifest covering every bundle in the session. Per-file
     #: hashes in an unsigned sidecar prove nothing on their own: an attacker who
     #: can rewrite the evidence can rewrite the hash next to it.
@@ -427,6 +472,7 @@ class Config:
     detection: DetectionConfig = field(default_factory=DetectionConfig)
     windows: WindowConfig = field(default_factory=WindowConfig)
     scene: SceneConfig = field(default_factory=SceneConfig)
+    threat: ThreatConfig = field(default_factory=ThreatConfig)
     behaviour: BehaviourConfig = field(default_factory=BehaviourConfig)
     identity: IdentityConfig = field(default_factory=IdentityConfig)
     reid: ReIDConfig = field(default_factory=ReIDConfig)

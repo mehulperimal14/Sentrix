@@ -130,6 +130,9 @@ class IncidentManager:
                 id=str(uuid.uuid4()), started_at=now, started_wall=time.time(),
                 level=level, peak_level=level, peak_tci=tci,
                 incident_type=incident_type, last_active=now,
+                # The opening tick may be the peak: record why, or the reason
+                # of an incident that only declines from here stays empty.
+                peak_features=dict(features or {}), peak_reason=reason,
             )
             log.info("incident %s opened (level %d, %s)",
                      self._current.short_id, level, incident_type)

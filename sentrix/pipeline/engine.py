@@ -11,11 +11,13 @@ Per-frame order:
 2. detect (people, weapons, fire) in one YOLOv8 component
 3. scene classification (normal/fire/weapon/assault/robbery), or - when no
    scene model is installed - the windowed RWF-2000 violence score
-4. behaviour kinematics from tracked people
-5. identity check (fail-closed)
-6. audio (read from the capture thread, never blocking)
-7. assemble the versioned feature vector
-8. TCI, then hysteretic level commit
+4. identity check (fail-closed)
+5. per-class threat evidence: every source's votes, k-of-n confirmation, the
+   person gate and corroboration caps (fusion/evidence.py, CLAUDE.md M1)
+6. behaviour kinematics from tracked people
+7. audio (read from the capture thread, never blocking)
+8. assemble the feature vector; TCI, then hysteretic level commit on the raw
+   (already confirmed) evidence
 9. incident update, then incident-scoped side effects
 10. publish state, append the event log, draw the HUD
 
@@ -39,6 +41,7 @@ from sentrix.alerting.dispatch import dispatch_service
 from sentrix.alerting.notifier import notifier
 from sentrix.config import settings
 from sentrix.evidence.vault import vault
+from sentrix.fusion.evidence import CLASS_ORDER, EvidenceAccumulator
 from sentrix.fusion.features import FeatureVector
 from sentrix.fusion.policy import LevelPolicy
 from sentrix.fusion.tci import TCIEngine, TCIResult
@@ -50,7 +53,7 @@ from sentrix.perception.detector import Detector
 from sentrix.perception.identity import IdentityEngine
 from sentrix.perception.motion import MotionEngine
 from sentrix.perception.reid import ReIDEngine
-from sentrix.perception.scene import SceneEngine, SceneResult
+from sentrix.perception.scene import SceneEngine
 from sentrix.perception.violence import ViolenceEngine
 from sentrix.pipeline.escalation import plan_for
 from sentrix.pipeline.events import EventLog
@@ -94,6 +97,8 @@ class Pipeline:
         self.identity = IdentityEngine()
         self.reid = ReIDEngine()
         self.audio = AudioEngine() if enable_audio else None
+        self.evidence = EvidenceAccumulator()
+        self._last_person_at: float | None = None
         self.tci = TCIEngine()
         self.policy = LevelPolicy()
         self.incidents = IncidentManager()
@@ -140,38 +145,56 @@ class Pipeline:
             log.warning("task queue full — dropping %s", getattr(func, "__name__", func))
 
     # ── perception ────────────────────────────────────────────────────────────
-    def _fuse(self, detections, scene: SceneResult | None) -> tuple[float, float]:
-        """Weapon and fire scores from the detectors and the scene classifier."""
-        weapon, fire = detections.weapon_score, detections.fire_score
-        if scene is None:
-            return weapon, fire
-        mode = self.cfg.scene.fusion
-        if mode == "scene":
-            return scene.signals["weapon"], scene.signals["fire"]
-        if mode == "detector":
-            return weapon, fire
-        return max(weapon, scene.signals["weapon"]), max(fire, scene.signals["fire"])
+    def _sources(self, detections, scene, violence) -> dict:
+        """This tick's votes: {source: {class: (value, threshold, fresh)}}."""
+        threat = self.cfg.threat
+        sources: dict[str, dict[str, tuple]] = {}
+        if scene is not None:
+            sources["scene"] = {c: (scene.probs.get(c, 0.0), scene.thresholds.get(c, 1.0),
+                                    scene.fresh)
+                                for c in CLASS_ORDER if c in scene.probs}
+        if violence is not None:
+            sources["violence"] = {"assault": violence}
+        fire_conf = max((d.confidence for d in detections.fires
+                         if d.label in threat.detector_fire_labels), default=0.0)
+        weapon_conf = max((d.confidence for d in detections.weapons
+                           if d.label in threat.detector_weapon_labels), default=0.0)
+        sources["detector"] = {
+            "weapon": (weapon_conf, self.cfg.detection.weapon_conf, True),
+            "fire": (fire_conf, self.cfg.detection.fire_conf, True),
+        }
+        return sources
 
     def _observe(self, frame: np.ndarray, now: float) -> FeatureVector:
         detections = self.detector.detect(frame)
+        person_present = bool(detections.persons)
+        if person_present:
+            self._last_person_at = now
+        person_recent: bool | None = (
+            self._last_person_at is not None and
+            now - self._last_person_at <= self.cfg.threat.person_memory_seconds)
+        if not detections.person_ok:
+            person_recent = None        # unknown: the weapon gate cannot apply
 
         scene = self.scene.observe(frame, now) if self.scene.available else None
+        violence = None
         if self.violence is not None:
             self.violence.observe(frame, now)
-            violence_score, violence_label = self.violence.result(now)
-        elif scene is not None:
-            violence_score, violence_label = scene.violence
-        else:
-            violence_score, violence_label = 0.0, "normal"
-
-        behaviour_score, behaviour_label = self.behaviour.classify(
-            detections.persons, frame.shape, (violence_score, violence_label), now,
-            robbery=scene.robbery if scene is not None else None)
-        weapon_score, fire_score = self._fuse(detections, scene)
+            violence_score, _ = self.violence.result(now)
+            violence = (violence_score, self.violence.threshold, self.violence.fresh)
 
         identity = self.identity.check(frame, now)
-        person_present = bool(detections.persons)
         identity_score = self.identity.score(identity, person_present)
+
+        # Identity never relaxes threat evidence (evidence.py); it only feeds
+        # the armed-mode intrusion rule and the dashboard.
+        sources = self._sources(detections, scene, violence)
+        evidence = self.evidence.update(now, sources, person_recent=person_recent)
+        assault, robbery = evidence["assault"], evidence["robbery"]
+        behaviour_score, behaviour_label = self.behaviour.classify(
+            detections.persons, frame.shape,
+            (assault.score, "fighting" if assault.confirmed else "normal"), now,
+            robbery=(robbery.score, "robbery" if robbery.confirmed else "normal"))
 
         if self.audio is not None:
             audio = self.audio.result()
@@ -192,8 +215,8 @@ class Pipeline:
             motion=self.motion.score(frame),
             behaviour=behaviour_score,
             identity=identity_score,
-            weapon=weapon_score,
-            fire=fire_score,
+            weapon=evidence["weapon"].score,
+            fire=evidence["fire"].score,
             is_night=1.0 if self.motion.is_night(frame) else 0.0,
             authorized=identity.authorized,
             person_present=person_present,
@@ -203,8 +226,13 @@ class Pipeline:
             identity_degraded=identity.degraded,
             extras={"detections": detections.to_dict(),
                     "identity_name": identity.name,
-                    "violence_score": round(violence_score, 4),
-                    "scene": scene.to_dict() if scene is not None else None},
+                    "violence_score": round(violence[0], 4) if violence else None,
+                    "scene": scene.to_dict() if scene is not None else None,
+                    "evidence": {c: e.to_dict() for c, e in evidence.items()},
+                    "sources": sources,
+                    "person_recent": person_recent,
+                    "faces": identity.faces,
+                    "faces_matched": identity.matched},
         )
 
     # ── side effects ──────────────────────────────────────────────────────────
@@ -274,7 +302,9 @@ class Pipeline:
         clean = frame
         features = self._observe(clean, now)
         result = self.tci.compute(features, now)
-        level_state = self.policy.update(result.tci, now)
+        # The policy reads the raw evidence: it is already confirmed over
+        # several ticks, so smoothing it again would only delay the alarm.
+        level_state = self.policy.update(result.raw_tci, now)
         level, status = level_state.level, level_state.status
 
         incident, closed = self.incidents.update(
@@ -364,6 +394,8 @@ class Pipeline:
         self.policy.reset()
         self.motion.reset()
         self.scene.reset()
+        self.evidence.reset()
+        self._last_person_at = None
         if self.violence is not None:
             self.violence.reset()
         self.behaviour.reset()

@@ -6,7 +6,7 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.4-EE4C2C.svg)](https://pytorch.org/)
 [![YOLOv8](https://img.shields.io/badge/YOLOv8-ultralytics-00BFA5.svg)](https://docs.ultralytics.com/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688.svg)](https://fastapi.tiangolo.com/)
-[![Tests](https://img.shields.io/badge/tests-89%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-149%20passing-brightgreen.svg)](tests/)
 
 > **Capstone Project CPG-299** · Computer Science and Engineering, Thapar Institute of
 > Engineering and Technology, Patiala · Mentor: Dr. Ashutosh Mishra
@@ -29,7 +29,7 @@ adding an ESP32 node or a GPIO relay later is a configuration change, not a rewr
 | Subsystem | State | Notes |
 |---|---|---|
 | Person / weapon / fire detection | **Working** | One YOLO component, three heads, ByteTrack; weapon and fire heads are YOLO11n trained on the custom dataset and draw boxes, but by default do not drive the alarm (see *Custom dataset evaluation*) |
-| TCI fusion + escalation | **Working** | Hysteresis, incident grouping, time-based smoothing |
+| TCI fusion + escalation | **Working** | Confirmed per-class evidence, hysteresis, incident grouping |
 | Encrypted evidence vault | **Working** | AES-256-GCM, HMAC hash-chained manifest |
 | Scene classification | **Working** | normal / fire / weapon / assault / robbery; DINOv2 ViT-B/14 trained on the custom dataset (`models/v4_custom/`) |
 | Violence classification | **Superseded** | The RWF-2000 model calls the test corridor a fight; replaced by the scene classifier's assault head whenever a scene model is installed |
@@ -146,7 +146,7 @@ Sentrix/
 │   └── runs/                   all run outputs (v1_legacy, v2_real, v3_real, ucf_crime_dvs)
 ├── tools/                      doctor, replay, baseline, evaluate, auditors,
 │                               custom-dataset evaluation
-├── tests/                      89 regression tests
+├── tests/                      149 regression tests
 ├── docs/                       specifications
 ├── Capstone Docs/              submissions
 └── var/                        runtime output — gitignored, never web-served
@@ -178,8 +178,8 @@ changed the system's behaviour.
 
 | Parameter | Value | Rationale |
 |---|---|---|
-| EMA time constant `τ` | **1.2 s** | `α = 1 − exp(−Δt/τ)`, recomputed from real elapsed time. The old fixed `α = 0.30` at ~5 Hz was `τ = 0.56 s` |
-| Escalate dwell | **0.6 s** | Response latency is a product requirement — confirm fast |
+| Evidence confirmation | **2 of 3** fresh evaluations | Rejects single-frame spikes before they reach the TCI; no display EMA (it made the gauge lag the level) |
+| Escalate dwell | **0 s** L2/L3, **0.6 s + 2 obs** L4/L5 | Evidence is already confirmed; the costly levels keep a second guard |
 | De-escalate dwell | **5.0 s** | Asymmetric on purpose: an intruder stepping behind a pillar must not clear the alarm |
 | Loiter dwell | **30 s** | Video-analytics convention is 30–60 s stationary in a zone |
 | Incident close | **20 s** quiet | Groups a contiguous episode into one incident |
@@ -187,25 +187,59 @@ changed the system's behaviour.
 | Evidence pre/post roll | **8 s / 15 s** | VMS convention (5–10 s before, 10–30 s after) |
 | SMS cooldown | **300 s** | Plus once-per-incident claiming |
 
-**Hysteresis is what actually suppresses false alarms, not smoothing.** A single
-large spike still drags an EMA across a threshold; it only takes slightly longer.
-Requiring the candidate level to persist for a dwell period rejects it outright.
+**Confirmation is what suppresses false alarms, not smoothing.** A single large
+spike still drags an EMA across a threshold; it only takes slightly longer. Requiring
+a source to cross on 2 of its last 3 evaluations rejects it outright.
 
 ### Detection confidence
 
 | Head | Threshold | Rationale |
 |---|---|---|
 | Person | 0.35 | Cheap to get wrong either way |
-| Weapon | **0.55** | Feeds a hard override that can trigger a siren. The previous build shipped 0.25 |
-| Fire / smoke | **0.50** | Same reasoning |
+| Weapon | **0.55** | Threshold of the *detector vote*. One confirmed source can reach L3 at most; L4+ needs the scene classifier to agree. Only `pistol`/`knife`/`long_gun` boxes vote; the custom head's `stick` class (test mAP50 0.003) is drawn, never counted |
+| Fire | **0.50** | Same. Only boxes labelled `fire` vote; smoke is not in the alarm path (public smoke heads read a backlit webcam as smoke) |
+
+### How evidence becomes an alarm (`fusion/evidence.py`)
+
+The first live run produced ~171 false weapon alarms per hour, each one tick of
+the scene classifier barely over its threshold in a room it had never seen
+(CLAUDE.md §5). Every threat class now passes four rules before it can move the
+level:
+
+| Rule | Default | Why |
+|---|---|---|
+| Confirmation | a source must cross on **2 of the last 3 ticks** (counted, not timed) | at 0.5 Hz a time window held one frame |
+| Person gate | weapon votes count only with a person seen in the last **2 s** (skipped, and said so in the reason, if the person detector is down) | 65 % of live weapon alarms had nobody in view |
+| Fresh evaluations only | a cached value (a failed inference, the violence model between hops) is carried, never counted again | one evaluation must not confirm itself |
+| Corroboration cap | one confirmed source lands in **L3** (0.45–0.62); a classifier **and** a detector box, both confirmed, score 0.70 + 0.25 × the weaker side's margin: **L4** at threshold, **L5** once both are ~60 % of the way to certainty | the least reliable source cannot text or siren alone; two classifiers are not independent |
+| Experimental cap | assault and robbery stop at **L2** | they exist in 1–3 clips and cannot be validated |
+
+Scene thresholds are the checkpoint's raised to at least weapon 0.50 / fire 0.45
+(the checkpoint's were tuned at 41 % threat prevalence), unless a deployment
+calibration names a class (`var/calibration/scene.json` or
+`SENTRIX_SCENE_THRESHOLDS`, values in (0, 1); other classes keep their floors).
+**Identity never relaxes threat evidence**: frame-level identity cannot tell a
+resident from a stranger next to them, so a weapon counts the same either way until
+per-track identity exists (CLAUDE.md M4).
+
+**Presence is context, not a threat.** In home mode (default) an unknown person
+is logged only. `SENTRIX_ARMED=1` raises an intrusion at L3 once someone has stayed
+unrecognised for 3 s (brief detector misses do not restart the clock). The TCI is
+the strongest confirmed class evidence — a transparent rule — and it is not
+smoothed: the number on the gauge, in the log, in the SMS and on the incident is
+the number the level was decided on. Persistence is counted once, in the evidence
+layer, so L2/L3 commit at the first confirmed tick; L4/L5 (SMS, siren) also need
+0.6 s and 2 observations over their threshold. A level steps down after 5 s without
+touching its threshold. Replaying the live session with these rules: 30 L2+ / 6 L4
+alarm onsets become 0 (`python tools/replay_decisions.py <event log>`).
 
 ### Escalation ladder
 
 | Level | TCI | Actions |
 |---|---|---|
 | 1 SECURE | 0.00–0.20 | Log only |
-| 2 SUSPICIOUS | 0.20–0.40 | + snapshot, incident opened |
-| 3 ELEVATED | 0.40–0.65 | + AES-256-GCM encrypted evidence |
+| 2 SUSPICIOUS | 0.20–0.40 | Incident opened (log and dashboard only) |
+| 3 ELEVATED | 0.40–0.65 | + snapshot, AES-256-GCM encrypted evidence |
 | 4 HIGH | 0.65–0.85 | + SMS, dispatch package prepared |
 | 5 CRITICAL | 0.85–1.00 | + siren, voice call |
 
@@ -472,11 +506,17 @@ anything), and 642 MB of false-positive runtime output.
 
 Stated plainly, because they will come up in review.
 
-**The TCI fusion model is still synthetic.** `training/scripts/refit_xgboost.py`
-generates its own labels from a formula, so its `R² = 0.984` measures only that XGBoost
-can memorise that formula. It is not a model result. The path out is
-`tools/replay.py` → `notebooks/02` — and note that the V3 retraining notebook was right
-to refuse to fabricate this dataset.
+**There is no fitted fusion model yet.** The shipped `models/tci_xgboost.json` was
+fitted to a synthetic formula (`R² = 0.984` measured only memorisation) in which
+`identity` meant *familiarity*, the opposite of what the runtime feeds; it scored an
+authorised resident ~5x higher than a stranger. It is retired: the TCI is now the
+strongest confirmed class evidence, a published rule. A calibrated model returns only
+once real session logs exist (CLAUDE.md M8).
+
+**No model is validated for a new room.** The first live run (dark bedroom, faces at
+< 1 m) was far outside the two rooms the models were trained on. The M1 rules stop the
+false alarms; making detection *work* there needs footage from that room (CLAUDE.md
+M6–M7).
 
 **Every model was measured on a contaminated split.** `tools/audit_splits.py`
 reproduces it:

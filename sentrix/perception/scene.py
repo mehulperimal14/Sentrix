@@ -12,32 +12,26 @@ labels — *what is happening in this frame* — with a classifier trained on it
 
 How its output reaches the TCI
 ------------------------------
-The classifier does not get a private path to the alarm. Its probabilities are
-mapped onto the scales the existing fusion already acts on, so every override,
-incident type, hysteresis rule and side-effect gate applies unchanged:
+The classifier reports per-class probabilities and nothing else. It does not
+map them onto fusion scales or raise overrides: the evidence layer
+(:mod:`sentrix.fusion.evidence`) decides what a probability is worth, after
+k-of-n confirmation, the person gate and corroboration caps. On its own the
+classifier can reach at most the L3 band (CLAUDE.md D3) - the first live run
+showed why: in a room it had never seen, it sat at its decision boundary.
 
-==========  =====================================================================
-class       becomes
-==========  =====================================================================
-weapon      a ``weapon`` score, fused with the detector's (``SceneConfig.fusion``)
-fire        a ``fire`` score, fused likewise
-assault     the violence score: label ``fighting`` above its threshold
-robbery     a ``robbery`` behaviour label above its threshold
-==========  =====================================================================
-
-The mapping is threshold-aligned (:func:`align`): a probability at the class's
-tuned threshold lands exactly on the fusion override for that modality
-(weapon 0.55, fire 0.70), and anything below it stays under the 0.3 bar at
-which the TCI engine starts typing an incident. The classifier's decision
-threshold and the pipeline's action threshold are therefore the same point.
+Thresholds
+----------
+The checkpoint's thresholds were tuned for macro-F1 on data that is 41 %
+threat; live, that put the weapon threshold at the 92nd percentile of *normal*
+ticks. Effective thresholds are therefore, in order of precedence: a
+deployment calibration (``var/calibration/scene.json`` or
+``SENTRIX_SCENE_THRESHOLDS`` as JSON, e.g. ``{"weapon": 0.55}``), else the
+checkpoint's value raised to ``ThreatConfig.scene_threshold_floor``.
 
 Temporal behaviour
 ------------------
-Every processed frame is scored — one forward pass per tick — and class
-probabilities are averaged over ``SceneConfig.window_seconds``. A short window
-stops a single ambiguous frame flipping the incident type tick to tick without
-adding the latency of the 2 s violence window; the TCI's own EMA and
-hysteresis still apply on top.
+Every processed frame is scored once; probabilities are averaged over the last
+``SceneConfig.window_ticks`` observations (counted, not timed).
 
 Checkpoints are self-describing (architecture, classes, preprocessing,
 temperature, thresholds), so promoting a new model is a file copy.
@@ -53,17 +47,18 @@ the delta. A 171 MB DINOv2 checkpoint becomes a 57 MB file with no loss.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import time
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
 from sentrix.config import settings
-from sentrix.paths import model_path
+from sentrix.paths import CALIBRATION_DIR, model_path
 from sentrix.utils.logging import get_logger, timed
 
 log = get_logger("scene")
@@ -85,24 +80,6 @@ PRIORITY: tuple[str, ...] = ("fire", "weapon", "assault", "robbery")
 #: ResNet-18 fine-tuned on it (docs/6).
 _WEIGHTS = ("v4_custom/scene_classifier_custom_v4.pt",
             "v4_finetuned/scene_classifier_ft_v4.pt")
-
-#: Below the class threshold a signal is scaled into [0, SUB_THRESHOLD_CEILING),
-#: i.e. under the 0.3 bar at which ``TCIEngine`` starts typing an incident.
-SUB_THRESHOLD_CEILING = 0.3
-
-
-def align(p: float, threshold: float, anchor: float) -> float:
-    """Map a class probability onto a fusion score.
-
-    ``threshold`` maps to ``anchor`` (the fusion override for that modality) and
-    1.0 maps to 1.0, linearly. Below the threshold the score stays under
-    ``SUB_THRESHOLD_CEILING`` so it can nudge the TCI but never type an incident.
-    """
-    p = float(min(max(p, 0.0), 1.0))
-    threshold = float(min(max(threshold, 1e-3), 1.0 - 1e-3))
-    if p >= threshold:
-        return anchor + (1.0 - anchor) * (p - threshold) / (1.0 - threshold)
-    return SUB_THRESHOLD_CEILING * p / threshold
 
 
 def decide_label(probs: dict[str, float], thresholds: dict[str, float]) -> str:
@@ -187,19 +164,63 @@ def _pick_device():
 
 @dataclass
 class SceneResult:
-    """One aggregated verdict, already mapped onto fusion scales."""
+    """Window-averaged class probabilities and the thresholds that apply."""
 
     probs: dict[str, float] = field(default_factory=dict)
+    #: Display label: the first class in :data:`PRIORITY` over its threshold.
+    #: Informational only - the evidence layer decides what raises an alarm.
     label: str = "normal"
-    #: ``weapon`` and ``fire`` on the fusion score scale (see :func:`align`).
-    signals: dict[str, float] = field(default_factory=dict)
-    violence: tuple[float, str] = (0.0, "normal")
-    robbery: tuple[float, str] = (0.0, "normal")
+    thresholds: dict[str, float] = field(default_factory=dict)
+    #: False when this is the previous result returned again (no new inference).
+    fresh: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return {"label": self.label,
                 "probs": {k: round(v, 4) for k, v in self.probs.items()},
-                "signals": {k: round(v, 4) for k, v in self.signals.items()}}
+                "thresholds": {k: round(v, 4) for k, v in self.thresholds.items()},
+                "fresh": self.fresh}
+
+
+def _valid_thresholds(values: dict, origin: str) -> dict[str, float]:
+    """Keep only known classes with a threshold strictly inside (0, 1).
+
+    A threshold of 0 or >= 1 (e.g. ``55`` meant as a percentage) would never be
+    crossed and would silently disable the class, so it is rejected loudly and
+    the checkpoint's floored value stays in force.
+    """
+    kept: dict[str, float] = {}
+    for key, value in (values or {}).items():
+        if key not in PRIORITY:
+            continue
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            number = float("nan")
+        if 0.0 < number < 1.0:
+            kept[key] = number
+        else:
+            log.error("ignoring %s threshold %r for %s: must be in (0, 1)",
+                      origin, value, key)
+    return kept
+
+
+def deployment_thresholds() -> dict[str, float]:
+    """Per-deployment threshold overrides, file first then environment."""
+    overrides: dict[str, float] = {}
+    path = CALIBRATION_DIR / "scene.json"
+    try:
+        if path.exists():
+            data = json.loads(path.read_text(encoding="utf-8"))
+            overrides.update(_valid_thresholds(data.get("thresholds", data), str(path)))
+    except Exception as exc:
+        log.error("ignoring unreadable scene calibration %s: %s", path, exc)
+    raw = os.getenv("SENTRIX_SCENE_THRESHOLDS", "").strip()
+    if raw:
+        try:
+            overrides.update(_valid_thresholds(json.loads(raw), "SENTRIX_SCENE_THRESHOLDS"))
+        except Exception as exc:
+            log.error("ignoring malformed SENTRIX_SCENE_THRESHOLDS: %s", exc)
+    return overrides
 
 
 class SceneEngine:
@@ -214,6 +235,7 @@ class SceneEngine:
         self.classes: list[str] = list(SCENE_CLASSES)
         self.temperature = 1.0
         self.thresholds: dict[str, float] = {c: 0.5 for c in PRIORITY}
+        self.threshold_source = "default"
         self._buffer: deque[tuple[float, np.ndarray]] = deque(maxlen=64)
         self._last: SceneResult = SceneResult()
         if self.cfg.enabled:
@@ -257,6 +279,7 @@ class SceneEngine:
             self.thresholds.update({k: float(v) for k, v in
                                     (ckpt.get("thresholds") or {}).items()
                                     if k in PRIORITY})
+            self._apply_threshold_policy()
             self._model = net
             self.weights_name = path.name
             log.info("scene classifier loaded: %s (%s, %dpx, T=%.2f, thr=%s)",
@@ -265,6 +288,20 @@ class SceneEngine:
         except Exception as exc:
             log.error("scene classifier failed to load from %s: %s", path, exc)
             self._model = None
+
+    def _apply_threshold_policy(self) -> None:
+        # Floors first, then any class a deployment calibration names. A
+        # calibration of one class must not drop the floors of the others (a
+        # weapon-only override used to put fire back at the checkpoint's 0.35,
+        # the value behind the live false fire alarms).
+        floors = settings.threat.scene_threshold_floor
+        self.thresholds = {c: max(t, float(floors.get(c, 0.0)))
+                           for c, t in self.thresholds.items()}
+        self.threshold_source = "checkpoint raised to floor"
+        overrides = deployment_thresholds()
+        if overrides:
+            self.thresholds.update(overrides)
+            self.threshold_source += f"; deployment calibration ({', '.join(sorted(overrides))})"
 
     @property
     def available(self) -> bool:
@@ -282,44 +319,40 @@ class SceneEngine:
         return probs.cpu().numpy()
 
     def decide(self, probs: np.ndarray) -> SceneResult:
-        """Threshold, prioritise and map one probability vector."""
+        """Probabilities, display label and the thresholds that apply."""
         p = {c: float(probs[i]) for i, c in enumerate(self.classes)}
-        label = decide_label(p, self.thresholds)
-        fusion = settings.fusion
-        signals = {
-            "weapon": align(p["weapon"], self.thresholds["weapon"],
-                            fusion.weapon_override_high),
-            "fire": align(p["fire"], self.thresholds["fire"], fusion.fire_override),
-        }
-        violence = (p["assault"],
-                    "fighting" if p["assault"] >= self.thresholds["assault"] else "normal")
-        robbery = (p["robbery"],
-                   "robbery" if p["robbery"] >= self.thresholds["robbery"] else "normal")
-        return SceneResult(p, label, signals, violence, robbery)
+        return SceneResult(p, decide_label(p, self.thresholds), dict(self.thresholds))
 
     def observe(self, frame: np.ndarray, now: float | None = None) -> SceneResult:
         """Score one frame and return the window-averaged verdict."""
         if self._model is None or frame is None or getattr(frame, "size", 0) == 0:
-            return self._last
+            return self.last
         now = time.monotonic() if now is None else now
         try:
             with timed("scene", "inference"):
                 probs = self.score_frames([frame])[0]
         except Exception as exc:
             log.debug("scene inference failed: %s", exc)
-            return self._last
+            return self.last
         self._buffer.append((now, probs))
-        horizon = now - self.cfg.window_seconds
+        horizon = now - self.cfg.max_age_seconds
         while len(self._buffer) > 1 and self._buffer[0][0] < horizon:
             self._buffer.popleft()
-        mean = np.mean([p for _, p in self._buffer], axis=0)
+        recent = list(self._buffer)[-max(1, self.cfg.window_ticks):]
+        mean = np.mean([p for _, p in recent], axis=0)
         self._last = self.decide(mean)
         return self._last
+
+    @property
+    def last(self) -> SceneResult:
+        """The previous verdict, marked as not fresh (no new inference)."""
+        return replace(self._last, fresh=False)
 
     def reset(self) -> None:
         self._buffer.clear()
         self._last = SceneResult()
 
 
-__all__ = ["SCENE_CLASSES", "PRIORITY", "SceneEngine", "SceneResult", "align",
-           "base_fingerprint", "build_scene_model", "decide_label", "merge_delta"]
+__all__ = ["SCENE_CLASSES", "PRIORITY", "SceneEngine", "SceneResult",
+           "base_fingerprint", "build_scene_model", "decide_label",
+           "deployment_thresholds", "merge_delta"]

@@ -92,6 +92,9 @@ class DetectionResult:
     persons: list[Detection] = field(default_factory=list)
     weapons: list[Detection] = field(default_factory=list)
     fires: list[Detection] = field(default_factory=list)
+    #: False when the person pass did not run (no model, or it failed), so
+    #: "no persons" means "unknown", not "nobody there".
+    person_ok: bool = True
 
     @property
     def person_score(self) -> float:
@@ -252,6 +255,9 @@ class Detector:
                         fixed_label="person")
                 except Exception as exc2:
                     log.error("person detection failed: %s", exc2)
+                    result.person_ok = False
+        else:
+            result.person_ok = False
 
         if self._weapon is not None:
             try:

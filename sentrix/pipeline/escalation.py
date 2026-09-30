@@ -54,9 +54,10 @@ def plan_for(level: int) -> ActionPlan:
     return ActionPlan(
         level=level,
         log=True,
-        # A snapshot is cheap and unencrypted; capture from level 2 so an
-        # operator has visual context for anything worth a database row.
-        snapshot=level >= 2,
+        # Snapshots are unencrypted images of whoever is in the room, so they
+        # start with confirmed evidence (L3), not with "suspicious" (D4): an
+        # unenrolled teammate or an unconfirmed flicker is not worth a photo.
+        snapshot=level >= evidence.snapshot_min_level,
         evidence=level >= evidence.min_level,
         sms=level >= alert.sms_min_level,
         siren=level >= alert.siren_min_level,

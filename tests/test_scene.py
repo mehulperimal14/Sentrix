@@ -1,4 +1,8 @@
-"""Regression tests for the scene classifier and its route into the TCI."""
+"""Regression tests for the scene classifier and its route into the TCI.
+
+Since M1 the classifier only reports probabilities; what they are worth is the
+evidence layer's decision (tests/test_evidence.py).
+"""
 
 from __future__ import annotations
 
@@ -11,31 +15,10 @@ from sentrix.config import settings
 from sentrix.fusion.features import FeatureVector
 from sentrix.fusion.tci import TCIEngine
 from sentrix.perception.behaviour import SUSPICIOUS_LABELS, BehaviourEngine
-from sentrix.perception.scene import (PRIORITY, SCENE_CLASSES, SUB_THRESHOLD_CEILING,
-                                      SceneEngine, SceneResult, align, decide_label)
+from sentrix.perception.detector import Detection, DetectionResult
+from sentrix.perception.scene import (PRIORITY, SCENE_CLASSES, SceneEngine, SceneResult,
+                                      decide_label, deployment_thresholds)
 from sentrix.pipeline.engine import Pipeline
-
-
-class TestAlignment:
-    """A probability at the class threshold must land exactly on the fusion
-    override, so the classifier's decision point and the pipeline's action
-    point are the same."""
-
-    def test_threshold_maps_to_the_override(self):
-        anchor = settings.fusion.weapon_override_high
-        assert align(0.62, 0.62, anchor) == pytest.approx(anchor)
-
-    def test_certainty_maps_to_one(self):
-        assert align(1.0, 0.4, 0.7) == pytest.approx(1.0)
-
-    def test_below_threshold_never_types_an_incident(self):
-        """TCIEngine types an incident above 0.3; sub-threshold must stay under."""
-        for p in np.linspace(0.0, 0.599, 50):
-            assert align(p, 0.6, 0.55) < SUB_THRESHOLD_CEILING
-
-    def test_monotonic(self):
-        values = [align(p, 0.45, 0.55) for p in np.linspace(0, 1, 101)]
-        assert all(b >= a for a, b in zip(values, values[1:]))
 
 
 class TestDecision:
@@ -69,12 +52,45 @@ def tiny_checkpoint(tmp_path_factory):
 
 
 class TestSceneEngine:
-    def test_checkpoint_contract(self, tiny_checkpoint):
+    def test_checkpoint_contract(self, tiny_checkpoint, monkeypatch):
         """fp16 weights, temperature and thresholds all come from the file."""
+        monkeypatch.delenv("SENTRIX_SCENE_THRESHOLDS", raising=False)
         engine = SceneEngine(tiny_checkpoint)
         assert engine.available and engine.weights_name == "scene.pt"
         assert engine.temperature == 1.5
-        assert engine.thresholds["weapon"] == 0.45
+        assert engine.thresholds["assault"] == 0.60   # 0.5 raised to the floor
+
+    def test_checkpoint_thresholds_are_raised_to_the_floor(self, tiny_checkpoint,
+                                                          monkeypatch):
+        """Checkpoint thresholds were tuned at 41 % threat prevalence; live
+        they sat at the 92nd percentile of normal ticks (CLAUDE.md §5)."""
+        monkeypatch.delenv("SENTRIX_SCENE_THRESHOLDS", raising=False)
+        engine = SceneEngine(tiny_checkpoint)
+        floors = settings.threat.scene_threshold_floor
+        for cls, floor in floors.items():
+            assert engine.thresholds[cls] >= floor
+        assert engine.threshold_source == "checkpoint raised to floor"
+
+    def test_deployment_calibration_overrides(self, tiny_checkpoint, monkeypatch):
+        monkeypatch.setenv("SENTRIX_SCENE_THRESHOLDS", '{"weapon": 0.71, "bogus": 1}')
+        assert deployment_thresholds() == {"weapon": 0.71}
+        engine = SceneEngine(tiny_checkpoint)
+        assert engine.thresholds["weapon"] == 0.71
+        assert "deployment calibration (weapon)" in engine.threshold_source
+
+    def test_partial_calibration_keeps_the_other_floors(self, tiny_checkpoint, monkeypatch):
+        """A weapon-only override used to drop fire back to the checkpoint's
+        value, the one behind the live false fire alarms (M1 review F5)."""
+        monkeypatch.setenv("SENTRIX_SCENE_THRESHOLDS", '{"weapon": 0.40}')
+        engine = SceneEngine(tiny_checkpoint)
+        floors = settings.threat.scene_threshold_floor
+        assert engine.thresholds["weapon"] == 0.40, "an explicit override may go below"
+        for cls in ("fire", "assault", "robbery"):
+            assert engine.thresholds[cls] >= floors[cls]
+
+    def test_malformed_calibration_is_ignored(self, monkeypatch):
+        monkeypatch.setenv("SENTRIX_SCENE_THRESHOLDS", "{not json")
+        assert deployment_thresholds() == {}
 
     def test_probabilities_are_a_distribution(self, tiny_checkpoint):
         engine = SceneEngine(tiny_checkpoint)
@@ -91,41 +107,80 @@ class TestSceneEngine:
         engine.reset()
         assert not engine._buffer
 
-    def test_decide_maps_onto_fusion_scales(self, tiny_checkpoint):
+    def test_decide_reports_probabilities_not_fusion_scores(self, tiny_checkpoint):
         engine = SceneEngine(tiny_checkpoint)
-        probs = np.array([0.05, 0.05, 0.80, 0.05, 0.05])
-        result = engine.decide(probs)
+        result = engine.decide(np.array([0.05, 0.05, 0.80, 0.05, 0.05]))
         assert result.label == "weapon"
-        assert result.signals["weapon"] >= settings.fusion.weapon_override_high
-        assert result.signals["fire"] < SUB_THRESHOLD_CEILING
-        assert result.violence[1] == "normal" and result.robbery[1] == "normal"
+        assert result.probs["weapon"] == pytest.approx(0.80)
+        assert result.thresholds == engine.thresholds
+        assert set(result.to_dict()) == {"label", "probs", "thresholds", "fresh"}
 
     def test_missing_weights_disable_the_engine(self, tmp_path):
         assert not SceneEngine(tmp_path / "absent.pt").available
 
 
-class TestFusionRoute:
+class TestDeploymentThresholdValidation:
+    """A typo in a calibration must not silently disable a class (F6)."""
+
+    @pytest.mark.parametrize("value", [0, 1, 55, -0.2, "x"])
+    def test_out_of_range_override_is_rejected(self, value, monkeypatch, tmp_path):
+        import json as _json
+        import sentrix.perception.scene as scene_mod
+        monkeypatch.setattr(scene_mod, "CALIBRATION_DIR", tmp_path)
+        monkeypatch.setenv("SENTRIX_SCENE_THRESHOLDS", _json.dumps({"weapon": value,
+                                                                     "fire": 0.6}))
+        assert scene_mod.deployment_thresholds() == {"fire": 0.6}
+
+
+class TestSourceAssembly:
+    """What the pipeline hands the evidence layer each tick."""
+
     @staticmethod
-    def fuse(mode, det_weapon, scene_weapon):
-        fake = SimpleNamespace(cfg=SimpleNamespace(scene=SimpleNamespace(fusion=mode)))
-        detections = SimpleNamespace(weapon_score=det_weapon, fire_score=0.0)
-        scene = SceneResult(signals={"weapon": scene_weapon, "fire": 0.0})
-        return Pipeline._fuse(fake, detections, scene)[0]
+    def sources(weapons=(), fires=(), scene=None, violence=None):
+        fake = SimpleNamespace(cfg=settings)
+        detections = DetectionResult(weapons=list(weapons), fires=list(fires))
+        return Pipeline._sources(fake, detections, scene, violence)
 
-    def test_max_takes_the_stronger_signal(self):
-        assert self.fuse("max", 0.0, 0.8) == 0.8
-        assert self.fuse("max", 0.6, 0.1) == 0.6
+    @staticmethod
+    def box(label, conf):
+        return Detection(label=label, confidence=conf, bbox=(0, 0, 10, 10))
 
-    def test_scene_mode_ignores_detector(self):
-        assert self.fuse("scene", 0.9, 0.1) == 0.1
+    def test_smoke_is_not_fire(self):
+        """Public-data smoke heads read a backlit webcam as smoke (D1)."""
+        src = self.sources(fires=[self.box("smoke", 0.9)])
+        assert src["detector"]["fire"][0] == 0.0
+        src = self.sources(fires=[self.box("smoke", 0.9), self.box("fire", 0.6)])
+        assert src["detector"]["fire"][0] == 0.6
 
-    def test_detector_mode_ignores_scene(self):
-        assert self.fuse("detector", 0.0, 0.9) == 0.0
+    def test_stick_boxes_do_not_vote(self):
+        """``stick`` is experimental (D1, test mAP50 0.003): drawn, never a vote."""
+        src = self.sources(weapons=[self.box("stick", 0.9)])
+        assert src["detector"]["weapon"][0] == 0.0
+        src = self.sources(weapons=[self.box("stick", 0.9), self.box("pistol", 0.6)])
+        assert src["detector"]["weapon"][0] == 0.6
 
-    def test_no_scene_passes_detector_through(self):
-        fake = SimpleNamespace(cfg=SimpleNamespace(scene=SimpleNamespace(fusion="max")))
-        det = SimpleNamespace(weapon_score=0.7, fire_score=0.2)
-        assert Pipeline._fuse(fake, det, None) == (0.7, 0.2)
+    def test_detector_thresholds_are_the_detection_floors(self):
+        src = self.sources(weapons=[self.box("pistol", 0.7)])
+        assert src["detector"]["weapon"] == (0.7, settings.detection.weapon_conf, True)
+        assert src["detector"]["fire"][1] == settings.detection.fire_conf
+
+    def test_scene_and_violence_votes(self):
+        scene = SceneResult(probs={c: 0.2 for c in SCENE_CLASSES},
+                            thresholds={c: 0.5 for c in PRIORITY})
+        src = self.sources(scene=scene, violence=(0.7, 0.4, True))
+        assert set(src["scene"]) == set(PRIORITY)
+        assert src["scene"]["weapon"] == (0.2, 0.5, True)
+        assert src["violence"] == {"assault": (0.7, 0.4, True)}
+
+    def test_cached_scene_result_is_marked_stale(self):
+        """A failed or skipped inference returns the last verdict, not fresh."""
+        engine = SceneEngine.__new__(SceneEngine)
+        engine._last = SceneResult(probs={"weapon": 0.7}, thresholds={"weapon": 0.5})
+        engine._model = None
+        stale = engine.observe(np.zeros((8, 8, 3), np.uint8), 1.0)
+        assert stale.fresh is False and stale.probs == {"weapon": 0.7}
+        src = self.sources(scene=stale)
+        assert src["scene"]["weapon"] == (0.7, 0.5, False)
 
 
 class TestRobberyRoute:
@@ -147,6 +202,12 @@ class TestRobberyRoute:
         result = TCIEngine().compute(features, now=0.0)
         assert result.incident_type == "robbery"
         assert "theft" in result.reason.lower()
+
+    def test_robbery_is_experimental_and_stays_in_l2(self):
+        """Robbery exists as one event in one video (D1): never above L2."""
+        features = FeatureVector(behaviour=0.95, behaviour_label="robbery")
+        result = TCIEngine().compute(features, now=0.0)
+        assert result.raw_tci <= settings.threat.experimental_cap < settings.policy.thresholds[1]
 
     def test_weapon_outranks_robbery(self):
         features = FeatureVector(weapon=0.6, behaviour=0.85, behaviour_label="robbery")

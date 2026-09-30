@@ -78,6 +78,8 @@ class ViolenceEngine:
         self._last_eval = 0.0
         self._score = 0.0
         self._label = "normal"
+        #: True only when the last :meth:`result` call produced a new score.
+        self.fresh = False
         self._load()
 
     # ── loading ───────────────────────────────────────────────────────────────
@@ -128,6 +130,11 @@ class ViolenceEngine:
     @property
     def available(self) -> bool:
         return self._model is not None
+
+    @property
+    def threshold(self) -> float:
+        """P(fight) above which the window counts as a fight."""
+        return self._threshold
 
     # ── sliding window ────────────────────────────────────────────────────────
     def observe(self, frame: np.ndarray, now: float | None = None) -> None:
@@ -187,7 +194,12 @@ class ViolenceEngine:
         return float(np.mean(np.sort(values)[-k:]))
 
     def result(self, now: float | None = None) -> tuple[float, str]:
-        """Return the cached ``(score, label)``, re-scoring once per hop."""
+        """Return the cached ``(score, label)``, re-scoring once per hop.
+
+        :attr:`fresh` tells the caller whether this call re-scored, so a cached
+        score is not counted again as a new observation.
+        """
+        self.fresh = False
         if self._model is None:
             return 0.0, "normal"
         now = time.monotonic() if now is None else now
@@ -207,11 +219,13 @@ class ViolenceEngine:
 
         self._score = score
         self._label = "fighting" if score >= self._threshold else "normal"
+        self.fresh = True
         return self._score, self._label
 
     def reset(self) -> None:
         self._buffer.clear()
         self._score, self._label, self._last_eval = 0.0, "normal", 0.0
+        self.fresh = False
 
 
 __all__ = ["ViolenceEngine"]

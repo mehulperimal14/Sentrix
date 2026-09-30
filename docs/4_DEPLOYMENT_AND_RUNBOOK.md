@@ -123,8 +123,10 @@ documented, so tuning is reviewable rather than buried in a local file.
 
 Optional overrides that shadow `config.py` for quick experiments:
 `SENTRIX_INFERENCE_FPS`, `SENTRIX_PERSON_CONF`, `SENTRIX_WEAPON_CONF`,
-`SENTRIX_FIRE_CONF`, `SENTRIX_EMA_TAU`, `SENTRIX_LOITER_SECONDS`,
-`SENTRIX_AUDIO_RMS_FLOOR`, `SENTRIX_IDENTITY_FAIL_CLOSED`.
+`SENTRIX_FIRE_CONF`, `SENTRIX_LOITER_SECONDS`, `SENTRIX_AUDIO_RMS_FLOOR`,
+`SENTRIX_IDENTITY_FAIL_CLOSED`; threat evidence `SENTRIX_ARMED`,
+`SENTRIX_THREAT_SOURCES`, `SENTRIX_CONFIRM_K`/`_N`, `SENTRIX_SCENE_THRESHOLDS`.
+(`SENTRIX_EMA_TAU` was removed with the display EMA.)
 
 > **Removed since v2.1.** `ROBOFLOW_API_KEY` — there is no cloud inference path
 > and the variable was already unread. `VOSK_MODEL_PATH` — voice SOS is not

@@ -31,7 +31,11 @@ from sentrix.utils.logging import get_logger
 
 log = get_logger("events")
 
-SCHEMA_VERSION = 2
+#: 3: ``votes`` (the raw per-source values fed to the evidence layer) and
+#: ``context.person_recent`` / ``faces`` / ``faces_matched``, so
+#: ``tools/replay_decisions.py`` can re-run the decision layer exactly and
+#: per-track identity (M4) has data to be designed on.
+SCHEMA_VERSION = 3
 
 
 class EventLog:
@@ -92,8 +96,17 @@ class EventLog:
                 "behaviour_label": features.behaviour_label,
                 "audio_label": features.audio_label,
                 "identity_degraded": features.identity_degraded,
+                "person_recent": features.extras.get("person_recent"),
+                "faces": features.extras.get("faces"),
+                "faces_matched": features.extras.get("faces_matched"),
             },
         }
+        votes = features.extras.get("sources")
+        if votes:
+            row["votes"] = {source: {cls: [round(float(v[0]), 5), round(float(v[1]), 5),
+                                           bool(v[2]) if len(v) > 2 else True]
+                                     for cls, v in per.items()}
+                            for source, per in votes.items()}
         if label is not None:
             row["label"] = label
         if extra:
@@ -152,7 +165,7 @@ def load_dataset(directory: Path | None = None):
     for path in sorted(Path(directory).glob("events_*.jsonl")):
         for row in read_events(path):
             flat = {k: v for k, v in row.items()
-                    if k not in ("features", "context", "extra")}
+                    if k not in ("features", "context", "extra", "votes")}
             flat.update(row.get("features", {}))
             flat.update({f"ctx_{k}": v for k, v in row.get("context", {}).items()})
             flat["log_file"] = path.name

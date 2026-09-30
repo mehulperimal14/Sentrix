@@ -38,6 +38,8 @@ SNAPSHOT_DIR = VAR_DIR / "snapshots"
 EVENTLOG_DIR = VAR_DIR / "events"
 FACES_DIR = VAR_DIR / "authorized_faces"
 LOG_DIR = VAR_DIR / "logs"
+#: Per-deployment calibration (thresholds fitted on this room's normal footage).
+CALIBRATION_DIR = VAR_DIR / "calibration"
 DB_PATH = VAR_DIR / "sentrix.db"
 
 _RUNTIME_DIRS = (
@@ -60,6 +62,6 @@ __all__ = [
     "ROOT_DIR", "PACKAGE_DIR", "MODELS_DIR", "TRAINING_DIR", "DOCS_DIR",
     "WEB_DIR", "STATIC_DIR", "TEMPLATES_DIR",
     "VAR_DIR", "EVIDENCE_DIR", "SNAPSHOT_DIR", "EVENTLOG_DIR", "FACES_DIR",
-    "LOG_DIR", "DB_PATH",
+    "LOG_DIR", "CALIBRATION_DIR", "DB_PATH",
     "ensure_runtime_dirs", "model_path",
 ]

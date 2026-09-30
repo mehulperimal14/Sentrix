@@ -81,7 +81,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  event logs      : {df['log_file'].nunique()} file(s), {len(df):,} frames")
     print(f"  inference rate  : {hz} Hz")
     print(f"  level bands     : {settings.policy.thresholds}")
-    print(f"  dwell up/down   : {settings.policy.escalate_dwell_seconds}s / "
+    print(f"  dwell up/down   : {settings.policy.escalate_dwell_seconds} s per threshold / "
           f"{settings.policy.deescalate_dwell_seconds}s")
     print(f"  labelled        : {labelled}")
 
@@ -128,7 +128,10 @@ def main(argv: list[str] | None = None) -> int:
         if len(normal):
             hours = len(normal) / hz / 3600.0
             for level in (3, 4, 5):
-                alarms = count_alarms(normal["tci"].to_numpy(), hz, level)
+                # The policy decides on raw_tci (identical to tci since the
+                # display EMA was removed; older logs smoothed tci).
+                column = "raw_tci" if "raw_tci" in normal else "tci"
+                alarms = count_alarms(normal[column].to_numpy(), hz, level)
                 rate = alarms / hours if hours else float("nan")
                 print(f"  level>={level}: {alarms:>4} alarms over {hours:6.2f} h "
                       f"-> {rate:6.2f}/hour")

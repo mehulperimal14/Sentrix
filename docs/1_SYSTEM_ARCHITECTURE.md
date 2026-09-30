@@ -120,12 +120,15 @@ Sentrix/
 └───────────────────────────────┬──────────────────────────────────────┘
                                 ▼  FeatureVector (CONTRACT_V2, 8 features)
 ┌──────────────────────────────────────────────────────────────────────┐
+│  Evidence — fusion/evidence.py (per class: weapon fire assault robbery)│
+│    votes from scene classifier and detector, k-of-n fresh evals,      │
+│    person gate, one source <= L3, classifier+detector -> L4/L5,       │
+│    experimental <= L2; identity has no input here                     │
 │  Fusion — fusion/tci.py                                               │
-│    1. hard overrides (fire, weapon, intrusion, authorised resident)   │
-│    2. XGBoost over the contract the booster declares                  │
-│    3. contextual boosters (unknown person, suspicious behaviour)      │
-│    4. EMA, alpha = 1 - exp(-dt/tau), tau = 1.2 s                      │
-│    5. optional fitted output calibrator -> probability                │
+│    1. TCI = strongest confirmed class evidence (transparent)          │
+│    2. armed mode only: sustained unrecognised person -> L3 intrusion  │
+│    3. optional fitted output calibrator -> probability (none yet)     │
+│    no smoothing: the displayed TCI is the decided TCI                 │
 └───────────────────────────────┬──────────────────────────────────────┘
                                 ▼  TCI
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -162,24 +165,30 @@ Bands from `PolicyConfig.thresholds`; actions from `AlertConfig` and
 | TCI | Level | Status | Actions |
 |---|---|---|---|
 | 0.00 – 0.20 | 1 | `SECURE` | Log only |
-| 0.20 – 0.40 | 2 | `SUSPICIOUS` | Incident opened; snapshot captured |
-| 0.40 – 0.65 | 3 | `ELEVATED` | + AES-256-GCM encrypted evidence bundle |
+| 0.20 – 0.40 | 2 | `SUSPICIOUS` | Incident opened (log and dashboard only) |
+| 0.40 – 0.65 | 3 | `ELEVATED` | + snapshot; AES-256-GCM encrypted evidence bundle |
 | 0.65 – 0.85 | 4 | `HIGH` | + SMS; dispatch package pre-populated |
 | 0.85 – 1.00 | 5 | `CRITICAL` | + siren; automated voice call |
 
-**Hard overrides** (bypass fusion; `FusionConfig`):
+**Evidence rules** (replaced the hard overrides after the first live run —
+CLAUDE.md §5 and M1; `ThreatConfig`):
 
-| Condition | Result |
+| Rule | Result |
 |---|---|
-| `fire ≥ 0.70` | TCI 0.95, incident type `fire` |
-| `weapon ≥ 0.70` | TCI 0.92, incident type `weapon` |
-| `weapon ≥ 0.55` | TCI 0.78 |
-| `intrusion ≥ 0.80` | TCI 0.78, where `intrusion = 0.5·identity + 0.5·motion` |
-| authorised resident, unarmed, identity backend healthy | TCI 0.10 |
+| a source crosses its threshold on 2 of the last 3 ticks | the source is *confirmed* for that class |
+| weapon vote with no person seen in the last 2 s | does not count |
+| one confirmed source | class evidence 0.45–0.62 → L3 (snapshot + evidence, no SMS/siren) |
+| a classifier **and** a detector confirmed | 0.70 + 0.25 × the weaker side's margin over its threshold → L4, L5 from a margin of ~0.6 |
+| assault / robbery (experimental) | capped at 0.35 → L2 |
+| a cached value (no new evaluation this tick) | carried with its window state, never counted again |
+| a non-finite value, or a threshold outside (0, 1) | recorded as gated, contributes nothing |
+| armed mode, person unrecognised for 3 s | intrusion at 0.45 → L3 (a missed detection within 2 s does not restart it) |
 
-Two properties of the last row matter. It requires `trusted_authorization` —
-authorisation from a *working* identity backend — so a degraded face check cannot
-suppress an alarm. And it does not apply when a weapon is visible.
+Identity has no input into threat evidence: frame-level identity says only that
+*some* face matched, so a stranger standing next to a resident would inherit the
+resident's authorisation. It feeds only the armed-mode intrusion rule, where a
+degraded backend never authorises (fail closed). Presence alone never raises the
+level in home mode.
 
 > **Corrected from v2.1.** The previous matrix said level 2 was a UI badge only,
 > level 3 saved evidence, level 4 sent SMS and level 5 fired the siren. The
@@ -188,11 +197,14 @@ suppress an alarm. And it does not apply when a weapon is visible.
 > that produced 1,489 evidence bundles and 2,415 snapshots from a single sustained
 > false positive.
 
-**Hysteresis.** A level change is committed only once the candidate level has
-persisted: 0.6 s to escalate, 5.0 s to de-escalate. The asymmetry is deliberate —
-fast response, slow clearing. This, not EMA smoothing, is what actually rejects
-single-frame false positives: a large spike still drags an average across a
-threshold, it merely takes longer.
+**Hysteresis** (per threshold). L2 and L3 commit as soon as the TCI reaches their
+threshold, because it only gets there on already-confirmed evidence; L4 and L5
+(SMS, dispatch, siren) need the threshold held for 0.6 s **and** 2 observations. A
+level steps down once the TCI has not touched its threshold for 5 s. A rising threat that crosses from one band
+into the next keeps its clock (the previous per-band candidate restarted it, so
+ramps never committed), and flapping between lower bands no longer holds a level.
+There is no display smoothing: the gauge, the event log, the SMS and the incident
+record all carry the value the level was decided on.
 
 ---
 
@@ -206,20 +218,17 @@ CONTRACT_V2 = ("vision", "audio", "motion", "behaviour",
 CONTRACT_V1 = ("vision", "audio", "motion", "identity", "is_night")  # legacy
 ```
 
-`TCIEngine` reads `booster.num_features()` and selects the matching contract, so a
-retrained 8-feature model drops in with no code change. The currently deployed
-`models/tci_xgboost.json` declares 5 features, so it runs on `CONTRACT_V1`; weapon,
-fire and behaviour are folded in outside the model using the published
-`fallback_weights`, and a warning is logged at startup.
+The feature vector is logged every tick; `weapon` and `fire` now carry the
+per-class *evidence* scores (TCI scale) and the full votes sit in
+`extras["evidence"]`. The synthetic booster `models/tci_xgboost.json` (5-feature
+`CONTRACT_V1`) is no longer served: it was fitted with the opposite meaning of
+`identity` and ranked threats worse than its own inputs. A fitted model on real
+session logs is milestone M8 of CLAUDE.md.
 
-Temporal smoothing:
-
-```
-alpha = 1 - exp(-dt / tau)          tau = 1.2 s
-TCI_t = TCI_{t-1} + alpha * (TCI_raw - TCI_{t-1})
-```
-
-`dt` is real elapsed time, so smoothing is identical at 3 Hz and 30 Hz.
+Temporal behaviour lives in the evidence layer (k-of-n over fresh model
+evaluations) and the level policy (per-threshold dwell, 5 s step-down). The TCI
+itself is not smoothed: the time-constant EMA that used to sit here made the gauge
+trail the committed level by more than a second at every onset.
 
 > **Corrected from v2.1.** Three claims in the previous §5 were wrong.
 >

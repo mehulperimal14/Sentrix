@@ -112,7 +112,7 @@ def check_models(report: Report) -> None:
     expected = {
         "v3_real/audio_classifier_real_v3.pt": ("audio (V3)", False),
         "audio_classifier.pt": ("audio (V2 fallback)", False),
-        "tci_xgboost.json": ("TCI fusion booster", False),
+        "tci_xgboost.json": ("legacy synthetic booster, NOT used (CLAUDE.md D6)", False),
         "tci_calibrator.json": ("fitted TCI calibrator", False),
     }
     for relative, (role, critical) in expected.items():
@@ -152,19 +152,24 @@ def check_config(report: Report) -> None:
                    "unset — evidence becomes unreadable when the process exits")
 
     report.add(OK, "inference rate", f"{settings.pipeline.inference_fps} Hz")
-    report.add(OK, "EMA time constant", f"{settings.fusion.ema_tau_seconds} s")
     report.add(OK, "level bands", str(settings.policy.thresholds))
     report.add(OK, "escalate/de-escalate",
-               f"{settings.policy.escalate_dwell_seconds}s / "
+               f"up {settings.policy.escalate_dwell_seconds} s per threshold "
+               f"(obs {settings.policy.min_escalate_observations}) / down "
                f"{settings.policy.deescalate_dwell_seconds}s")
     report.add(OK, "SMS from level", str(settings.alert.sms_min_level))
     report.add(OK, "siren from level", str(settings.alert.siren_min_level))
 
-    if settings.fusion.calibrate_inputs:
-        report.add(FAIL, "calibrate_inputs",
-                   "TRUE — reintroduces the train/serve skew, see fusion/calibration.py")
-    else:
-        report.add(OK, "calibrate_inputs", "False (correct)")
+    threat = settings.threat
+    report.add(OK, "threat confirmation",
+               f"{threat.confirm_k} of {threat.confirm_n} ticks, sources={threat.sources}")
+    report.add(OK, "escalation caps",
+               f"one source <= {threat.single_source_cap} (L3), classifier + detector "
+               f"{threat.corroborated_floor}-{threat.corroborated_cap} (L4/L5), "
+               f"experimental <= {threat.experimental_cap} (L2)")
+    report.add(OK if not threat.armed else WARN, "mode",
+               "home (presence is logged only)" if not threat.armed
+               else "ARMED (unrecognised people raise intrusions)")
 
 
 def check_engines(report: Report) -> None:
@@ -174,8 +179,8 @@ def check_engines(report: Report) -> None:
     from sentrix.fusion.tci import TCIEngine
 
     engine = TCIEngine()
-    report.add(OK, "TCI fusion", f"source={engine.model_source}, "
-                                 f"contract={engine._contract}")
+    report.add(OK, "TCI fusion", f"source={engine.model_source} (strongest confirmed "
+                                 f"class evidence)")
 
     # The single most important behavioural check in the whole system.
     idle, now = FeatureVector(), 0.0
@@ -194,8 +199,9 @@ def check_engines(report: Report) -> None:
     if scene_weights() is not None:
         scene = SceneEngine()
         if scene.available:
-            report.add(OK, "scene classifier", f"{scene.weights_name} loaded, "
-                                               f"fusion={scene.cfg.fusion}")
+            report.add(OK, "scene classifier",
+                       f"{scene.weights_name} loaded, thresholds {scene.thresholds} "
+                       f"({scene.threshold_source})")
         else:
             report.add(FAIL, "scene classifier",
                        "weights present but failed to load — see the log (a delta "

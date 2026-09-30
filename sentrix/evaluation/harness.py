@@ -89,15 +89,23 @@ class StillResult:
 def score_still(pipeline, frame: np.ndarray) -> StillResult:
     """Score one image as a static clip, through the product perception path.
 
-    Two observations one violence hop apart: the first fills the temporal
-    windows, the second is the first tick at which a windowed model has
-    re-scored. All temporal state is reset first, so images are independent.
+    The image is observed ``max(confirm_n, confirm_k + 1)`` times, one violence
+    hop apart, so every source (including the violence model, which re-scores
+    once per hop) makes ``confirm_k`` fresh evaluations. Identical frames make
+    the k-of-n rule trivially met, so a still measures the per-frame decision
+    plus the person gate, not temporal confirmation; that is measured on video
+    (``tools/replay_custom_videos.py``). All temporal state is reset first, so
+    images are independent.
     """
     pipeline.reset()
     hop = settings.windows.violence_hop_seconds
-    pipeline._observe(frame, 0.0)
-    features = pipeline._observe(frame, hop)
-    result = pipeline.tci.compute(features, hop)
+    threat = settings.threat
+    ticks = max(threat.confirm_n, threat.confirm_k + 1)
+    features, now = None, 0.0
+    for i in range(ticks):
+        now = i * hop
+        features = pipeline._observe(frame, now)
+    result = pipeline.tci.compute(features, now)
     return StillResult(features, result)
 
 

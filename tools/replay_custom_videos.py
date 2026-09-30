@@ -1,8 +1,8 @@
 """End-to-end test: replay the custom dataset's source videos through SENTRIX.
 
 Every video is decoded at its native rate and fed to ``Pipeline.process`` at
-the configured inference rate with its true timestamps, so windowing, EMA
-smoothing, hysteresis and incident typing all behave as they do live. Side
+the configured inference rate with its true timestamps, so windowing, evidence
+confirmation, hysteresis and incident typing all behave as they do live. Side
 effects are disabled and identity is neutral (``sentrix/evaluation/harness.py``).
 
 Each processed frame is scored against the reviewed label timeline

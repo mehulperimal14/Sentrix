@@ -73,6 +73,11 @@ class IdentityResult:
     similarity: float = 0.0
     #: True when no usable backend exists, so the verdict is "unknown", not "no".
     degraded: bool = False
+    #: Faces found on this frame, and how many of them matched the gallery.
+    faces: int = 0
+    matched: int = 0
+    #: True when ``authorized`` is the held verdict of an earlier frame.
+    held: bool = False
 
 
 def _cosine(a: np.ndarray, b: np.ndarray) -> float:
@@ -198,26 +203,34 @@ class IdentityEngine:
         if not gallery:
             return IdentityResult(authorized=False)
 
+        threshold = 1.0 - self.cfg.match_threshold      # config is a distance
         best_name, best_similarity = None, -1.0
+        faces = matched = 0
         with timed("identity", "inference"):
             for embedding in self._embed_all(frame):
+                faces += 1
+                face_best = -1.0
                 for name, known in gallery:
                     similarity = _cosine(embedding, known)
+                    face_best = max(face_best, similarity)
                     if similarity > best_similarity:
                         best_similarity, best_name = similarity, name
+                matched += face_best >= threshold
 
-        threshold = 1.0 - self.cfg.match_threshold      # config is a distance
         if best_name is not None and best_similarity >= threshold:
             self._last_match, self._last_name = now, best_name
-            return IdentityResult(True, best_name, best_similarity)
+            return IdentityResult(True, best_name, best_similarity,
+                                  faces=faces, matched=matched)
 
         # Hold the previous verdict briefly so a resident turning their head
         # does not immediately re-arm the alarm.
         if (self._last_name is not None
                 and now - self._last_match < self.cfg.auth_hold_seconds):
-            return IdentityResult(True, self._last_name, best_similarity)
+            return IdentityResult(True, self._last_name, best_similarity,
+                                  faces=faces, matched=matched, held=True)
 
-        return IdentityResult(False, None, max(best_similarity, 0.0))
+        return IdentityResult(False, None, max(best_similarity, 0.0),
+                              faces=faces, matched=matched)
 
     def score(self, result: IdentityResult, person_present: bool) -> float:
         """Identity contribution to the TCI feature vector."""

@@ -16,9 +16,8 @@ in substance by `python tools/doctor.py`; run it rather than trusting any table.
 |---|---|
 | YOLOv8 person, weapon, fire/smoke detection | One component, three heads, one load each |
 | ByteTrack multi-object tracking | Built into ultralytics; replaced the DeepSORT dependency |
-| TCI fusion with hard overrides | Empty room 0.012, knife 0.920, fire 0.950 |
-| Hysteresis and incident grouping | 0.6 s up, 5.0 s down; side effects bind to incidents |
-| Time-based EMA | `α = 1 − exp(−dt/τ)`, identical at 3 Hz and 30 Hz |
+| TCI fusion from confirmed per-class evidence | 2-of-3 fresh evaluations, one source ≤ L3, classifier + detector → L4/L5 (hard overrides and the display EMA were removed after the first live test, CLAUDE.md M1) |
+| Hysteresis and incident grouping | L2/L3 immediate on confirmed evidence, L4/L5 0.6 s + 2 obs, 5.0 s down; side effects bind to incidents |
 | Violence classification | 16 frames over 2.0 s, re-scored at 1 Hz |
 | Acoustic classification | 4.0 s log-mel window, 1.0 s hop, RMS-gated |
 | Face authorisation | ArcFace 512-d **when `insightface` is installed**; fails closed otherwise |

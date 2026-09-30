@@ -63,6 +63,15 @@ class TestIncidentGrouping:
         active, closed = manager.update(1, 0.05, "normal", now=0.0)
         assert active is None and closed is None
 
+    def test_opening_tick_reason_is_kept_when_it_is_the_peak(self):
+        """An incident that only declines after opening kept an empty reason."""
+        manager = IncidentManager()
+        manager.update(3, 0.45, "intrusion", now=0.0, features={"weapon": 0.0},
+                       reason="Unrecognised person present for 3 s (armed mode)")
+        active, _ = manager.update(3, 0.40, "intrusion", now=0.5, reason="later")
+        assert active.peak_reason.startswith("Unrecognised person")
+        assert active.peak_features == {"weapon": 0.0}
+
     def test_sustained_threat_is_one_incident(self):
         manager = IncidentManager()
         ids = set()
