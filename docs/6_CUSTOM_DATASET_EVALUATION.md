@@ -135,13 +135,364 @@ These are not threshold problems: at AUROC 0.54 there is no weapon threshold
 that separates the classes. The models need to see this domain, which is what
 the `sentrix/finetuned-v3` and `sentrix/custom-v4` branches do.
 
-## 6.4 Reproducing
+## 6.4 How the custom-data models are built
+
+### Scene classifier (`sentrix/perception/scene.py`)
+
+A five-class image classifier answers the question the dataset labels — *what
+is happening in this frame* — and reaches the TCI only through the scales the
+fusion already acts on:
+
+| Class | Becomes |
+|---|---|
+| weapon | a `weapon` score, fused with the detector's (`SceneConfig.fusion`) |
+| fire | a `fire` score, fused likewise |
+| assault | the violence score; label `fighting` above its threshold |
+| robbery | a new `robbery` behaviour label → `robbery` incident type |
+
+The mapping is threshold-aligned: a probability exactly at the class's tuned
+threshold lands on the fusion override (weapon 0.55, fire 0.70); anything below
+stays under the 0.3 bar at which the TCI engine types an incident. The
+classifier's decision point and the pipeline's action point are the same point,
+so every override, hysteresis rule and side-effect gate applies unchanged. It
+scores every tick and averages probabilities over 0.5 s. When a scene model is
+installed it replaces the RWF-2000 violence engine.
+
+### Bounding boxes for the detectors (`training/custom/annotate_boxes.py`)
+
+The dataset labels images, YOLO needs boxes, and the v3 detectors cannot supply
+them (AUROC 0.54 and 0.43 above). Boxes come from GroundingDINO, constrained so
+a proposal can only confirm what the reviewed label already says:
+
+1. proposals only on frames whose reviewed label is `weapon` or `fire`, and only
+   for that class; the prompt follows the scene (handgun in the bedroom, long
+   stick in the corridor);
+2. a weapon box must overlap a person — weapons here are held. Persons are the
+   union of `yolov8n` and a GroundingDINO person query, because `yolov8n` misses
+   the masked, top-down subject in the corridor in most frames;
+3. the single best box above 0.30 is kept; a positive frame without one is
+   **excluded**, never turned into a false "nothing here" negative;
+4. every box was reviewed on contact sheets
+   ([`training/runs/custom/annotation_qc/`](../training/runs/custom/annotation_qc/));
+   16 were rejected ([`box_qc_rejects.txt`](../training/datasets/sentrix_custom/box_qc_rejects.txt)).
+
+Result ([`boxes.csv`](../training/datasets/sentrix_custom/boxes.csv)): train 68
+pistol / 23 stick / 11 fire boxes, val 44 pistol / 6 fire, test 15 stick.
+`normal` frames are background negatives. `assault` and `robbery` frames are
+excluded — several show a weapon in hand and one label per image cannot say where.
+
+### Model selection without touching the test video
+
+With one test video and a val split missing two classes, a single split cannot
+rank candidates. Classifiers are therefore selected by **leave-one-video-out
+cross-validation over the nine train + val videos**; the test video `wa02` is
+never loaded by any selection step. Out-of-fold predictions also fix the
+classifier's temperature and per-class thresholds (coordinate ascent on OOF
+macro-F1; robbery is fixed at 0.60 because out of fold it is never seen). Fusion
+mode and detector gates are chosen on the val split. Test is reported once, for
+the chosen configuration.
+
+**Cross-video generalisation is the hard part.** Frozen features plus a
+logistic-regression probe, same protocol (`training/custom/screen_backbones.py`):
+
+| Backbone (frozen) | LOVO accuracy | LOVO macro-F1 | fire F1 | weapon F1 | Threat FPR | Val macro-F1 |
+|---|---|---|---|---|---|---|
+| vit_base_patch14_dinov2.lvd142m | 0.567 | 0.378 | 0.81 | 0.35 | 0.21 | 0.700 |
+| vit_small_patch14_dinov2.lvd142m@448 | 0.429 | 0.292 | 0.55 | 0.31 | 0.42 | 0.444 |
+| vit_small_patch14_dinov2.lvd142m | 0.388 | 0.276 | 0.44 | 0.42 | 0.55 | 0.534 |
+| vit_base_patch16_siglip_224.webli | 0.621 | 0.244 | 0.00 | 0.46 | 0.13 | 0.379 |
+| vit_base_patch16_clip_224.openai | 0.564 | 0.237 | 0.00 | 0.47 | 0.24 | 0.442 |
+| convnext_tiny.fb_in22k_ft_in1k | 0.537 | 0.225 | 0.00 | 0.45 | 0.30 | 0.387 |
+| efficientnet_b0.ra_in1k | 0.481 | 0.206 | 0.00 | 0.41 | 0.38 | 0.271 |
+| resnet18_violence (v3) | 0.429 | 0.197 | 0.00 | 0.45 | 0.50 | 0.371 |
+| convnext_nano.in12k_ft_in1k | 0.409 | 0.184 | 0.00 | 0.37 | 0.47 | 0.220 |
+
+Assault F1 is 0 for every backbone: assault exists in exactly two videos (a
+bedroom and the corridor), so each fold asks a model to recognise an assault in
+a room it has only ever seen calm. Robbery is one event in one video. **Neither
+class can be validated on this dataset**; both thresholds end up conservative.
+
+## 6.5 Branch `sentrix/finetuned-v3`: the notebook models, fine-tuned
+
+*Results from that branch, reproduced here for comparison.*
+
+Every model the V3 retraining notebook produced that has an input in this
+dataset was fine-tuned on it. The audio classifier and the UCF-Crime DVS anomaly
+model were not: the dataset has no audio and no event-camera data.
+
+| Model | Starting point | Recipe | Written to |
+|---|---|---|---|
+| Scene classifier | `violence_classifier_real_v3.pt` (ResNet-18); new 5-class head whose `normal`/`assault` rows start from the old `nofight`/`fight` rows | 15 epochs, AdamW (backbone 2e-4, head 2e-3), class-balanced sampling, grayscale/blur/crop augmentation; **600 RWF-2000 clips per class rehearsed** (30 % of draws) | `models/v4_finetuned/scene_classifier_ft_v4.pt` |
+| Weapon detector | `weapon_detector_real_v3.pt` (YOLOv8n) | head extended to knife / long_gun / pistol / **stick**; custom boxes (positives ×3) + 1,500 rehearsal images of the original corpus; early-stopped on custom val | `models/v4_finetuned/weapon_detector_ft_v4.pt` |
+| Fire/smoke detector | `fire_smoke_detector_real_v3.pt` (YOLOv8n) | custom fire boxes (positives ×8) + 1,500 rehearsal images | `models/v4_finetuned/fire_smoke_detector_ft_v4.pt` |
+
+### Selection evidence
+
+Scene classifier, leave-one-video-out (`python tools/custom_eval_table.py --cv`):
+
+| Candidate | Architecture | Init | Rehearsal | OOF accuracy | OOF macro-F1 | normal F1 | fire F1 | weapon F1 | assault F1 | robbery F1 | Threat FPR |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| ft_r18 | resnet18 @224 | violence_v3 | - | 0.515 | 0.196 | 0.662 | 0.000 | 0.317 | 0.000 | 0.000 | 0.278 |
+| **ft_r18_reh** | resnet18 @224 | violence_v3 | 600 | 0.556 | 0.210 | 0.684 | 0.000 | 0.366 | 0.000 | 0.000 | 0.227 |
+| r18_imagenet | resnet18 @224 | imagenet | - | 0.562 | 0.215 | 0.704 | 0.000 | 0.371 | 0.000 | 0.000 | 0.204 |
+
+Rehearsal helps, and is kept. The ImageNet-initialised ablation is marginally
+ahead of both: **the RWF-2000 fight pretraining does not transfer to this
+footage** — the same finding as the baseline's corridor failure, seen from the
+other side.
+
+Fusion mode, val split, full product pipeline:
+
+| Configuration | Accuracy | Macro-F1 | Threat F1 | Threat FPR |
+|---|---|---|---|---|
+| `detector` (classifier drives assault/robbery only) | 0.417 | 0.368 | 0.329 | 0.000 |
+| `scene` (classifier drives weapon/fire too) | 0.464 | 0.321 | 0.545 | 0.130 |
+| `max` | 0.548 | 0.377 | 0.653 | 0.130 |
+| **`max`, weapon detection floor 0.35** | **0.583** | **0.401** | **0.694** | 0.130 |
+
+The fine-tuned weapon head scores lower than v3 did: on val frames 0.35 keeps
+zero false positives and lifts detector recall from 0.20 to 0.31. Replaying the
+val videos confirmed it (accuracy 0.549 → 0.562, identical false alarms). This
+is the *detection floor* only — the siren-capable weapon override stays at 0.55.
+
+### Component results
+
+| Model | Held-out result | Before (v3) | Retention on its original corpus |
+|---|---|---|---|
+| Scene classifier (alone) | val acc 0.464 / macro-F1 0.321; test acc 0.710 / macro-F1 0.415 | — | RWF-2000 fight vs nofight AUROC **0.886** (v3: 0.881, same 390 frames) |
+| Weapon detector | val box mAP50 0.690 (pistol); frame AUROC val 0.707, test 0.447 | frame AUROC val 0.41, test 0.37 | mAP50 0.848 (v3: 0.939) on 400 original val images |
+| Fire detector | val box mAP50 0.498; frame AUROC val 0.906 | frame AUROC val 0.49 | mAP50 0.648 (v3: 0.722) on 400 original val images |
+
+### System results (`python tools/custom_eval_table.py baseline finetuned`)
+
+#### Per-image evaluation
+
+| Run | Split | n | Accuracy | Macro-F1 | Threat recall | Threat FPR | Weapon F1 | Fire F1 | Assault F1 |
+|---|---|---|---|---|---|---|---|---|---|
+| baseline | train | 588 | 0.566 | 0.280 | 0.688 | 0.308 | 0.429 | 0.000 | 0.230 |
+| baseline | val | 84 | 0.417 | 0.281 | 0.197 | 0.000 | 0.358 | 0.000 | - |
+| baseline | test | 93 | 0.043 | 0.114 | 1.000 | 1.000 | 0.229 | - | - |
+| finetuned | train | 588 | 0.867 | 0.749 | 0.809 | 0.094 | 0.889 | 0.957 | 0.000 |
+| finetuned | val | 84 | 0.583 | 0.401 | 0.557 | 0.130 | 0.630 | 0.000 | - |
+| finetuned | test | 93 | 0.677 | 0.460 | 0.077 | 0.090 | 0.118 | - | - |
+
+#### Video replay (end to end)
+
+| Run | Videos | Ticks | Accuracy | Macro-F1 | Threat recall | Threat FPR | Episodes detected | False alarms / normal min |
+|---|---|---|---|---|---|---|---|---|
+| baseline | all | 1759 | 0.459 | 0.221 | 0.673 | 0.471 | 14/18 | 13.96 |
+| baseline | val | 153 | 0.516 | 0.318 | 0.151 | 0.000 | 1/2 | 0.00 |
+| baseline | test | 250 | 0.052 | 0.157 | 1.000 | 0.976 | 3/3 | 20.39 |
+| baseline | train | 1356 | 0.528 | 0.248 | 0.755 | 0.398 | 10/13 | 13.34 |
+| finetuned | all | 1759 | 0.844 | 0.648 | 0.727 | 0.097 | 15/18 | 7.12 |
+| finetuned | val | 153 | 0.562 | 0.390 | 0.494 | 0.121 | 1/2 | 21.62 |
+| finetuned | test | 250 | 0.824 | 0.606 | 0.227 | 0.049 | 3/3 | 5.83 |
+| finetuned | train | 1356 | 0.879 | 0.707 | 0.840 | 0.105 | 11/13 | 6.50 |
+
+Train rows are in-sample for this branch and are shown only to expose
+overfitting; quote val and test.
+
+### What improved, and what did not
+
+* **The corridor no longer reads as a fight.** Test accuracy rises from 0.043 to
+  0.677 per image and from 0.052 to 0.824 in replay; test false alarms fall from
+  20.4 to 5.8 per normal minute.
+* **Handguns in a new context** (the `gun` video): weapon F1 on val rises from
+  0.36 to 0.63.
+* **The stick is still mostly missed** (test threat recall 0.08 per image, 0.23
+  in replay; 3/3 episodes are caught, but late — median 1.0 s). 23 training boxes
+  of a stick carried at the side do not teach a stick swung overhead, and val
+  contains no stick, so nothing in selection rewards it.
+* **Fire on held-out video is not detected** by the system (0/1 val episode):
+  the fine-tuned classifier calls the flame-jet frames `weapon` (a can held out
+  like a gun), and weapon outranks fire in incident typing. The fire detector
+  itself separates them (AUROC 0.91) but rarely clears its 0.50 gate.
+* **Assault is never predicted.** Out of fold every assault prediction was
+  wrong, so its tuned threshold (0.85) is effectively off. That is the honest
+  outcome for a class that exists in two videos in two different rooms.
+* **The val false-alarm rate rose** (0 → 4 short runs over 0.19 normal
+  minutes, all in `vid04` while the aerosol can is held — the same can-as-gun
+  confusion). The baseline almost never flagged anything on val, threats
+  included.
+
+## 6.6 Branch `sentrix/custom-v4`: new models trained on the custom dataset
+
+New models, trained on this dataset from generic public weights — nothing
+inherited from the V3 notebook.
+
+| Model | Starting point | Recipe | Written to |
+|---|---|---|---|
+| Scene classifier | DINOv2 ViT-B/14 (`timm:vit_base_patch14_dinov2.lvd142m`, self-supervised, public) | backbone frozen except the **last 4 transformer blocks**; 15 epochs, AdamW (blocks 2e-5, head 1e-3), class-balanced sampling, same augmentation as §6.5 | `models/v4_custom/scene_classifier_custom_v4.pt` (delta checkpoint, below) |
+| Weapon detector | `yolo11n.pt` (COCO) | classes pistol / stick; custom boxes only (positives ×3), 60 epochs, patience 20 | `models/v4_custom/weapon_detector_custom_v4.pt` |
+| Fire detector | `yolo11n.pt` (COCO) | class fire; custom boxes only (positives ×8), 60 epochs, patience 20 | `models/v4_custom/fire_detector_custom_v4.pt` |
+
+**Delta checkpoint.** The fp16 DINOv2 checkpoint is 171 MB, over GitHub's
+100 MB file limit. Only the last four blocks, the head and the position
+embedding differ from the public weights, so only they are stored (57 MB),
+with a SHA-256 fingerprint of the frozen remainder. At load the engine builds
+the public weights (downloaded once by timm into the Hugging Face cache, about
+350 MB), refuses to continue unless they hash to the training-time
+fingerprint, and overlays the delta. Verified across timm 1.0.28/CUDA and
+1.0.30/CPU: maximum probability difference 0.0009. **An offline machine must
+have the base weights cached** — see the runbook note in the README.
+
+### Selection evidence
+
+The backbone screen (§6.4) put DINOv2 ViT-B/14 ahead of every other candidate
+by a wide margin on both LOVO and val. Fine-tuning depth, leave-one-video-out:
+
+| Candidate | Architecture | Init | Rehearsal | OOF accuracy | OOF macro-F1 | normal F1 | fire F1 | weapon F1 | assault F1 | robbery F1 | Threat FPR |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| ft_r18_reh (§6.5, for reference) | resnet18 @224 | violence_v3 | 600 | 0.556 | 0.210 | 0.684 | 0.000 | 0.366 | 0.000 | 0.000 | 0.227 |
+| dino_b_frozen | timm:vit_base_patch14_dinov2.lvd142m @224 | pretrained | - | 0.661 | 0.399 | 0.752 | 0.692 | 0.550 | 0.000 | 0.000 | 0.151 |
+| dino_b_last2 | timm:vit_base_patch14_dinov2.lvd142m @224 | pretrained | - | 0.698 | 0.435 | 0.779 | 0.786 | 0.613 | 0.000 | 0.000 | 0.129 |
+| **dino_b_last4** | timm:vit_base_patch14_dinov2.lvd142m @224 | pretrained | - | 0.696 | **0.440** | 0.779 | 0.828 | 0.593 | 0.000 | 0.000 | 0.114 |
+| dino_b_last6 | timm:vit_base_patch14_dinov2.lvd142m @224 | pretrained | - | 0.677 | 0.423 | 0.760 | 0.774 | 0.581 | 0.000 | 0.000 | 0.154 |
+
+The selection rule was fixed in advance — highest OOF macro-F1 — and picks
+`dino_b_last4`. Training more of the backbone stops helping at six blocks:
+the representation that generalises across videos is the pretrained one.
+
+Fusion mode, val split, full product pipeline:
+
+| Configuration | Per-image accuracy | Per-image macro-F1 | Threat FPR | Replay accuracy | Replay episodes | Replay false alarms |
+|---|---|---|---|---|---|---|
+| `detector` | 0.333 | 0.206 | 0.000 | - | - | - |
+| `max` | 0.679 | 0.768 | 0.000 | 0.719 | 2/2 | 0 |
+| **`scene`** | 0.679 | 0.768 | 0.000 | 0.719 | 2/2 | 0 |
+
+`max` and `scene` tie exactly on val, images and videos. The custom-only YOLO
+heads validate weakly on their own (below), so `scene` is the default: they
+draw boxes on the HUD and in evidence sidecars but do not drive the alarm.
+
+### Component results
+
+| Model | Held-out result |
+|---|---|
+| Scene classifier (alone) | val acc 0.679 / macro-F1 **0.768**, threat FPR 0.000; test acc 0.720 / macro-F1 0.419 |
+| Weapon detector | val box mAP50 0.514 (pistol); frame AUROC val 0.655, test 0.405 |
+| Fire detector | val box mAP50 0.285; frame AUROC val 0.616 |
+
+With 11 fire boxes from one video and 23 stick boxes from one video, the
+custom-only detectors do not generalise; the fine-tuned detectors of §6.5,
+which keep their original corpora through rehearsal, are clearly better
+(weapon frame AUROC 0.707, fire 0.906).
+
+### System results (`python tools/custom_eval_table.py baseline finetuned custom`)
+
+The `finetuned` rows are copied from `sentrix/finetuned-v3`
+(`training/runs/custom_eval/finetuned/*.json`) so the three configurations can
+be compared in one place.
+
+#### Per-image evaluation
+
+| Run | Split | n | Accuracy | Macro-F1 | Threat recall | Threat FPR | Weapon F1 | Fire F1 | Assault F1 |
+|---|---|---|---|---|---|---|---|---|---|
+| baseline | train | 588 | 0.566 | 0.280 | 0.688 | 0.308 | 0.429 | 0.000 | 0.230 |
+| baseline | val | 84 | 0.417 | 0.281 | 0.197 | 0.000 | 0.358 | 0.000 | - |
+| baseline | test | 93 | 0.043 | 0.114 | 1.000 | 1.000 | 0.229 | - | - |
+| finetuned | train | 588 | 0.867 | 0.749 | 0.809 | 0.094 | 0.889 | 0.957 | 0.000 |
+| finetuned | val | 84 | 0.583 | 0.401 | 0.557 | 0.130 | 0.630 | 0.000 | - |
+| finetuned | test | 93 | 0.677 | 0.460 | 0.077 | 0.090 | 0.118 | - | - |
+| custom | train | 588 | 0.906 | 0.778 | 0.800 | 0.032 | 0.960 | 0.957 | 0.045 |
+| custom | val | 84 | 0.679 | 0.768 | 0.557 | 0.000 | 0.675 | 1.000 | - |
+| custom | test | 93 | 0.720 | 0.419 | 0.000 | 0.000 | 0.000 | - | - |
+
+#### Video replay (end to end)
+
+| Run | Videos | Ticks | Accuracy | Macro-F1 | Threat recall | Threat FPR | Episodes detected | False alarms / normal min |
+|---|---|---|---|---|---|---|---|---|
+| baseline | all | 1759 | 0.459 | 0.221 | 0.673 | 0.471 | 14/18 | 13.96 |
+| baseline | val | 153 | 0.516 | 0.318 | 0.151 | 0.000 | 1/2 | 0.00 |
+| baseline | test | 250 | 0.052 | 0.157 | 1.000 | 0.976 | 3/3 | 20.39 |
+| baseline | train | 1356 | 0.528 | 0.248 | 0.755 | 0.398 | 10/13 | 13.34 |
+| finetuned | all | 1759 | 0.844 | 0.648 | 0.727 | 0.097 | 15/18 | 7.12 |
+| finetuned | val | 153 | 0.562 | 0.390 | 0.494 | 0.121 | 1/2 | 21.62 |
+| finetuned | test | 250 | 0.824 | 0.606 | 0.227 | 0.049 | 3/3 | 5.83 |
+| finetuned | train | 1356 | 0.879 | 0.707 | 0.840 | 0.105 | 11/13 | 6.50 |
+| custom | all | 1759 | 0.894 | 0.720 | 0.702 | 0.028 | 13/18 | 0.79 |
+| custom | val | 153 | 0.719 | 0.750 | 0.517 | 0.015 | 2/2 | 0.00 |
+| custom | test | 250 | 0.824 | 0.452 | 0.000 | 0.000 | 0/3 | 0.00 |
+| custom | train | 1356 | 0.927 | 0.748 | 0.827 | 0.035 | 11/13 | 1.03 |
+
+### What improved, and what did not
+
+* **Best validation result of the three, by a wide margin**: per-image val
+  macro-F1 0.768 (fine-tuned 0.401, baseline 0.281); every val fire frame and
+  both val episodes (fire, handgun) detected, with zero false positives.
+* **False alarms nearly eliminated**: 0.79 per normal minute across all ten
+  videos, against 7.12 fine-tuned and 13.96 baseline; zero on val and test.
+* **The test stick is never detected** (0/3 episodes). The classifier's weapon
+  probability on those frames averages 0.05 (max 0.15), so no threshold can
+  recover it: 39 frames of a stick *carried* in `wa01` did not teach a stick
+  *swung* in `wa02`. The fine-tuned branch catches all three test episodes,
+  late, most plausibly through its detector's rehearsed long-gun knowledge — a
+  prior the custom-only detectors never had. No validation data contains a
+  stick, so this could not have been tuned for without using the test video.
+* **Test accuracy is high for the wrong reason**: 0.720 per image and 0.824 in
+  replay come from calling the corridor normal, which it mostly is. Macro-F1
+  (0.419 / 0.452) is the honest test number.
+* **Assault is still never predicted** (threshold 0.85, as in §6.5).
+
+## 6.7 Comparison and recommendation
+
+Held-out numbers only (val = `gun`, `vid04`; test = `wa02`):
+
+| | baseline (v3) | finetuned-v3 | custom-v4 |
+|---|---|---|---|
+| Val per-image accuracy / macro-F1 | 0.417 / 0.281 | 0.583 / 0.401 | **0.679 / 0.768** |
+| Val replay accuracy / episodes / false alarms | 0.516 / 1 of 2 / 0 | 0.562 / 1 of 2 / 4 | **0.719 / 2 of 2 / 0** |
+| Test per-image accuracy / macro-F1 | 0.043 / 0.114 | 0.677 / **0.460** | **0.720** / 0.419 |
+| Test replay accuracy / macro-F1 | 0.052 / 0.157 | **0.824 / 0.606** | **0.824** / 0.452 |
+| Test episodes detected | 3 of 3 (and everything else) | **3 of 3** | 0 of 3 |
+| False alarms per normal minute, all 10 videos | 13.96 | 7.12 | **0.79** |
+| Scene model size / CPU cost per frame | — | 44.8 MB / 15 ms | 57 MB (+ cached base) / 105 ms |
+
+**`sentrix/custom-v4` is the most accurate configuration** on everything that
+could be used to choose — val, cross-validation, false alarms — and is the
+recommended deployment. Its one clear loss is the test corridor's stick, which
+`finetuned-v3` catches.
+
+Both results point at the same next step, which is also the cheapest: record
+more footage. Every weakness above is a class seen in only one or two videos
+(stick, fire, assault, robbery). The fine-tuned *detectors* and the custom
+*classifier* are complementary — a merged configuration (DINOv2 scene model +
+fine-tuned YOLO heads, `max` fusion) is the obvious candidate, but choosing it
+on this dataset would mean choosing on the test video, so it is left as a
+recommendation rather than shipped as a result.
+
+**Latency.** The DINOv2 scene model costs about 105 ms per frame on the
+laptop CPU, which puts a full pipeline tick near 190-200 ms: the live loop runs
+at about 5 Hz instead of 6 on CPU. With CUDA available the scene model runs on
+the GPU automatically.
+
+## 6.8 Reproducing
 
 ```bash
-python tools/eval_custom_frames.py --splits train,val,test --tag baseline
-python tools/replay_custom_videos.py --videos all --tag baseline
-python tools/custom_eval_table.py baseline
+# baseline and branch evaluation
+python tools/eval_custom_frames.py --splits train,val,test --tag <tag>
+python tools/replay_custom_videos.py --videos all --tag <tag>
+python tools/custom_eval_table.py baseline <tag>
+
+# training (sentrix conda env, CUDA)
+python training/custom/annotate_boxes.py --out training/datasets/sentrix_custom/boxes.csv \
+    --qc-dir training/runs/custom/annotation_qc --reject training/datasets/sentrix_custom/box_qc_rejects.txt
+python training/custom/screen_backbones.py --models resnet18_violence vit_base_patch14_dinov2.lvd142m
+python training/custom/train_scene_classifier.py cv  --init violence_v3 --arch resnet18 \
+    --rehearsal 600 --tag ft_r18_reh
+python training/custom/train_scene_classifier.py fit --init violence_v3 --arch resnet18 \
+    --rehearsal 600 --cv-tag ft_r18_reh --tag ft_r18_reh \
+    --out models/v4_finetuned/scene_classifier_ft_v4.pt
+python training/custom/train_detector.py --task weapon \
+    --init models/v3_real/weapon_detector_real_v3.pt --classes knife,long_gun,pistol,stick \
+    --rehearsal 1500 --retention 400 --epochs 50 --patience 15 --tag ft_weapon \
+    --out models/v4_finetuned/weapon_detector_ft_v4.pt
+python training/custom/train_detector.py --task fire \
+    --init models/v3_real/fire_smoke_detector_real_v3.pt --classes fire,smoke \
+    --rehearsal 1500 --retention 400 --pos-repeat 8 --tag ft_fire \
+    --out models/v4_finetuned/fire_smoke_detector_ft_v4.pt
 ```
 
 `--rescore` on the replay tool recomputes metrics from the saved per-tick CSV
-without replaying.
+without replaying. GroundingDINO runs are not bit-for-bit deterministic across
+GPUs; `boxes.csv` is the annotation of record.

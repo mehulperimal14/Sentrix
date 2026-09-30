@@ -1,0 +1,372 @@
+{
+  "tag": "dino_b_last6",
+  "config": {
+    "cmd": "cv",
+    "arch": "timm:vit_base_patch14_dinov2.lvd142m",
+    "init": "pretrained",
+    "size": 224,
+    "epochs": 15,
+    "batch": 32,
+    "lr": 2e-05,
+    "head_lr_mult": 50.0,
+    "weight_decay": 0.05,
+    "label_smoothing": 0.1,
+    "rehearsal": 0,
+    "rehearsal_share": 0.0,
+    "train_last_blocks": 6,
+    "seed": 42,
+    "dataset": null,
+    "tag": "dino_b_last6",
+    "verbose": false
+  },
+  "folds": [
+    "gun",
+    "vid02",
+    "vid03",
+    "vid04",
+    "vid05",
+    "vid06",
+    "vid07",
+    "wa01",
+    "wa03"
+  ],
+  "temperature": 1.5482377593151662,
+  "thresholds": {
+    "fire": 0.3,
+    "weapon": 0.3,
+    "assault": 0.85,
+    "robbery": 0.6
+  },
+  "minutes": 14.5,
+  "reports": {
+    "argmax": {
+      "n": 672,
+      "accuracy": 0.6101,
+      "macro_f1": 0.3999,
+      "balanced_accuracy": 0.3794,
+      "classes_scored": [
+        "normal",
+        "fire",
+        "weapon",
+        "assault",
+        "robbery"
+      ],
+      "per_class": {
+        "normal": {
+          "precision": 0.6537,
+          "recall": 0.7626,
+          "f1": 0.704,
+          "support": 396,
+          "predicted": 462
+        },
+        "fire": {
+          "precision": 0.8462,
+          "recall": 0.6471,
+          "f1": 0.7333,
+          "support": 17,
+          "predicted": 13
+        },
+        "weapon": {
+          "precision": 0.6644,
+          "recall": 0.4874,
+          "f1": 0.5623,
+          "support": 199,
+          "predicted": 146
+        },
+        "assault": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 43,
+          "predicted": 44
+        },
+        "robbery": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 17,
+          "predicted": 7
+        }
+      },
+      "confusion": {
+        "labels": [
+          "normal",
+          "fire",
+          "weapon",
+          "assault",
+          "robbery"
+        ],
+        "matrix": [
+          [
+            302,
+            2,
+            45,
+            44,
+            3
+          ],
+          [
+            5,
+            11,
+            1,
+            0,
+            0
+          ],
+          [
+            100,
+            0,
+            97,
+            0,
+            2
+          ],
+          [
+            38,
+            0,
+            3,
+            0,
+            2
+          ],
+          [
+            17,
+            0,
+            0,
+            0,
+            0
+          ]
+        ]
+      },
+      "threat_detection": {
+        "tp": 116,
+        "fp": 94,
+        "fn": 160,
+        "tn": 302,
+        "precision": 0.5524,
+        "recall": 0.4203,
+        "f1": 0.4774,
+        "false_positive_rate": 0.2374
+      }
+    },
+    "thr_0.5": {
+      "n": 672,
+      "accuracy": 0.6652,
+      "macro_f1": 0.3137,
+      "balanced_accuracy": 0.2955,
+      "classes_scored": [
+        "normal",
+        "fire",
+        "weapon",
+        "assault",
+        "robbery"
+      ],
+      "per_class": {
+        "normal": {
+          "precision": 0.6503,
+          "recall": 0.9394,
+          "f1": 0.7686,
+          "support": 396,
+          "predicted": 572
+        },
+        "fire": {
+          "precision": 1.0,
+          "recall": 0.1765,
+          "f1": 0.3,
+          "support": 17,
+          "predicted": 3
+        },
+        "weapon": {
+          "precision": 0.809,
+          "recall": 0.3618,
+          "f1": 0.5,
+          "support": 199,
+          "predicted": 89
+        },
+        "assault": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 43,
+          "predicted": 8
+        },
+        "robbery": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 17,
+          "predicted": 0
+        }
+      },
+      "confusion": {
+        "labels": [
+          "normal",
+          "fire",
+          "weapon",
+          "assault",
+          "robbery"
+        ],
+        "matrix": [
+          [
+            372,
+            0,
+            16,
+            8,
+            0
+          ],
+          [
+            14,
+            3,
+            0,
+            0,
+            0
+          ],
+          [
+            127,
+            0,
+            72,
+            0,
+            0
+          ],
+          [
+            42,
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            17,
+            0,
+            0,
+            0,
+            0
+          ]
+        ]
+      },
+      "threat_detection": {
+        "tp": 76,
+        "fp": 24,
+        "fn": 200,
+        "tn": 372,
+        "precision": 0.76,
+        "recall": 0.2754,
+        "f1": 0.4043,
+        "false_positive_rate": 0.0606
+      }
+    },
+    "tuned": {
+      "n": 672,
+      "accuracy": 0.6771,
+      "macro_f1": 0.4231,
+      "balanced_accuracy": 0.4189,
+      "classes_scored": [
+        "normal",
+        "fire",
+        "weapon",
+        "assault",
+        "robbery"
+      ],
+      "per_class": {
+        "normal": {
+          "precision": 0.6907,
+          "recall": 0.846,
+          "f1": 0.7605,
+          "support": 396,
+          "predicted": 485
+        },
+        "fire": {
+          "precision": 0.8571,
+          "recall": 0.7059,
+          "f1": 0.7742,
+          "support": 17,
+          "predicted": 14
+        },
+        "weapon": {
+          "precision": 0.6243,
+          "recall": 0.5427,
+          "f1": 0.5806,
+          "support": 199,
+          "predicted": 173
+        },
+        "assault": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 43,
+          "predicted": 0
+        },
+        "robbery": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 17,
+          "predicted": 0
+        }
+      },
+      "confusion": {
+        "labels": [
+          "normal",
+          "fire",
+          "weapon",
+          "assault",
+          "robbery"
+        ],
+        "matrix": [
+          [
+            335,
+            2,
+            59,
+            0,
+            0
+          ],
+          [
+            3,
+            12,
+            2,
+            0,
+            0
+          ],
+          [
+            91,
+            0,
+            108,
+            0,
+            0
+          ],
+          [
+            39,
+            0,
+            4,
+            0,
+            0
+          ],
+          [
+            17,
+            0,
+            0,
+            0,
+            0
+          ]
+        ]
+      },
+      "threat_detection": {
+        "tp": 126,
+        "fp": 61,
+        "fn": 150,
+        "tn": 335,
+        "precision": 0.6738,
+        "recall": 0.4565,
+        "f1": 0.5443,
+        "false_positive_rate": 0.154
+      }
+    }
+  },
+  "per_video_accuracy": {
+    "gun": 0.6833,
+    "vid02": 0.5424,
+    "vid03": 0.8462,
+    "vid04": 0.6667,
+    "vid05": 0.1633,
+    "vid06": 0.6452,
+    "vid07": 0.8622,
+    "wa01": 0.4556,
+    "wa03": 0.6415
+  }
+}

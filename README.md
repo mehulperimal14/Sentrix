@@ -6,7 +6,7 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.4-EE4C2C.svg)](https://pytorch.org/)
 [![YOLOv8](https://img.shields.io/badge/YOLOv8-ultralytics-00BFA5.svg)](https://docs.ultralytics.com/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688.svg)](https://fastapi.tiangolo.com/)
-[![Tests](https://img.shields.io/badge/tests-65%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-88%20passing-brightgreen.svg)](tests/)
 
 > **Capstone Project CPG-299** · Computer Science and Engineering, Thapar Institute of
 > Engineering and Technology, Patiala · Mentor: Dr. Ashutosh Mishra
@@ -28,10 +28,11 @@ adding an ESP32 node or a GPIO relay later is a configuration change, not a rewr
 
 | Subsystem | State | Notes |
 |---|---|---|
-| Person / weapon / fire detection | **Working** | One YOLOv8 component, three heads, ByteTrack |
+| Person / weapon / fire detection | **Working** | One YOLO component, three heads, ByteTrack; weapon and fire heads are YOLO11n trained on the custom dataset and draw boxes, but by default do not drive the alarm (see *Custom dataset evaluation*) |
 | TCI fusion + escalation | **Working** | Hysteresis, incident grouping, time-based smoothing |
 | Encrypted evidence vault | **Working** | AES-256-GCM, HMAC hash-chained manifest |
-| Violence classification | **Working** | Windowed; needs a temporal head for real gains |
+| Scene classification | **Working** | normal / fire / weapon / assault / robbery; DINOv2 ViT-B/14 trained on the custom dataset (`models/v4_custom/`) |
+| Violence classification | **Superseded** | The RWF-2000 model calls the test corridor a fight; replaced by the scene classifier's assault head whenever a scene model is installed |
 | Acoustic classification | **Working** | Model is under-trained — see *Known limitations* |
 | Face authorisation | **Working** | ArcFace 512-d via `insightface`; fails closed without it |
 | Cross-camera re-identification | **Degraded** | Histogram fallback; install `torchreid` |
@@ -75,6 +76,19 @@ python tools/doctor.py
 python -m sentrix
 ```
 
+**First run downloads the scene classifier's base weights.** The v4 scene model
+is stored as a 57 MB delta on top of the public DINOv2 ViT-B/14 weights, which
+`timm` fetches once (about 350 MB) into the Hugging Face cache. The engine
+verifies them against a SHA-256 fingerprint before use. On a machine that will
+run offline, cache them while online:
+
+```bash
+python -c "import timm; timm.create_model('vit_base_patch14_dinov2.lvd142m', pretrained=True)"
+```
+
+Without them the scene engine refuses to load and the pipeline falls back to
+the v3 violence model, logging an error.
+
 Strongly recommended — without a face-embedding backend, nobody can ever be
 authorised:
 
@@ -97,7 +111,8 @@ Sentrix/
 │   │   └── actuators.py        console | sound | GPIO relay
 │   ├── perception/             one score per modality
 │   │   ├── detector.py         ★ YOLOv8: person + weapon + fire + tracking
-│   │   ├── violence.py         sliding-window action classification
+│   │   ├── scene.py            ★ 5-class scene classifier, threshold-aligned to fusion
+│   │   ├── violence.py         sliding-window action classification (fallback)
 │   │   ├── audio.py            checkpoint-adaptive acoustic CNN
 │   │   ├── identity.py         ★ fail-closed face authorisation
 │   │   ├── behaviour.py        kinematics, resolution-independent
@@ -125,12 +140,13 @@ Sentrix/
 ├── notebooks/                  ★ TCI analysis (contract, calibration, thresholds)
 ├── training/
 │   ├── datasets/sentrix_custom/ ground truth of the custom frame dataset
+│   ├── custom/                 ★ custom-dataset box annotation, training, screening
 │   ├── scripts/                training as .py
 │   ├── notebooks/              training as .ipynb
 │   └── runs/                   all run outputs (v1_legacy, v2_real, v3_real, ucf_crime_dvs)
 ├── tools/                      doctor, replay, baseline, evaluate, auditors,
 │                               custom-dataset evaluation
-├── tests/                      65 regression tests
+├── tests/                      88 regression tests
 ├── docs/                       specifications
 ├── Capstone Docs/              submissions
 └── var/                        runtime output — gitignored, never web-served
@@ -325,7 +341,31 @@ python tools/custom_eval_table.py                            # markdown tables
 On this footage the shipped v3 models score **0.043 accuracy on the test video**:
 the violence classifier calls the entire test corridor a fight, the weapon
 detector is near chance (AUROC 0.54) and the fire detector finds none of the
-flame jets. Protocol, metric definitions and the full breakdown are in
+flame jets.
+
+Three configurations are kept on separate branches:
+
+| Branch | Models |
+|---|---|
+| `sentrix/baseline-v3` | the shipped v3 models, unchanged |
+| `sentrix/finetuned-v3` | the V3-notebook models fine-tuned on the custom data (ResNet-18 scene model, YOLOv8n heads, with rehearsal) |
+| `sentrix/custom-v4` (this branch) | new models trained on the custom data: a DINOv2 ViT-B/14 scene classifier and YOLO11n heads |
+
+| Held-out result | baseline | finetuned | **custom (this branch)** |
+|---|---|---|---|
+| Val, per image — accuracy / macro-F1 | 0.417 / 0.281 | 0.583 / 0.401 | **0.679 / 0.768** |
+| Val, video replay — episodes detected, false alarms | 1 of 2, 0 | 1 of 2, 4 | **2 of 2, 0** |
+| Test, per image — accuracy / macro-F1 | 0.043 / 0.114 | 0.677 / 0.460 | 0.720 / 0.419 |
+| Test, video replay — episodes detected | 3 of 3 | 3 of 3 | **0 of 3** |
+| False alarms per normal minute, all 10 videos | 13.96 | 7.12 | **0.79** |
+
+This branch is the most accurate on everything that could be used to choose a
+model (validation, cross-validation, false alarms) and is the recommended
+configuration. Its blind spot is the stick swung in the test corridor, which
+the fine-tuned branch catches: 39 training frames of a stick *carried* did not
+teach a stick *swung*. Assault is not detected by either branch — it appears in
+two videos in two different rooms, which no model generalises across. Protocol,
+model selection and the full breakdown are in
 [`docs/6_CUSTOM_DATASET_EVALUATION.md`](docs/6_CUSTOM_DATASET_EVALUATION.md).
 
 ### The TCI notebooks

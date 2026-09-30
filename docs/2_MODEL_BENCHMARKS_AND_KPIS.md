@@ -235,9 +235,10 @@ behaviour. See doc 1 §5.
 | Engine | File actually loaded | Size |
 |---|---|---|
 | Person detection | `yolov8n.pt` | 6.5 MB |
-| Weapon | `v3_real/weapon_detector_real_v3.pt` | 6.2 MB |
-| Fire & smoke | `v3_real/fire_smoke_detector_real_v3.pt` | 6.2 MB |
-| Violence | `v3_real/violence_classifier_real_v3.pt` | 44.8 MB |
+| Weapon | `v4_custom/weapon_detector_custom_v4.pt` (YOLO11n, custom data; boxes only by default) | 5.5 MB |
+| Fire | `v4_custom/fire_detector_custom_v4.pt` (YOLO11n, custom data; boxes only by default) | 5.5 MB |
+| Scene (normal/fire/weapon/assault/robbery) | `v4_custom/scene_classifier_custom_v4.pt` (DINOv2 ViT-B/14, delta on the public weights) | 57.1 MB |
+| Violence | `v3_real/violence_classifier_real_v3.pt` — **not loaded** while a scene model is present | 44.8 MB |
 | Audio | `v3_real/audio_classifier_real_v3.pt` | 4.9 MB |
 | TCI fusion | `tci_xgboost.json` (synthetic) | 0.3 MB |
 
@@ -257,6 +258,19 @@ Retained but **not loaded by anything**: `violence_classifier.pt` and
 > `perception/audio.py` now builds its architecture from the checkpoint's own
 > parameter names, so both load. **The V3 audio and violence models are serving
 > for the first time.**
+
+---
+
+### v4: new models trained on the custom dataset
+
+Every metric above is measured on the corpus each model was trained on; on the
+team's own labelled footage (765 frames, 10 videos) the v3 models score 0.043
+test accuracy. The v4 scene classifier — DINOv2 ViT-B/14 with its last four
+blocks trained on that footage, chosen by leave-one-video-out cross-validation
+— reaches val macro-F1 0.768 and cuts false alarms across all ten videos from
+13.96 to 0.79 per normal minute, but misses the stick swung in the test video.
+Full protocol, the comparison with the fine-tuned v3 models, and every
+limitation: [doc 6](6_CUSTOM_DATASET_EVALUATION.md).
 
 ---
 

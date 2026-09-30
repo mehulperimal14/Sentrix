@@ -183,7 +183,11 @@ class SceneConfig:
 
     enabled: bool = _env_bool("SENTRIX_SCENE_ENABLED", True)
     window_seconds: float = _env_float("SENTRIX_SCENE_WINDOW", 0.5)
-    fusion: str = os.getenv("SENTRIX_SCENE_FUSION", "max").strip().lower() or "max"
+    #: ``scene`` for the v4_custom models: ``max`` and ``scene`` tied exactly on
+    #: the validation images and videos, and the custom-only YOLO heads validate
+    #: weakly on their own (frame AUROC 0.65 weapon, 0.62 fire), so they draw
+    #: boxes but do not drive the alarm.
+    fusion: str = os.getenv("SENTRIX_SCENE_FUSION", "scene").strip().lower() or "scene"
 
 
 # ──────────────────────────────────────────────────────────────────────────────

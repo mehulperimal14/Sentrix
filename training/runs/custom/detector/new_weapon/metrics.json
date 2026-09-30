@@ -1,0 +1,65 @@
+{
+  "custom_val": {
+    "mAP50": 0.5144,
+    "mAP50_95": 0.2907,
+    "precision": 0.5625,
+    "recall": 0.4091,
+    "per_class_mAP50": {
+      "pistol": 0.5144
+    }
+  },
+  "frame_level": {
+    "val": {
+      "n_pos": 55,
+      "n_neg": 23,
+      "auroc": 0.6545,
+      "recall@0.25": 0.1273,
+      "fpr@0.25": 0.0,
+      "recall@0.4": 0.1091,
+      "fpr@0.4": 0.0,
+      "recall@0.5": 0.0909,
+      "fpr@0.5": 0.0,
+      "recall@0.55": 0.0909,
+      "fpr@0.55": 0.0,
+      "recall@0.7": 0.0909,
+      "fpr@0.7": 0.0
+    },
+    "test": {
+      "n_pos": 26,
+      "n_neg": 67,
+      "auroc": 0.4047,
+      "recall@0.25": 0.0,
+      "fpr@0.25": 0.0149,
+      "recall@0.4": 0.0,
+      "fpr@0.4": 0.0149,
+      "recall@0.5": 0.0,
+      "fpr@0.5": 0.0149,
+      "recall@0.55": 0.0,
+      "fpr@0.55": 0.0149,
+      "recall@0.7": 0.0,
+      "fpr@0.7": 0.0
+    }
+  },
+  "training_minutes": 8.8,
+  "dataset": {
+    "train_negative": 384,
+    "train_positive": 91,
+    "train_excluded": 113,
+    "val_negative": 29,
+    "val_positive": 44,
+    "val_excluded": 11,
+    "test_negative": 67,
+    "test_positive": 15,
+    "test_excluded": 11,
+    "train_rehearsal": 0
+  },
+  "custom_test": {
+    "mAP50": 0.0026,
+    "mAP50_95": 0.0015,
+    "precision": 0.004,
+    "recall": 0.0667,
+    "per_class_mAP50": {
+      "stick": 0.0026
+    }
+  }
+}
