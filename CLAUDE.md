@@ -132,7 +132,7 @@ The product did not work as a whole — see section 5.
 Commits on `sentrix/e2e-repair` since `custom-v4` (not pushed):
 
 ```
-(M5)    feat(eval): committed-level metrics, negative sessions, multi-rate replay, gate report
+7b42ae4 feat(eval): committed-level metrics, negative sessions, multi-rate replay, gate report
 d067d4f feat(identity): M4 - enrol from the monitoring camera, fixed uploads, per-track identity
 47bdbd3 feat(records): M3 - incident rows from one tick, crash-safe logs, committed alarm, usable events page
 dc9b089 perf(identity): run face recognition on its own thread in the live loop
