@@ -162,6 +162,31 @@ class WindowConfig:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Scene classification (normal / fire / weapon / assault / robbery)
+# ──────────────────────────────────────────────────────────────────────────────
+@dataclass(frozen=True)
+class SceneConfig:
+    """The five-class scene classifier and how its output meets the detectors.
+
+    ``window_seconds`` averages class probabilities over the last few ticks
+    (three at 6 Hz). One ambiguous frame then cannot flip the incident type,
+    and a weapon brandished for a second is still caught; the TCI's EMA and
+    hysteresis apply on top.
+
+    ``fusion`` decides how the classifier's weapon and fire scores combine with
+    the YOLO detectors': ``max`` takes the stronger of the two, ``scene`` lets
+    the classifier alone drive them (boxes are still drawn), ``detector``
+    ignores the classifier for weapon and fire. Assault and robbery always come
+    from the classifier — no detector produces them. The default was chosen on
+    the validation videos; see ``docs/6_CUSTOM_DATASET_EVALUATION.md``.
+    """
+
+    enabled: bool = _env_bool("SENTRIX_SCENE_ENABLED", True)
+    window_seconds: float = _env_float("SENTRIX_SCENE_WINDOW", 0.5)
+    fusion: str = os.getenv("SENTRIX_SCENE_FUSION", "max").strip().lower() or "max"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Behaviour / kinematics
 # ──────────────────────────────────────────────────────────────────────────────
 @dataclass(frozen=True)
@@ -189,6 +214,7 @@ class BehaviourConfig:
 
     scores: dict = field(default_factory=lambda: {
         "fighting": 0.90,
+        "robbery": 0.85,
         "crawling": 0.70,
         "running": 0.65,
         "loitering": 0.55,
@@ -396,6 +422,7 @@ class Config:
     pipeline: PipelineConfig = field(default_factory=PipelineConfig)
     detection: DetectionConfig = field(default_factory=DetectionConfig)
     windows: WindowConfig = field(default_factory=WindowConfig)
+    scene: SceneConfig = field(default_factory=SceneConfig)
     behaviour: BehaviourConfig = field(default_factory=BehaviourConfig)
     identity: IdentityConfig = field(default_factory=IdentityConfig)
     reid: ReIDConfig = field(default_factory=ReIDConfig)

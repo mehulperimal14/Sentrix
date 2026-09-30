@@ -28,7 +28,8 @@ All inference is local. There is no cloud dependency and no subscription.
 | Person, weapon, fire/smoke detection + tracking | Working — one YOLOv8 component |
 | TCI fusion, hysteresis, incident grouping | Working |
 | AES-256-GCM evidence vault with signed manifest | Working |
-| Violence classification over a 2 s window | Working |
+| Scene classification (normal/fire/weapon/assault/robbery), 0.5 s window | Working — see doc 6 |
+| Violence classification over a 2 s window | Fallback only — superseded by the scene classifier when installed |
 | Acoustic classification over a 4 s window | Working (model under-trained — see doc 2) |
 | Face authorisation | Working with `insightface`; **fails closed** without it |
 | Cross-camera re-identification | Degraded — histogram fallback unless `torchreid` installed |
@@ -51,7 +52,8 @@ Sentrix/
 │   │   └── actuators.py        Actuator: console | sound | GPIO relay
 │   ├── perception/
 │   │   ├── detector.py         YOLOv8 — person + weapon + fire + ByteTrack
-│   │   ├── violence.py         sliding-window action classification
+│   │   ├── scene.py            5-class scene classifier (normal/fire/weapon/assault/robbery)
+│   │   ├── violence.py         sliding-window action classification (used only without a scene model)
 │   │   ├── audio.py            checkpoint-adaptive acoustic CNN
 │   │   ├── identity.py         fail-closed face authorisation
 │   │   ├── behaviour.py        kinematics, resolution-independent
@@ -107,7 +109,9 @@ Sentrix/
 │  Perception — every scorer maps sensor data to [0, 1]                 │
 │                                                                        │
 │   detector.py    YOLOv8: persons + weapons + fire, ByteTrack ids      │
-│   violence.py    16 frames over 2.0 s, re-scored every 1.0 s          │
+│   scene.py       5-class scene probabilities, 0.5 s mean, mapped onto │
+│                  the weapon/fire/violence/robbery scales              │
+│   violence.py    16 frames over 2.0 s (only without a scene model)    │
 │   audio.py       4.0 s log-mel window, 1.0 s hop, RMS-gated           │
 │   identity.py    ArcFace 512-d against the enrolled gallery           │
 │   behaviour.py   kinematics in frame-diagonals per second             │
