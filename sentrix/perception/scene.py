@@ -41,10 +41,18 @@ hysteresis still apply on top.
 
 Checkpoints are self-describing (architecture, classes, preprocessing,
 temperature, thresholds), so promoting a new model is a file copy.
+
+A checkpoint may be a *delta*: when most of a backbone was frozen during
+training, only the tensors training changed are stored, together with a
+SHA-256 fingerprint of the frozen remainder. Loading rebuilds the public
+pretrained weights (downloaded once by timm, then cached), refuses to continue
+unless they hash to exactly what the classifier was trained on, and overlays
+the delta. A 171 MB DINOv2 checkpoint becomes a 57 MB file with no loss.
 """
 
 from __future__ import annotations
 
+import hashlib
 import os
 import time
 from collections import deque
@@ -105,6 +113,29 @@ def decide_label(probs: dict[str, float], thresholds: dict[str, float]) -> str:
     """
     return next((c for c in PRIORITY if probs.get(c, 0.0) >= thresholds.get(c, 0.5)),
                 "normal")
+
+
+def base_fingerprint(state: dict, exclude: set[str] | frozenset[str]) -> str:
+    """SHA-256 over every tensor not in ``exclude``, in name order, as float32."""
+    digest = hashlib.sha256()
+    for name in sorted(state):
+        if name in exclude:
+            continue
+        tensor = state[name].detach().float().cpu().contiguous()
+        digest.update(name.encode())
+        digest.update(tensor.numpy().tobytes())
+    return digest.hexdigest()
+
+
+def merge_delta(net, delta: dict, expected_fingerprint: str) -> None:
+    """Overlay a delta checkpoint onto ``net``'s pretrained weights, or raise."""
+    actual = base_fingerprint(net.state_dict(), frozenset(delta))
+    if actual != expected_fingerprint:
+        raise ValueError("pretrained base weights differ from the ones this "
+                         "classifier was trained on (fingerprint mismatch)")
+    missing, unexpected = net.load_state_dict(delta, strict=False)
+    if unexpected:
+        raise ValueError(f"delta has tensors the model lacks: {unexpected[:5]}")
 
 
 def build_scene_model(architecture: str, num_classes: int, pretrained: bool = False,
@@ -202,10 +233,14 @@ class SceneEngine:
             classes = [str(c) for c in ckpt.get("classes", SCENE_CLASSES)]
             if set(PRIORITY) - set(classes):
                 raise ValueError(f"checkpoint classes {classes} lack {PRIORITY}")
-            net = build_scene_model(ckpt["architecture"], len(classes),
-                                    image_size=int(ckpt.get("image_size", 224)))
             state = {k: v.float() for k, v in ckpt["model_state_dict"].items()}
-            net.load_state_dict(state)
+            delta = ckpt.get("storage") == "delta"
+            net = build_scene_model(ckpt["architecture"], len(classes), pretrained=delta,
+                                    image_size=int(ckpt.get("image_size", 224)))
+            if delta:
+                merge_delta(net, state, ckpt["base_fingerprint"])
+            else:
+                net.load_state_dict(state)
             net.to(self._device).eval()
 
             norm = ckpt.get("normalization") or {}
@@ -287,4 +322,4 @@ class SceneEngine:
 
 
 __all__ = ["SCENE_CLASSES", "PRIORITY", "SceneEngine", "SceneResult", "align",
-           "build_scene_model", "decide_label"]
+           "base_fingerprint", "build_scene_model", "decide_label", "merge_delta"]

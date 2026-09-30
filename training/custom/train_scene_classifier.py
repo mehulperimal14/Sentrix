@@ -60,7 +60,8 @@ sys.path.insert(0, str(ROOT))
 
 from sentrix.evaluation.custom_dataset import CLASSES, Frame, load_frames  # noqa: E402
 from sentrix.evaluation.metrics import classification_report  # noqa: E402
-from sentrix.perception.scene import PRIORITY, build_scene_model, decide_label  # noqa: E402
+from sentrix.perception.scene import (PRIORITY, base_fingerprint,  # noqa: E402
+                                      build_scene_model, decide_label)
 
 VIOLENCE_V3 = ROOT / "models" / "v3_real" / "violence_classifier_real_v3.pt"
 RWF_DIR = Path(os.getenv("SENTRIX_VIOLENCE_DATA", r"G:\Capstone\data\violence_data"))
@@ -433,12 +434,24 @@ def cmd_fit(args) -> int:
         w.writerow(["image", "split", "video", "gt", "pred", *[f"p_{c}" for c in CLASSES]])
         w.writerows(rows)
 
+    full = net.state_dict()
+    storage = "full"
+    if args.delta:
+        # Only what training changed, plus the position embedding (timm
+        # resamples it to the input size, and that resampling may differ
+        # between timm versions). Everything else is the public checkpoint.
+        keep = {n for n, p in net.named_parameters() if p.requires_grad}
+        keep |= {n for n in full if n == "pos_embed"}
+        fingerprint = base_fingerprint(full, frozenset(keep))
+        full = {k: v for k, v in full.items() if k in keep}
+        storage = "delta"
     state = {k: (v.half() if args.fp16 and v.is_floating_point() else v)
-             for k, v in net.state_dict().items()}
+             for k, v in full.items()}
     init_from = VIOLENCE_V3.name if args.init == "violence_v3" else f"{args.arch} pretrained"
     ckpt = {
         "model_state_dict": state,
         "state_dtype": "float16" if args.fp16 else "float32",
+        "storage": storage,
         "architecture": args.arch,
         "classes": list(CLASSES),
         "image_size": args.size,
@@ -451,6 +464,7 @@ def cmd_fit(args) -> int:
                      "rehearsal_frames": len(rehearsal)},
         "metrics": {k: v for k, v in metrics.items() if k != "cv_oof"},
         "run_id": datetime.now().strftime("%Y%m%d_%H%M%S"),
+        **({"base_model": args.arch, "base_fingerprint": fingerprint} if args.delta else {}),
         "training_type": "real_data",
         "synthetic_data": False,
     }
@@ -505,7 +519,14 @@ def main(argv=None) -> int:
             p.add_argument("--out", required=True)
             p.add_argument("--fp16", action="store_true",
                            help="store weights as float16 (halves the file)")
+            p.add_argument("--delta", action="store_true",
+                           help="store only the trained tensors plus a fingerprint "
+                                "of the frozen public weights (needs --init "
+                                "pretrained and --train-last-blocks)")
     args = parser.parse_args(argv)
+    if getattr(args, "delta", False) and (args.init == "violence_v3"
+                                          or args.train_last_blocks is None):
+        raise SystemExit("--delta needs --init pretrained and --train-last-blocks")
     if not args.rehearsal:
         args.rehearsal_share = 0.0
     return args.func(args)
