@@ -153,6 +153,20 @@ class TestRobberyRoute:
         assert TCIEngine().compute(features, now=0.0).incident_type == "weapon"
 
 
+class TestDashboardPayload:
+    def test_scene_verdict_reaches_the_websocket(self):
+        """The dashboard's Scene Classifier card reads ``scene`` from the
+        websocket payload; it must survive serialisation."""
+        import json
+        from sentrix.pipeline.state import SystemState
+        live = SystemState()
+        live.update(scene=SceneResult(probs={"normal": 0.2, "weapon": 0.8},
+                                      label="weapon").to_dict())
+        payload = json.loads(live.ws_payload())
+        assert payload["scene"]["label"] == "weapon"
+        assert payload["scene"]["probs"]["weapon"] == 0.8
+
+
 class TestDeltaCheckpoint:
     """A delta checkpoint must reproduce the trained model exactly, and must
     refuse to load onto public weights other than the ones it was trained on."""
