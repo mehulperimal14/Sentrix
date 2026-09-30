@@ -301,10 +301,12 @@ overfitting; quote val and test.
   in replay; 3/3 episodes are caught, but late — median 1.0 s). 23 training boxes
   of a stick carried at the side do not teach a stick swung overhead, and val
   contains no stick, so nothing in selection rewards it.
-* **Fire on held-out video is not detected** by the system (0/1 val episode):
-  the fine-tuned classifier calls the flame-jet frames `weapon` (a can held out
-  like a gun), and weapon outranks fire in incident typing. The fire detector
-  itself separates them (AUROC 0.91) but rarely clears its 0.50 gate.
+* **Fire on held-out video is not detected** by the system (0/1 val episode).
+  Out of fold the fine-tuned classifier's fire predictions were never right, so
+  its tuned fire threshold is 0.85 (effectively off) while its weapon threshold
+  is 0.25 — and it calls the flame-jet frames `weapon` (a can held out like a
+  gun), which outranks fire in incident typing. The fire detector itself
+  separates them (AUROC 0.91) but rarely clears its 0.50 gate.
 * **Assault is never predicted.** Out of fold every assault prediction was
   wrong, so its tuned threshold (0.85) is effectively off. That is the honest
   outcome for a class that exists in two videos in two different rooms.
