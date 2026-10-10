@@ -14,7 +14,7 @@ Reports the preview rate (what the operator sees), the AI rate, frame age
 
 Usage::
 
-    python tools/bench_live.py                       # 7.mov from $SENTRIX_CUSTOM_VIDEOS
+    python tools/bench_live.py                       # vid07 (7.mov) from the bundled videos
     python tools/bench_live.py --video clip.mp4 --seconds 60 --json bench.json
 """
 
@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import statistics
 import sys
 import tempfile
@@ -105,7 +104,8 @@ def percentile(values: list[float], q: float) -> float:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    videos = Path(os.getenv("SENTRIX_CUSTOM_VIDEOS", r"C:\Users\PC\OneDrive\Desktop\Videos"))
+    from sentrix.evaluation.custom_dataset import videos_dir
+    videos = videos_dir()
     parser.add_argument("--video", type=Path, default=videos / "7.mov")
     parser.add_argument("--seconds", type=float, default=30.0)
     parser.add_argument("--warmup", type=float, default=5.0,

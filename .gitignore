@@ -1,6 +1,9 @@
 # ── secrets ───────────────────────────────────────────────────────────────────
+# .env holds the dashboard password, the evidence key and Twilio credentials.
+# Only the blank template is tracked.
 .env
-.env.local
+.env.*
+!.env.example
 *.pem
 *.key
 
@@ -28,8 +31,11 @@ htmlcov/
 .ipynb_checkpoints/
 
 # ── datasets ──────────────────────────────────────────────────────────────────
-# Raw and preprocessed data stays out of git. Record provenance in
-# docs/ and the sample manifests under training/runs/ instead.
+# Raw and preprocessed public corpora stay out of git. Record provenance in
+# docs/ and the sample manifests under training/runs/ instead. The one
+# exception is the team's custom dataset (frames + 10 source videos, ~140 MB),
+# tracked under training/datasets/sentrix_custom/ so every evaluation in
+# docs/6 reproduces on a fresh clone.
 data/
 training/cache_ucf_crime_dvs/
 training/ucf_crime_dvs/
@@ -48,10 +54,21 @@ training/runs/**/epoch*.pt
 Thumbs.db
 desktop.ini
 
-# ── editors ───────────────────────────────────────────────────────────────────
+# ── editors and local tooling ─────────────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
+.claude/
+.mypy_cache/
+.tox/
+.cache/
+*.log
+
+# ── device-specific exports ───────────────────────────────────────────────────
+# TensorRT engines and OpenVINO folders are built per machine from the tracked
+# .pt weights; they do not transfer between GPUs or driver versions.
+*.engine
+*_openvino_model/
 
 # per-run weight dumps of custom-dataset detector training; the promoted
 # copy lives in models/

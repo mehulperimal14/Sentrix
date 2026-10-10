@@ -1,0 +1,56 @@
+video_id,video_path,start_time,end_time,label,confidence,annotation_method,split,notes
+vid02,vid02.mov,0.0,8.5,normal,0.9,vlm_visual_review,train,person walks in and moves about room; no threat object visible
+vid02,vid02.mov,8.5,11.0,normal,0.55,vlm_visual_review,train,bending over bed picking something up; pre-threat transition
+vid02,vid02.mov,11.0,18.5,weapon,0.88,vlm_visual_review,train,handgun-shaped object held and pointed
+vid02,vid02.mov,18.5,19.9,weapon,0.5,vlm_visual_review,train,object possibly still in hand but not clearly visible
+vid03,vid03.mov,0.0,2.5,normal,0.9,vlm_visual_review,train,two men seated talking
+vid03,vid03.mov,2.5,6.0,normal,0.6,vlm_visual_review,train,arm-extended interaction; horseplay vs shove unclear
+vid03,vid03.mov,6.0,8.5,normal,0.88,vlm_visual_review,train,seated conversation
+vid03,vid03.mov,8.6,10.8,weapon,0.92,vlm_visual_review,train,handgun pointed at seated person
+vid03,vid03.mov,10.9,12.6,normal,0.62,vlm_visual_review,train,weapon lowered out of view between events
+vid03,vid03.mov,12.7,14.9,weapon,0.9,vlm_visual_review,train,handgun pointed again
+vid03,vid03.mov,15.0,17.1,normal,0.55,vlm_visual_review,train,post-event
+vid04,vid04.mov,0.0,4.5,normal,0.9,vlm_visual_review,val,two men seated talking
+vid04,vid04.mov,4.5,10.5,normal,0.5,vlm_visual_review,val,aerosol can and lighter held; pre-ignition
+vid04,vid04.mov,10.6,13.8,fire,0.92,vlm_visual_review,val,visible flame jet from aerosol
+vid04,vid04.mov,13.8,18.7,normal,0.5,vlm_visual_review,val,can still held
+vid05,vid05.mov,0.0,7.5,assault,0.85,vlm_visual_review,train,standing person striking and grappling seated person
+vid05,vid05.mov,7.5,7.8,assault,0.5,vlm_visual_review,train,transition frames
+vid05,vid05.mov,7.8,10.8,weapon,0.88,vlm_visual_review,train,handgun drawn and pointed during altercation
+vid05,vid05.mov,10.8,13.7,normal,0.5,vlm_visual_review,train,post-event standing; aftermath not clearly normal
+vid06,vid06.mov,0.0,3.5,normal,0.72,vlm_visual_review,train,one person standing over seated person
+vid06,vid06.mov,3.5,5.0,normal,0.5,vlm_visual_review,train,aerosol can raised
+vid06,vid06.mov,5.0,8.5,fire,0.95,vlm_visual_review,train,large sustained flame jet
+vid06,vid06.mov,8.5,12.8,normal,0.5,vlm_visual_review,train,can held
+vid06,vid06.mov,12.8,17.5,fire,0.93,vlm_visual_review,train,second sustained flame burst
+vid06,vid06.mov,17.5,19.7,normal,0.5,vlm_visual_review,train,post-event
+vid07,vid07.mov,0.0,67.0,normal,0.92,vlm_visual_review,train,group of people talking sitting and standing; no threat for over a minute
+vid07,vid07.mov,67.3,70.3,weapon,0.85,vlm_visual_review,train,handgun appears and is pointed
+vid07,vid07.mov,70.3,72.3,normal,0.5,vlm_visual_review,train,weapon out of view briefly
+vid07,vid07.mov,72.3,80.3,weapon,0.9,vlm_visual_review,train,handgun repeatedly raised and brandished
+vid07,vid07.mov,80.3,87.5,normal,0.5,vlm_visual_review,train,weapon lowered; seated interaction ambiguous
+vid07,vid07.mov,87.5,90.5,assault,0.5,vlm_visual_review,train,raised arm and leaning over another person; strike vs horseplay unclear
+vid07,vid07.mov,90.5,92.5,normal,0.55,vlm_visual_review,train,seated
+vid07,vid07.mov,92.5,96.8,weapon,0.8,vlm_visual_review,train,handgun held close to another persons head
+vid07,vid07.mov,96.8,102.4,normal,0.55,vlm_visual_review,train,post-event
+gun,gun.mov,0.0,1.0,normal,0.7,vlm_visual_review,val,person entering frame
+gun,gun.mov,1.0,12.0,weapon,0.88,vlm_visual_review,val,handgun carried pointed and raised throughout
+gun,gun.mov,12.0,14.3,normal,0.5,vlm_visual_review,val,leaning down
+wa01,wa01.mp4,0.0,11.5,normal,0.95,vlm_visual_review,train,empty corridor
+wa01,wa01.mp4,11.5,13.0,normal,0.55,vlm_visual_review,train,person entering frame
+wa01,wa01.mp4,13.0,29.5,weapon,0.72,vlm_visual_review,train,person carrying long stick or rod; melee weapon
+wa01,wa01.mp4,29.5,35.5,normal,0.45,vlm_visual_review,train,person wheeling a bicycle; theft vs ownership indistinguishable
+wa01,wa01.mp4,35.5,41.5,assault,0.45,vlm_visual_review,train,person crouched or fallen beside bicycle; altercation unconfirmed
+wa01,wa01.mp4,41.5,48.1,normal,0.8,vlm_visual_review,train,corridor largely empty again
+wa02,wa02.mp4,0.0,13.5,normal,0.95,vlm_visual_review,test,empty corridor
+wa02,wa02.mp4,13.5,23.5,normal,0.88,vlm_visual_review,test,person at urinal then walking; routine activity
+wa02,wa02.mp4,23.5,39.5,normal,0.45,vlm_visual_review,test,person moving bicycle around; theft vs ownership indistinguishable
+wa02,wa02.mp4,39.5,41.5,weapon,0.75,vlm_visual_review,test,long stick raised overhead in striking posture
+wa02,wa02.mp4,41.5,52.5,normal,0.45,vlm_visual_review,test,two people around bicycle
+wa02,wa02.mp4,52.5,54.0,weapon,0.78,vlm_visual_review,test,long stick swung
+wa02,wa02.mp4,54.0,58.8,normal,0.75,vlm_visual_review,test,single person at urinal
+wa03,wa03.mp4,0.0,10.5,normal,0.95,vlm_visual_review,train,empty corridor
+wa03,wa03.mp4,10.5,16.5,normal,0.88,vlm_visual_review,train,person at urinal then walking away
+wa03,wa03.mp4,16.5,18.68,normal,0.80,vlm_frame_review,train,"person takes hold of parked bicycle and turns it; wheels on floor, act still ambiguous in isolation"
+wa03,wa03.mp4,18.68,20.70,robbery,0.88,vlm_frame_review,train,"bicycle lifted clear of the floor and carried away at a run; user-confirmed the bike was carried, not wheeled"
+wa03,wa03.mp4,20.70,29.0,normal,0.95,vlm_visual_review,train,corridor empty again; subject and bicycle gone

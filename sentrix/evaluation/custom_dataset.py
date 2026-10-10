@@ -22,8 +22,10 @@ Two views of the ground truth are exposed:
   low-confidence segments (e.g. ``wa02`` 41.3-47.6 s is a weapon, not the
   ``normal (0.45)`` segment it sits inside).
 
-Paths resolve from ``SENTRIX_CUSTOM_DATASET`` / ``SENTRIX_CUSTOM_VIDEOS`` when
-set, otherwise from the locations the dataset was delivered to.
+The frames and the ten source videos ship with the repository
+(``training/datasets/sentrix_custom/frames`` and ``.../videos``), so every
+evaluation runs on a fresh clone. ``SENTRIX_CUSTOM_DATASET`` /
+``SENTRIX_CUSTOM_VIDEOS`` point elsewhere when set.
 """
 
 from __future__ import annotations
@@ -44,8 +46,9 @@ THREAT_CLASSES: tuple[str, ...] = CLASSES[1:]
 #: Vendored ground truth. Authoritative for every metric in this repository.
 METADATA_DIR = ROOT_DIR / "training" / "datasets" / "sentrix_custom"
 
-DEFAULT_DATASET_DIR = Path(r"C:\Users\PC\OneDrive\Desktop\dataset")
-DEFAULT_VIDEOS_DIR = Path(r"C:\Users\PC\OneDrive\Desktop\Videos")
+#: The frame dataset (labels.csv + train/val/test) and its source videos.
+DEFAULT_DATASET_DIR = METADATA_DIR / "frames"
+DEFAULT_VIDEOS_DIR = METADATA_DIR / "videos"
 
 #: TCI incident type -> dataset class. ``intrusion`` (an unrecognised person)
 #: is not one of the five dataset classes: nobody in this footage is enrolled,

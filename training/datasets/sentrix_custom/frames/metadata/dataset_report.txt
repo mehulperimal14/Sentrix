@@ -1,0 +1,185 @@
+========================================
+SENTRIX DATASET REPORT
+========================================
+
+Source videos:
+    Total:      10
+    Train:      7  (vid02, vid03, vid05, vid06, vid07, wa01, wa03)
+    Validation: 2  (gun, vid04)
+    Test:       1  (wa02)
+
+Images:
+    Total extracted:    1276
+    Total retained:     536
+    Duplicates removed: 522
+    Low-quality removed:0
+    Review required:    218
+
+----------------------------------------
+
+CLASS DISTRIBUTION
+
+Normal:
+    Train:      236
+    Validation: 9
+    Test:       36
+
+Fire:
+    Train:      9
+    Validation: 5
+    Test:       0
+
+Weapon:
+    Train:      141
+    Validation: 55
+    Test:       13
+
+Assault:
+    Train:      32
+    Validation: 0
+    Test:       0
+
+Robbery:
+    Train:      17
+    Validation: 0
+    Test:       0
+
+----------------------------------------
+
+DATA LEAKAGE CHECK
+
+Total labelled frames: 765  (was 754; +11 newly extracted from the
+wa03 carry-off at 8 fps, which is the same elevated sampling rate the
+pipeline already uses for assault and weapon; 6 existing frames were
+moved from train/normal to train/robbery)
+
+Caveat on the robbery class: all 17 frames come from ONE event in ONE
+video (wa03, train split). Validation and test contain no robbery
+frames, so robbery recall cannot be measured on this dataset. Treat
+the class as a seed for transfer learning, not as a trainable class
+on its own.
+
+Videos appearing in multiple splits: 0
+Duplicate leakage across splits: 1
+
+----------------------------------------
+
+QUALITY FILTER BREAKDOWN
+
+    near_duplicate       522
+
+----------------------------------------
+
+PROCESSING ERRORS
+
+    none
+
+----------------------------------------
+
+WARNINGS
+
+    - split 'test' contains only 1 source video (wa02) - metrics computed on it will be extremely high variance
+    - split 'val' contains no 'assault' frames - not enough source videos of that class to cover every split
+    - split 'test' contains no 'fire' frames - not enough source videos of that class to cover every split
+    - split 'test' contains no 'assault' frames - not enough source videos of that class to cover every split
+    - only 10 source videos: a 70/15/15 split cannot produce meaningful val/test sets. Collect more videos, or use --train-ratio 0.6 --val-ratio 0.2 --test-ratio 0.2 and treat results as indicative only
+
+----------------------------------------
+
+RUN CONFIGURATION
+
+    input_dir              /home/claude/sentrix_ds/pipeline/videos
+    annotations            /home/claude/sentrix_ds/pipeline/annotations/segments_source.csv
+    output_dir             /home/claude/sentrix_ds/pipeline/dataset
+    fps                    3.0
+    fast_class_fps         6.0
+    fast_classes           ['assault', 'weapon']
+    blur_threshold         12.0
+    dark_threshold         6.0
+    bright_threshold       249.0
+    min_std                4.0
+    phash_distance         2
+    dedup_scope            video
+    min_keep_interval      1.0
+    cross_split_corr       0.985
+    confidence_threshold   0.7
+    train_ratio            0.7
+    val_ratio              0.15
+    test_ratio             0.15
+    seed                   42
+    jpeg_quality           95
+    contact_sheet_cols     6
+    contact_sheet_max      24
+
+========================================
+========================================
+MANUAL REVIEW RESOLUTION
+========================================
+
+All 218 frames previously held in review/ were re-examined
+frame by frame at 400px and assigned a label. review/ is empty.
+
+Labels assigned on VISIBLE CONTENT of each frame:
+  - a frame showing no threat object or aggression -> normal
+  - aerosol can held without flame -> normal; visible flame -> fire
+  - firearm or stick visible in hand -> weapon
+  - visible strike / person downed with aggressor -> assault
+
+Corrections made during this pass:
+  - vid07 87.5-90.5s: previously flagged 'assault'. It is a steel
+    water bottle being handled, not a strike. Relabelled normal.
+  - vid04 13.81s and vid06 4.84s / 17.51s: flame clearly visible,
+    relabelled fire (these were inside low-confidence segments).
+  - wa01 35.5-38.5s: genuine assault, one person striking another
+    who is on the ground. Relabelled assault.
+  - wa02 41.3-47.6s and 52.2s: long stick carried and swung.
+    Relabelled weapon.
+  - wa03 18.68-20.70s: RE-REVIEWED at 12.5 fps. The bicycle is not
+    wheeled - it is lifted clear of the floor and carried away at a
+    run, exiting frame at 20.76s. Relabelled robbery (17 frames).
+    The lead-in, wa03 16.5-18.68s, stays normal: the subject is
+    holding the bike with both wheels down, which on its own is
+    indistinguishable from an owner collecting their bicycle.
+  - all other bicycle-handling segments remain normal: no lift,
+    no flight, no visible threat.
+
+FINAL CLASS DISTRIBUTION
+
+Normal:
+    Train:      373
+    Validation: 23
+    Test:       67
+
+Fire:
+    Train:      11
+    Validation: 6
+    Test:       0
+
+Weapon:
+    Train:      144
+    Validation: 55
+    Test:       26
+
+Assault:
+    Train:      43
+    Validation: 0
+    Test:       0
+
+Robbery:
+    Train:      17
+    Validation: 0
+    Test:       0
+
+Total labelled frames: 765  (was 754; +11 newly extracted from the
+wa03 carry-off at 8 fps, which is the same elevated sampling rate the
+pipeline already uses for assault and weapon; 6 existing frames were
+moved from train/normal to train/robbery)
+
+Caveat on the robbery class: all 17 frames come from ONE event in ONE
+video (wa03, train split). Validation and test contain no robbery
+frames, so robbery recall cannot be measured on this dataset. Treat
+the class as a seed for transfer learning, not as a trainable class
+on its own.
+
+Videos appearing in multiple splits: 0
+========================================
