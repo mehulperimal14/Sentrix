@@ -123,48 +123,55 @@ The product did not work as a whole — see section 5.
 
 | Branch | Head | Contents |
 |---|---|---|
-| `main` | `d4f37cd` | pre-session history (18 commits), untouched |
-| `sentrix/baseline-v3` | `ab01e84` | staged rewrite committed (`f74996f`) + evaluation harness (`ebc1349`) + doc fixes |
-| `sentrix/finetuned-v3` | `321cf7c` | baseline + scene integration + training tooling + fine-tuned v3 models |
-| `sentrix/custom-v4` | `cfef092` | baseline + scene integration + training tooling + new DINOv2/YOLO11n models (recommended) |
-| `sentrix/e2e-repair` | (this branch) | custom-v4 + this plan + M1–M5 (commits below) |
+| `main` | = `sentrix/e2e-repair` | the published state: custom-v4 models + M1–M5 + fresh-clone setup (pre-session head was `0f75a0e`) |
+| `sentrix/baseline-v3` | `d8629eb` | staged rewrite committed (`9e0037a`) + evaluation harness (`05a04fe`) + doc fixes |
+| `sentrix/finetuned-v3` | `66accb9` | baseline + scene integration + training tooling + fine-tuned v3 models |
+| `sentrix/custom-v4` | `3772acf` | baseline + scene integration + training tooling + new DINOv2/YOLO11n models (recommended) |
+| `sentrix/e2e-repair` | same as `main` | custom-v4 + this plan + M1–M5 + fresh-clone setup (commits below) |
 
-Commits on `sentrix/e2e-repair` since `custom-v4` (not pushed):
+Published to `github.com/mehulperimal14/Sentrix` on 2026-10-10. Before publishing,
+history was rewritten once: private runtime data that earlier commits had
+carried (enrolled face photos, webcam alert snapshots, old evidence bundles and
+their keys, under `backend/runtime/` and `SentrixV2-main/`) was removed from every
+commit, so every hash changed. Commits on `sentrix/e2e-repair` since `custom-v4`:
 
 ```
-7b42ae4 feat(eval): committed-level metrics, negative sessions, multi-rate replay, gate report
-d067d4f feat(identity): M4 - enrol from the monitoring camera, fixed uploads, per-track identity
-47bdbd3 feat(records): M3 - incident rows from one tick, crash-safe logs, committed alarm, usable events page
-dc9b089 perf(identity): run face recognition on its own thread in the live loop
-ca42a54 feat(live): decouple capture, inference and preview; report video and AI rates separately
-fd893ce perf(identity): stop onnxruntime spin-waiting and load only the face models used
-e50e7a3 fix(fusion): M1 containment - confirmed per-class evidence replaces single-frame overrides
-518dc76 docs: CLAUDE.md - project memory, live diagnosis and end-to-end repair plan
+8f21f47 chore: make a fresh clone install, run and test end to end
+85262ca data: ship the custom dataset and its videos; repo-relative defaults; .gitignore for local tooling
+ebcd957 docs(claude): M5 commit hash in the branch history
+19d607d feat(eval): committed-level metrics, negative sessions, multi-rate replay, gate report
+0b9e659 feat(identity): M4 - enrol from the monitoring camera, fixed uploads, per-track identity
+00be662 feat(records): M3 - incident rows from one tick, crash-safe logs, committed alarm, usable events page
+c78c79e perf(identity): run face recognition on its own thread in the live loop
+f13e506 feat(live): decouple capture, inference and preview; report video and AI rates separately
+056a1c4 perf(identity): stop onnxruntime spin-waiting and load only the face models used
+ec2e936 fix(fusion): M1 containment - confirmed per-class evidence replaces single-frame overrides
+4f17576 docs: CLAUDE.md - project memory, live diagnosis and end-to-end repair plan
 ```
 
 Commits on `sentrix/custom-v4` since `main`:
 
 ```
-cfef092 docs(readme): test count
-9673ee8 feat(web): show the scene classifier on the dashboard and in /api/health
-b9fea16 docs: baseline latency measured on an idle machine
-3c362e6 docs(readme): latency of the three configurations
-ed1bf30 docs: measured pipeline latency of all three branches, fire threshold note
-a61a4f8 fix(doctor): report the weights each engine resolves, and load the scene model
-6fc8fc3 feat(models): v4 custom models trained on the custom dataset
-3963702 feat(scene): delta checkpoints for partially frozen backbones
-bcaca05 feat(training): custom-dataset box annotation, training and model selection
-88660db feat(perception): five-class scene classifier wired into the TCI
-ebc1349 feat(eval): custom-dataset evaluation harness and v3 baseline results
-f74996f refactor: restructure backend/ into the sentrix package (v3 current state)
+3772acf docs(readme): test count
+f3f30b1 feat(web): show the scene classifier on the dashboard and in /api/health
+fee918a docs: baseline latency measured on an idle machine
+688a6af docs(readme): latency of the three configurations
+04744ca docs: measured pipeline latency of all three branches, fire threshold note
+a6d5e0c fix(doctor): report the weights each engine resolves, and load the scene model
+4b37863 feat(models): v4 custom models trained on the custom dataset
+3d995ae feat(scene): delta checkpoints for partially frozen backbones
+336fdd5 feat(training): custom-dataset box annotation, training and model selection
+68b1241 feat(perception): five-class scene classifier wired into the TCI
+05a04fe feat(eval): custom-dataset evaluation harness and v3 baseline results
+9e0037a refactor: restructure backend/ into the sentrix package (v3 current state)
 ```
 
-Pre-session `main` (newest first): `d4f37cd` master engineering plan docs ·
-`3c6a32c` custom-data/IoT docs · `ec6c27f` ignore runtime output · `42e63c6`
-v3_real paths + clean-frame overlays · `535cb2c` relax YOLO box limits ·
-`8aec357` YOLO thresholds 0.25, HSV flame, theft/harmful scores · `7a9e0b5` docs ·
-`7d5d342` workspace restructure · `98f8a69` restructure, ML engines, reports ·
-`a16ba85`…`2a63633` restructure series · `6a9485e`, `46e230a` Phase 2.5.
+Pre-session `main` (newest first): `0f75a0e` master engineering plan docs ·
+`fdfb9a9` custom-data/IoT docs · `30ca1b9` ignore runtime output · `5084f9e`
+v3_real paths + clean-frame overlays · `ce1af62` relax YOLO box limits ·
+`32155a0` YOLO thresholds 0.25, HSV flame, theft/harmful scores · `deb5116` docs ·
+`4a7465a` workspace restructure · `6a9dbc1` restructure, ML engines, reports ·
+`367c826`…`d20a3f3` restructure series · `8c915e8`, `e3eaf6b` Phase 2.5.
 
 ---
 
