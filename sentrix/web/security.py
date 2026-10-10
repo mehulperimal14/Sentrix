@@ -8,6 +8,7 @@ import os
 import threading
 import time
 from collections import defaultdict, deque
+from functools import lru_cache
 
 from sentrix.utils.logging import get_logger
 
@@ -24,7 +25,13 @@ _MAGIC = ((b"\xff\xd8\xff", "jpeg"), (b"\x89PNG\r\n\x1a\n", "png"))
 
 
 def _signing_key(password: str) -> bytes:
-    secret = os.getenv("SESSION_SECRET", "").strip()
+    return _derive_key(os.getenv("SESSION_SECRET", "").strip(), password)
+
+
+@lru_cache(maxsize=8)
+def _derive_key(secret: str, password: str) -> bytes:
+    """100k-round PBKDF2, computed once per (secret, password) rather than on
+    every authenticated request."""
     if secret:
         material = f"{secret}:{password}".encode()
         salt = hashlib.sha256(secret.encode()).digest()[:16]

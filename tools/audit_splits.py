@@ -29,8 +29,8 @@ Usage::
         --val   training/runs/v3_real/violence/sample_manifest_val.csv
 
     python tools/audit_splits.py images \\
-        --train G:/Capstone/data/weapon_data/train/images \\
-        --val   G:/Capstone/data/weapon_data/valid/images
+        --train data/weapon_data/train/images \\
+        --val   data/weapon_data/valid/images
 """
 
 from __future__ import annotations

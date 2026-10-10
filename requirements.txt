@@ -1,5 +1,6 @@
 # SENTRIX runtime dependencies
-# Python 3.10-3.12. Install:  pip install -r requirements.txt
+# Python 3.10-3.14 (fresh installs verified on 3.12 and 3.14).
+# Install:  pip install -r requirements.txt
 #
 # The previous root requirements.txt could not start the application: it was
 # missing jinja2, sqlalchemy, python-dotenv, cryptography, scipy, sounddevice
@@ -23,7 +24,7 @@ cryptography>=43.0.0          # AES-256-GCM + HKDF for the evidence vault
 sqlalchemy>=2.0.30
 
 # ── vision ────────────────────────────────────────────────────────────────────
-numpy>=1.26.4,<2.0.0
+numpy>=1.26.4                 # 2.x works; there are no numpy<2 wheels for 3.13+
 opencv-python>=4.10.0
 ultralytics>=8.3.0            # YOLOv8 detection + ByteTrack tracking
 lap>=0.5.12                   # ByteTrack assignment; without it track() fails and
@@ -36,6 +37,13 @@ torch>=2.4.0
 torchvision>=0.19.0
 torchaudio>=2.4.0             # log-mel front end for the V3 audio model
 timm>=1.0.0                   # DINOv2 backbone of the v4 scene classifier
+
+# ── face recognition ──────────────────────────────────────────────────────────
+# Without it identity FAILS CLOSED: nobody can be authorised. insightface >= 1.0
+# ships wheels (0.7.x needed a C++ compiler on Windows); the buffalo_l models
+# (~280 MB) download into ~/.insightface on first use.
+insightface>=1.0.1
+onnxruntime>=1.18.0
 
 # ── fusion & analysis ─────────────────────────────────────────────────────────
 xgboost>=2.1.1
@@ -55,11 +63,6 @@ twilio>=9.0.0
 pytest>=8.0.0
 
 # ── optional, install explicitly ──────────────────────────────────────────────
-# Face recognition. Without one of these, identity FAILS CLOSED: nobody is
-# authorised and no alert is ever suppressed. Prefer insightface on Windows —
-# it needs no C++ build chain and is more accurate than dlib's 128-d model.
-#   pip install insightface onnxruntime
-#
 # Appearance re-identification across cameras:
 #   pip install torchreid
 #

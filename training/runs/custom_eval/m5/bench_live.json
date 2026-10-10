@@ -1,5 +1,5 @@
 {
-  "video": "C:\\Users\\PC\\OneDrive\\Desktop\\Videos\\7.mov",
+  "video": "training/datasets/sentrix_custom/videos/7.mov",
   "source_fps": 29.7,
   "seconds": 25.0,
   "inference_fps_cap": 6.0,

@@ -2,8 +2,9 @@
 REM ============================================================================
 REM SENTRIX launcher (Windows)
 REM
-REM Unlike the previous version, this actually does what the docs said it did:
-REM creates the virtual environment, installs dependencies, and seeds .env.
+REM Creates the virtual environment, installs dependencies (again only when
+REM requirements.txt changes), creates .env with generated secrets on the first
+REM run, checks the setup and starts the dashboard.
 REM ============================================================================
 setlocal
 cd /d "%~dp0"
@@ -13,43 +14,43 @@ echo  SENTRIX - Multimodal Edge Threat Intelligence
 echo ================================================================
 
 if not exist ".venv\Scripts\python.exe" (
-    echo [1/4] Creating virtual environment...
-    python -m venv .venv
-    if errorlevel 1 (
-        echo ERROR: could not create .venv. Is Python 3.10+ on PATH?
+    echo [1/5] Creating virtual environment...
+    REM Prefer the Python launcher; any Python 3.10-3.14 works.
+    where py >nul 2>nul && (py -3 -m venv .venv) || (python -m venv .venv)
+    if not exist ".venv\Scripts\python.exe" (
+        echo ERROR: could not create .venv. Install Python 3.10-3.14 from python.org.
         exit /b 1
     )
 ) else (
-    echo [1/4] Virtual environment present.
+    echo [1/5] Virtual environment present.
 )
 
 set "PY=.venv\Scripts\python.exe"
+"%PY%" --version
 
-echo [2/4] Installing dependencies...
-"%PY%" -m pip install --upgrade pip --quiet
-"%PY%" -m pip install -r requirements.txt --quiet
+echo [2/5] Installing dependencies (first run: several minutes)...
+"%PY%" -c "import hashlib,pathlib,sys;h=hashlib.sha256(pathlib.Path('requirements.txt').read_bytes()).hexdigest();s=pathlib.Path('.venv/.requirements.sha256');sys.exit(0 if s.exists() and s.read_text()==h else 1)"
 if errorlevel 1 (
-    echo ERROR: dependency installation failed.
-    exit /b 1
-)
-
-if not exist ".env" (
-    echo [3/4] Creating .env from .env.example...
-    copy ".env.example" ".env" >nul
-    echo.
-    echo   ACTION REQUIRED: set SENTRIX_PASSWORD in .env before logging in.
-    echo   Generate secrets with:
-    echo     .venv\Scripts\python.exe -c "import secrets; print(secrets.token_hex(32))"
-    echo.
+    "%PY%" -m pip install --upgrade pip --quiet
+    "%PY%" -m pip install -r requirements.txt --quiet
+    if errorlevel 1 (
+        echo ERROR: dependency installation failed.
+        exit /b 1
+    )
+    "%PY%" -c "import hashlib,pathlib;pathlib.Path('.venv/.requirements.sha256').write_text(hashlib.sha256(pathlib.Path('requirements.txt').read_bytes()).hexdigest())"
 ) else (
-    echo [3/4] .env present.
+    echo       requirements unchanged since the last install.
 )
 
-echo [4/4] Running pre-flight checks...
+echo [3/5] Preparing .env...
+"%PY%" tools\setup_env.py
+if errorlevel 1 exit /b 1
+
+echo [4/5] Running pre-flight checks...
 "%PY%" tools\doctor.py
-echo.
-echo Starting server - dashboard at http://127.0.0.1:8000/dashboard
-echo Press Ctrl+C to stop.
+
+echo [5/5] Starting server - dashboard at http://127.0.0.1:8000/dashboard
+echo       The first start downloads ~600 MB of model weights. Ctrl+C stops it.
 echo.
 "%PY%" -m sentrix
 

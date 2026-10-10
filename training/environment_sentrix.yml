@@ -155,4 +155,3 @@ dependencies:
       - wheel==0.48.0
       - widgetsnbextension==4.0.16
       - xgboost==2.1.4
-prefix: C:\Users\PC\anaconda3\envs\sentrix

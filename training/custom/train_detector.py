@@ -37,6 +37,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import random
 import shutil
 import sys
@@ -55,9 +56,11 @@ from sentrix.evaluation.custom_dataset import dataset_dir, load_frames  # noqa: 
 BOXES_CSV = ROOT / "training" / "datasets" / "sentrix_custom" / "boxes.csv"
 BUILD_ROOT = ROOT / "data" / "custom_yolo"            # gitignored
 RUNS = ROOT / "training" / "runs" / "custom" / "detector"
+#: The public corpora the v3 heads were trained on (not in this repository;
+#: see docs/2). Needed only for rehearsal and retention measurement.
 ORIGINAL = {
-    "weapon": Path(r"G:\Capstone\data\weapon_data"),
-    "fire": Path(r"G:\Capstone\data\fire_smoke_data"),
+    "weapon": Path(os.getenv("SENTRIX_WEAPON_DATA", ROOT / "data" / "weapon_data")),
+    "fire": Path(os.getenv("SENTRIX_FIRE_DATA", ROOT / "data" / "fire_smoke_data")),
 }
 #: Frame labels that are guaranteed free of the task's objects.
 NEGATIVE_LABELS = {"weapon": {"normal", "fire"}, "fire": {"normal", "weapon"}}

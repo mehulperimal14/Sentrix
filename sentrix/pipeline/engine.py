@@ -761,7 +761,7 @@ def get_pipeline() -> Pipeline:
     global _pipeline
     with _pipeline_lock:
         if _pipeline is None:
-            _pipeline = Pipeline()
+            _pipeline = Pipeline(enable_audio=settings.pipeline.audio_enabled)
         return _pipeline
 
 

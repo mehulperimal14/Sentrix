@@ -58,6 +58,9 @@ class PipelineConfig:
     """
 
     capture_fps: float = _env_float("SENTRIX_CAPTURE_FPS", 30.0)
+    #: Microphone capture and acoustic classification. SENTRIX_AUDIO=0 for a
+    #: machine without a microphone, or to keep the mic closed.
+    audio_enabled: bool = _env_bool("SENTRIX_AUDIO", True)
     #: Requested webcam mode; the driver may pick the nearest it supports.
     capture_width: int = _env_int("SENTRIX_CAPTURE_WIDTH", 640)
     capture_height: int = _env_int("SENTRIX_CAPTURE_HEIGHT", 480)

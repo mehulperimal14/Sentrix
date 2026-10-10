@@ -22,6 +22,7 @@ resolves paths inside a fixed base directory.
 from __future__ import annotations
 
 import asyncio
+import hmac
 import os
 from pathlib import Path
 
@@ -62,10 +63,9 @@ def _secure_cookies() -> bool:
 
 async def require_auth(session_token: str | None = Cookie(None)) -> bool:
     password = _password()
-    if not password:
-        raise HTTPException(status_code=500,
-                            detail="SENTRIX_PASSWORD is not configured")
-    if not verify_token(session_token, password):
+    # Unset password: send the browser to the login page, which says what to
+    # do, instead of a raw JSON 500 on the first page a newcomer opens.
+    if not password or not verify_token(session_token, password):
         raise HTTPException(status_code=status.HTTP_307_TEMPORARY_REDIRECT,
                             headers={"Location": "/login"})
     return True
@@ -95,8 +95,12 @@ async def root() -> RedirectResponse:
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request) -> HTMLResponse:
+    context = {"request": request}
+    if not _password():
+        context["error"] = ("No password is configured. Set SENTRIX_PASSWORD in "
+                            ".env (copy .env.example) and restart SENTRIX.")
     return templates.TemplateResponse(request=request, name="login.html",
-                                      context={"request": request})
+                                      context=context)
 
 
 @router.post("/login")
@@ -114,9 +118,10 @@ async def login(request: Request, password: str = Form(...)):
         return templates.TemplateResponse(
             request=request, name="login.html", status_code=500,
             context={"request": request,
-                     "error": "Server misconfigured: SENTRIX_PASSWORD unset"})
+                     "error": "No password is configured. Set SENTRIX_PASSWORD "
+                              "in .env (copy .env.example) and restart SENTRIX."})
 
-    if password != expected:
+    if not hmac.compare_digest(password.encode(), expected.encode()):
         return templates.TemplateResponse(
             request=request, name="login.html", status_code=401,
             context={"request": request, "error": "Invalid password"})
@@ -249,7 +254,8 @@ async def api_health() -> JSONResponse:
         "armed": settings.threat.armed,
         "violence_model_loaded": pipeline.violence is not None,
         "identity_backend": pipeline.identity.backend,
-        "identity_fail_closed": pipeline.identity.backend is None,
+        # True while no face backend works, i.e. nobody can be authorised now.
+        "identity_failing_closed": pipeline.identity.backend is None,
         "enrolled_faces": len(pipeline.identity.enrolled),
         "audio": bool(pipeline.audio and pipeline.audio.available),
         "fusion_source": pipeline.tci.model_source,

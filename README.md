@@ -2,11 +2,11 @@
 
 **Multimodal edge threat intelligence and physical security system**
 
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+[![Python 3.10–3.14](https://img.shields.io/badge/Python-3.10--3.14-blue.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.4-EE4C2C.svg)](https://pytorch.org/)
 [![YOLOv8](https://img.shields.io/badge/YOLOv8-ultralytics-00BFA5.svg)](https://docs.ultralytics.com/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688.svg)](https://fastapi.tiangolo.com/)
-[![Tests](https://img.shields.io/badge/tests-207%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-215%20passing-brightgreen.svg)](tests/)
 
 > **Capstone Project CPG-299** · Computer Science and Engineering, Thapar Institute of
 > Engineering and Technology, Patiala · Mentor: Dr. Ashutosh Mishra
@@ -47,55 +47,109 @@ trusting this table.
 
 ## Quickstart
 
+Runs on a laptop CPU — Windows, macOS or Linux, **Python 3.10–3.14** (fresh
+installs verified on 3.12 and 3.14). Installing, testing and evaluating need no
+GPU, camera or microphone: the repository ships the models, the team's custom
+dataset and its ten source videos.
+
+### 1. Get the code
+
 ```bash
-git clone <repo> && cd Sentrix
+git clone https://github.com/mehulperimal14/Sentrix.git
+cd Sentrix
 ```
 
-**Windows**
+The clone is about 0.8 GB (weights, dataset and videos are tracked). On Windows,
+clone to a short path such as `C:\src\Sentrix`: long-path support is off by
+default and some files inside the virtual environment are deeply nested.
 
-```bash
-run.bat
-```
+### 2. Start it — one command
 
-**macOS / Linux**
+| Windows (PowerShell or cmd) | macOS / Linux |
+|---|---|
+| `.\run.bat` | `./run.sh` |
 
-```bash
-chmod +x run.sh && ./run.sh
-```
+Both scripts create `.venv`, install `requirements.txt` (several minutes the first
+time, then only when it changes), create `.env` with a generated dashboard
+password — **printed once in the terminal** — plus generated session and evidence
+keys, run the pre-flight checks and start the server. Open
+**http://127.0.0.1:8000** and log in with that password (it is `SENTRIX_PASSWORD`
+in `.env`).
 
-Both scripts create `.venv`, install dependencies, seed `.env`, run pre-flight
-checks and start the server. Set `SENTRIX_PASSWORD` in `.env`, then open
-**http://127.0.0.1:8000/dashboard**.
+The first start downloads about 600 MB of public weights, once: the DINOv2 base of
+the scene classifier (~330 MB, Hugging Face cache) and InsightFace `buffalo_l`
+(~280 MB, `~/.insightface`). The dashboard answers once the log prints
+`dashboard: http://…`.
 
-Manual install:
+* **Linux:** `sudo apt install python3-venv libportaudio2 libgl1 libglib2.0-0`.
+  On a CPU-only machine, install the CPU build of PyTorch first to skip ~2.5 GB of
+  CUDA wheels:
+  `pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu`.
+* **NVIDIA GPU:** install the CUDA build of PyTorch before `requirements.txt`
+  (`--index-url https://download.pytorch.org/whl/cu126`); the scene model moves to
+  the GPU automatically.
 
-```bash
-python -m venv .venv && .venv/Scripts/activate
-pip install -r requirements.txt
-cp .env.example .env          # then set SENTRIX_PASSWORD
-python tools/doctor.py
+**Manual install**, instead of the scripts:
+
+```powershell
+# Windows PowerShell
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python tools\setup_env.py        # creates .env, prints the generated password
 python -m sentrix
 ```
 
-**First run downloads the scene classifier's base weights.** The v4 scene model
-is stored as a 57 MB delta on top of the public DINOv2 ViT-B/14 weights, which
-`timm` fetches once (about 350 MB) into the Hugging Face cache. The engine
-verifies them against a SHA-256 fingerprint before use. On a machine that will
-run offline, cache them while online:
-
 ```bash
-python -c "import timm; timm.create_model('vit_base_patch14_dinov2.lvd142m', pretrained=True)"
+# macOS / Linux (Git Bash on Windows: source .venv/Scripts/activate)
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python tools/setup_env.py        # creates .env, prints the generated password
+python -m sentrix
 ```
 
-Without them the scene engine refuses to load and the pipeline falls back to
-the v3 violence model, logging an error.
+### 3. No webcam? Use a bundled video
 
-Strongly recommended — without a face-embedding backend, nobody can ever be
-authorised:
+Add to `.env`:
 
 ```bash
-pip install insightface onnxruntime
+CAMERA_SOURCES=training/datasets/sentrix_custom/videos/gun.mov   # loops; any video path works
+SENTRIX_AUDIO=0         # keep the microphone closed
+SENTRIX_SIREN=console   # the weapon clips reach L5: print the siren instead of sounding it
 ```
+
+Leave the Twilio fields in `.env` blank and every SMS or call is only printed to
+the console. Other cameras: `CAMERA_SOURCES=1` (second webcam),
+`rtsp://user:pw@host/stream` (IP camera), or several separated by commas.
+
+### 4. Test and evaluate
+
+```bash
+python -m pytest                     # 215 tests, ~20 s; no camera, mic, network or GPU
+python tools/doctor.py               # pre-flight report (also probes webcams 0-2)
+python tools/bench_live.py           # live loop on a bundled video: video fps, AI Hz, latency
+
+# The custom-dataset evaluation, on the bundled frames and videos
+python tools/eval_custom_frames.py --splits train,val,test --tag local    # per image
+python tools/replay_custom_videos.py --videos all --tag local             # 10 videos end to end (~6 min)
+python tools/custom_eval_table.py custom local                            # compare with the published run
+python tools/gate_report.py --replay training/runs/custom_eval/local/replay_all.json
+```
+
+Your runs land in `training/runs/custom_eval/<tag>/` (ignored by git); the
+published runs quoted in `docs/6` are `baseline`, `custom`, `finetuned`, `m1` and
+`m5`. Every evaluation tool builds the pipeline with side effects disabled — no
+alert, siren or database row, whatever `.env` contains.
+
+### 5. Enrol faces
+
+**Access** page → *Capture from camera* (2–3 photos per person, facing the camera)
+or *Upload photos*. Until someone is enrolled, everyone is "unknown"; in home
+mode (the default) that is only logged.
+
+`.env.example` documents every setting (camera, armed mode, thresholds, alerts);
+the algorithmic constants live in `sentrix/config.py`.
 
 ---
 
@@ -140,14 +194,14 @@ Sentrix/
 ├── models/                     deployed weights
 ├── notebooks/                  ★ TCI analysis (contract, calibration, thresholds)
 ├── training/
-│   ├── datasets/sentrix_custom/ ground truth of the custom frame dataset
+│   ├── datasets/sentrix_custom/ custom dataset: 765 frames, 10 source videos, ground truth
 │   ├── custom/                 ★ custom-dataset box annotation, training, screening
 │   ├── scripts/                training as .py
 │   ├── notebooks/              training as .ipynb
-│   └── runs/                   all run outputs (v1_legacy, v2_real, v3_real, ucf_crime_dvs)
-├── tools/                      doctor, replay, baseline, evaluate, auditors,
-│                               custom-dataset evaluation
-├── tests/                      207 regression tests
+│   └── runs/                   run outputs (v1_legacy … v3_real, custom, custom_eval)
+├── tools/                      doctor, setup_env, bench_live, replay tools, evaluation,
+│                               gate_report, auditors
+├── tests/                      215 regression tests
 ├── docs/                       specifications
 ├── Capstone Docs/              submissions
 └── var/                        runtime output — gitignored, never web-served
@@ -232,7 +286,8 @@ the number the level was decided on. Persistence is counted once, in the evidenc
 layer, so L2/L3 commit at the first confirmed tick; L4/L5 (SMS, siren) also need
 0.6 s and 2 observations over their threshold. A level steps down after 5 s without
 touching its threshold. Replaying the live session with these rules: 30 L2+ / 6 L4
-alarm onsets become 0 (`python tools/replay_decisions.py <event log>`).
+alarm onsets become 0 (`python tools/replay_decisions.py var/events/<session>.jsonl`
+re-runs the current rules on any session you have recorded).
 
 ### Escalation ladder
 
@@ -328,6 +383,9 @@ for behaviour → temporal head for violence → ViT re-id last.
 ## Evaluation workflow
 
 No training is involved. The point is to measure what already exists, honestly.
+Steps 2–4 need the public corpora the v3 models were trained on (`data/…`, not
+in this repository); everything on the bundled custom dataset is in the
+Quickstart, step 4.
 
 ```bash
 # 1. Is anything actually broken or missing?
@@ -346,7 +404,7 @@ python tools/audit_splits.py images \
 python tools/baseline.py --clips data/clips
 
 # 4. Run the same footage through SENTRIX, writing labelled event logs
-python tools/replay.py --clips data/clips --no-audio
+python tools/replay.py --clips data/clips
 
 # 5. Produce the metrics table
 python tools/evaluate.py --json report.json
@@ -355,7 +413,8 @@ python tools/evaluate.py --json report.json
 jupyter lab notebooks/
 ```
 
-`tools/replay.py` uses the identical `Pipeline.process` that the live camera uses.
+`tools/replay.py` uses the identical `Pipeline.process` that the live camera uses,
+with every side effect disabled and no camera opened.
 There is deliberately no separate evaluation path — the previous build had one, and
 it had already drifted, which meant every published number came from code that was
 not the product.
@@ -384,9 +443,9 @@ Three configurations are kept on separate branches:
 |---|---|
 | `sentrix/baseline-v3` | the shipped v3 models, unchanged |
 | `sentrix/finetuned-v3` | the V3-notebook models fine-tuned on the custom data (ResNet-18 scene model, YOLOv8n heads, with rehearsal) |
-| `sentrix/custom-v4` (this branch) | new models trained on the custom data: a DINOv2 ViT-B/14 scene classifier and YOLO11n heads |
+| `sentrix/custom-v4` (the models on `main`) | new models trained on the custom data: a DINOv2 ViT-B/14 scene classifier and YOLO11n heads |
 
-| Held-out result | baseline | finetuned | **custom (this branch)** |
+| Held-out result | baseline | finetuned | **custom (on `main`)** |
 |---|---|---|---|
 | Val, per image — accuracy / macro-F1 | 0.417 / 0.281 | 0.583 / 0.401 | **0.679 / 0.768** |
 | Val, video replay — episodes detected, false alarms | 1 of 2, 0 | 1 of 2, 4 | **2 of 2, 0** |
@@ -395,9 +454,13 @@ Three configurations are kept on separate branches:
 | False alarms per normal minute, all 10 videos | 13.96 | 7.12 | **0.79** |
 | Pipeline latency per tick on CPU, mean / p95 | 121 / 205 ms | 117 / 132 ms | 213 / 245 ms |
 
-This branch is the most accurate on everything that could be used to choose a
-model (validation, cross-validation, false alarms) and is the recommended
-configuration. Its blind spot is the stick swung in the test corridor, which
+The custom models are the most accurate on everything that could be used to
+choose a model (validation, cross-validation, false alarms) and ship on `main`.
+This table predates the end-to-end repair: it scores each frame with the
+checkpoint's own thresholds. With the repaired defaults (thresholds raised to
+safety floors, 2-of-3 confirmation) a fresh `eval_custom_frames.py` gives val
+0.607 / 0.718, and the video replay catches the same 13 of 18 episodes with
+**0 false alarms** at every level (docs/6 §6.8). Its blind spot is the stick swung in the test corridor, which
 the fine-tuned branch catches: 39 training frames of a stick *carried* did not
 teach a stick *swung*. Assault is not detected by either branch — it appears in
 two videos in two different rooms, which no model generalises across. The latency
@@ -503,8 +566,9 @@ captioned as that file's contents.
 ### Removed
 
 `frontend/` (stale duplicate of a Next.js app that does not exist), `next_prompt.md`,
-`anomaly_classifier.pt` (a ResNet-18 with `val_acc = 0.39` at epoch 1, never loaded by
-anything), and 642 MB of false-positive runtime output.
+and 642 MB of false-positive runtime output. `models/anomaly_classifier.pt` (a
+ResNet-18 with `val_acc = 0.39` at epoch 1) is no longer loaded by anything; the
+file is kept only for provenance.
 
 ---
 
@@ -570,7 +634,7 @@ rate per hour of an empty room.
 | [`docs/5_FUTURE_ADVANCEMENTS_AND_CLOUD_DEPLOYMENT.md`](docs/5_FUTURE_ADVANCEMENTS_AND_CLOUD_DEPLOYMENT.md) | Roadmap |
 | [`docs/6_CUSTOM_DATASET_EVALUATION.md`](docs/6_CUSTOM_DATASET_EVALUATION.md) | Custom-dataset protocol and results |
 
-All five were rewritten for v3. Each carries explicit **"Corrected from v2.1"**
+All six were rewritten for v3. Each carries explicit **"Corrected from v2.1"**
 callouts where the previous version stated something that was not true of the
 code — those corrections need to be carried into the final report, because an
 examiner comparing the docs against `training/runs/` will find them.

@@ -14,6 +14,7 @@ whole pipeline, which is how evaluation and production drift apart.
 
 from __future__ import annotations
 
+import sys
 import threading
 import time
 from abc import ABC, abstractmethod
@@ -68,7 +69,11 @@ class FrameSource(ABC):
         if not ok or frame is None:
             return None, seq, getattr(self, "_live_at", 0.0)
         self._live_seq, self._live_at = seq + 1, now
-        self._live_next = now + settings.pipeline.capture_period
+        # Schedule from the previous deadline, not from now: on Windows each
+        # wait overshoots, and adding the overshoot every frame played a 30 fps
+        # file at ~21 fps.
+        period = settings.pipeline.capture_period
+        self._live_next = max(now, getattr(self, "_live_next", now) + period)
         return frame, self._live_seq, now
 
     @property
@@ -118,8 +123,10 @@ class CaptureSource(FrameSource):
         try:
             if self._cap is not None:
                 self._cap.release()
-            # CAP_DSHOW avoids a multi-second open delay on Windows MSMF.
-            if isinstance(self.source, int) and hasattr(cv2, "CAP_DSHOW"):
+            # CAP_DSHOW avoids a multi-second open delay on Windows MSMF. The
+            # constant exists in every OpenCV build, but DirectShow does not:
+            # on Linux/macOS the default backend (V4L2/AVFoundation) is used.
+            if isinstance(self.source, int) and sys.platform == "win32":
                 cap = cv2.VideoCapture(self.source, cv2.CAP_DSHOW)
             else:
                 cap = cv2.VideoCapture(self.source)
@@ -333,8 +340,14 @@ def build_source(spec: str | None = None) -> FrameSource:
         elif "://" in part:
             sources.append(CaptureSource(part))
         else:
+            # A relative path may be given from the repository root (e.g. a
+            # bundled clip); a video used as the camera loops instead of
+            # freezing on its last frame.
             path = Path(part)
-            sources.append(FileSource(path) if path.exists()
+            if not path.exists() and not path.is_absolute():
+                from sentrix.paths import ROOT_DIR
+                path = ROOT_DIR / path
+            sources.append(FileSource(path, loop=True) if path.exists()
                            else CaptureSource(part))
     return sources[0] if len(sources) == 1 else MultiSource(sources)
 

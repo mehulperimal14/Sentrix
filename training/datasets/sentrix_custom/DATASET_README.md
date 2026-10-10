@@ -119,4 +119,5 @@ wa03_t00019.961_f000499.jpg
 * **Only 2 physical locations** are represented (~74% one room, ~26% one
   corridor). A model trained on this alone will partly learn the room.
   The intended use is as a held-out evaluation set for models trained on
-  the larger corpora in `G:\Capstone\data`.
+  the larger public corpora (RWF-2000, the Roboflow weapon and fire/smoke
+  sets; see docs/2).

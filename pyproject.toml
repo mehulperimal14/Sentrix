@@ -24,7 +24,7 @@ dependencies = [
     "python-dotenv>=1.0.1",
     "cryptography>=43.0.0",
     "sqlalchemy>=2.0.30",
-    "numpy>=1.26.4,<2.0.0",
+    "numpy>=1.26.4",
     "opencv-python>=4.10.0",
     "ultralytics>=8.3.0",
     "lap>=0.5.12",
@@ -39,11 +39,13 @@ dependencies = [
     "sounddevice>=0.4.7",
     "soundfile>=0.12.1",
     "librosa>=0.10.2",
+    "insightface>=1.0.1",
+    "onnxruntime>=1.18.0",
 ]
 
 [project.optional-dependencies]
-# Without one of these, identity fails closed and nobody is ever authorised.
-face = ["insightface>=0.7.3", "onnxruntime>=1.18.0"]
+# Face recognition (insightface, onnxruntime) is a core dependency since 1.0
+# ships wheels; GPU users can swap onnxruntime for onnxruntime-gpu.
 reid = ["torchreid>=1.4.0"]
 voice = ["vosk>=0.3.45"]
 alerts = ["twilio>=9.0.0"]

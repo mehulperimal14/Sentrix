@@ -22,7 +22,11 @@ feature vector, TCI, committed level and the ground-truth label. Feed that to
 Usage::
 
     python tools/replay.py --clips data/clips
-    python tools/replay.py --clips data/clips --limit 20 --no-audio
+    python tools/replay.py --clips data/clips --limit 20
+
+Side effects are disabled: no camera is opened, no snapshot, evidence,
+incident row, SMS, call, siren or dispatch is produced, whatever ``.env``
+contains. The microphone stays off unless ``--audio`` is given.
 """
 
 from __future__ import annotations
@@ -70,9 +74,12 @@ def main(argv: list[str] | None = None) -> int:
                         help="process at most N clips")
     parser.add_argument("--max-frames", type=int, default=0,
                         help="cap frames per clip")
+    parser.add_argument("--audio", action="store_true",
+                        help="also feed the live microphone (off by default: the "
+                             "room does not hear the clip)")
     parser.add_argument("--no-audio", action="store_true",
-                        help="skip microphone capture (recommended for replay: "
-                             "live mic audio does not correspond to the clip)")
+                        help="kept for compatibility: the microphone is off "
+                             "unless --audio is given")
     args = parser.parse_args(argv)
 
     if not args.clips.is_dir():
@@ -91,13 +98,20 @@ def main(argv: list[str] | None = None) -> int:
         print("WARNING: only one class present. False-alarm rate needs normal "
               "footage; detection rate needs threat footage.")
 
+    from sentrix.evaluation.harness import _NullSource, _noop
     from sentrix.io.sources import FileSource
     from sentrix.pipeline.engine import Pipeline
 
-    # enable_audio=False by default: during replay the microphone hears the
+    # Audio is off unless asked for: during replay the microphone hears the
     # room, not the clip, so live audio would inject an uncorrelated signal
-    # into every feature vector.
-    pipeline = Pipeline(enable_audio=not args.no_audio, event_source="replay")
+    # into every feature vector. No camera is opened (null source) and
+    # every side effect is a no-op: replaying a weapon clip must never text
+    # the phone in .env or sound the siren.
+    pipeline = Pipeline(source=_NullSource(), enable_audio=args.audio and not args.no_audio,
+                        event_source="replay")
+    pipeline._act = _noop
+    pipeline._submit = _noop
+    pipeline._save_open_incident = _noop
     print(f"event log: {pipeline.events.path}\n")
 
     started = time.time()

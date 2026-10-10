@@ -257,6 +257,12 @@ class SceneEngine:
                 raise ValueError(f"checkpoint classes {classes} lack {PRIORITY}")
             state = {k: v.float() for k, v in ckpt["model_state_dict"].items()}
             delta = ckpt.get("storage") == "delta"
+            if delta:
+                # First run only: timm downloads the public base weights
+                # (~330 MB) into the Hugging Face cache with no progress output.
+                log.info("loading the scene model's public base weights (%s); "
+                         "the first run downloads ~330 MB, which takes a few "
+                         "minutes", ckpt["architecture"])
             net = build_scene_model(ckpt["architecture"], len(classes), pretrained=delta,
                                     image_size=int(ckpt.get("image_size", 224)))
             if delta:

@@ -64,7 +64,7 @@ from sentrix.perception.scene import (PRIORITY, base_fingerprint,  # noqa: E402
                                       build_scene_model, decide_label)
 
 VIOLENCE_V3 = ROOT / "models" / "v3_real" / "violence_classifier_real_v3.pt"
-RWF_DIR = Path(os.getenv("SENTRIX_VIOLENCE_DATA", r"G:\Capstone\data\violence_data"))
+RWF_DIR = Path(os.getenv("SENTRIX_VIOLENCE_DATA", ROOT / "data" / "violence_data"))
 RUNS = ROOT / "training" / "runs" / "custom"
 MEAN, STD = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
 NORMAL, ASSAULT = CLASSES.index("normal"), CLASSES.index("assault")

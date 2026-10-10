@@ -49,17 +49,17 @@ All tunables: `sentrix/config.py` (seconds, never frames). Runtime output:
 
 | Purpose | Python | Notes |
 |---|---|---|
-| App, tests, evaluation | `.venv\Scripts\python.exe` (3.14, **CPU** torch) | `python -m sentrix`, `python -m pytest -q tests/` |
+| App, tests, evaluation | `.venv` (Python 3.10–3.14; maintainer PC: 3.14, **CPU** torch) | `run.bat` / `run.sh`, or `python -m sentrix`; `python -m pytest` |
 | Training (GPU) | `C:\Users\PC\anaconda3\envs\sentrix\python.exe` (3.11, torch cu126, RTX 4060 8 GB) | has ultralytics, timm, transformers |
 
 ### Data locations
 
 | What | Where |
 |---|---|
-| Custom frame dataset (765 reviewed frames, 5 classes) | `C:\Users\PC\OneDrive\Desktop\dataset` (`SENTRIX_CUSTOM_DATASET`) |
-| Its 10 source videos | `C:\Users\PC\OneDrive\Desktop\Videos` (`SENTRIX_CUSTOM_VIDEOS`) |
+| Custom frame dataset (765 reviewed frames, 5 classes) | `training/datasets/sentrix_custom/frames/` (tracked; `SENTRIX_CUSTOM_DATASET` overrides) |
+| Its 10 source videos | `training/datasets/sentrix_custom/videos/` (tracked; `SENTRIX_CUSTOM_VIDEOS` overrides) |
 | Vendored ground truth, boxes, QC rejects | `training/datasets/sentrix_custom/` |
-| Original corpora (RWF-2000 frames, weapon, fire/smoke, audio, UCF-DVS) | `G:\Capstone\data` |
+| Original public corpora (RWF-2000 frames, weapon, fire/smoke, audio, UCF-DVS) | not in git; `data/` or `SENTRIX_VIOLENCE_DATA` / `SENTRIX_WEAPON_DATA` / `SENTRIX_FIRE_DATA` (maintainer PC: `G:\Capstone\data`) |
 
 ### Rules for working here
 

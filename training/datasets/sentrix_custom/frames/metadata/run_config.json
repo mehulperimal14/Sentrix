@@ -1,7 +1,7 @@
 {
-  "input_dir": "/home/claude/sentrix_ds/pipeline/videos",
-  "annotations": "/home/claude/sentrix_ds/pipeline/annotations/segments_source.csv",
-  "output_dir": "/home/claude/sentrix_ds/pipeline/dataset",
+  "input_dir": "<build>/pipeline/videos",
+  "annotations": "<build>/pipeline/annotations/segments_source.csv",
+  "output_dir": "<build>/pipeline/dataset",
   "fps": 3.0,
   "fast_class_fps": 6.0,
   "fast_classes": [

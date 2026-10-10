@@ -1,6 +1,6 @@
 # SENTRIX — Deployment Guide & Operations Runbook
 
-**Version 3.0 · Updated: August 2026**
+**Version 3.1 · Updated: October 2026**
 
 ---
 
@@ -8,14 +8,16 @@
 
 | Requirement | Minimum | Recommended |
 |---|---|---|
-| Python | 3.10 | 3.12 |
+| Python | 3.10 | 3.12–3.14 (fresh installs verified on both) |
 | RAM | 4 GB | 8 GB |
 | GPU | none (CPU works) | CUDA 12+ or Apple MPS |
 | OS | Windows 10, Ubuntu 22.04, macOS 13 | any |
 | Camera | any UVC webcam | 1080p UVC or RTSP |
 | Microphone | optional | USB boundary mic |
 
-Disk: ~2 GB for dependencies, ~200 MB for model weights.
+Disk: the clone is ~0.8 GB (weights, custom dataset and videos are tracked);
+dependencies take 2–5 GB; the first start downloads ~600 MB of public weights
+(DINOv2 base, InsightFace `buffalo_l`).
 
 ---
 
@@ -24,26 +26,28 @@ Disk: ~2 GB for dependencies, ~200 MB for model weights.
 **Windows**
 
 ```bat
-run.bat
+.\run.bat
 ```
 
 **macOS / Linux**
 
 ```bash
-chmod +x run.sh && ./run.sh
+./run.sh
 ```
 
 Both scripts now:
 
 1. create `.venv` if absent
-2. `pip install -r requirements.txt`
-3. copy `.env.example` → `.env` (and on Unix, generate `SESSION_SECRET` and
-   `EVIDENCE_AES_KEY` with `openssl`)
+2. `pip install -r requirements.txt` (again only when it changes)
+3. run `tools/setup_env.py`: copy `.env.example` → `.env` and fill every blank
+   secret — the dashboard password (printed once), `SESSION_SECRET` and
+   `EVIDENCE_AES_KEY`
 4. run `tools/doctor.py`
 5. start the server
 
-Then set `SENTRIX_PASSWORD` in `.env` and open
-**http://127.0.0.1:8000/dashboard**.
+Then open **http://127.0.0.1:8000** and log in with the printed password. No
+webcam: set `CAMERA_SOURCES=training/datasets/sentrix_custom/videos/gun.mov`
+(a bundled clip, looped) and `SENTRIX_AUDIO=0` in `.env`.
 
 > **Corrected from v2.1.** The previous version of this section claimed both
 > scripts created a virtual environment and installed dependencies. Neither did —
@@ -68,7 +72,7 @@ pip install -r requirements.txt
 # GPU PyTorch — install AFTER requirements if you want CUDA
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 
-cp .env.example .env            # then set SENTRIX_PASSWORD
+python tools/setup_env.py       # creates .env with generated secrets
 python tools/doctor.py
 python -m sentrix
 ```
@@ -162,7 +166,9 @@ removed with the display EMA.)
 | `GET` | `/api/evidence/verify` | **New** — walk and verify the manifest chain |
 | `GET` | `/api/dispatch/latest` | Latest pending package |
 | `POST` | `/api/dispatch/{id}/send/{authority}` | Send (`POLICE` \| `FIRE`) |
-| `POST` | `/authorized/upload` | Enrol a face |
+| `POST` | `/authorized/upload` | Enrol a face (quality-gated) |
+| `POST` | `/api/authorized/capture` | Enrol from the monitoring camera's current frame |
+| `GET` | `/api/authorized/preview.jpg` | The raw frame enrolment would capture |
 | `DELETE` | `/api/authorized/{filename}` | Remove an enrolment |
 | `GET` | `/media/snapshot/{name}` | **New** — authenticated snapshot |
 | `GET` | `/media/face/{name}` | **New** — authenticated enrolled image |
@@ -187,8 +193,9 @@ order and loads the first file present:
 
 | Engine | Preference order |
 |---|---|
-| Weapon | `v3_real/weapon_detector_real_v3.pt` → `weapon_detector.pt` |
-| Fire | `v3_real/fire_smoke_detector_real_v3.pt` → `fire_smoke_detector.pt` |
+| Scene | `v4_custom/scene_classifier_custom_v4.pt` → `v4_finetuned/scene_classifier_ft_v4.pt` |
+| Weapon | `v4_custom/weapon_detector_custom_v4.pt` → `v4_finetuned/…` → `v3_real/weapon_detector_real_v3.pt` → `weapon_detector.pt` |
+| Fire | `v4_custom/fire_detector_custom_v4.pt` → `v4_finetuned/…` → `v3_real/fire_smoke_detector_real_v3.pt` → `fire_smoke_detector.pt` |
 | Violence | `v3_real/violence_classifier_real_v3.pt` → `violence_classifier.pt` |
 | Audio | `v3_real/audio_classifier_real_v3.pt` → `audio_classifier.pt` |
 
@@ -232,9 +239,18 @@ python tools/doctor.py                    # what is actually running
 python tools/audit_splits.py manifest ... # check for split contamination FIRST
 python tools/diagnose_anomaly.py          # UCF-Crime polarity check
 python tools/baseline.py --clips data/clips     # motion-only comparator
-python tools/replay.py --clips data/clips --no-audio   # labelled event logs
+python tools/replay.py --clips data/clips      # labelled event logs (no side effects)
 python tools/evaluate.py --json report.json     # the metrics table
 jupyter lab notebooks/                    # calibration and thresholds
+```
+
+On the bundled custom dataset (no external data needed):
+
+```bash
+python tools/eval_custom_frames.py --splits train,val,test --tag local
+python tools/replay_custom_videos.py --videos all --tag local
+python tools/bench_live.py --json var/bench.json
+python tools/gate_report.py --replay training/runs/custom_eval/local/replay_all.json --bench var/bench.json
 ```
 
 `tools/replay.py` drives the same `Pipeline.process` the live camera uses. There
@@ -279,13 +295,13 @@ removing them would destroy the labelled data the retraining depends on.
 | Audio always `normal_ambient` | Below the RMS gate, or no mic | Lower `SENTRIX_AUDIO_RMS_FLOOR`; check doctor |
 | Everyone is `GID-1` | Expected without `torchreid` | `pip install torchreid` |
 | Siren does nothing | `ConsoleSiren` selected | Check `siren_is_real` in `/api/health` |
-| High TCI on an empty room | Should not happen | Doctor asserts empty-scene TCI < 0.10. If it fails, check `SENTRIX_CALIBRATE_INPUTS` is not set to `1` |
+| High TCI on an empty room | Should not happen | Doctor asserts empty-scene TCI < 0.10; the TCI only leaves 0 on confirmed evidence, so check the reason text on the dashboard |
 
 ---
 
 ## 10. Pre-Production Checklist
 
-- [ ] `SENTRIX_PASSWORD` changed from `admin` to something strong
+- [ ] `SENTRIX_PASSWORD` strong (the generated one, or your own)
 - [ ] `SESSION_SECRET` set to 32 random bytes
 - [ ] `EVIDENCE_AES_KEY` set to 32 random bytes and **backed up** — losing it makes every bundle unreadable
 - [ ] `pip install insightface onnxruntime`, residents enrolled, verified via `/authorized`
@@ -297,8 +313,7 @@ removing them would destroy the labelled data the retraining depends on.
 - [ ] Level bands reviewed against `notebooks/03_tci_thresholds.ipynb`
 - [ ] `GET /api/evidence/verify` returns `ok: true`
 
-**Known gap.** The deployed TCI fusion model is trained on synthetic labels
-(doc 2 §4). It works — hard overrides and hysteresis carry the safety-critical
-paths — but the fused score is not yet calibrated against real events. Treat
-levels 2 and 3 as advisory until `notebooks/02` has been run on real labelled
-footage.
+**Known gap.** There is no fitted fusion model yet: the TCI is the strongest
+confirmed per-class evidence, a published rule (README, *How evidence becomes an
+alarm*). It is not calibrated against real events; treat levels 2 and 3 as
+advisory until `notebooks/02` has been run on real labelled sessions.

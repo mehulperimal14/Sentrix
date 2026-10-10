@@ -244,7 +244,8 @@ def check_camera(report: Report) -> None:
 
     found = []
     for index in range(3):
-        cap = cv2.VideoCapture(index, getattr(cv2, "CAP_DSHOW", 0))
+        cap = (cv2.VideoCapture(index, cv2.CAP_DSHOW) if sys.platform == "win32"
+               else cv2.VideoCapture(index))
         if cap.isOpened():
             ok, frame = cap.read()
             if ok and frame is not None:

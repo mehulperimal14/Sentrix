@@ -16,6 +16,9 @@ from sentrix.utils.logging import configure, get_logger
 # Load .env before anything reads os.getenv at import time.
 load_dotenv(ROOT_DIR / ".env")
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
+# Windows without developer mode cannot symlink inside the Hugging Face cache;
+# the copy fallback works, so silence its long warning.
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
 configure()
 log = get_logger("app")
@@ -64,7 +67,8 @@ async def lifespan(app: FastAPI):
     _stop.clear()
     _thread = threading.Thread(target=_loop, daemon=True, name="sentrix-pipeline")
     _thread.start()
-    log.info("dashboard: http://127.0.0.1:8000/dashboard")
+    log.info("dashboard: http://%s:%s/dashboard", os.getenv("SENTRIX_HOST", "127.0.0.1"),
+             os.getenv("SENTRIX_PORT", "8000"))
 
     yield
 

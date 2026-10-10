@@ -73,3 +73,31 @@ desktop.ini
 # per-run weight dumps of custom-dataset detector training; the promoted
 # copy lives in models/
 training/runs/custom/detector/*/weights/
+
+# your own evaluation runs (tools/*.py --tag <name>); the published runs that
+# docs/6 and CLAUDE.md quote stay tracked
+training/runs/custom_eval/*
+!training/runs/custom_eval/baseline/
+!training/runs/custom_eval/custom/
+!training/runs/custom_eval/finetuned/
+!training/runs/custom_eval/m1/
+!training/runs/custom_eval/m5/
+
+# ── stray outputs ─────────────────────────────────────────────────────────────
+# Ultralytics downloads base weights into the working directory and writes runs/
+# there by default; the weights SENTRIX uses are tracked under models/.
+/*.pt
+/runs/
+# runtime databases and event logs written outside var/ by mistake
+*.db
+*.sqlite
+*.sqlite3
+*.jsonl
+# other local environments and tooling
+.venv*/
+venv*/
+.python-version
+coverage.xml
+CLAUDE.local.md
+# Office lock files (Capstone Docs/)
+~$*
