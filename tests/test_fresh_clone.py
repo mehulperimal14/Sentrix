@@ -43,10 +43,14 @@ class TestCameraChoice:
 
 class TestFirstLogin:
     def test_unset_password_sends_the_browser_to_the_login_page(self, monkeypatch):
+        from starlette.requests import Request
         from sentrix.web.routes import require_auth
         monkeypatch.setenv("SENTRIX_PASSWORD", "")
+        request = Request({"type": "http", "method": "GET", "path": "/dashboard",
+                           "headers": [(b"accept", b"text/html")], "query_string": b"",
+                           "client": ("127.0.0.1", 50000)})
         with pytest.raises(HTTPException) as caught:
-            asyncio.run(require_auth(None))
+            asyncio.run(require_auth(request))
         assert caught.value.status_code == 307
         assert caught.value.headers["Location"] == "/login"
 

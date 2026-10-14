@@ -98,6 +98,8 @@ TRANSITIONS: dict[tuple[str | None, str], str] = {
     (DRAFTED, CANCEL): CANCELLED,
     (PENDING, CANCEL): CANCELLED,
     (PENDING, EXPIRE): EXPIRED,
+    # Recovery: a request whose prompt never went out before a crash.
+    (DRAFTED, EXPIRE): EXPIRED,
     (APPROVED, DELIVERED): DISPATCHED,
     (FAILED, DELIVERED): DISPATCHED,
     (APPROVED, DELIVERY_FAILED): FAILED,
@@ -146,6 +148,32 @@ URGENCIES = ("NORMAL", "HIGH")
 #: Desk resolve outcomes: the verdict they set.
 OUTCOMES = {"help_arrived": "TRUE", "real_threat": "TRUE",
             "false_alarm_confirmed": "FALSE", "no_action_needed": "FALSE"}
+
+
+# ── message steps (outbox dedupe: request|recipient|channel|step) ─────────────
+#: One name per message a request can cause, on the device and the Portal, so
+#: a retry, a restart or the other side never sends the same step twice.
+STEP_T0 = "t0"                         # first prompt to the owner
+#: Owner reminders, by offset after T0 (SosConfig.reminder_offsets_seconds).
+REMINDER_STEPS = {120: "r120", 300: "r300", 600: "r600", 1200: "r1200"}
+STEP_LAPSE = "lapse"                   # "lapses in 5 min"
+STEP_LAPSED = "lapsed"                 # expired unanswered (owner + notified contacts)
+#: Committed level rises during an open request (legacy L4 SMS folds in here).
+RISE_STEPS = {4: "rise4", 5: "rise5"}
+STEP_CONTACTS_T0 = "contacts_t0"       # first message to confirmed contacts
+STEP_DESK_T0 = "desk_t0"               # first page to the Desk number (modem SMS, offline)
+STEP_RESOLVED = "resolved"             # "resolved by resident" / closed
+STEP_DURESS = "duress"                 # duress banner to contacts and Desk
+
+
+def reminder_step(offset_seconds: float) -> str:
+    """``r<seconds>`` for an owner reminder offset."""
+    return REMINDER_STEPS.get(int(offset_seconds), f"r{int(offset_seconds)}")
+
+
+def repage_step(n: int) -> str:
+    """``repage1`` .. ``repageN`` for the help path's re-pages."""
+    return f"repage{int(n)}"
 
 
 def next_state(state: str | None, event: str) -> str | None:
@@ -200,4 +228,5 @@ def owner_view(state: str, flags: dict | None = None) -> dict:
 
 
 __all__ = [name for name in dir() if name.isupper() and not name.startswith("_")] + [
-    "next_state", "is_terminal", "reconcile", "owner_view"]
+    "next_state", "is_terminal", "reconcile", "owner_view", "reminder_step",
+    "repage_step"]

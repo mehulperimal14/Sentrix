@@ -11,12 +11,13 @@ ROUTER_MODULES: tuple[str, ...] = (
     "sentrix_portal.routes.settings",
     "sentrix_portal.routes.privacy",
     "sentrix_portal.routes.admin",
+    "sentrix_portal.routes.consent",      # /consent/{token} (contact consent)
     # T-LINK: device link, tunnel parity, SOS, Desk, contact pages
     "sentrix_portal.routes.link_hub",
     "sentrix_portal.routes.device_proxy",
     "sentrix_portal.routes.sos",
     "sentrix_portal.routes.desk",
-    "sentrix_portal.routes.contacts",
+    "sentrix_portal.routes.contacts",     # /c/{token} (SOS contact pages only)
     # T-CH: provider webhooks
     "sentrix_portal.routes.hooks",
 )

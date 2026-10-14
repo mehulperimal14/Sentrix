@@ -259,6 +259,35 @@ def check_camera(report: Report) -> None:
         report.add(WARN, "camera", "none detected — set CAMERA_SOURCES or use a file")
 
 
+def check_services(report: Report) -> None:
+    """Send guard, mode and every service's own preflight checks (docs/7
+    §3.6): tracks add rows through ``preflight(settings)`` in their service
+    module, not by editing this file."""
+    from sentrix import services
+    from sentrix.alerting import guard
+    from sentrix.config import settings
+
+    report.section("services and send guard (docs/7)")
+    status = guard.status()
+    live = [ch for ch, on in status["channels_live"].items() if on]
+    report.add(OK if status["test_mode"] else WARN, "test mode",
+               "on (only allowlisted recipients, test banner)" if status["test_mode"]
+               else "OFF: live alerts reach real people once switched on")
+    report.add(OK, "live alerts",
+               f"on for {', '.join(live)}" if live else "dry run (nothing leaves)")
+    report.add(OK, "test recipients", f"{status['test_recipients']} allowlisted")
+    flags = {"sos": settings.sos.enabled, "link": settings.link.enabled,
+             "channels": settings.channels.enabled, "gpio": settings.gpio.enabled,
+             "node": settings.node.enabled}
+    report.add(OK, "services enabled",
+               ", ".join(k for k, v in flags.items() if v) or "none (default)")
+    levels = {"ok": OK, "warn": WARN, "fail": FAIL}
+    for name, rows in services.preflight_report(settings).items():
+        for row in rows:
+            report.add(levels.get(row.get("status"), WARN),
+                       f"{name}: {row.get('name', '')}", row.get("detail", ""))
+
+
 def main() -> int:
     from dotenv import load_dotenv
 
@@ -269,7 +298,7 @@ def main() -> int:
     print("=" * 68)
     report = Report()
     for check in (check_dependencies, check_models, check_config,
-                  check_engines, check_camera):
+                  check_services, check_engines, check_camera):
         try:
             check(report)
         except Exception as exc:

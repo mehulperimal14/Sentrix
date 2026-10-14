@@ -9,14 +9,14 @@ because the pipeline thread writes while the dashboard reads.
 from __future__ import annotations
 
 import json
-import threading
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable
+from typing import Any
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
+from sentrix import listeners as _listeners
 from sentrix.paths import DB_PATH, ensure_runtime_dirs
 from sentrix.storage.models import (AssistanceRequestRecord, Base, DispatchRecord,
                                     IncidentRecord)
@@ -25,39 +25,13 @@ from sentrix.utils.logging import get_logger
 log = get_logger("database")
 
 # ── change listeners (docs/7 §6.3) ────────────────────────────────────────────
-#: kind -> callbacks, called after a successful commit with a plain dict.
-#: Kinds: "incident" (save_incident), "dispatch" (save_dispatch and status
-#: changes), "verdict" (set_verdict). The link client registers here to put
-#: mirror events in its outbox; nothing is registered in tests or replays.
-_LISTENERS: dict[str, list[Callable[[dict], None]]] = {}
-_LISTENER_LOCK = threading.Lock()
-LISTENER_KINDS = ("incident", "dispatch", "verdict")
-
-
-def add_listener(kind: str, callback: Callable[[dict], None]) -> None:
-    if kind not in LISTENER_KINDS:
-        raise ValueError(f"unknown listener kind {kind!r}")
-    with _LISTENER_LOCK:
-        _LISTENERS.setdefault(kind, []).append(callback)
-
-
-def remove_listener(kind: str, callback: Callable[[dict], None]) -> None:
-    with _LISTENER_LOCK:
-        if callback in _LISTENERS.get(kind, []):
-            _LISTENERS[kind].remove(callback)
-
-
-def _emit(kind: str, payload: Callable[[], dict] | dict) -> None:
-    with _LISTENER_LOCK:
-        callbacks = list(_LISTENERS.get(kind, ()))
-    if not callbacks:
-        return
-    data = payload() if callable(payload) else payload
-    for callback in callbacks:
-        try:
-            callback(data)
-        except Exception as exc:              # a listener never breaks a write
-            log.error("%s listener failed: %s", kind, exc)
+# The registry lives in ``sentrix.listeners`` (stdlib only) so the vault, the
+# event log and the runtime mode can announce writes without importing the
+# database. These names stay for the callers that registered here first.
+LISTENER_KINDS = _listeners.KINDS
+add_listener = _listeners.add_listener
+remove_listener = _listeners.remove_listener
+_emit = _listeners.emit
 
 #: Level names, duplicated from PolicyConfig so the storage layer stays free of
 #: a config import. Kept in sync by tests/test_pipeline.py.
@@ -99,11 +73,16 @@ _ADDED_COLUMNS = (
     ("enrolled_faces", "member_id", "VARCHAR(36)"),
     ("enrolled_faces", "consent_id", "VARCHAR(36)"),
     ("enrolled_faces", "enrolled_by", "VARCHAR(64)"),
+    # notifications existed in foundation builds without it (docs/7 §8.2)
+    ("notifications", "meta_json", "TEXT"),
 )
-#: Indexes on added columns, created if missing (name, table, column).
+#: Indexes created if missing: (name, table, columns, unique). A unique index
+#: on rows that would violate it fails loudly at start-up rather than silently.
 _ADDED_INDEXES = (
-    ("ix_incidents_request_id", "incidents", "request_id"),
-    ("ix_dispatch_packages_request_id", "dispatch_packages", "request_id"),
+    ("ix_incidents_request_id", "incidents", ("request_id",), False),
+    ("ix_dispatch_packages_request_id", "dispatch_packages", ("request_id",), False),
+    # One chain per (request, origin): docs/7 §7.6.
+    ("ux_request_events_origin_seq", "request_events", ("request_id", "origin", "seq"), True),
 )
 
 
@@ -114,11 +93,12 @@ def _migrate() -> None:
             if present and column not in present:
                 conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {sql_type}")
                 log.info("database: added %s.%s", table, column)
-        for name, table, column in _ADDED_INDEXES:
+        for name, table, columns, unique in _ADDED_INDEXES:
             present = {row[1] for row in conn.exec_driver_sql(f"PRAGMA table_info({table})")}
-            if column in present:
-                conn.exec_driver_sql(
-                    f"CREATE INDEX IF NOT EXISTS {name} ON {table} ({column})")
+            if set(columns) <= present:
+                kind = "UNIQUE INDEX" if unique else "INDEX"
+                conn.exec_driver_sql(f"CREATE {kind} IF NOT EXISTS {name} ON {table} "
+                                     f"({', '.join(columns)})")
 
 
 def init_db() -> None:
@@ -193,11 +173,30 @@ def save_incident(incident, session_id: str, ongoing: bool = False) -> None:
         "actions": sorted(incident.actions)})
 
 
+def _incident_listener_dict(row: IncidentRecord, ongoing: bool = False) -> dict[str, Any]:
+    """The "incident" listener payload built from a stored row (the same keys
+    as ``save_incident``'s)."""
+    return {
+        "id": row.id, "session_id": row.session_id, "ongoing": ongoing,
+        "started_at": _iso_utc(row.started_at),
+        "duration_seconds": row.duration_seconds, "peak_level": row.peak_level,
+        "peak_tci": row.peak_tci, "incident_type": row.incident_type,
+        "reason": row.reason, "frames": row.frames,
+        "evidence_count": row.evidence_count, "snapshot_path": row.snapshot_path,
+        "evidence_bundle": row.evidence_bundle, "evidence_hash": row.evidence_hash,
+        "person_present": row.person_present, "authorized": row.authorized,
+        "actions": json.loads(row.actions_json) if row.actions_json else []}
+
+
 def close_interrupted(current_session: str) -> int:
     """End rows left open by a session that crashed or was killed.
 
     Their end is the last time they were written (start + saved duration).
+    Each closed row is announced to the "incident" listeners (``ongoing``
+    False), so the Portal's mirror closes it too: the app lifespan calls this
+    after the services started, while the link client listens.
     """
+    closed: list[dict[str, Any]] = []
     try:
         with session_scope() as session:
             rows = (session.query(IncidentRecord)
@@ -209,12 +208,15 @@ def close_interrupted(current_session: str) -> int:
                     start = start.replace(tzinfo=timezone.utc)
                 row.ended_at = (start + timedelta(seconds=row.duration_seconds or 0.0)
                                 if start is not None else datetime.now(timezone.utc))
+                closed.append(_incident_listener_dict(row))
             if rows:
                 log.info("closed %d incident(s) interrupted by a previous shutdown", len(rows))
-            return len(rows)
     except Exception as exc:
         log.error("close_interrupted failed: %s", exc)
         return 0
+    for payload in closed:
+        _emit("incident", payload)
+    return len(closed)
 
 
 def _iso_utc(value: datetime | None) -> str | None:
@@ -269,12 +271,16 @@ def recent_incidents(limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
 
 
 def set_verdict(incident_id: str, verdict: str, note: str | None = None, *,
-                by: str | None = None, channel: str | None = None) -> bool:
+                by: str | None = None, channel: str | None = None,
+                actor_type: str | None = None) -> bool:
     """Record operator feedback: was this a real threat?
 
     This is the single highest-value piece of data the deployment produces —
     it is what a retrained fusion model learns from. ``by`` records who
-    ("lc:device_admin", "portal:<user id>", "desk:<operator id>").
+    (``Actor.ref``: "lc:device_admin", "portal:<user id>", "desk:<operator
+    id>"); ``actor_type`` is the request-event actor type
+    (``Actor.event_actor_type``: device_admin, owner, member, desk, contact,
+    cloud), guessed from ``by`` when omitted.
 
     A FALSE verdict's effect on help depends on the incident's assistance
     request (docs/7 §7.7), so a false-alarm click can never quietly cancel
@@ -287,32 +293,54 @@ def set_verdict(incident_id: str, verdict: str, note: str | None = None, *,
       help stay as they are (only the Desk or a contact closes it);
     * duress request: nothing changes (the caller still reports success);
     * request already terminal: only the label is recorded.
+
+    With an open request the SOS PIN is required, so callers go through
+    ``sos.false_verdict`` (which turns the duress PIN into approve + duress
+    before this runs), never straight here. The write holds
+    ``requests.REQUEST_LOCK``. The "verdict" listeners get ``request_id``,
+    ``request_state`` and ``request_version``: the SOS engine re-reads the
+    request, publishes its new events, refreshes ``state.sos``, cancels its
+    timers and tells notified contacts.
     """
+    from sentrix.actor import event_actor_type_for_ref
+    from sentrix.storage.requests import REQUEST_LOCK
+
     verdict = verdict.upper()
     if verdict not in ("TRUE", "FALSE"):
         return False
+    actor_type = actor_type or event_actor_type_for_ref(by)
     outcome = "label_only"
+    request_info: dict[str, Any] = {"request_id": None, "request_state": None,
+                                    "request_version": None}
     try:
-        with session_scope() as session:
+        with REQUEST_LOCK, session_scope() as session:
             row = session.query(IncidentRecord).filter_by(id=incident_id).first()
             if row is None:
                 return False
             row.verdict, row.verdict_note = verdict, note
             row.verdict_by, row.verdict_at = by, datetime.now(timezone.utc)
             if verdict == "FALSE":
-                outcome = _false_verdict_effect(session, row, by, channel)
+                outcome = _false_verdict_effect(session, row, by, channel, actor_type)
+            if row.request_id:
+                request = session.get(AssistanceRequestRecord, row.request_id)
+                if request is not None:
+                    request_info = {"request_id": request.id,
+                                    "request_state": request.state,
+                                    "request_version": request.version}
     except Exception as exc:
         log.error("set_verdict failed: %s", exc)
         return False
     _emit("verdict", {"incident_id": incident_id, "verdict": verdict, "note": note,
-                      "by": by, "channel": channel, "effect": outcome,
+                      "by": by, "actor_type": actor_type, "channel": channel,
+                      "effect": outcome, **request_info,
                       "at": datetime.now(timezone.utc).isoformat()})
     return True
 
 
 def _false_verdict_effect(session, incident: IncidentRecord, by: str | None,
-                          channel: str | None) -> str:
-    """Apply a FALSE verdict to the incident's request/package; returns what it did."""
+                          channel: str | None, actor_type: str) -> str:
+    """Apply a FALSE verdict to the incident's request/package; returns what it
+    did. Runs inside ``set_verdict``'s transaction, under REQUEST_LOCK."""
     from sentrix.sos import states as S
     from sentrix.storage.requests import append_event
 
@@ -332,7 +360,6 @@ def _false_verdict_effect(session, incident: IncidentRecord, by: str | None,
     flags = json.loads(request.flags_json or "{}")
     if flags.get("duress"):
         return "label_only"
-    actor_type = "device_admin" if (by or "").startswith("lc:") else "owner"
     if request.state in S.PROMPTING_STATES:
         previous = request.state
         request.state = S.CANCELLED
@@ -500,6 +527,10 @@ def prune(retention_days: int = 30) -> int:
     Level 4 and 5 incidents are never pruned, and neither is anything an
     operator has not reviewed — deleting unreviewed events would destroy the
     labelled data the fusion retraining depends on.
+
+    The decisions' hard caps (``settings.retention``: SOS snapshot 30 d,
+    unreviewed 180 d, TRUE 1 y, audit 1 y) override these exemptions; they and
+    the vault tombstones are the integration step's (docs/7 §6.2).
     """
     cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
     try:

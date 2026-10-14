@@ -716,6 +716,11 @@ class ClipConfig:
     #: Model runtime for exported models: torch | onnx | ncnn.
     runtime: str = _env_str("SENTRIX_RUNTIME", "torch")
     threads: int = _env_int("SENTRIX_CLIP_THREADS", 4)
+    #: A clip is one observation of 4 s that already needed confirm_keyframes
+    #: hits, so L4/L5 commit on one clip (the tick loop needs 2 ticks:
+    #: PolicyConfig.min_escalate_observations). The clip strategy builds its
+    #: LevelPolicy with this.
+    min_escalate_observations: int = 1
 
 
 @dataclass(frozen=True)
@@ -743,6 +748,24 @@ class WebConfig:
     setup_mode: bool = _env_bool("SENTRIX_SETUP_MODE", False)
 
 
+@dataclass(frozen=True)
+class RetentionConfig:
+    """Hard retention caps (decisions, data protection). They override every
+    prune exemption (``database.prune`` keeps L4/L5 and unreviewed incidents
+    only *inside* these caps); pruned evidence leaves a signed tombstone so the
+    chain reports a retention gap, not tampering. Device prune and vault
+    tombstones: integration; Portal prune: T-ACCT's retention worker."""
+
+    #: Reviewed L1-L3 incidents (the pre-portal RETENTION_DAYS rule).
+    reviewed_low_days: int = _env_int("RETENTION_DAYS", 30)
+    sos_snapshot_days: int = 30
+    unreviewed_days: int = 180
+    true_days: int = 365
+    audit_days: int = 365
+    #: Declined emergency contacts are erased within this many days.
+    declined_contact_days: int = 7
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Root
 # ──────────────────────────────────────────────────────────────────────────────
@@ -768,6 +791,7 @@ class Config:
     clip: ClipConfig = field(default_factory=ClipConfig)
     node: NodeConfig = field(default_factory=NodeConfig)
     web: WebConfig = field(default_factory=WebConfig)
+    retention: RetentionConfig = field(default_factory=RetentionConfig)
 
     @property
     def test_mode(self) -> bool:

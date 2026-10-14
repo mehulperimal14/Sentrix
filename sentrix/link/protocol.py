@@ -86,6 +86,16 @@ COMMANDS = (
     "demo.trigger",     # test mode only: disclosed scripted L3 (SIMULATED)
 )
 
+#: ``sos.respond`` actions (owner, member, device admin; a contact may only
+#: ``approve``, and only under the request's frozen safety defaults).
+SOS_RESPOND_ACTIONS = ("approve", "decline", "checking", "safe", "help_now")
+#: ``sos.update`` events: cloud-side facts the device applies through
+#: ``sentrix.sos.states.next_state`` (``notification``: a Portal channel's
+#: delivery status for one of this request's messages).
+SOS_UPDATE_EVENTS = ("acknowledge", "resolve", "delivered", "delivery_failed",
+                     "contacts_notified", "device_offline", "device_online", "seen",
+                     "notification")
+
 #: Command / tunnel error codes and their HTTP-like status.
 ERROR_CODES = {
     "invalid_args": 400, "unauthorised": 401, "forbidden_role": 403,
@@ -158,6 +168,30 @@ def unpack_binary(message: bytes) -> tuple[BinaryHeader, bytes]:
     return BinaryHeader(kind, flags, a, b), message[HEADER_BYTES:]
 
 
+# ── canonical JSON (hashes both sides recompute) ─────────────────────────────
+def canonical_json(obj: Any) -> bytes:
+    """The one byte encoding hashed on both sides: the profile ``sha256``, the
+    request-event chains and the Portal audit chain.
+
+    Sorted keys, ``(",", ":")`` separators, UTF-8 without ASCII escaping, and
+    **no** ``default=str``: a value JSON cannot represent raises ``TypeError``
+    instead of hashing a ``repr`` the other side cannot reproduce. Timestamps
+    travel as ISO strings and are hashed (and stored by the Portal) verbatim.
+    """
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"),
+                      ensure_ascii=False, allow_nan=False).encode("utf-8")
+
+
+def sha256_hex(obj: Any) -> str:
+    import hashlib
+    return hashlib.sha256(canonical_json(obj)).hexdigest()
+
+
+def sos_dedupe_key(request_id: str, origin: str, seq: int) -> str:
+    """Outbox dedupe key of one SOS event: ``sos:<request>:<origin>:<seq>``."""
+    return f"sos:{request_id}:{origin}:{int(seq)}"
+
+
 # ── text messages ─────────────────────────────────────────────────────────────
 def now_ms() -> int:
     return int(time.time() * 1000)
@@ -204,4 +238,5 @@ def error(code: str, message: str, ref: str | None = None) -> dict[str, Any]:
 
 __all__ = [name for name in dir() if name.isupper() and not name.startswith("_")] + [
     "BinaryHeader", "pack_frame", "pack_body_chunk", "unpack_binary", "now_ms",
-    "envelope", "encode", "decode", "error", "ProtocolError"]
+    "envelope", "encode", "decode", "error", "ProtocolError", "canonical_json",
+    "sha256_hex", "sos_dedupe_key"]

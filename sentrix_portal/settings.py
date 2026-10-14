@@ -4,13 +4,23 @@ Unlike the device's ``sentrix.config`` (read once at import), the Portal builds
 a :class:`PortalSettings` per app so tests can point it at a temporary
 database. Secrets are fields here (the Portal has no ``/api/config``), but are
 never logged or rendered.
+
+Keys: every HMAC digest the Portal stores (device bootstrap and token, claim
+and activation codes, action tokens, session ids, the audit chain) and every
+sealed column depend on ``secret_key`` / ``data_key``. In test mode, when the
+environment does not set them, :meth:`PortalSettings.checked` generates each
+**once** into ``<data_dir>/secret_key`` and ``<data_dir>/data_key`` (mode 0600)
+and reuses them, so a restart of the VM strands no device and no login. With
+test mode off both must come from the environment. Only explicit test
+fixtures (:meth:`PortalSettings.for_tests`) get throwaway keys.
 """
 
 from __future__ import annotations
 
 import os
 import secrets
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from pathlib import Path
 
 from sentrix.paths import PORTAL_VAR_DIR
 
@@ -34,16 +44,42 @@ def _str(name: str, default: str) -> str:
 
 
 DEFAULT_DATABASE_URL = f"sqlite:///{(PORTAL_VAR_DIR / 'portal.db').as_posix()}"
+SECRET_KEY_FILE = "secret_key"
+DATA_KEY_FILE = "data_key"
+
+
+def _default_data_dir() -> str:
+    return _str("PORTAL_DATA_DIR", str(PORTAL_VAR_DIR))
+
+
+def _key_file(directory: str, name: str) -> tuple[str, bool]:
+    """(key, created): read ``<directory>/<name>``, or create it once (0600)."""
+    path = Path(directory) / name
+    try:
+        value = path.read_text(encoding="utf-8").strip()
+        if value:
+            return value, False
+    except FileNotFoundError:
+        pass
+    value = secrets.token_hex(32)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:                       # created meanwhile
+        return path.read_text(encoding="utf-8").strip(), False
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(value)
+    return value, True
 
 
 @dataclass(frozen=True)
 class PortalSettings:
     database_url: str = DEFAULT_DATABASE_URL
-    #: HMAC key for sessions ids, codes, audit chain and IP hashes. Generated
-    #: (ephemeral, with a warning) only in test mode.
+    #: HMAC key for session ids, codes, tokens, audit chain and IP hashes. In
+    #: test mode without the env var: generated once into <data_dir>/secret_key.
     secret_key: str = ""
-    #: Column encryption (phones, medical notes, TOTP secrets); derived from
-    #: ``secret_key`` when unset, in test mode only.
+    #: Column encryption (phones, medical notes, TOTP secrets). In test mode
+    #: without the env var: generated once into <data_dir>/data_key.
     data_key: str = ""
     base_url: str = "http://portal.localhost:8100"
     #: Decision D13: on unless PORTAL_TEST_MODE=0.
@@ -67,8 +103,11 @@ class PortalSettings:
     telegram_bot_name: str = ""
     notice_version: str = "2026-10-1"
     api_docs: bool = False
-    #: Where uploaded SOS snapshots and exports live when not in the database.
-    data_dir: str = str(PORTAL_VAR_DIR)
+    #: Key files, exports, and SOS snapshots when not in the database.
+    data_dir: str = field(default_factory=_default_data_dir)
+    #: Start ``app.BACKGROUND_MODULES`` (hub watcher, cloud SOS timers,
+    #: notification worker, retention) in the lifespan. Off in tests.
+    workers: bool = False
     extras: dict = field(default_factory=dict)
 
     @classmethod
@@ -87,30 +126,46 @@ class PortalSettings:
             desk_number=_str("PORTAL_DESK_NUMBER", ""),
             telegram_bot_name=_str("PORTAL_TELEGRAM_BOT_NAME", ""),
             api_docs=_flag("PORTAL_API_DOCS", False),
-            data_dir=_str("PORTAL_DATA_DIR", str(PORTAL_VAR_DIR)),
+            data_dir=_default_data_dir(),
+            workers=_flag("PORTAL_WORKERS", False),
         )
         values.update(overrides)
         return cls(**values).checked()
 
+    @classmethod
+    def for_tests(cls, directory, **overrides) -> "PortalSettings":
+        """Throwaway settings in ``directory`` (a pytest ``tmp_path``): its own
+        SQLite file and data dir, random keys, test mode on, no workers."""
+        directory = Path(directory)
+        values = dict(database_url=f"sqlite:///{(directory / 'portal.db').as_posix()}",
+                      data_dir=str(directory / "portal-data"),
+                      secret_key=secrets.token_hex(32), data_key=secrets.token_hex(32),
+                      test_mode=True, workers=False)
+        values.update(overrides)
+        return cls(**values).checked()
+
     def checked(self) -> "PortalSettings":
-        """Fill development secrets in test mode; refuse to run without them
-        otherwise."""
+        """Fill the keys (see the module docstring); refuse to run without them
+        when test mode is off."""
         secret, data = self.secret_key, self.data_key
+        created: list[str] = []
         if not secret:
             if not self.test_mode:
                 raise RuntimeError("PORTAL_SECRET_KEY must be set when "
                                    "PORTAL_TEST_MODE is off")
-            secret = secrets.token_hex(32)
+            secret, made = _key_file(self.data_dir, SECRET_KEY_FILE)
+            created += [SECRET_KEY_FILE] if made else []
         if not data:
             if not self.test_mode:
                 raise RuntimeError("PORTAL_DATA_KEY must be set when "
                                    "PORTAL_TEST_MODE is off")
-            data = secret
+            data, made = _key_file(self.data_dir, DATA_KEY_FILE)
+            created += [DATA_KEY_FILE] if made else []
         if secret == self.secret_key and data == self.data_key:
             return self
-        from dataclasses import replace
         return replace(self, secret_key=secret, data_key=data,
-                       extras={**self.extras, "ephemeral_secret": not self.secret_key})
+                       extras={**self.extras, "key_files": not self.secret_key,
+                               "key_files_created": created})
 
 
 _current: PortalSettings | None = None
@@ -129,4 +184,5 @@ def current() -> PortalSettings:
     return _current
 
 
-__all__ = ["PortalSettings", "DEFAULT_DATABASE_URL", "set_current", "current"]
+__all__ = ["PortalSettings", "DEFAULT_DATABASE_URL", "SECRET_KEY_FILE", "DATA_KEY_FILE",
+           "set_current", "current"]

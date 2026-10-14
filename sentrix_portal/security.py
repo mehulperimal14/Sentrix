@@ -32,6 +32,7 @@ from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatc
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
+from sentrix.link.protocol import canonical_json
 from sentrix_portal import settings as portal_settings
 from sentrix_portal.db import get_db
 from sentrix_portal.models import AuditLog, User, UserSession, utcnow
@@ -274,10 +275,13 @@ def verify_login_csrf(request: Request, supplied: str | None) -> bool:
     return bool(cookie and supplied and hmac.compare_digest(cookie, supplied))
 
 
-async def supplied_csrf(request: Request) -> str | None:
+async def supplied_csrf(request: Request, *, header_only: bool = False) -> str | None:
+    """The CSRF token of a request: the ``X-CSRF-Token`` header, else (unless
+    ``header_only``) a ``csrf_token`` form field. ``header_only`` never reads
+    the body, so a proxy can still forward it (the tunnel)."""
     header = request.headers.get(portal_settings.current().csrf_header)
-    if header:
-        return header
+    if header or header_only:
+        return header or None
     content_type = request.headers.get("content-type", "")
     if content_type.startswith(("application/x-www-form-urlencoded",
                                 "multipart/form-data")):
@@ -296,12 +300,25 @@ def verify_csrf(principal: Principal, supplied: str | None) -> bool:
 TOTP_ROLES = frozenset({"company_admin", "operator"})
 
 
+def _inner_path(path: str) -> str:
+    """``/d/<device id>/x`` -> ``/x`` (the console path behind the tunnel)."""
+    if path.startswith("/d/"):
+        parts = path.split("/", 3)
+        return "/" + (parts[3] if len(parts) > 3 else "")
+    return path
+
+
 def _wants_html(request: Request) -> bool:
-    return "text/html" in request.headers.get("accept", "") and not \
-        request.url.path.startswith(("/api/", "/d/"))
+    """A browser navigating to a page (a logged-out bookmark of
+    ``/d/<id>/dashboard`` included): redirect to the login page. APIs, media,
+    the video relay and scripted requests get JSON."""
+    if request.method != "GET" or "text/html" not in request.headers.get("accept", ""):
+        return False
+    return not _inner_path(request.url.path).startswith(("/api/", "/media/", "/ws/",
+                                                         "/video"))
 
 
-def require_role(*roles: str, csrf: bool = True,
+def require_role(*roles: str, csrf: bool | str = True,
                  step_up: bool = False) -> Callable[..., Any]:
     """Dependency: a signed-in user with one of ``roles`` (any role if none).
 
@@ -309,8 +326,12 @@ def require_role(*roles: str, csrf: bool = True,
     * wrong role -> 403;
     * admin/operator without TOTP this session -> 303 to ``/account/2fa``
       (403 for APIs);
-    * state-changing method without a valid CSRF token -> 403 (``csrf=False``
-      only for endpoints with their own proof, e.g. a signed webhook);
+    * state-changing method without a valid CSRF token -> 403. ``csrf=True``
+      accepts the header or a ``csrf_token`` form field; ``csrf="header"``
+      only the ``X-CSRF-Token`` header and never reads the body (the device
+      proxy, which must forward form and multipart bodies untouched);
+      ``csrf=False`` only for endpoints with their own proof (a signed
+      webhook);
     * ``step_up=True``: password/PIN re-entered within ``step_up_seconds``,
       else 403 ``step_up_required``.
     """
@@ -331,7 +352,8 @@ def require_role(*roles: str, csrf: bool = True,
                                     headers={"Location": "/account/2fa"})
             raise HTTPException(status.HTTP_403_FORBIDDEN, detail="totp_required")
         if csrf and request.method in STATE_CHANGING:
-            if not verify_csrf(principal, await supplied_csrf(request)):
+            supplied = await supplied_csrf(request, header_only=csrf == "header")
+            if not verify_csrf(principal, supplied):
                 raise HTTPException(status.HTTP_403_FORBIDDEN, detail="csrf")
         if step_up and not principal.stepped_up():
             raise HTTPException(status.HTTP_403_FORBIDDEN, detail="step_up_required")
@@ -347,12 +369,11 @@ _GENESIS = "0" * 64
 
 def _audit_fields(row: AuditLog) -> bytes:
     at = _aware(row.at)
-    return json.dumps({
+    return canonical_json({
         "at": at.isoformat() if at else None, "household_id": row.household_id,
         "actor_type": row.actor_type, "actor_id": row.actor_id, "event": row.event,
         "target_type": row.target_type, "target_id": row.target_id,
-        "ip_hash": row.ip_hash, "detail": row.detail or {}},
-        sort_keys=True, separators=(",", ":"), default=str).encode()
+        "ip_hash": row.ip_hash, "detail": row.detail or {}})
 
 
 def audit(db: Session, event: str, *, actor_type: str = "system",
@@ -362,9 +383,12 @@ def audit(db: Session, event: str, *, actor_type: str = "system",
     """Append one audit row (docs/7 §13 event names) in the caller's
     transaction. ``hash = HMAC(secret, prev_hash || canonical(row))``."""
     last = db.query(AuditLog).order_by(AuditLog.id.desc()).first()
+    # Stored and hashed as JSON values (a datetime becomes its string), so the
+    # chain verifies from what is read back (protocol.canonical_json).
+    detail = json.loads(json.dumps(detail or {}, default=str))
     row = AuditLog(at=utcnow(), household_id=household_id, actor_type=actor_type,
                    actor_id=actor_id, event=event, target_type=target_type,
-                   target_id=target_id, ip_hash=ip_digest(ip), detail=detail or {},
+                   target_id=target_id, ip_hash=ip_digest(ip), detail=detail,
                    prev_hash=last.hash if last else _GENESIS)
     row.hash = hmac.new(_secret(), row.prev_hash.encode() + _audit_fields(row),
                         hashlib.sha256).hexdigest()

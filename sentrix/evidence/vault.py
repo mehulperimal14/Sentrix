@@ -111,6 +111,19 @@ class EvidenceRecord:
     extras: dict[str, Any] = field(default_factory=dict)
 
 
+def _announce(record: "EvidenceRecord") -> None:
+    """"evidence" listener event: metadata only, never the image (docs/7 §5.5
+    ``evidence.meta``)."""
+    from sentrix import listeners
+    listeners.emit("evidence", lambda: {
+        "bundle_id": record.bundle_id, "incident_id": record.incident_id,
+        "created_at": record.timestamp, "level": record.level, "tci": record.tci,
+        "sha256": record.sha256, "camera_id": record.camera_id,
+        "incident_type": record.incident_type,
+        "detections": [{"label": d.get("label"), "conf": d.get("conf")}
+                       for d in record.detections if isinstance(d, dict)]})
+
+
 class EvidenceVault:
     """Encrypts frames and maintains the tamper-evident manifest chain."""
 
@@ -242,6 +255,7 @@ class EvidenceVault:
 
             log.info("evidence %s sealed (L%d, sha256=%s...)", base, level,
                      digest[:12])
+            _announce(record)
             return record
         except Exception as exc:
             log.error("evidence save failed: %s", exc)

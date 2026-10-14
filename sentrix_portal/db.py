@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Iterator
 
 from fastapi import Request
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, inspect
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -45,8 +45,30 @@ class Database:
                                          autoflush=False, expire_on_commit=False)
 
     def init(self) -> None:
+        """Create missing tables, then add missing nullable columns to
+        existing ones (additive only; nothing is dropped or rewritten). After
+        the first deployment schema changes go through Alembic."""
         from sentrix_portal import models  # noqa: F401  (registers the tables)
         Base.metadata.create_all(bind=self.engine)
+        self._add_missing_columns()
+
+    def _add_missing_columns(self) -> list[str]:
+        added = []
+        inspector = inspect(self.engine)
+        existing_tables = set(inspector.get_table_names())
+        with self.engine.begin() as conn:
+            for table in Base.metadata.sorted_tables:
+                if table.name not in existing_tables:
+                    continue
+                present = {c["name"] for c in inspector.get_columns(table.name)}
+                for column in table.columns:
+                    if column.name in present or column.primary_key or not column.nullable:
+                        continue
+                    sql_type = column.type.compile(dialect=self.engine.dialect)
+                    conn.exec_driver_sql(f'ALTER TABLE {table.name} ADD COLUMN '
+                                         f'{column.name} {sql_type}')
+                    added.append(f"{table.name}.{column.name}")
+        return added
 
     @contextmanager
     def session(self) -> Iterator[Session]:

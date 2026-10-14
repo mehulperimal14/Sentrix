@@ -49,6 +49,11 @@ BRIDGE_HEADERS = (HEADER_SECRET, HEADER_USER_ID, HEADER_USER_NAME, HEADER_ROLE,
 TUNNEL_ROLES = ("owner", "member", "operator")
 #: Request-scope key where the LC stores the verified identity.
 SCOPE_KEY = "sentrix_tunnel"
+#: The ASGI ``client`` the tunnel executor sets on every replayed request
+#: (``httpx.ASGITransport(app=lc_app, client=TUNNEL_CLIENT)``). Console rate
+#: limiters key on the actor (``sentrix.web.auth.rate_key``), never on this
+#: address, or every remote user would share one bucket.
+TUNNEL_CLIENT = ("tunnel", 0)
 
 _SECRET = secrets.token_urlsafe(32)
 _BASE = re.compile(r"^/d/[A-Za-z0-9_-]{1,64}$")
@@ -77,6 +82,12 @@ class TunnelIdentity:
 
     def stepped_up_within(self, seconds: float, now: float) -> bool:
         return self.step_up_at is not None and 0 <= now - self.step_up_at <= seconds
+
+    def to_actor(self):
+        """The :class:`sentrix.actor.Actor` of this identity (type = role)."""
+        from sentrix.actor import Actor
+        return Actor(type=self.role, id=self.user_id, name=self.user_name or None,
+                     step_up_at=self.step_up_at)
 
 
 def build_headers(*, user_id: str, user_name: str, role: str, base: str,
@@ -144,5 +155,5 @@ def base_for(request: Any) -> str:
 
 __all__ = ["HEADER_SECRET", "HEADER_USER_ID", "HEADER_USER_NAME", "HEADER_ROLE",
            "HEADER_STEP_UP", "HEADER_REQUEST_ID", "HEADER_BASE", "HEADER_CSRF",
-           "BRIDGE_HEADERS", "TUNNEL_ROLES", "SCOPE_KEY", "TunnelIdentity",
+           "BRIDGE_HEADERS", "TUNNEL_ROLES", "SCOPE_KEY", "TUNNEL_CLIENT", "TunnelIdentity",
            "process_secret", "build_headers", "verify", "identity_of", "base_for"]

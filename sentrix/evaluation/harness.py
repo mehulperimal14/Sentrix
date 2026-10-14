@@ -1,7 +1,7 @@
 """Drive the real ``Pipeline`` for evaluation, with every side effect removed.
 
 There is deliberately no second inference path here: stills and videos both go
-through ``Pipeline._observe`` / ``Pipeline.process``, the code the live camera
+through ``Pipeline.observe`` / ``Pipeline.process``, the code the live camera
 runs. What the harness changes is *only* what must not happen during a
 measurement:
 
@@ -72,10 +72,21 @@ def _noop(*_args, **_kwargs) -> None:
     return None
 
 
-def build_eval_pipeline():
-    """A ``Pipeline`` that measures but cannot act."""
+#: Evaluation modes: the per-tick pipeline, or the 4-second clip engine.
+EVAL_MODES = ("tick", "clip")
+
+
+def build_eval_pipeline(mode: str = "tick"):
+    """A ``Pipeline`` that measures but cannot act.
+
+    ``mode="clip"`` hands the same safe pipeline to
+    ``sentrix.pipeline.clip.prepare_eval_pipeline`` (track T-CLIP), which may
+    add clip-mode state but must not undo anything below.
+    """
     from sentrix.pipeline.engine import Pipeline
 
+    if mode not in EVAL_MODES:
+        raise ValueError(f"unknown evaluation mode {mode!r}; use one of {EVAL_MODES}")
     pipeline = Pipeline(source=_NullSource(), enable_audio=False,
                         event_source="eval")
     pipeline.identity = _UnknownIdentity()
@@ -83,6 +94,9 @@ def build_eval_pipeline():
     pipeline._submit = _noop         # background writes, incl. incident DB rows
     pipeline._save_open_incident = _noop     # the shutdown save as well
     pipeline.sos = NullSosService()          # never opens an assistance request
+    if mode == "clip":
+        from sentrix.pipeline.clip import prepare_eval_pipeline
+        pipeline = prepare_eval_pipeline(pipeline)
     assert_measurement_safe(pipeline)
     return pipeline
 
@@ -115,7 +129,7 @@ def score_still(pipeline, frame: np.ndarray) -> StillResult:
     features, now = None, 0.0
     for i in range(ticks):
         now = i * hop
-        features = pipeline._observe(frame, now)
+        features = pipeline.observe(frame, now)
     result = pipeline.tci.compute(features, now)
     return StillResult(features, result)
 

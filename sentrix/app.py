@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import threading
 from contextlib import asynccontextmanager
@@ -43,10 +44,16 @@ def _loop() -> None:
     log.info("processing loop exited")
 
 
-def _start_services(pipeline) -> None:
-    """Build and start the enabled background services (docs/7 §3.4) and
+def _start_services(pipeline, app: FastAPI, loop: asyncio.AbstractEventLoop) -> None:
+    """Build and start the enabled background services (docs/7 §3.6) and
     hand the SOS service to the pipeline. Every service is off unless its own
-    env flag is set, so this is a no-op on a default install."""
+    env flag is set, so this is a no-op on a default install.
+
+    ``ctx.extras``: ``app`` (this LC app: the tunnel executor replays requests
+    into it with ``httpx.ASGITransport``) and ``loop`` (the server's event
+    loop: a service thread schedules coroutines on it with
+    ``asyncio.run_coroutine_threadsafe``; nothing may block it).
+    """
     from sentrix import services
     from sentrix.config import settings
     from sentrix.pipeline.engine import get_pipeline
@@ -57,17 +64,39 @@ def _start_services(pipeline) -> None:
                     "profile names once their channel switches are on")
     ctx = services.ServiceContext(settings=settings, state=state,
                                   get_pipeline=get_pipeline,
-                                  registry=services.registry)
+                                  registry=services.registry,
+                                  extras={"app": app, "loop": loop})
     services.registry.load_builtin(ctx)
     services.registry.start_all()
     sos = services.registry.get("sos")
     if sos is not None:
         pipeline.sos = sos
+    if services.registry.get("channels") is None:
+        _legacy_channels_block(settings, state)
+
+
+def _legacy_channels_block(settings, state) -> None:
+    """Without the channel router, the only outbound path is the legacy
+    Twilio notifier (guarded): report it, so the dashboard's "no outbound
+    channel" banner is true. The banner (``warn``) is shown only with SOS on."""
+    from sentrix.alerting.notifier import notifier
+    from sentrix.pipeline.state import CHANNELS_IDLE
+
+    ready = bool(notifier.online)
+    state.update(channels={**CHANNELS_IDLE, "legacy_twilio": ready,
+                           "outbound_ready": ready,
+                           "warn": bool(settings.sos.enabled and not ready)})
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    from sentrix import services
+    """Start-up: database, pipeline, persisted HOME/ARMED, services, then the
+    interrupted-incident cleanup (so the link mirrors it) and the live loop.
+    Shutdown, in this order: the live loop, the pipeline (its worker drains
+    queued side effects such as an SOS trigger and saves the open incident,
+    while the services still run), then the services in reverse order."""
+    from sentrix import listeners, services
+    from sentrix import mode as runtime_mode
     from sentrix.pipeline.engine import get_pipeline, shutdown_pipeline
     from sentrix.storage import database
 
@@ -81,13 +110,16 @@ async def lifespan(app: FastAPI):
                     "to authenticate. Copy .env.example to .env and set it.")
 
     pipeline = get_pipeline()   # build eagerly so startup failures surface here
-    database.close_interrupted(pipeline.session_id)
+    runtime_mode.load()         # a power cut must not silently disarm the house
     try:
         database.prune(int(os.getenv("RETENTION_DAYS", "30")))
     except Exception as exc:
         log.warning("retention prune skipped: %s", exc)
 
-    _start_services(pipeline)      # before the loop, so the first L3 can reach SOS
+    # Before the loop, so the first L3 can reach SOS.
+    _start_services(pipeline, app, asyncio.get_running_loop())
+    # After the services, so the link client hears the closures.
+    database.close_interrupted(pipeline.session_id)
 
     _stop.clear()
     _thread = threading.Thread(target=_loop, daemon=True, name="sentrix-pipeline")
@@ -101,8 +133,9 @@ async def lifespan(app: FastAPI):
     _stop.set()
     if _thread is not None:
         _thread.join(timeout=5.0)
+    shutdown_pipeline()            # drains queued side effects; services still listen
     services.registry.clear()      # stops link, SOS, channels, gpio, node (reverse order)
-    shutdown_pipeline()
+    listeners.clear()
     log.info("shutdown complete")
 
 

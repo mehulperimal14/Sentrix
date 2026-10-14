@@ -26,7 +26,7 @@ import hmac
 import os
 from pathlib import Path
 
-from fastapi import (APIRouter, Cookie, Depends, File, Form, HTTPException,
+from fastapi import (APIRouter, Body, Depends, File, Form, HTTPException,
                      Request, UploadFile, status)
 from fastapi.responses import (HTMLResponse, JSONResponse, RedirectResponse,
                                Response)
@@ -37,7 +37,6 @@ from sentrix import mode as runtime_mode
 from sentrix import services
 from sentrix.config import settings
 from sentrix.evidence.vault import vault
-from sentrix.alerting.dispatch import dispatch_service
 from sentrix.paths import FACES_DIR, SNAPSHOT_DIR, TEMPLATES_DIR
 from sentrix.pipeline.engine import get_pipeline
 from sentrix.pipeline.state import state
@@ -45,6 +44,8 @@ from sentrix.storage import database
 from sentrix.utils.logging import get_logger, telemetry
 from sentrix.utils.redact import redact_url
 from sentrix.perception.identity import person_name
+from sentrix.sos import current_service as sos_service
+from sentrix.web import auth
 from sentrix.web.security import (RateLimiter, generate_token, login_limiter,
                                   sanitize_filename, validate_image,
                                   verify_token)
@@ -64,14 +65,29 @@ def _secure_cookies() -> bool:
     return os.getenv("SENTRIX_SECURE_COOKIES", "").strip().lower() in ("1", "true", "yes")
 
 
-async def require_auth(session_token: str | None = Cookie(None)) -> bool:
-    password = _password()
-    # Unset password: send the browser to the login page, which says what to
-    # do, instead of a raw JSON 500 on the first page a newcomer opens.
-    if not password or not verify_token(session_token, password):
-        raise HTTPException(status_code=status.HTTP_307_TEMPORARY_REDIRECT,
-                            headers={"Location": "/login"})
+async def require_auth(request: Request) -> bool:
+    """Every LC page and API: the device admin's session or a verified tunnel
+    identity (``sentrix.web.auth.principal_of``). The principal is on
+    ``request.state.lc_principal``.
+
+    Unset password or no session: the browser goes to the login page, which
+    says what to do, instead of a raw JSON 500 on the first page a newcomer
+    opens. Tunnelled requests get 401 JSON instead (the Portal never rewrites
+    a redirect to the device's login). T-WEB moves the APIs to 401 JSON too
+    (``auth.require_lc``).
+    """
+    principal = auth.principal_of(request)
+    if principal is None:
+        raise auth.unauthenticated(request, legacy_redirect=True)
+    request.state.lc_principal = principal
     return True
+
+
+def _principal(request: Request) -> auth.LcPrincipal:
+    principal = getattr(request.state, "lc_principal", None)
+    if principal is None:                 # a route without require_auth
+        raise auth.unauthenticated(request)
+    return principal
 
 
 def _safe_path(base: Path, name: str) -> Path:
@@ -239,11 +255,12 @@ async def api_metrics() -> JSONResponse:
     return JSONResponse(state.get())
 
 
-@router.get("/api/health", dependencies=[Depends(require_auth)])
-async def api_health() -> JSONResponse:
+def health_payload() -> dict:
+    """The ``/api/health`` fields (also the link's ``hello.health``). Redacted:
+    no camera credentials, no addresses."""
     pipeline = get_pipeline()
     live = state.get()
-    return JSONResponse({
+    return {
         "camera": pipeline.source.online,
         # Redacted: rtsp://user:pw@host must never leave this route (docs/7 §12).
         "camera_source": redact_url(pipeline.source.name),
@@ -272,7 +289,12 @@ async def api_health() -> JSONResponse:
         "latency": telemetry.stats(),
         # services, send_guard, test_mode, mode (docs/7 §9.3)
         **services.health_fields(),
-    })
+    }
+
+
+@router.get("/api/health", dependencies=[Depends(require_auth)])
+async def api_health() -> JSONResponse:
+    return JSONResponse(health_payload())
 
 
 @router.get("/api/config", dependencies=[Depends(require_auth)])
@@ -289,14 +311,29 @@ async def api_incidents(limit: int = 100) -> JSONResponse:
 
 @router.post("/api/incidents/{incident_id}/verdict",
              dependencies=[Depends(require_auth)])
-async def api_verdict(incident_id: str, verdict: str = Form(...),
-                      note: str = Form(None)) -> JSONResponse:
+async def api_verdict(request: Request, incident_id: str, verdict: str = Form(...),
+                      note: str = Form(None), pin: str = Form(None)) -> JSONResponse:
     """Operator feedback: was this a real threat?
 
     Every labelled incident is a training row for the fusion model, which is
-    the dataset the retraining notebook could not find.
+    the dataset the retraining notebook could not find. "False alarm" goes
+    through the SOS service (docs/7 §7.7): with an open request it needs the
+    SOS PIN, and the duress PIN quietly asks for help.
     """
-    ok = database.set_verdict(sanitize_filename(incident_id), verdict, note)
+    principal = _principal(request)
+    actor = principal.to_actor()
+    incident_id = sanitize_filename(incident_id)
+    verdict = (verdict or "").upper()
+    if verdict == "FALSE":
+        result = await asyncio.to_thread(sos_service().false_verdict, incident_id,
+                                         pin=pin, actor=actor, channel=principal.channel,
+                                         note=note)
+        if not result["ok"]:
+            raise auth.LcError(result["code"], result["message"])
+        return JSONResponse({"status": "ok"})
+    ok = database.set_verdict(incident_id, verdict, note, by=actor.ref,
+                              channel=principal.channel,
+                              actor_type=actor.event_actor_type)
     if not ok:
         raise HTTPException(status_code=400, detail="Unknown incident or verdict")
     return JSONResponse({"status": "ok"})
@@ -314,13 +351,38 @@ async def api_dispatch_latest() -> JSONResponse:
 
 @router.post("/api/dispatch/{package_id}/send/{authority}",
              dependencies=[Depends(require_auth)])
-async def api_dispatch_send(package_id: str, authority: str) -> JSONResponse:
-    if authority.upper() not in ("POLICE", "FIRE"):
+async def api_dispatch_send(request: Request, package_id: str,
+                            authority: str) -> JSONResponse:
+    """"Send now". A package of an assistance request approves that request
+    (the SOS service); otherwise the guarded legacy send. 409 for a package
+    that is already SENT, CANCELLED or EXPIRED."""
+    from sentrix.alerting.dispatch import AUTHORITIES
+    if authority.upper() not in AUTHORITIES:
         raise HTTPException(status_code=400,
-                            detail="authority must be POLICE or FIRE")
-    sent = await asyncio.to_thread(dispatch_service.send,
-                                   sanitize_filename(package_id), authority)
-    return JSONResponse({"status": "sent" if sent else "failed"})
+                            detail=f"authority must be one of {', '.join(AUTHORITIES)}")
+    principal = _principal(request)
+    package_id = sanitize_filename(package_id)
+    result = await asyncio.to_thread(sos_service().approve_package, package_id,
+                                     authority.upper(), actor=principal.to_actor(),
+                                     channel=principal.channel)
+    if not result["ok"]:
+        raise auth.LcError(result["code"], result["message"])
+    package = database.get_dispatch(package_id) or {}
+    return JSONResponse({"status": "sent" if package.get("status") == "SENT" else "failed",
+                         "message": result["message"]})
+
+
+@router.post("/api/mode", dependencies=[Depends(require_auth)])
+async def api_mode(request: Request, armed: bool = Body(..., embed=True),
+                   pin: str | None = Body(None, embed=True)) -> JSONResponse:
+    """HOME/ARMED (docs/7 §9.2). Arming needs no PIN; disarming needs the SOS
+    PIN (the duress PIN disarms visibly and opens a silent request)."""
+    principal = _principal(request)
+    result = await asyncio.to_thread(sos_service().set_mode, bool(armed), pin=pin,
+                                     actor=principal.to_actor())
+    if not result["ok"]:
+        raise auth.LcError(result["code"], result["message"])
+    return JSONResponse({"mode": runtime_mode.snapshot()})
 
 
 # ── enrolment ─────────────────────────────────────────────────────────────────

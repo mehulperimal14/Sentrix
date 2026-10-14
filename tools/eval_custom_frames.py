@@ -1,7 +1,7 @@
 """Score the custom dataset's labelled images through the product pipeline.
 
 Each image is treated as a short static clip and pushed through
-``Pipeline._observe`` and ``TCIEngine.compute`` — the same code the live camera
+``Pipeline.observe`` and ``TCIEngine.compute`` — the same code the live camera
 runs — with side effects disabled and identity neutral (see
 ``sentrix/evaluation/harness.py``). The predicted class is the incident type
 the TCI engine assigns, mapped onto the five dataset classes.

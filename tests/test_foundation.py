@@ -327,7 +327,8 @@ class TestVerdictBySosState:
             incident = _incident()
             database.save_incident(incident, "s1", ongoing=True)
         finally:
-            database._LISTENERS.clear()
+            from sentrix import listeners
+            listeners.clear()
         assert seen == [("incident", incident.id)]
         assert database.recent_incidents()[0]["id"] == incident.id
 
@@ -350,7 +351,8 @@ class TestRequestStore:
         requests.transition("r", "delivered")
         requests.transition("r", "resolve", actor_type="desk", outcome="help_arrived")
         assert requests.open_request() is None
-        assert requests.verify_chain("r") == {"ok": True, "entries": 5, "problems": []}
+        assert requests.verify_chain("r") == {"ok": True, "entries": 5, "problems": [],
+                                              "origins": {"device": 5}}
 
 
 class TestLinkAndNotificationStores:

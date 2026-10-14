@@ -201,6 +201,12 @@ class IncidentManager:
             incident.peak = tick
         return incident, closed
 
+    def close_now(self, now: float | None = None) -> Incident | None:
+        """Close the open incident at once (``Pipeline.request_close_incident``,
+        the test-mode demo reset). Returns it, or None (nothing open, or too
+        short and never saved)."""
+        return self._close(time.monotonic() if now is None else now)
+
     def _close(self, now: float) -> Incident | None:
         incident = self._current
         self._current = None

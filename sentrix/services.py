@@ -14,6 +14,20 @@ None when its flag is off.
 
 Measurement code (evaluation harness, replays, benchmarks) calls
 :func:`assert_measurement_safe` on its pipeline.
+
+Threading rules (docs/7 §3.6): ``start``/``stop`` run on the server's event
+loop thread inside the lifespan, so they spawn a thread or
+``asyncio.create_task`` and return. ``ctx.extras["loop"]`` is that loop: a
+service thread schedules coroutines on it with
+``asyncio.run_coroutine_threadsafe`` and never blocks it.
+``ctx.extras["app"]`` is the LC FastAPI app (the tunnel executor's ASGI
+target). Listener callbacks (``sentrix.listeners``) run on the writer's
+thread: enqueue only.
+
+Optional ``preflight(settings) -> list[dict]`` in a factory module: cheap
+local checks (env vars, files; no network, no devices) that ``tools/doctor.py``
+prints for every service, so no track has to edit the doctor. Each dict:
+``{"status": "ok" | "warn" | "fail", "name": str, "detail": str}``.
 """
 
 from __future__ import annotations
@@ -46,7 +60,8 @@ class Service(Protocol):
 class ServiceContext:
     """What a factory may use. ``get_pipeline`` is lazy (no models load until
     called); ``registry`` lets a later service find an earlier one (the SOS
-    service finds ``channels``)."""
+    service finds ``channels``); ``extras`` carries ``app`` (the LC app) and
+    ``loop`` (the running event loop) in the live app."""
 
     settings: Any
     state: Any
@@ -187,6 +202,35 @@ class ServiceRegistry:
 registry = ServiceRegistry()
 
 
+def preflight_report(settings: Any,
+                     factories: tuple[tuple[str, str], ...] = BUILTIN_FACTORIES
+                     ) -> dict[str, list[dict[str, str]]]:
+    """Every service module's optional ``preflight(settings)`` checks, for
+    ``tools/doctor.py``. A missing module or function is skipped; a failing
+    one reports itself as one ``fail`` row."""
+    report: dict[str, list[dict[str, str]]] = {}
+    for name, target in factories:
+        module_name = target.partition(":")[0]
+        try:
+            module = importlib.import_module(module_name)
+        except ModuleNotFoundError as exc:
+            if exc.name and module_name.startswith(exc.name):
+                continue
+            report[name] = [{"status": "fail", "name": name, "detail": f"import failed: {exc}"}]
+            continue
+        except Exception as exc:
+            report[name] = [{"status": "fail", "name": name, "detail": f"import failed: {exc}"}]
+            continue
+        check = getattr(module, "preflight", None)
+        if check is None:
+            continue
+        try:
+            report[name] = [dict(row) for row in (check(settings) or [])]
+        except Exception as exc:
+            report[name] = [{"status": "fail", "name": name, "detail": f"preflight failed: {exc}"}]
+    return report
+
+
 def health_fields() -> dict[str, Any]:
     """Fields every ``/api/health`` response carries (docs/7 §9.3)."""
     from sentrix import mode
@@ -217,5 +261,5 @@ def assert_measurement_safe(pipeline: Any = None) -> None:
 
 
 __all__ = ["Service", "ServiceContext", "ServiceRegistry", "registry",
-           "BUILTIN_FACTORIES", "health_fields", "assert_measurement_safe",
-           "MeasurementUnsafe"]
+           "BUILTIN_FACTORIES", "health_fields", "preflight_report",
+           "assert_measurement_safe", "MeasurementUnsafe"]

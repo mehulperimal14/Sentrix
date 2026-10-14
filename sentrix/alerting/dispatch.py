@@ -22,6 +22,31 @@ from sentrix.utils.logging import get_logger
 log = get_logger("dispatch")
 
 FIRE_INCIDENTS = {"fire"}
+#: Authorities a package can be sent to (``sentrix.sos.states.AUTHORITIES``).
+AUTHORITIES = ("POLICE", "FIRE", "MEDICAL")
+#: Package statuses that may still be sent (docs/7 §6.1). SENT, CANCELLED and
+#: EXPIRED are final: sending one again answers 409 ``conflict``.
+SENDABLE_STATUSES = ("PENDING", "FAILED")
+
+
+@dataclass(frozen=True)
+class SendOutcome:
+    """Result of :meth:`DispatchService.send`. Truthy only when sent, so
+    ``if dispatch_service.send(...)`` keeps working. ``code`` is the docs/7
+    §13 code a route maps to its status: sent -> ok (200), failed -> ok with
+    ``status: "failed"`` (the guard suppressed it or the provider failed; the
+    package stays sendable), conflict -> 409, not_found -> 404, invalid -> 400."""
+
+    status: str                 # sent | failed | conflict | not_found | invalid
+    message: str = ""
+
+    def __bool__(self) -> bool:
+        return self.status == "sent"
+
+    @property
+    def code(self) -> str:
+        return {"sent": "ok", "failed": "ok", "conflict": "conflict",
+                "not_found": "not_found", "invalid": "invalid_args"}[self.status]
 
 
 @dataclass
@@ -38,8 +63,8 @@ class DispatchPackage:
     camera_location: str
     evidence_bundle: str | None
     evidence_hash: str | None
-    authority: str            # POLICE | FIRE
-    status: str               # PENDING | SENT | CANCELLED
+    authority: str            # POLICE | FIRE (recommended)
+    status: str               # database.DISPATCH_STATUSES
     payload_json: str
 
 
@@ -86,18 +111,25 @@ class DispatchService:
             log.error("dispatch creation failed: %s", exc)
             return None
 
-    def send(self, package_id: str, authority: str) -> bool:
-        """Send a package. Operator-confirmed; never called automatically."""
+    def send(self, package_id: str, authority: str, *,
+             by: str = "lc:device_admin") -> SendOutcome:
+        """Send a package. Operator-confirmed; never called automatically.
+
+        With the SOS service on, a package linked to a request is sent by the
+        SOS engine (``sos.approve_package``), not here.
+        """
         from sentrix.storage import database
 
-        authority = authority.upper()
-        if authority not in ("POLICE", "FIRE"):
+        authority = (authority or "").upper()
+        if authority not in AUTHORITIES:
             log.error("invalid authority: %s", authority)
-            return False
+            return SendOutcome("invalid", f"authority must be one of {', '.join(AUTHORITIES)}")
         package = database.get_dispatch(package_id)
         if package is None:
             log.error("dispatch %s not found", package_id)
-            return False
+            return SendOutcome("not_found", "unknown package")
+        if package["status"] not in SENDABLE_STATUSES:
+            return SendOutcome("conflict", f"package is {package['status']}")
 
         body = (f"[SENTRIX EMERGENCY - {authority}]\n"
                 f"{package['incident_type'].upper()} at "
@@ -108,8 +140,18 @@ class DispatchService:
                 f"Contact: {package['user_phone']}\n"
                 f"Evidence: {package.get('evidence_bundle') or 'n/a'}")
         sent = notifier.send_raw(body)
-        database.update_dispatch_status(package_id, "SENT" if sent else "PENDING")
-        return sent
+        if sent:
+            database.update_dispatch_status(
+                package_id, "SENT", chosen_authority=authority, sent_by=by,
+                sent_at=datetime.now(timezone.utc), error=None)
+            return SendOutcome("sent")
+        # Stays PENDING (the dashboard's dispatch panel lists PENDING packages,
+        # and a dry run is the default): the attempt is recorded in ``error``.
+        status = package["status"] if package["status"] in SENDABLE_STATUSES else "PENDING"
+        database.update_dispatch_status(package_id, status, chosen_authority=authority,
+                                        error="not sent (send guard or provider)")
+        return SendOutcome("failed", "not sent: the send guard refused it (dry run "
+                                     "by default) or the provider failed")
 
     @staticmethod
     def to_dict(package: DispatchPackage) -> dict:
@@ -118,4 +160,5 @@ class DispatchService:
 
 dispatch_service = DispatchService()
 
-__all__ = ["DispatchPackage", "DispatchService", "dispatch_service"]
+__all__ = ["DispatchPackage", "DispatchService", "SendOutcome", "dispatch_service",
+           "AUTHORITIES", "SENDABLE_STATUSES"]

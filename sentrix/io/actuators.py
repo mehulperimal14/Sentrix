@@ -22,6 +22,12 @@ Wiring, for when the relay arrives (unchanged from ``docs/3``):
 ``active_low`` matters: most cheap optocoupler relay boards are active-low, so
 driving the pin HIGH *releases* the relay. Getting this backwards means a siren
 that runs continuously until level 5, then stops.
+
+Frozen interface (docs/7 §2.4; track T-HW rewrites the GPIO backend on
+gpiozero behind it): ``build_siren() -> Actuator``; ``Actuator.activate(
+duration=None)``, ``.deactivate()``, ``.name``, ``.is_real``; and
+:func:`siren_test`, which ``POST /api/node/siren-test`` and the link's
+``siren.test`` command both call so they share one limiter.
 """
 
 from __future__ import annotations
@@ -29,7 +35,9 @@ from __future__ import annotations
 import os
 import platform
 import subprocess
+import sys
 import threading
+import time
 from abc import ABC, abstractmethod
 
 from sentrix.config import settings
@@ -186,4 +194,57 @@ def build_siren() -> Actuator:
     return ConsoleSiren()
 
 
-__all__ = ["Actuator", "ConsoleSiren", "SoundSiren", "GpioSiren", "build_siren"]
+_test_lock = threading.Lock()
+_last_test: float | None = None
+
+
+def siren_test(siren: Actuator, *, actor) -> dict:
+    """Sound ``siren`` for ``settings.link.siren_test_seconds`` (1 s), at most
+    once per ``siren_test_min_interval_seconds`` (60 s) for the whole process.
+
+    Callers check who may test (device admin, or an owner with a fresh
+    step-up: the LC route; the link's command rules). ``actor`` is a
+    ``sentrix.actor.Actor``; the test is written to the live event log as
+    ``siren_test``. Returns ``{ok, code, message, retry_after, seconds,
+    backend, is_real}`` with a docs/7 §13 code (``rate_limited`` when too soon).
+    """
+    global _last_test
+    from sentrix.config import settings
+
+    cfg = settings.link
+    now = time.monotonic()
+    with _test_lock:
+        if _last_test is not None and now - _last_test < cfg.siren_test_min_interval_seconds:
+            wait = cfg.siren_test_min_interval_seconds - (now - _last_test)
+            return {"ok": False, "code": "rate_limited", "retry_after": round(wait, 1),
+                    "message": "the siren was tested less than a minute ago",
+                    "seconds": 0.0, "backend": siren.name, "is_real": siren.is_real}
+        _last_test = now
+    try:
+        siren.activate(cfg.siren_test_seconds)
+    except Exception as exc:
+        log.error("siren test failed: %s", exc)
+        return {"ok": False, "code": "internal", "retry_after": None,
+                "message": f"siren failed: {exc}", "seconds": 0.0,
+                "backend": siren.name, "is_real": siren.is_real}
+    engine = sys.modules.get("sentrix.pipeline.engine")
+    pipeline = getattr(engine, "_pipeline", None) if engine else None
+    if pipeline is not None:
+        pipeline.events.audit("siren_test", by=getattr(actor, "ref", str(actor)),
+                              backend=siren.name, seconds=cfg.siren_test_seconds)
+    log.warning("siren test by %s (%s, %.1fs)", getattr(actor, "ref", actor),
+                siren.name, cfg.siren_test_seconds)
+    return {"ok": True, "code": "ok", "retry_after": None, "message": "",
+            "seconds": cfg.siren_test_seconds, "backend": siren.name,
+            "is_real": siren.is_real}
+
+
+def _reset_siren_test_limiter() -> None:
+    """Tests only."""
+    global _last_test
+    with _test_lock:
+        _last_test = None
+
+
+__all__ = ["Actuator", "ConsoleSiren", "SoundSiren", "GpioSiren", "build_siren",
+           "siren_test"]

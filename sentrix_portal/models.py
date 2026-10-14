@@ -332,9 +332,12 @@ class RequestEvent(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     request_id = Column(String(36), ForeignKey("assistance_requests.id"), index=True)
-    seq = Column(Integer)
+    seq = Column(Integer)                                               # per (request, origin)
     origin = Column(String(8), default="device")                       # device | cloud
     at = Column(TS, default=utcnow)
+    #: The sender's ISO ``at`` string, verbatim: the chain hash covers it, and
+    #: a parsed-and-reformatted timestamp may not reproduce the same bytes.
+    at_text = Column(String(40))
     received_at = Column(TS, default=utcnow)
     from_state = Column(String(16))
     to_state = Column(String(16))
@@ -385,6 +388,9 @@ class Notification(Base):
     error = Column(Text)
     subject = Column(String(200))
     body = Column(Text)
+    #: Recipient name/role, e-mail HTML, Telegram buttons, urgency
+    #: (``channels.base.message_meta``), so ``due`` rebuilds the exact message.
+    meta = Column(JSON, default=dict)
     test_mode = Column(Boolean, default=True)
     created_at = Column(TS, default=utcnow)
     sent_at = Column(TS)
@@ -404,7 +410,9 @@ class ActionToken(Base):
     request_id = Column(String(36), index=True)
     subject_type = Column(String(8))                                    # user | contact
     subject_id = Column(String(36))
-    nonce = Column(String(32))                                          # Telegram callback nonce
+    #: Telegram callback nonce (16 chars, ``channels.base.new_callback_nonce``):
+    #: callback_data is "<nonce>:<letter>" (64-byte limit), looked up here.
+    nonce = Column(String(32), unique=True, index=True)
     created_at = Column(TS, default=utcnow)
     expires_at = Column(TS, nullable=False)
     used_at = Column(TS)

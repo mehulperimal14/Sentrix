@@ -14,8 +14,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import (Boolean, Column, DateTime, Float, Integer, LargeBinary,
-                        String, Text)
+from sqlalchemy import (Boolean, Column, DateTime, Float, Index, Integer,
+                        LargeBinary, String, Text)
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
@@ -181,15 +181,20 @@ class AssistanceRequestRecord(Base):
 class RequestEventRecord(Base):
     """Audit trail of one request: every transition and notable event.
 
-    Hash-chained per request (``sentrix.storage.requests.append_event``).
-    ``restricted`` rows (duress) are never shown to owners or members.
+    Hash-chained per (request, origin) (``sentrix.storage.requests.
+    append_event``): the device's events and the cloud's events (imported
+    from ``sos.sync``) form two chains, each numbered 1, 2, 3 ... so neither
+    side ever uses up the other's sequence numbers. ``restricted`` rows
+    (duress) are never shown to owners or members.
     """
 
     __tablename__ = "request_events"
+    __table_args__ = (Index("ux_request_events_origin_seq", "request_id", "origin",
+                            "seq", unique=True),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     request_id = Column(String(36), index=True)
-    seq = Column(Integer)                                     # 1, 2, 3 ... per request
+    seq = Column(Integer)                                     # 1, 2, 3 ... per (request, origin)
     at = Column(DateTime, default=_utcnow)
     from_state = Column(String(16), nullable=True)
     to_state = Column(String(16), nullable=True)
@@ -269,6 +274,9 @@ class NotificationRecord(Base):
     error = Column(Text, nullable=True)
     subject = Column(String(200), nullable=True)
     body = Column(Text)
+    #: Rendering the transport needs and the dedupe key does not: recipient
+    #: name and role, e-mail HTML, Telegram buttons, urgency (JSON).
+    meta_json = Column(Text, nullable=True)
     test_mode = Column(Boolean, default=True)
     created_at = Column(DateTime, default=_utcnow)
     sent_at = Column(DateTime, nullable=True)

@@ -23,7 +23,11 @@ def _test_mode_default() -> bool:
 
 
 #: The ``sos`` block while no request is open (docs/7 §9.4). Owner-facing: it
-#: never carries the duress flag (``sentrix.sos.states.owner_view``).
+#: never carries the duress flag (``sentrix.sos.states.owner_view``). One
+#: payload reaches LC and tunnel viewers alike, so paths in it are
+#: base-relative (``snapshot: "media/snapshot/<name>"``, no leading slash);
+#: the page prefixes ``document.body.dataset.base``. ``actions`` holds names
+#: from ``sentrix.sos.SOS_ACTIONS``.
 SOS_IDLE: dict[str, Any] = {
     "active": False, "request_id": None, "short_id": None, "state": None,
     "label": None, "incident_id": None, "incident_type": None, "level": None,
@@ -45,11 +49,15 @@ NODE_IDLE: dict[str, Any] = {
     "door": None, "siren_armed": None, "gpio": None,
     "uptime_s": None, "updated_at": None,
 }
-#: The ``channels`` block (track T-CH fills it): is anything able to leave?
-#: ``modem`` is the 4G modem worker's status (present, registered, signal).
+#: The ``channels`` block (track T-CH fills it; the app lifespan reports the
+#: legacy Twilio notifier while no router runs): is anything able to leave?
+#: ``outbound_ready`` counts the legacy notifier; ``warn`` (the red "no
+#: outbound channel" banner) is True only while SOS is enabled and nothing can
+#: leave. ``modem``: {present, registered, signal_dbm, sms_today} or None.
 CHANNELS_IDLE: dict[str, Any] = {
     "enabled": False, "outbound_ready": False, "live": False, "channels": {},
-    "outbox_depth": 0, "last_error": None, "modem": None,
+    "outbox_depth": 0, "last_error": None, "modem": None, "legacy_twilio": False,
+    "warn": False,
 }
 #: Runtime HOME/ARMED mode (``sentrix.mode``).
 MODE_IDLE: dict[str, Any] = {"armed": False, "source": "config",

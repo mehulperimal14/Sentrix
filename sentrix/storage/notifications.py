@@ -6,14 +6,15 @@ foundation; track T-CH owns this module from here on.
 
 from __future__ import annotations
 
+import json
 import math
 from datetime import datetime, timezone
 
 from sqlalchemy.exc import IntegrityError
 
 from sentrix.alerting import guard
-from sentrix.alerting.channels.base import (FAILED, QUEUED, Message, OutboxItem,
-                                            Recipient)
+from sentrix.alerting.channels.base import (FAILED, QUEUED, OutboxItem, message_meta,
+                                            rebuild)
 from sentrix.storage import database
 from sentrix.storage.models import NotificationRecord
 from sentrix.utils.redact import mask_recipient
@@ -51,6 +52,7 @@ class SqlOutbox:
                     dedupe_key=item.dedupe_key, status=item.status,
                     attempts=item.attempts, next_attempt_at=_dt(item.next_attempt_at),
                     subject=m.subject, body=m.text,
+                    meta_json=json.dumps(message_meta(r, m), default=str),
                     test_mode=guard.test_mode(), created_at=_dt(m.created_at)))
             return True
         except IntegrityError:
@@ -63,16 +65,20 @@ class SqlOutbox:
                             NotificationRecord.next_attempt_at <= _dt(now))
                     .order_by(NotificationRecord.next_attempt_at)
                     .limit(limit).all())
-            return [OutboxItem(
-                id=row.id,
-                recipient=Recipient(ref=row.recipient_ref, name=row.recipient_ref,
-                                    channel=row.channel, address=row.address),
-                message=Message(template=row.template, step=row.step, text=row.body,
-                                request_id=row.request_id, subject=row.subject,
-                                created_at=_ts(row.created_at)),
-                status=row.status, attempts=row.attempts or 0,
-                next_attempt_at=_ts(row.next_attempt_at),
-                provider_id=row.provider_id, error=row.error) for row in rows]
+            items = []
+            for row in rows:
+                recipient, message = rebuild(
+                    row.recipient_ref, row.channel, row.address,
+                    json.loads(row.meta_json) if row.meta_json else None,
+                    template=row.template, step=row.step, text=row.body,
+                    request_id=row.request_id, subject=row.subject,
+                    created_at=_ts(row.created_at))
+                items.append(OutboxItem(
+                    id=row.id, recipient=recipient, message=message,
+                    status=row.status, attempts=row.attempts or 0,
+                    next_attempt_at=_ts(row.next_attempt_at),
+                    provider_id=row.provider_id, error=row.error))
+            return items
 
     def update(self, item: OutboxItem) -> None:
         with database.session_scope() as session:

@@ -50,6 +50,8 @@
     {% block content %}{% endblock %}
   </main>
 
+  {# External files only, each with the request's CSP nonce:
+     <script src="/static/<area>/x.js" nonce="{{ csp_nonce }}"></script> #}
   {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -25,6 +25,12 @@ Overlays are drawn on a copy. The previous code annotated ``combined_frame`` and
 then passed the same array to the encoders on later ticks, so HUD text and
 bounding boxes were baked into the pixels the classifiers saw — the models were
 partly reading the system's own overlay.
+
+Seams for other tracks (docs/7 §2.4): ``observe`` (steps 2-7, perception into
+a feature vector) and ``decide`` (steps 8-10) are public so the 4-second clip
+engine (``sentrix/pipeline/clip.py``) can feed its own clip-level features
+into the same decision path; ``run_live`` takes an :class:`InferenceStrategy`
+so clip mode keeps the capture, preview, identity-worker and HUD threads.
 """
 
 from __future__ import annotations
@@ -35,10 +41,11 @@ import time
 from collections import deque
 from dataclasses import dataclass
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
 
+from sentrix import listeners
 from sentrix import mode as runtime_mode
 from sentrix.alerting.dispatch import dispatch_service
 from sentrix.alerting.notifier import notifier
@@ -79,6 +86,9 @@ LEVEL_COLOURS = {
     4: (0, 60, 240), 5: (0, 0, 220),
 }
 TASK_QUEUE_MAX = 64
+#: Queued behind every pending side effect at shutdown: the worker drains
+#: what is ahead of it (an SOS trigger, the last incident save) and stops.
+_DRAIN = object()
 
 
 @dataclass(frozen=True)
@@ -96,6 +106,79 @@ class Overlay:
     detections: dict
     #: Capture time of the frame the overlay was computed on.
     at: float
+
+
+@runtime_checkable
+class InferenceStrategy(Protocol):
+    """How the live loop turns captured frames into decisions.
+
+    ``Pipeline.run_live`` owns capture, preview (HUD, MJPEG encode), the
+    identity worker and the rates; the strategy owns the inference thread.
+    ``on_frame`` runs on the capture thread for every new camera frame and
+    must be O(1) (hand the frame over, never infer); ``run`` is the inference
+    thread's body until ``stop`` is set, calling ``pipeline.process`` (or
+    ``observe`` + ``decide``) and ``pipeline.note_inference`` after each
+    decision; ``wake`` makes a blocked ``run`` return promptly.
+
+    The tick loop is :class:`TickStrategy`; clip mode
+    (``SENTRIX_PIPELINE_MODE=clip``) uses ``sentrix.pipeline.clip.
+    build_strategy(pipeline)`` (track T-CLIP).
+    """
+
+    name: str
+
+    def on_frame(self, frame: np.ndarray, captured_at: float) -> None: ...
+
+    def run(self, stop: threading.Event) -> None: ...
+
+    def wake(self) -> None: ...
+
+
+class TickStrategy:
+    """Today's loop: the newest frame through a single slot, at most
+    ``inference_fps``; frames inference cannot keep up with are dropped,
+    never queued."""
+
+    name = "tick"
+
+    def __init__(self, pipeline: "Pipeline") -> None:
+        self.pipeline = pipeline
+
+    def on_frame(self, frame: np.ndarray, captured_at: float) -> None:
+        pipeline = self.pipeline
+        with pipeline._slot:
+            pipeline._pending = (frame, captured_at)
+            pipeline._slot.notify()
+
+    def wake(self) -> None:
+        with self.pipeline._slot:
+            self.pipeline._slot.notify_all()
+
+    def run(self, stop: threading.Event) -> None:
+        pipeline = self.pipeline
+        period = pipeline.cfg.pipeline.inference_period
+        next_at = 0.0
+        while not stop.is_set():
+            delay = next_at - time.monotonic()
+            if delay > 0:
+                stop.wait(delay)
+                continue
+            with pipeline._slot:
+                if pipeline._pending is None:
+                    pipeline._slot.wait(timeout=0.5)
+                job, pipeline._pending = pipeline._pending, None
+            if job is None:
+                continue
+            frame, captured_at = job
+            next_at = time.monotonic() + period
+            try:
+                # Pipeline time is the capture time: evidence windows and dwell
+                # timers measure the scene, not the queue.
+                pipeline.process(frame, now=captured_at)
+            except Exception as exc:
+                log.error("frame processing failed: %s", exc, exc_info=True)
+                continue
+            pipeline.note_inference(captured_at)
 
 
 class Pipeline:
@@ -170,15 +253,25 @@ class Pipeline:
         self._ai_hz = 0.0
         self._rates_at = 0.0
         self._offline = False
+        self._strategy: InferenceStrategy = TickStrategy(self)
+        #: Set by request_close_incident (any thread), applied by decide().
+        self._close_requested: str | None = None
 
     # ── background side effects ───────────────────────────────────────────────
     def _task_loop(self) -> None:
-        while not self._stop.is_set():
+        """FIFO side effects. At shutdown ``_DRAIN`` is queued behind whatever
+        is pending, so a queued SOS trigger or incident save still runs."""
+        while True:
             try:
-                func, args, kwargs = self._tasks.get(timeout=0.5)
+                item = self._tasks.get(timeout=0.5)
             except queue.Empty:
+                if self._stop.is_set():
+                    return
                 continue
             try:
+                if item is _DRAIN:
+                    return
+                func, args, kwargs = item
                 func(*args, **kwargs)
             except Exception as exc:
                 log.error("background task failed: %s", exc)
@@ -212,7 +305,10 @@ class Pipeline:
         }
         return sources
 
-    def _observe(self, frame: np.ndarray, now: float) -> FeatureVector:
+    def observe(self, frame: np.ndarray, now: float) -> FeatureVector:
+        """Perception for one frame (steps 2-7): detections, scene, identity,
+        per-class evidence, behaviour, audio -> the feature vector ``decide``
+        scores. Public seam for the clip engine (docs/7 §2.4)."""
         detections = self.detector.detect(frame)
         person_present = bool(detections.persons)
         if person_present:
@@ -303,6 +399,9 @@ class Pipeline:
         path = notifier.save_snapshot(frame, incident.id)
         if path is not None:
             incident.snapshot_path = path.name
+            listeners.emit("snapshot", lambda: {
+                "name": path.name, "incident_id": incident.id,
+                "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
 
     def _capture_evidence(self, incident, frame: np.ndarray, result: TCIResult,
                           level: int, status: str, detections: list,
@@ -372,7 +471,14 @@ class Pipeline:
             incident.actions.add("sos")
             self._submit_or_run(self._sos_trigger, incident, result, level, now)
 
-        if plan.sms and claim(incident, "sms"):
+        # Once the SOS service owns an incident it owns every message about it
+        # (D8: SMS only offline or unseen after 10 min; the legacy L4 SMS folds
+        # into the request's level_rise reminder, the L5 call into its rise5
+        # step) and its one dispatch package (opened with the request at L3).
+        # The siren stays: a physical deterrent is not a message.
+        sos_owned = "sos" in incident.actions
+
+        if plan.sms and not sos_owned and claim(incident, "sms"):
             self._submit(notifier.send_sms, result, level, status)
 
         if plan.siren and claim(incident, "siren"):
@@ -382,12 +488,12 @@ class Pipeline:
             except Exception as exc:
                 log.error("siren failed: %s", exc)
 
-        if plan.dispatch and claim(incident, "dispatch"):
+        if plan.dispatch and not sos_owned and claim(incident, "dispatch"):
             # Queued after the evidence capture above (one FIFO worker), so the
             # package carries the sealed bundle instead of "n/a".
             self._submit(self._create_dispatch, incident, result, level)
 
-        if plan.call and claim(incident, "call"):
+        if plan.call and not sos_owned and claim(incident, "call"):
             self._submit(notifier.make_call, result, level, status)
 
     def _submit_or_run(self, func, *args) -> None:
@@ -438,14 +544,24 @@ class Pipeline:
     # ── main entry point ──────────────────────────────────────────────────────
     def process(self, frame: np.ndarray, now: float | None = None,
                 label: str | None = None) -> dict[str, Any]:
-        """Score one frame end to end. Used by both live and replay."""
+        """Score one frame end to end (``observe`` then ``decide``). Used by
+        both live and replay."""
         now = time.monotonic() if now is None else now
         started = time.perf_counter()
-        self._frame_count += 1
-
         # Inference operates on a pristine copy; the HUD is drawn separately.
+        features = self.observe(frame, now)
+        return self.decide(frame, features, now, label, started=started)
+
+    def decide(self, frame: np.ndarray, features: FeatureVector, now: float,
+               label: str | None = None, *, started: float | None = None) -> dict[str, Any]:
+        """Steps 8-10 for one observation: TCI, committed level, incident and
+        its side effects, event log, state, overlay. ``frame`` is the clean
+        frame the snapshot/evidence capture (the clip engine passes the
+        trigger keyframe); ``started`` is the ``perf_counter`` at which the
+        observation began, for the latency figures."""
+        started = time.perf_counter() if started is None else started
+        self._frame_count += 1
         clean = frame
-        features = self._observe(clean, now)
         result = self.tci.compute(features, now)
         # The policy reads the raw evidence: it is already confirmed over
         # several ticks, so smoothing it again would only delay the alarm.
@@ -503,11 +619,37 @@ class Pipeline:
             fire=features.fire, authorized=features.authorized,
             identity_degraded=features.identity_degraded,
             detections=features.extras.get("detections", {}), at=now)
+        if self._close_requested is not None:
+            self._apply_close_request(result, now)
         return {"tci": result.tci, "level": level, "status": status,
                 "incident_type": result.incident_type,
                 "features": features.model_features(), "latency": latency,
                 "incident_id": incident.id if incident else None,
                 "sources": features.extras.get("sources") or {}}
+
+    # ── incident control (demo reset) ─────────────────────────────────────────
+    def request_close_incident(self, reason: str = "demo") -> bool:
+        """Close the open incident after the next decision, on the inference
+        thread, and clear the temporal state (level dwell, evidence windows,
+        intrusion timer) so the next scene has to be confirmed afresh and opens
+        a new incident (and request). Safe from any thread. Returns whether an
+        incident was open when asked. Used by ``demo.close_incident`` (test
+        mode only; the SOS service checks)."""
+        self._close_requested = reason or "demo"
+        return self.incidents.current is not None
+
+    def _apply_close_request(self, result: TCIResult, now: float) -> None:
+        reason, self._close_requested = self._close_requested, None
+        closed = self.incidents.close_now(now)
+        if closed is not None:
+            self._submit(database.save_incident, closed, self.session_id)
+            self.events.audit("incident_closed", incident_id=closed.id, reason=reason)
+            log.info("incident %s closed on request (%s)", closed.short_id, reason)
+        self.policy.reset()
+        self.evidence.reset()
+        self.tci.reset()
+        if self._committed_level != 1:
+            self._level_changed(1, "SECURE", result, None, now)
 
     def _save_open_incident(self, incident) -> None:
         """Synchronous save at shutdown. Measurement pipelines replace it with a
@@ -552,32 +694,24 @@ class Pipeline:
         }
 
     # ── live loop: capture, inference and preview are decoupled ──────────────
-    def run_live(self, stop: threading.Event) -> None:
+    def run_live(self, stop: threading.Event,
+                 strategy: InferenceStrategy | None = None) -> None:
         """Capture loop; runs until ``stop`` is set.
 
         Every captured frame is composited with the latest inference overlay and
         becomes the preview, so the video runs at the camera's rate whatever the
-        AI rate is. Inference runs on its own thread and always takes the newest
-        frame through a single slot: frames it cannot keep up with are dropped,
-        never queued. In the first live test the preview was drawn only after
-        inference, so the video froze at the AI rate (0.3 Hz, CLAUDE.md §5).
+        AI rate is. Inference runs on its own thread (``strategy.run``; the tick
+        loop by default, the clip engine in clip mode), fed by
+        ``strategy.on_frame`` from this thread. In the first live test the
+        preview was drawn only after inference, so the video froze at the AI
+        rate (0.3 Hz, CLAUDE.md §5).
         """
-        if self.cfg.clip.mode == "clip":
-            # The 4-second clip engine (HARDWARE.md T1, track T-CLIP) owns the
-            # live loop in clip mode; it reuses process()'s decision path.
-            try:
-                from sentrix.pipeline.clip import run_clip_live
-            except ImportError as exc:
-                log.error("SENTRIX_PIPELINE_MODE=clip but the clip engine is "
-                          "missing (%s); running the tick loop", exc)
-            else:
-                run_clip_live(self, stop)
-                return
+        self._strategy = strategy or self._build_strategy()
         identity = getattr(self, "identity", None)
         if getattr(identity, "available", False) and self._identity_worker is None:
             self._identity_worker = IdentityWorker(identity)
-        worker = threading.Thread(target=self._inference_loop, args=(stop,),
-                                  daemon=True, name="sentrix-inference")
+        worker = threading.Thread(target=self._strategy.run, args=(stop,),
+                                  daemon=True, name=f"sentrix-inference-{self._strategy.name}")
         worker.start()
         try:
             while not stop.is_set():
@@ -589,12 +723,33 @@ class Pipeline:
                 if not fresh:
                     stop.wait(0.004)
         finally:
-            with self._slot:
-                self._slot.notify_all()
+            try:
+                self._strategy.wake()
+            except Exception as exc:
+                log.debug("strategy wake failed: %s", exc)
             worker.join(timeout=5.0)
             if self._identity_worker is not None:
                 self._identity_worker.stop()
                 self._identity_worker = None
+
+    def _build_strategy(self) -> InferenceStrategy:
+        if self.cfg.clip.mode == "clip":
+            # The 4-second clip engine (HARDWARE.md T1, track T-CLIP).
+            try:
+                from sentrix.pipeline.clip import build_strategy
+            except ImportError as exc:
+                log.error("SENTRIX_PIPELINE_MODE=clip but the clip engine is "
+                          "missing (%s); running the tick loop", exc)
+            else:
+                return build_strategy(self)
+        return TickStrategy(self)
+
+    def note_inference(self, captured_at: float) -> None:
+        """An inference finished on a frame captured at ``captured_at``: the AI
+        rate and the frame age on the dashboard (strategies call this)."""
+        done = time.monotonic()
+        self._ai_times.append(done)
+        state.update(frame_age_ms=round((done - captured_at) * 1000, 1))
 
     def _capture_step(self) -> bool:
         """Publish the newest camera frame as the preview and offer it to AI."""
@@ -611,9 +766,7 @@ class Pipeline:
         self._last_seq = seq
         self._raw = frame
         self._video_times.append(now)
-        with self._slot:
-            self._pending = (frame, captured_at)
-            self._slot.notify()
+        self._strategy.on_frame(frame, captured_at)
         self._publish(self._draw(frame.copy(), self._overlay, now))
         if now - self._rates_at >= 1.0:
             self._rates_at = now
@@ -625,32 +778,8 @@ class Pipeline:
         return True
 
     def _inference_loop(self, stop: threading.Event) -> None:
-        """Run the neural stack on the newest frame, at most ``inference_fps``."""
-        period = self.cfg.pipeline.inference_period
-        next_at = 0.0
-        while not stop.is_set():
-            delay = next_at - time.monotonic()
-            if delay > 0:
-                stop.wait(delay)
-                continue
-            with self._slot:
-                if self._pending is None:
-                    self._slot.wait(timeout=0.5)
-                job, self._pending = self._pending, None
-            if job is None:
-                continue
-            frame, captured_at = job
-            next_at = time.monotonic() + period
-            try:
-                # Pipeline time is the capture time: evidence windows and dwell
-                # timers measure the scene, not the queue.
-                self.process(frame, now=captured_at)
-            except Exception as exc:
-                log.error("frame processing failed: %s", exc, exc_info=True)
-                continue
-            done = time.monotonic()
-            self._ai_times.append(done)
-            state.update(frame_age_ms=round((done - captured_at) * 1000, 1))
+        """The tick loop's inference thread (kept for callers of the old name)."""
+        TickStrategy(self).run(stop)
 
     def latest_raw(self) -> np.ndarray | None:
         """The newest camera frame without the HUD, for enrolment from the
@@ -723,6 +852,7 @@ class Pipeline:
         self._latencies.clear()
         self._frame_count = 0
         self._committed_level = 1
+        self._close_requested = None
 
     # ── presentation ──────────────────────────────────────────────────────────
     def _draw(self, frame, overlay: "Overlay | None", now: float):
@@ -803,7 +933,13 @@ class Pipeline:
     def shutdown(self) -> None:
         log.info("shutting down pipeline")
         self._stop.set()
-        self._worker.join(timeout=3.0)
+        try:
+            # Behind every queued side effect (an SOS trigger, an incident
+            # save), so they run before the worker exits.
+            self._tasks.put(_DRAIN, timeout=1.0)
+        except queue.Full:
+            log.warning("task queue full at shutdown; some side effects may be lost")
+        self._worker.join(timeout=10.0)
         if self.incidents.current is not None:
             # Keep the open incident: it would otherwise vanish on restart.
             self._save_open_incident(self.incidents.current)
@@ -853,4 +989,5 @@ def shutdown_pipeline() -> None:
             _pipeline = None
 
 
-__all__ = ["Pipeline", "get_pipeline", "shutdown_pipeline"]
+__all__ = ["Pipeline", "InferenceStrategy", "TickStrategy", "get_pipeline",
+           "shutdown_pipeline"]

@@ -6,10 +6,10 @@ Track T-CH adds ``router.py`` (the device service: ``build_service``),
 asks ``sentrix.alerting.guard`` first.
 """
 
-from sentrix.alerting.channels.base import (Button, Channel, ChannelRouter,
+from sentrix.alerting.channels.base import (Button, Channel, ChannelRouter, ChannelsService,
                                             FakeTransport, MemoryOutbox, Message,
                                             Outbox, OutboxItem, Recipient,
                                             SendResult, Transport)
 
-__all__ = ["Button", "Channel", "ChannelRouter", "FakeTransport", "MemoryOutbox",
+__all__ = ["Button", "Channel", "ChannelRouter", "ChannelsService", "FakeTransport", "MemoryOutbox",
            "Message", "Outbox", "OutboxItem", "Recipient", "SendResult", "Transport"]

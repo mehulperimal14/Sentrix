@@ -126,23 +126,27 @@ class EventLog:
                 log.debug("event write failed: %s", exc)
 
     def audit(self, event: str, **detail: Any) -> None:
-        """Record an operator action (gallery changes) in the session log.
+        """Record an operator action (gallery changes, mode_set, ...) in the
+        session log, then announce it to the "audit" listeners (the link
+        client mirrors gallery rows as ``gallery.audit``; docs/7 §5.5).
 
         Audit rows carry ``event`` and no ``features``, so replay and dataset
         loaders skip them.
         """
+        from sentrix import listeners
+
         row = {"schema": SCHEMA_VERSION, "session": self.session_id,
                "source": self.source, "ts": round(time.time(), 3),
                "event": event, **detail}
         with self._lock:
             handle = self._open()
-            if handle is None:
-                return
-            try:
-                handle.write(json.dumps(row, default=str) + "\n")
-                handle.flush()
-            except (OSError, TypeError) as exc:
-                log.debug("audit write failed: %s", exc)
+            if handle is not None:
+                try:
+                    handle.write(json.dumps(row, default=str) + "\n")
+                    handle.flush()
+                except (OSError, TypeError) as exc:
+                    log.debug("audit write failed: %s", exc)
+        listeners.emit("audit", lambda: json.loads(json.dumps(row, default=str)))
 
     @property
     def rows(self) -> int:

@@ -22,9 +22,11 @@ def main() -> None:
     from sentrix_portal.settings import PortalSettings
 
     settings = PortalSettings.from_env()
-    if settings.extras.get("ephemeral_secret"):
-        print("PORTAL_SECRET_KEY is not set: using a temporary key "
-              "(sessions end when the Portal restarts).")
+    if settings.extras.get("key_files"):
+        made = settings.extras.get("key_files_created") or []
+        print(f"PORTAL_SECRET_KEY / PORTAL_DATA_KEY not set: using the key files in "
+              f"{settings.data_dir}" + (f" (created {', '.join(made)})" if made else "")
+              + ". Back them up: without them no device, login or code verifies.")
     uvicorn.run(create_app(settings), host=settings.host, port=settings.port,
                 log_level=os.getenv("PORTAL_LOG_LEVEL", "warning"))
 
