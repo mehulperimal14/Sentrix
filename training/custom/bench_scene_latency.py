@@ -62,6 +62,34 @@ def cpu_name() -> str:
     return platform.processor() or "unknown"
 
 
+def on_mains() -> bool | None:
+    """True on mains power, False on battery, None when unknown.
+
+    A laptop on battery caps its CPU (and GPU) power, which can double CPU
+    latencies, so the power source is part of every measurement.
+    """
+    try:
+        if sys.platform == "win32":
+            import ctypes
+
+            class PowerStatus(ctypes.Structure):
+                _fields_ = [("ACLineStatus", ctypes.c_ubyte), ("BatteryFlag", ctypes.c_ubyte),
+                            ("BatteryLifePercent", ctypes.c_ubyte),
+                            ("SystemStatusFlag", ctypes.c_ubyte),
+                            ("BatteryLifeTime", ctypes.c_ulong),
+                            ("BatteryFullLifeTime", ctypes.c_ulong)]
+            status = PowerStatus()
+            if ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(status)):
+                return {0: False, 1: True}.get(status.ACLineStatus)
+            return None
+        supplies = list(Path("/sys/class/power_supply").glob("*/online"))
+        if supplies:
+            return any(p.read_text().strip() == "1" for p in supplies)
+    except Exception:
+        pass
+    return None
+
+
 def summarise(samples_ms: list[float]) -> dict:
     a = np.asarray(samples_ms, dtype=np.float64)
     return {"n": int(a.size), "median_ms": round(float(np.median(a)), 2),
@@ -188,7 +216,7 @@ def main(argv=None) -> int:
         "measured": datetime.now().isoformat(timespec="seconds"),
         "machine": {"cpu": cpu_name(), "os": platform.platform(),
                     "logical_cpus": os.cpu_count(),
-                    "cpu_load_before_percent": load_before},
+                    "cpu_load_before_percent": load_before, "on_mains_power": on_mains()},
         "threads": args.threads, "batch": 1,
         "runs_per_model": args.rounds * args.per_round, "warmup": args.warmup,
         "versions": {"python": platform.python_version(), "torch": torch.__version__,

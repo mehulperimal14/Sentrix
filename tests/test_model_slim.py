@@ -457,6 +457,10 @@ class TestLatencyBench:
         assert order == ["a", "b"] + ["a", "a", "b", "b"] * 2
         assert {k: len(v) for k, v in samples.items()} == {"a": 4, "b": 4}
 
+    def test_power_source_is_reported(self):
+        import bench_scene_latency as bench
+        assert bench.on_mains() in (True, False, None)
+
     def test_graph_and_flops_from_a_checkpoint(self, tiny_scene_checkpoint):
         import bench_scene_latency as bench
         net, info = bench.load_graph(tiny_scene_checkpoint)

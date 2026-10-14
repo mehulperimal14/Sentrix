@@ -222,7 +222,9 @@ def latency_table() -> str:
     if not LATENCY.exists():
         return "_(latency not measured yet)_"
     rep = json.loads(LATENCY.read_text(encoding="utf-8"))
-    lines = [f"Measured {rep['measured']} on {rep['machine']['cpu']}, "
+    power = {True: "on mains power", False: "**on battery**"}.get(
+        rep["machine"].get("on_mains_power"), "power source unknown")
+    lines = [f"Measured {rep['measured']} on {rep['machine']['cpu']} ({power}), "
              f"**{rep['threads']} threads**, batch {rep['batch']}, "
              f"{rep['runs_per_model']} timed runs per model in interleaved rounds "
              f"(CPU load before the run: {rep['machine']['cpu_load_before_percent']} %); "
