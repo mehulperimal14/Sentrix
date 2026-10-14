@@ -222,18 +222,29 @@ def owner_actions(state: str) -> list[str]:
 
 def events_view(db, request_id: str, view: str = "owner") -> list[dict[str, Any]]:
     query = db.query(RequestEvent).filter_by(request_id=request_id)
-    if view == "owner":
-        query = query.filter(RequestEvent.restricted.is_(False))
     rows = query.order_by(RequestEvent.at, RequestEvent.origin, RequestEvent.seq).all()
     out = []
     for row in rows:
         item = event_dict(row)
+        if view == "owner" and row.restricted:
+            # A duress approval reads as the decline it appears to be (the
+            # device's owner_events does the same); other restricted rows
+            # do not exist for the household.
+            if item["event"] == S.APPROVE and (item["detail"] or {}).get("duress"):
+                item.update(event=S.DECLINE, to_state=S.DECLINED, restricted=False,
+                            detail={})
+                out.append(item)
+            continue
         if view == "owner":
             # A duress approval is a restricted row; the owner never sees it,
             # nor the flag in a later detail.
             item["detail"] = {k: v for k, v in (item["detail"] or {}).items()
                               if k != "duress"}
         out.append(item)
+    if view == "owner":
+        # Nor a sequence gap or a hash that would hint at a hidden row.
+        for n, item in enumerate(out, 1):
+            item.update(seq=n, hash=None, prev_hash=None)
     return out
 
 

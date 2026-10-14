@@ -52,6 +52,8 @@ _FORCED_ENV = {
     # runtime files: the whole device var/ tree (database, events, evidence,
     # snapshots, faces, calibration, mode) in the session dir, never var/
     "SENTRIX_VAR_DIR": str(_SESSION_DIR / "var"),
+    # ultralytics probes one.one.one.one / dns.google when imported
+    "YOLO_OFFLINE": "1",
     # no systemd notify socket: a lifespan test never builds the watchdog
     "NOTIFY_SOCKET": "", "WATCHDOG_USEC": "",
     "PORTAL_DATA_DIR": str(_SESSION_DIR / "portal"),
