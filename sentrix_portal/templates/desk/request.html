@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}{{ req.short_id }} - SENTRIX Desk{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/sos/sos.css">{% endblock %}
+{% block content %}
+<div id="desk-card" data-request="{{ req.id }}" data-state="{{ req.state }}">
+  <p class="muted"><a href="/desk">&larr; Queue</a></p>
+  <h1 class="page-title">SOS <span class="mono">{{ req.short_id }}</span> &middot; {{ req.label }}</h1>
+  {% if message %}<p class="notice" role="status">{{ message }}</p>{% endif %}
+  {% if req.duress %}
+  <p class="banner-duress" role="alert">DURESS: {{ req.banner }} The resident was forced to cancel.
+    Do not call the resident first.</p>
+  {% endif %}
+
+  <section class="card sos-card sos-state-{{ req.state | lower }}">
+    <p><strong>{{ req.incident_type }}</strong>, level {{ req.peak_level }}
+      {% if req.evidence_state == 'corroborated' %}(confirmed by two different models)
+      {% elif req.evidence_state == 'confirmed' %}(possible: one camera check){% endif %}
+      {% if room %}&middot; {{ room }}{% endif %}</p>
+    {% if req.sos_text %}<pre class="sos-text">{{ req.sos_text }}</pre>{% endif %}
+    {% if address %}<p><strong>Address:</strong> {{ address }}</p>{% endif %}
+    {% if household and household.entry_note %}<p><strong>Entry:</strong> {{ household.entry_note }}</p>{% endif %}
+    {% if map_url %}<p><a href="{{ map_url }}" rel="noopener noreferrer" target="_blank">Open the map</a></p>{% endif %}
+    {% if household %}
+    <p><strong>Home:</strong>
+      {% for key, value in (household.occupants or {}).items() %}{{ value }} {{ key }}{% if not loop.last %}, {% endif %}{% endfor %}
+      {% if household.pets %}&middot; pets: {{ household.pets }}{% endif %}</p>
+    {% endif %}
+    {% if medical %}<p><strong>Medical notes (consented):</strong> {{ medical }}</p>{% endif %}
+    {% if owner_name %}<p><strong>Resident:</strong> {{ owner_name }}
+      {% if owner_phone and not req.duress %}&middot; <a href="tel:{{ owner_phone }}">Call resident</a>{% endif %}</p>{% endif %}
+    {% if has_snapshot %}
+    <img class="sos-snapshot" src="/desk/requests/{{ req.id }}/snapshot.jpg" alt="Consented SOS snapshot">
+    {% endif %}
+    {% if live_url %}<p><a class="btn btn-ghost" href="{{ live_url }}">Live view (the household allowed it)</a></p>{% endif %}
+  </section>
+
+  <section class="card sos-actions" aria-label="Desk actions">
+    {% if req.state in ('APPROVED', 'DISPATCHED', 'FAILED') %}
+    <form method="post" action="/desk/requests/{{ req.id }}/acknowledge" class="sos-form">
+      <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+      <button type="submit" class="btn btn-danger">Acknowledge</button>
+    </form>
+    {% endif %}
+    {% if req.state in ('APPROVED', 'DISPATCHED', 'ACKNOWLEDGED', 'FAILED') %}
+    <form method="post" action="/desk/requests/{{ req.id }}/called-112" class="sos-form">
+      <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+      <button type="submit" class="btn btn-ghost">Called 112 (simulated)</button>
+    </form>
+    {% endif %}
+    {% if req.state in ('DISPATCHED', 'ACKNOWLEDGED') %}
+    <form method="post" action="/desk/requests/{{ req.id }}/resolve" class="sos-form">
+      <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+      <label for="outcome">Outcome</label>
+      <select id="outcome" name="outcome" required>
+        {% for key, label in outcomes.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+      </select>
+      <label for="note">Note</label>
+      <input id="note" name="note" maxlength="500">
+      <button type="submit" class="btn">Resolve</button>
+    </form>
+    {% endif %}
+    {% if req.state == 'CLOSED' %}<p>Closed{% if req.outcome %}: {{ outcomes.get(req.outcome, req.outcome) }}{% endif %}.</p>{% endif %}
+    <p class="muted">{{ call.label }}{% if call.test_mode %} &middot; test mode{% endif %}. SENTRIX does not contact 112 itself.</p>
+  </section>
+
+  <section class="card">
+    <h2>Timeline</h2>
+    <ol class="timeline">
+      {% for e in events %}
+      <li><time datetime="{{ e.at }}">{{ e.at }}</time> <strong>{{ e.event }}</strong>
+        <span class="muted">{{ e.actor_type }}{% if e.channel %} via {{ e.channel }}{% endif %}{% if e.origin == 'cloud' %} (Portal){% endif %}{% if e.restricted %} &middot; restricted{% endif %}</span></li>
+      {% endfor %}
+    </ol>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/desk/desk.js" nonce="{{ csp_nonce }}"></script>{% endblock %}

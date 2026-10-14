@@ -1,0 +1,78 @@
+/* SENTRIX Portal: SOS pages, Desk console, contact pages, offline device page. */
+
+.page-title { font-size: 1.5rem; margin-bottom: 0.75rem; }
+.notice {
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid var(--accent-blue);
+  border-radius: 8px;
+  padding: 0.6rem 0.9rem;
+  margin-bottom: 1rem;
+}
+.banner-duress {
+  background: var(--danger);
+  color: #fff;
+  font-weight: 700;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+.tag-duress { color: var(--danger); }
+
+.sos-card { border-left: 6px solid var(--level-3); }
+.sos-state-pending, .sos-state-drafted { border-left-color: var(--level-4); }
+.sos-state-approved, .sos-state-dispatched, .sos-state-failed { border-left-color: var(--level-5); }
+.sos-state-acknowledged { border-left-color: var(--level-2); }
+.sos-state-closed, .sos-state-declined, .sos-state-cancelled { border-left-color: var(--level-1); }
+.sos-state-expired { border-left-color: var(--text-muted); }
+
+.sos-label { font-size: 1.1rem; margin-bottom: 0.4rem; }
+.countdown-big { font-size: 1.6rem; font-weight: 700; margin: 0.5rem 0; }
+.sos-snapshot { max-width: 100%; border-radius: 8px; margin: 0.75rem 0; display: block; }
+.sos-text {
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin: 0.75rem 0;
+  overflow-x: auto;
+}
+
+.sos-actions { display: flex; flex-direction: column; gap: 0.9rem; }
+.sos-form { display: flex; flex-direction: column; gap: 0.4rem; max-width: 28rem; }
+.btn-call { text-align: center; text-decoration: none; font-weight: 700; padding: 0.7rem 1rem; }
+.btn-disabled { opacity: 0.6; cursor: default; }
+
+.sos-list { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; }
+.sos-item { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: baseline;
+            border-left: 4px solid var(--level-4); padding-left: 0.6rem; }
+.sos-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.sos-table th, .sos-table td { text-align: left; padding: 0.4rem 0.5rem;
+                               border-bottom: 1px solid var(--border-light); }
+.sos-table tr.duress td { background: rgba(239, 68, 68, 0.12); }
+.sos-table .btn { padding: 0.15rem 0.5rem; font-size: 0.8rem; }
+
+.timeline { list-style: none; display: flex; flex-direction: column; gap: 0.35rem;
+            font-size: 0.9rem; }
+
+/* The global "Do you need assistance?" banner (sos.js). */
+.sos-banner {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--level-4);
+  color: #fff;
+  padding: 0.7rem 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  font-weight: 600;
+}
+.sos-banner a { color: #fff; text-decoration: underline; }
+
+@media (max-width: 640px) {
+  .sos-table { font-size: 0.8rem; }
+  .sos-table th:nth-child(n+5), .sos-table td:nth-child(n+5) { display: none; }
+}

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}SENTRIX SOS {{ req.short_id }}{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/sos/sos.css">{% endblock %}
+{% block content %}
+<h1 class="page-title">SENTRIX SOS for {{ resident }}</h1>
+{% if message %}<p class="notice" role="status">{{ message }}</p>{% endif %}
+{% if req.duress %}
+<p class="banner-duress" role="alert">{{ req.banner }}</p>
+{% endif %}
+<section class="card sos-card sos-state-{{ req.state | lower }}">
+  <p>Hello {{ contact.name }}. You are an emergency contact of {{ resident }}.</p>
+  <p>Request <span class="mono">{{ req.short_id }}</span>: <strong>{{ req.label }}</strong>
+     &middot; {{ req.incident_type }}, level {{ req.peak_level }}
+     {% if req.evidence_state == 'corroborated' %}(confirmed by two different models)
+     {% elif req.evidence_state == 'confirmed' %}(possible: one camera check){% endif %}</p>
+  {% if address %}<p><strong>Address:</strong> {{ address }}</p>{% endif %}
+  {% if entry_note %}<p><strong>Entry:</strong> {{ entry_note }}</p>{% endif %}
+  {% if map_url %}<p><a href="{{ map_url }}" rel="noopener noreferrer" target="_blank">Open the map</a></p>{% endif %}
+  {% if medical %}<p><strong>Medical notes (shared with consent):</strong> {{ medical }}</p>{% endif %}
+  {% if has_snapshot %}
+  <img class="sos-snapshot" src="/c/{{ token }}/snapshot.jpg" alt="Snapshot from the home camera">
+  {% endif %}
+</section>
+<section class="card sos-actions" aria-label="What you can do">
+  {% if call.href %}<a class="btn btn-danger btn-call" href="{{ call.href }}">{{ call.label }}</a>{% endif %}
+  {% if resident_phone and not req.duress %}<a class="btn btn-ghost" href="tel:{{ resident_phone }}">Call resident</a>{% endif %}
+  {% if can_acknowledge %}
+  <form method="post" action="/c/{{ token }}" class="sos-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <input type="hidden" name="action" value="acknowledge">
+    <button type="submit" class="btn">I'm handling it</button>
+  </form>
+  {% endif %}
+  {% if can_approve %}
+  <form method="post" action="/c/{{ token }}" class="sos-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <input type="hidden" name="action" value="approve">
+    <button type="submit" class="btn btn-danger">Alert the SENTRIX desk</button>
+    <p class="muted">{{ resident }} has not answered yet.</p>
+  </form>
+  {% endif %}
+  <p class="muted">This page works only while the request is open (plus two hours).
+    SENTRIX does not contact 112 itself.</p>
+</section>
+{% endblock %}
