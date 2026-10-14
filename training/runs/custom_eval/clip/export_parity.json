@@ -1,0 +1,179 @@
+{
+  "exports": {
+    "yolov8n_320.onnx": {
+      "role": "person",
+      "source": "models\\yolov8n.pt",
+      "source_sha256": "f59b3d833e2ff32e194b5bb8e08d211dc7c5bdf144b90d2c8412c47ccfc83b36",
+      "imgsz": 320,
+      "format": "onnx",
+      "file": "models\\exported\\yolov8n_320.onnx",
+      "bytes": 12698164,
+      "seconds": 9.2,
+      "parity": {
+        "frames": 12,
+        "raw_score_max_abs": 1.4e-05,
+        "raw_box_max_abs_px": 0.0028,
+        "parity_ok": true,
+        "decoded": {
+          "torch_boxes": 37,
+          "runtime_boxes": 41,
+          "matched": 33,
+          "worst_iou": 0.6086,
+          "worst_conf_diff": 0.185,
+          "note": "ultralytics predict letterboxes .pt to a minimal rectangle, exports to a square"
+        }
+      }
+    },
+    "yolov8n_640.onnx": {
+      "role": "person",
+      "source": "models\\yolov8n.pt",
+      "source_sha256": "f59b3d833e2ff32e194b5bb8e08d211dc7c5bdf144b90d2c8412c47ccfc83b36",
+      "imgsz": 640,
+      "format": "onnx",
+      "file": "models\\exported\\yolov8n_640.onnx",
+      "bytes": 12824168,
+      "seconds": 7.9,
+      "parity": {
+        "frames": 12,
+        "raw_score_max_abs": 2.5e-05,
+        "raw_box_max_abs_px": 0.0042,
+        "parity_ok": true,
+        "decoded": {
+          "torch_boxes": 44,
+          "runtime_boxes": 46,
+          "matched": 44,
+          "worst_iou": 0.6478,
+          "worst_conf_diff": 0.339,
+          "note": "ultralytics predict letterboxes .pt to a minimal rectangle, exports to a square"
+        }
+      }
+    },
+    "weapon_detector_custom_v4_320.onnx": {
+      "role": "weapon",
+      "source": "models\\v4_custom\\weapon_detector_custom_v4.pt",
+      "source_sha256": "4fb50c96019a74e47bb4e338d25389ae280a862d33f7d8833f19980d29cc0bb6",
+      "imgsz": 320,
+      "format": "onnx",
+      "file": "models\\exported\\weapon_detector_custom_v4_320.onnx",
+      "bytes": 10439982,
+      "seconds": 9.9,
+      "parity": {
+        "frames": 12,
+        "raw_score_max_abs": 1e-06,
+        "raw_box_max_abs_px": 0.0006,
+        "parity_ok": true,
+        "decoded": {
+          "torch_boxes": 1,
+          "runtime_boxes": 1,
+          "matched": 1,
+          "worst_iou": 1.0,
+          "worst_conf_diff": 0.011,
+          "note": "ultralytics predict letterboxes .pt to a minimal rectangle, exports to a square"
+        }
+      }
+    },
+    "weapon_detector_custom_v4_640.onnx": {
+      "role": "weapon",
+      "source": "models\\v4_custom\\weapon_detector_custom_v4.pt",
+      "source_sha256": "4fb50c96019a74e47bb4e338d25389ae280a862d33f7d8833f19980d29cc0bb6",
+      "imgsz": 640,
+      "format": "onnx",
+      "file": "models\\exported\\weapon_detector_custom_v4_640.onnx",
+      "bytes": 10565986,
+      "seconds": 8.4,
+      "parity": {
+        "frames": 12,
+        "raw_score_max_abs": 1e-06,
+        "raw_box_max_abs_px": 0.0017,
+        "parity_ok": true,
+        "decoded": {
+          "torch_boxes": 2,
+          "runtime_boxes": 2,
+          "matched": 2,
+          "worst_iou": 1.0,
+          "worst_conf_diff": 0.0103,
+          "note": "ultralytics predict letterboxes .pt to a minimal rectangle, exports to a square"
+        }
+      }
+    },
+    "fire_detector_custom_v4_320.onnx": {
+      "role": "fire",
+      "source": "models\\v4_custom\\fire_detector_custom_v4.pt",
+      "source_sha256": "d0ad546d5226ccc49efe4312d630a9c91840b1cba6119514c2db13fe34d31321",
+      "imgsz": 320,
+      "format": "onnx",
+      "file": "models\\exported\\fire_detector_custom_v4_320.onnx",
+      "bytes": 10439186,
+      "seconds": 5.4,
+      "parity": {
+        "frames": 12,
+        "raw_score_max_abs": 1e-06,
+        "raw_box_max_abs_px": 0.0021,
+        "parity_ok": true,
+        "decoded": {
+          "torch_boxes": 2,
+          "runtime_boxes": 2,
+          "matched": 2,
+          "worst_iou": 1.0,
+          "worst_conf_diff": 0.0002,
+          "note": "ultralytics predict letterboxes .pt to a minimal rectangle, exports to a square"
+        }
+      }
+    },
+    "fire_detector_custom_v4_640.onnx": {
+      "role": "fire",
+      "source": "models\\v4_custom\\fire_detector_custom_v4.pt",
+      "source_sha256": "d0ad546d5226ccc49efe4312d630a9c91840b1cba6119514c2db13fe34d31321",
+      "imgsz": 640,
+      "format": "onnx",
+      "file": "models\\exported\\fire_detector_custom_v4_640.onnx",
+      "bytes": 10565190,
+      "seconds": 9.1,
+      "parity": {
+        "frames": 12,
+        "raw_score_max_abs": 2e-06,
+        "raw_box_max_abs_px": 0.0023,
+        "parity_ok": true,
+        "decoded": {
+          "torch_boxes": 2,
+          "runtime_boxes": 2,
+          "matched": 2,
+          "worst_iou": 1.0,
+          "worst_conf_diff": 0.0018,
+          "note": "ultralytics predict letterboxes .pt to a minimal rectangle, exports to a square"
+        }
+      }
+    },
+    "scene_classifier_custom_v4.onnx": {
+      "role": "scene",
+      "source": "models\\v4_custom\\scene_classifier_custom_v4.pt",
+      "source_sha256": "a305401f3cafd8a9133baa095310a43282aa29bfa3a07c76a5a80c3546fe5ea9",
+      "imgsz": 224,
+      "format": "onnx",
+      "file": "models\\exported\\scene_classifier_custom_v4.onnx",
+      "bytes": 343048465,
+      "export_seconds": 9.5,
+      "parity": {
+        "frames": 12,
+        "logit_max_abs": 9e-06,
+        "prob_max_abs_end_to_end": 2e-06,
+        "parity_ok": true,
+        "note": "end to end: torchvision transform + torch vs Pillow preprocessing + onnxruntime"
+      }
+    }
+  },
+  "updated_at": "2026-10-15T00:19:35",
+  "commit": "31c6c50",
+  "skipped": [],
+  "versions": {
+    "ultralytics": "8.4.128",
+    "torch": "2.13.0+cpu",
+    "onnx": "1.22.0",
+    "onnxruntime": "1.29.0"
+  },
+  "tolerances": {
+    "score": 0.002,
+    "box_px": 0.5,
+    "prob": 0.002
+  }
+}
