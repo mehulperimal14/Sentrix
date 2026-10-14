@@ -1,0 +1,33 @@
+# Home Wi-Fi, primary uplink. Route metric 600: below the 4G modem's 700, so
+# Wi-Fi carries traffic whenever it has Internet; with the connectivity check
+# on (20-sentrix-connectivity.conf), a Wi-Fi without Internet gets +20000 and
+# the modem takes over. /setup/wifi (setup mode) creates the same profile
+# through nmcli (sentrix/io/network.py).
+#
+# Install by hand: fill the @...@ fields, then
+#   sudo install -m 600 sentrix-wifi.nmconnection /etc/NetworkManager/system-connections/
+#   sudo nmcli connection reload
+
+[connection]
+id=sentrix-wifi-@SSID_SLUG@
+type=wifi
+interface-name=wlan0
+autoconnect=true
+autoconnect-priority=10
+
+[wifi]
+mode=infrastructure
+ssid=@SSID@
+
+[wifi-security]
+key-mgmt=wpa-psk
+psk=@PSK@
+
+[ipv4]
+method=auto
+route-metric=600
+
+[ipv6]
+method=auto
+route-metric=600
+addr-gen-mode=stable-privacy

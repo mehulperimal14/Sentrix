@@ -235,7 +235,16 @@ def check_engines(report: Report) -> None:
 
 
 def check_camera(report: Report) -> None:
+    import os
+
     report.section("camera")
+    spec = os.getenv("CAMERA_SOURCES", "0")
+    if any(part.strip().lower().startswith(("picamera", "picam"))
+           for part in spec.split(",")):
+        # OpenCV cannot open the CSI camera, and the running service may hold
+        # it: the hardware section enumerated it through libcamera instead.
+        report.add(OK, "camera source", f"{spec} (Picamera2; see the hardware section)")
+        return
     try:
         import cv2
     except ImportError:
@@ -288,6 +297,21 @@ def check_services(report: Report) -> None:
                        f"{name}: {row.get('name', '')}", row.get("detail", ""))
 
 
+def check_hardware(report: Report, rows: list[dict] | None = None) -> None:
+    """Raspberry Pi platform checks (``sentrix.io.node.hardware_report``):
+    venv, CSI camera (enumerated, never opened), OpenCV, temperature,
+    throttling, EXT5V, config.txt lines, PSU_MAX_CURRENT, systemd unit,
+    network. On a laptop it prints one "skipped" row. GPIO pins and the node
+    service report through their ``preflight`` rows (services section)."""
+    from sentrix.io.node import hardware_report
+
+    report.section("hardware (Raspberry Pi)")
+    levels = {"ok": OK, "warn": WARN, "fail": FAIL}
+    for row in hardware_report() if rows is None else rows:
+        report.add(levels.get(row.get("status"), WARN), row.get("name", ""),
+                   row.get("detail", ""))
+
+
 def main() -> int:
     from dotenv import load_dotenv
 
@@ -298,7 +322,7 @@ def main() -> int:
     print("=" * 68)
     report = Report()
     for check in (check_dependencies, check_models, check_config,
-                  check_services, check_engines, check_camera):
+                  check_services, check_hardware, check_engines, check_camera):
         try:
             check(report)
         except Exception as exc:

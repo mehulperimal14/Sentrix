@@ -1,0 +1,26 @@
+# USB 4G modem managed by ModemManager (type gsm), backup uplink. Route
+# metric 700, set explicitly: above Wi-Fi's 600, so it carries traffic only
+# when Wi-Fi is gone or fails the connectivity check.
+#
+# APN: Airtel airtelgprs.com, Vi www (not Jio: SMS from these modules needs
+# IMS registration). install_pi.sh --modem-apn <apn> renders and installs it.
+# The modem's SMS path (pyserial AT commands, track T-CH) does not need this
+# data connection.
+
+[connection]
+id=sentrix-modem
+type=gsm
+autoconnect=true
+autoconnect-priority=5
+
+[gsm]
+apn=@APN@
+
+[ipv4]
+method=auto
+route-metric=700
+
+[ipv6]
+method=auto
+route-metric=700
+addr-gen-mode=stable-privacy

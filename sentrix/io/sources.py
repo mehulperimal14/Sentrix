@@ -328,6 +328,8 @@ def build_source(spec: str | None = None) -> FrameSource:
         "0,1"                     two webcams, tiled
         "rtsp://host:554/stream"  IP camera or ESP32 node
         "clips/test.mp4"          replay
+        "picamera" / "picamera:0" Raspberry Pi CSI camera (Picamera2), e.g.
+                                  "picamera:0?fps=15&main=1280x720&lores=640x480"
     """
     import os
 
@@ -338,7 +340,11 @@ def build_source(spec: str | None = None) -> FrameSource:
 
     sources: list[FrameSource] = []
     for part in parts:
-        if part.isdigit():
+        if part.lower().split("?", 1)[0].split(":", 1)[0] in ("picamera", "picam"):
+            # OpenCV cannot open the CSI camera on a Pi 5 (HARDWARE.md §3).
+            from sentrix.io.picamera import PiCameraSource
+            sources.append(PiCameraSource.from_spec(part))
+        elif part.isdigit():
             sources.append(CaptureSource(int(part)))
         elif "://" in part:
             sources.append(CaptureSource(part))

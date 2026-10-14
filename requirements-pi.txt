@@ -2,16 +2,22 @@
 #
 # Create the venv WITH system site packages so the apt camera and GPIO stack
 # is visible (picamera2 / libcamera cannot be pip-installed; lgpio is the
-# gpiozero pin factory on the Pi 5, RPi.GPIO does not work there):
+# gpiozero pin factory on the Pi 5, RPi.GPIO does not work there; PortAudio
+# is the microphone's C library):
 #
-#   sudo apt install -y python3-picamera2 python3-libcamera python3-lgpio
+#   sudo apt install -y python3-picamera2 python3-libcamera python3-lgpio libportaudio2
 #   python3 -m venv --system-site-packages .venv
 #   .venv/bin/pip install -r requirements-pi.txt
 #
-# Same packages as requirements.txt except: headless OpenCV (no Qt/X11 on the
-# unit; never install opencv-python next to it, both provide cv2), CPU torch
-# from PyPI's aarch64 wheels. Track T-HW owns this file (run.sh Pi path,
-# deploy/pi5/); keep it in step with requirements.txt.
+# ./run.sh does exactly this on a Pi, and sudo deploy/pi5/install_pi.sh does it
+# plus the system setup (service user, systemd, watchdog, NetworkManager).
+#
+# Same packages as requirements.txt except: headless OpenCV < 5 (no Qt/X11 on
+# the unit; 5.x is untested), no pytest, CPU torch from PyPI's aarch64 wheels.
+# ultralytics depends on opencv-python, and both builds provide cv2: run.sh and
+# install_pi.sh uninstall opencv-python after this file and reinstall the
+# headless build, so exactly one cv2 remains. Track T-HW owns this file; keep
+# it in step with requirements.txt.
 
 # web
 fastapi>=0.115.0
