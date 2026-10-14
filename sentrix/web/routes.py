@@ -32,6 +32,7 @@ link's path table; the pages only hide what a role cannot use
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import hmac
 import json
 import os
@@ -211,8 +212,9 @@ def call_target() -> dict[str, str]:
         except Exception as exc:                # the button must still render
             log.debug("desk number unavailable: %s", exc)
             desk = None
+    from sentrix.alerting.guard import is_emergency_number
     number = re.sub(r"[^\d+]", "", str(desk or ""))
-    if number and number.lstrip("+") not in ("112", "100", "101", "102", "108"):
+    if number and not is_emergency_number(number):
         return {"href": f"tel:{number}",
                 "note": f"Test mode: this calls the SENTRIX Desk ({number}), not 112."}
     return {"href": "", "note": "Test mode: no SENTRIX Desk number is configured "
@@ -221,7 +223,6 @@ def call_target() -> dict[str, str]:
 
 @lru_cache(maxsize=256)
 def _asset_version(path: str, mtime_ns: int) -> str:
-    import hashlib
     return hashlib.sha256(f"{path}:{mtime_ns}".encode()).hexdigest()[:10]
 
 

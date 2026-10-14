@@ -820,7 +820,8 @@ select.text-input { cursor: pointer; }
 .gauge-value { font-family: var(--font-mono); }
 .gauge-scale { font-family: var(--font-sans); }
 .score-value {
-  width: 4.5rem;
+  width: 6.5rem;
+  white-space: nowrap;
   text-align: right;
   font-family: var(--font-mono);
   font-size: 0.75rem;
@@ -842,6 +843,19 @@ select.text-input { cursor: pointer; }
 .dispatch-meta { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; margin-bottom: 1rem; }
 .dispatch-panel-snapshot { max-width: 320px; }
 .link-state { font-size: 0.7rem; color: var(--text-muted); margin-top: 0.3rem; }
+
+.video-overlay {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+  background: rgba(220, 38, 38, 0.85);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+.video-overlay:empty { display: none; }
 
 /* --- live --- */
 .remote-video-label { font-size: 0.8rem; color: #fde047; margin-bottom: 0.5rem; }

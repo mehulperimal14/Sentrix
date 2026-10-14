@@ -8,7 +8,9 @@
   <div class="page-meta">
     <span class="badge badge-secure">🔒 AES-256-GCM Encrypted</span>
     {% set problems = chain.problems or [] %}
-    {% if chain.ok %}
+    {% if chain.ok and chain.note %}
+    <span class="chain-badge ok" id="chain-badge">Chain: {{ chain.note }}</span>
+    {% elif chain.ok %}
     <span class="chain-badge ok" id="chain-badge" title="Every bundle re-hashed against the HMAC-signed manifest">Chain verified: {{ chain.entries or 0 }} entries, 0 problems</span>
     {% else %}
     <span class="chain-badge bad" id="chain-badge">Chain check failed: {{ chain.entries or 0 }} entries, {{ problems|length }} problem{{ "" if problems|length == 1 else "s" }}{% if chain.error %} ({{ chain.error }}){% endif %}</span>

@@ -148,8 +148,11 @@ class TestCsrf:
                            headers={"X-CSRF-Token": auth.csrf_for_session(cookie)}).status_code == 200
 
     def test_tunnelled_requests_were_checked_by_the_portal(self, console):
-        response = tunnel_client(console).post("/api/mode", json={"armed": True})
-        assert response.status_code == 200
+        client = tunnel_client(console)
+        assert client.post("/api/mode", json={"armed": True}).status_code == 200
+        # The browser's origin is the Portal's, never this console's host.
+        assert client.post("/api/mode", json={"armed": True},
+                           headers={"Origin": "https://portal.example"}).status_code == 200
 
     def test_signed_out_writes_get_401_not_csrf(self, console):
         response = TestClient(console.app).post("/api/mode", json={"armed": True})

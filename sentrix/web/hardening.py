@@ -13,10 +13,11 @@ stream and the websocket pass through unbuffered:
   are refused for tunnel identities: the Portal relays video and state itself.
 * **CSRF.** A state-changing request (POST, PUT, PATCH, DELETE) from an LC
   session must carry ``X-CSRF-Token`` = ``auth.csrf_for_session(cookie)``,
-  which every page renders into ``<meta name="csrf-token">``. Any
+  which every page renders into ``<meta name="csrf-token">``. Any LAN
   state-changing request a browser marks as cross-site (``Origin``,
   ``Sec-Fetch-Site``, ``Referer``) is refused, signed in or not (login CSRF).
-  Tunnelled requests were checked by the Portal against its own token.
+  Tunnelled requests were checked by the Portal against its own token (their
+  browser origin is the Portal's), so neither check applies to them.
   The pre-M10 ``session_token`` cookie is still honoured until it expires
   (12 h): without the header it passes only the cross-site check, so a tab
   opened before the upgrade keeps working.
@@ -150,11 +151,13 @@ def csrf_refusal(scope: dict, identity: tunnel_auth.TunnelIdentity | None) -> st
     """Why a state-changing request is refused, or None to let it through."""
     if scope.get("method", "GET").upper() not in STATE_CHANGING:
         return None
+    if identity is not None:
+        # The Portal checked its own CSRF token (and the browser's origin is
+        # the Portal's, not this console's) before replaying the request.
+        return None
     headers = Headers(scope=scope)
     if is_cross_site(headers):
         return "cross-site request refused"
-    if identity is not None:
-        return None                         # the Portal checked its own token
     from sentrix.web.auth import LEGACY_COOKIE, csrf_for_session
     from sentrix.web.security import verify_token
     name, cookie = _session_cookie(headers)

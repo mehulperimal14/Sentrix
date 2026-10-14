@@ -18,7 +18,7 @@ from datetime import datetime
 import pytest
 from fastapi.testclient import TestClient
 
-from test_web_console import (BASE, add_incident, add_package, console,  # noqa: F401
+from test_web_console import (add_incident, add_package, console,  # noqa: F401
                               lc_client, tunnel_client)
 
 

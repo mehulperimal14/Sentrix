@@ -246,7 +246,8 @@ const Sentrix = (() => {
     // ── SOS prompt, banner and countdown chip (state.sos) ───────────────────
     const MINIMISED_KEY = "sentrix.sos.minimised";
     const PROMPTING = new Set(["DRAFTED", "PENDING"]);
-    const sos = { block: null, deadline: null, shownFor: "" };
+    // forced: opened from the banner/chip, kept open until minimised.
+    const sos = { block: null, deadline: null, remainingSeen: null, forced: false };
 
     function storedMinimised() {
         try {
@@ -321,8 +322,9 @@ const Sentrix = (() => {
         const prompt = document.getElementById("sos-prompt");
         if (!prompt) return;
         const block = sos.block;
+        if (force) sos.forced = true;
         const visible = !!block && can("sos") &&
-            (force || (isPrompting(block) && storedMinimised() !== promptKey(block)));
+            (sos.forced || (isPrompting(block) && storedMinimised() !== promptKey(block)));
         if (!block) {
             show(prompt, false);
             return;
@@ -357,19 +359,33 @@ const Sentrix = (() => {
         document.querySelectorAll("[data-sos-countdown]").forEach(node => { node.textContent = text; });
     }
 
-    function updateSos(block) {
-        const active = !!(block && block.active && block.request_id);
-        sos.block = active ? block : null;
-        if (!active) {
+    // The deadline comes from expires_at (absolute, so a block that is not
+    // republished every second still counts down); remaining_s is used only
+    // without it, and only when its value changes.
+    function updateDeadline(block) {
+        if (!block) {
             sos.deadline = null;
+            sos.remainingSeen = null;
+            return;
+        }
+        const at = block.expires_at ? Date.parse(block.expires_at) : NaN;
+        if (!isNaN(at)) {
+            sos.deadline = at;
         } else if (typeof block.remaining_s === "number") {
-            sos.deadline = Date.now() + block.remaining_s * 1000;
-        } else if (block.expires_at) {
-            const at = Date.parse(block.expires_at);
-            sos.deadline = isNaN(at) ? null : at;
+            if (block.remaining_s !== sos.remainingSeen) {
+                sos.remainingSeen = block.remaining_s;
+                sos.deadline = Date.now() + block.remaining_s * 1000;
+            }
         } else {
             sos.deadline = null;                     // help path: approved requests never lapse
         }
+    }
+
+    function updateSos(block) {
+        const active = !!(block && block.active && block.request_id);
+        if (!active || (sos.block && sos.block.request_id !== block.request_id)) sos.forced = false;
+        sos.block = active ? block : null;
+        updateDeadline(sos.block);
         show(document.getElementById("sos-chip"), active);
         show(document.getElementById("sos-banner"), active);
         if (active) {
@@ -502,6 +518,7 @@ const Sentrix = (() => {
     });
 
     function minimisePrompt() {
+        sos.forced = false;
         if (sos.block) storeMinimised(promptKey(sos.block));
         show(document.getElementById("sos-prompt"), false);
     }

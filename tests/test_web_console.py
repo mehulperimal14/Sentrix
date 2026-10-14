@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from html.parser import HTMLParser
 from pathlib import Path
 from types import SimpleNamespace
@@ -461,6 +461,7 @@ class TestBannersAndSos:
                        'id="dp-address"', 'id="dp-authority"', 'id="dp-dismiss"',
                        'data-dispatch-authority="POLICE"', 'data-dispatch-authority="FIRE"',
                        'data-dispatch-authority="MEDICAL"', 'id="dp-countdown"',
+                       'id="video-overlay" data-sos-countdown',
                        'data-sos-pin-for="decline"', 'data-sos-action="checking"'):
             assert marker in dashboard, marker
 
@@ -540,9 +541,14 @@ class TestPageParityFixes:
     def test_evidence_chain_badge_objects_and_view_link(self, console):
         add_evidence(console)
         text = tunnel_client(console).get("/evidence").text
-        assert "Chain verified: 0 entries, 0 problems" in text
+        assert "Chain: no manifest yet" in text
         assert "pistol 0.82" in text and "{&#39;label&#39;" not in text
         assert f'href="{BASE}/media/evidence/L3_bundle_1"' in text
+
+    def test_evidence_chain_verified(self, console, monkeypatch):
+        monkeypatch.setattr(console.vault, "verify_chain",
+                            lambda: {"ok": True, "entries": 3, "problems": []})
+        assert "Chain verified: 3 entries, 0 problems" in lc_client(console)[0].get("/evidence").text
 
     def test_evidence_chain_problems_are_shown(self, console, monkeypatch):
         monkeypatch.setattr(console.vault, "verify_chain", lambda: {
