@@ -1,0 +1,36 @@
+{% extends "acct/layout.html" %}
+{% block title %}{{ title }} {{ device.serial }} · SENTRIX{% endblock %}
+{% block page_content %}
+<h1 class="no-print">{{ title }}: <span class="mono">{{ device.serial }}</span></h1>
+<div class="actions no-print">
+  <button type="button" class="btn" data-print>Print the label</button>
+  <a href="/admin/devices">Back to devices</a>
+  <span class="small muted">Shown once: the Portal keeps only digests of these codes.</span>
+</div>
+<article class="print-sheet label-sheet">
+  <div>
+    <h2>SENTRIX home unit</h2>
+    <table class="table">
+      <tr><th>Serial</th><td class="mono">{{ device.serial }}</td></tr>
+      {% if claim_code %}<tr><th>Claim code</th><td><span class="code-big">{{ claim_code }}</span></td></tr>{% endif %}
+      {% if setup_code %}<tr><th>Wi-Fi setup code</th><td class="mono">{{ setup_code }}</td></tr>{% endif %}
+    </table>
+    <p class="small">Scan to claim, or open <span class="mono">{{ claim_url }}</span></p>
+  </div>
+  <div>{{ qr | safe }}</div>
+</article>
+
+{% if identity_json %}
+<section class="card no-print">
+  <h2>identity.json for the SD card</h2>
+  <p class="help">Save as <span class="mono">/etc/sentrix/identity.json</span> on the device,
+    mode 0600, readable only by the SENTRIX service user. It survives a factory reset (which
+    wipes <span class="mono">var/</span> only). The bootstrap secret inside is shown only now.</p>
+  <pre class="text" id="identity-json">{{ identity_json }}</pre>
+  <div class="actions">
+    <a class="btn btn-secondary" download="identity.json" href="data:application/json;base64,{{ identity_b64 }}">Download identity.json</a>
+    <button type="button" class="btn btn-secondary" data-copy="#identity-json">Copy</button>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

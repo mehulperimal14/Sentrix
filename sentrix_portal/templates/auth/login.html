@@ -1,0 +1,23 @@
+{% extends "acct/layout.html" %}
+{% import "acct/macros.html" as ui %}
+{% block title %}Sign in · SENTRIX Portal{% endblock %}
+{% block page_content %}
+<div class="card form">
+  <h1>Sign in</h1>
+  <p class="lead">Your SENTRIX account. New customers: use the activation code from your
+    welcome letter first.</p>
+  {{ ui.notice(error, 'error') }}
+  <form class="form" method="post" action="/login" autocomplete="on">
+    {{ ui.login_csrf(csrf_token) }}
+    <input type="hidden" name="next" value="{{ next }}">
+    {{ ui.input('username', 'Username', username, autocomplete='username', required=True, maxlength=64) }}
+    {{ ui.input('password', 'Password', type='password', autocomplete='current-password', required=True, maxlength=128) }}
+    <div class="actions">
+      <button type="submit" class="btn">Sign in</button>
+      <a href="/activate{% if username %}?u={{ username | urlencode }}{% endif %}">Activate a new account</a>
+    </div>
+  </form>
+  <p class="small muted">Forgot your password? Ask SENTRIX to send a reset link to your
+    e-mail. SENTRIX staff never ask for your password.</p>
+</div>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends "acct/layout.html" %}
+{% import "acct/macros.html" as ui %}
+{% block title %}Activate your account · SENTRIX Portal{% endblock %}
+{% block page_content %}
+<div class="card form">
+  <h1>{% if known_user %}Set your password{% else %}Activate your account{% endif %}</h1>
+  <p class="lead">Choose your own password. Nobody at SENTRIX knows it or can see it.</p>
+  {{ ui.notice(error, 'error') }}
+  {{ ui.error_summary(errors) }}
+  <form class="form" method="post" action="{% if code_in_path %}/activate/{{ code_in_path }}{% else %}/activate{% endif %}">
+    {{ ui.login_csrf(csrf_token) }}
+    {% if known_user %}
+      <dl class="facts"><dt>Username</dt><dd class="mono">{{ known_user.username }}</dd></dl>
+      <input type="hidden" name="username" value="{{ known_user.username }}">
+    {% else %}
+      {{ ui.input('username', 'Username (from the letter or e-mail)', username, autocomplete='username', required=True, maxlength=64) }}
+      {{ ui.input('code', 'Activation code', '', autocomplete='one-time-code', required=True, maxlength=20, placeholder='XXXX-XXXX-XXXX', help='Letters only; dashes and capitals do not matter. It works once and expires after 72 hours.') }}
+    {% endif %}
+    {{ ui.input('password', 'New password', type='password', errors=errors, autocomplete='new-password', required=True, maxlength=128, help='At least ' ~ min_length ~ ' characters. A phrase of a few words works well.') }}
+    {{ ui.input('password_confirm', 'Repeat the password', type='password', errors=errors, autocomplete='new-password', required=True, maxlength=128) }}
+    <div class="actions"><button type="submit" class="btn">Activate</button>
+      <a href="/login">Already active? Sign in</a></div>
+  </form>
+</div>
+{% endblock %}

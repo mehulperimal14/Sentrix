@@ -1,0 +1,26 @@
+{% extends "acct/layout.html" %}
+{% block title %}Thank you · SENTRIX{% endblock %}
+{% block page_content %}
+<div class="card form">
+  {% if decision == 'confirm' %}
+    <h1>Thank you, {{ contact.name }}</h1>
+    <p>You will receive SENTRIX alerts about {{ owner_name }}'s home.</p>
+    {% if telegram_link %}
+    <p><a class="btn" href="{{ telegram_link }}" target="_blank" rel="noopener">Get alerts on Telegram</a></p>
+    <p class="small muted">Opens the SENTRIX bot in a private chat. The link works once, for 24 hours.</p>
+    {% endif %}
+    {% if opt_out_link %}
+    <h2>To opt out later</h2>
+    <p>Keep this personal link; it works for a year:</p>
+    <div class="copy-box">
+      <input id="opt-out-link" type="text" readonly value="{{ opt_out_link }}" aria-label="Opt-out link">
+      <button type="button" class="btn btn-secondary btn-small" data-copy="#opt-out-link">Copy</button>
+    </div>
+    {% endif %}
+  {% else %}
+    <h1>You have opted out</h1>
+    <p>SENTRIX will not send you alerts about {{ owner_name }}'s home. Your phone number and
+      e-mail were erased; the rest goes within {{ declined_days }} days.</p>
+  {% endif %}
+</div>
+{% endblock %}

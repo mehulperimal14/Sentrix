@@ -1,0 +1,29 @@
+{% extends "acct/layout.html" %}
+{% import "acct/macros.html" as ui %}
+{% block title %}Close the account · SENTRIX Portal{% endblock %}
+{% block page_content %}
+<div class="card form">
+  <h1>Close the account and erase your data</h1>
+  {% if erasure_due %}
+    <p>Erasure is scheduled for <time datetime="{{ erasure_due }}">{{ erasure_due[:10] }}</time>.
+      Until then you can keep your account.</p>
+    <form method="post" action="/privacy/erase">{{ ui.csrf(principal) }}
+      <input type="hidden" name="action" value="cancel">
+      <button class="btn" type="submit">Keep my account</button></form>
+  {% else %}
+    <p>After a {{ grace_days }}-day grace period SENTRIX erases your household, members, contacts,
+      consents, SOS requests and their snapshots, incident records and notifications, and
+      unpairs your device (it keeps protecting your home locally, without alerts to the
+      Portal). The audit log keeps only ids, never names or numbers, for up to a year.</p>
+    <p>Export your data first if you want a copy: <a href="/privacy/export">Export</a>.</p>
+    {{ ui.error_summary(errors) }}
+    {{ ui.step_up(principal, '/privacy/erase', stepped_up) }}
+    <form class="form" method="post" action="/privacy/erase" data-confirm="Schedule the erasure of your SENTRIX account?">
+      {{ ui.csrf(principal) }}<input type="hidden" name="action" value="schedule">
+      {{ ui.input('confirm', 'Type ERASE to confirm', '', errors=errors, required=True, maxlength=10, autocomplete='off') }}
+      <div class="actions"><button class="btn btn-danger" type="submit"{% if not stepped_up %} disabled{% endif %}>Schedule erasure</button>
+        <a href="/privacy">Cancel</a></div>
+    </form>
+  {% endif %}
+</div>
+{% endblock %}

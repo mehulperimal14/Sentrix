@@ -1,0 +1,18 @@
+{% extends "acct/layout.html" %}
+{% import "acct/macros.html" as ui %}
+{% block title %}Export your data · SENTRIX Portal{% endblock %}
+{% block page_content %}
+<div class="card form">
+  <h1>Export your data</h1>
+  <p class="lead">A JSON file with your household, members, contacts, consents, devices, SOS
+    requests and their history, incident records, notifications and the activity log.
+    Passwords, PINs and security codes are never included: only whether they are set.</p>
+  {% if stepup == 'required' %}{{ ui.notice('Confirm your password first.', 'warn') }}{% endif %}
+  {{ ui.step_up(principal, '/privacy/export', stepped_up) }}
+  <form method="post" action="/privacy/export">
+    {{ ui.csrf(principal) }}
+    <button class="btn" type="submit"{% if not stepped_up %} disabled{% endif %}>Download the export</button>
+  </form>
+  <p class="small muted">The file holds your address and phone numbers: keep it safe.</p>
+</div>
+{% endblock %}

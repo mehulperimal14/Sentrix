@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{#- Layout of the T-ACCT pages: the track's stylesheet and script (external,
+    with the request's CSP nonce). Pages fill `page_content`. -#}
+{% block extra_head %}<link rel="stylesheet" href="/static/acct/acct.css">{% endblock %}
+{% block content %}{% block page_content %}{% endblock %}{% endblock %}
+{% block scripts %}<script src="/static/acct/acct.js" nonce="{{ csp_nonce }}" defer></script>{% endblock %}

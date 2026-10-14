@@ -1,0 +1,18 @@
+{#- Occupants, pets and medical notes (wizard step 3 and /household). Needs
+    `values`, `errors`, `disabled`. -#}
+{% import "acct/macros.html" as ui %}
+<fieldset>
+  <legend>Who lives here</legend>
+  <div class="grid-3">
+    {{ ui.input('adults', 'Adults', values.get('adults'), errors=errors, required=True, inputmode='numeric', maxlength=2, disabled=disabled) }}
+    {{ ui.input('children', 'Children', values.get('children'), errors=errors, inputmode='numeric', maxlength=2, disabled=disabled) }}
+    {{ ui.input('seniors', 'Seniors', values.get('seniors'), errors=errors, inputmode='numeric', maxlength=2, disabled=disabled) }}
+  </div>
+  {{ ui.input('pets', 'Pets', values.get('pets'), errors=errors, maxlength=60, help='For example "one dog (friendly)".', disabled=disabled) }}
+</fieldset>
+<fieldset>
+  <legend>Medical or accessibility notes (optional)</legend>
+  {{ ui.textarea('medical', 'Notes', values.get('medical'), errors=errors, maxlength=200, help='For example "senior uses a wheelchair, ground floor". Stored encrypted.', disabled=disabled) }}
+  {{ ui.checkbox('medical_consent', 'I consent to SENTRIX storing these notes (a separate consent; withdrawing it erases them).', values.get('medical_consent'), errors=errors, disabled=disabled) }}
+  {{ ui.checkbox('include_medical', 'Include the notes in an SOS (off by default).', values.get('include_medical'), errors=errors, disabled=disabled) }}
+</fieldset>

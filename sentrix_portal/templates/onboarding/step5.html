@@ -1,0 +1,44 @@
+{% extends "onboarding/_wizard.html" %}
+{% block step_content %}
+<section class="card">
+  <h2>5. Your device</h2>
+  {% if assigned %}
+  <h3>Claim it</h3>
+  <p class="lead">Proves the device is in your home: type the serial and claim code, or scan
+    the QR code on the label with your phone.</p>
+  <p class="small">Assigned to you: {% for d in assigned %}<span class="mono">{{ d.serial }}</span>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+  {% set action_url = '/onboarding/5' %}
+  {% include "onboarding/_claim_form.html" %}
+  {% elif not claimed %}
+  <p>No device is assigned to your account yet. SENTRIX assigns it when you buy it; ask the
+    shop to check the serial number.</p>
+  {% endif %}
+</section>
+
+{% for item in claimed %}
+{% set d = item.device %}{% set form_values = device_form if device_form and device_form.get('device_id') == d.id else {} %}
+<section class="card">
+  <h2>{{ d.name or d.serial }} {% if item.online %}<span class="badge badge-ok">online</span>{% else %}<span class="badge badge-bad">offline</span>{% endif %}</h2>
+  <form class="form" method="post" action="/onboarding/5">
+    {{ ui.csrf(principal) }}<input type="hidden" name="action" value="device">
+    <input type="hidden" name="device_id" value="{{ d.id }}">
+    <div class="grid-2">
+      {{ ui.input('name', 'Device name', form_values.get('name') or d.name, errors=errors, required=True, maxlength=60, placeholder='Living room unit') }}
+      {{ ui.input('room_label', 'Room label of the camera', form_values.get('room_label') or (item.camera.room_label if item.camera else ''), errors=errors, required=True, maxlength=40, placeholder='Living room', help='The SOS says "WHERE: Living room" instead of CAM_0.') }}
+    </div>
+    <div class="grid-2">
+      {{ ui.input('floor', 'Floor', form_values.get('floor') or (item.camera.floor if item.camera else ''), errors=errors, maxlength=20, placeholder='Ground') }}
+      {{ ui.select('mode', 'Default mode', [('home', 'HOME: an unknown person is only logged'), ('armed', 'ARMED: a confirmed stranger opens an intrusion alert')], form_values.get('mode') or 'home', errors=errors, required=True) }}
+    </div>
+    <h3>Check the view</h3>
+    <p>Open the live view and make sure the camera sees the room as intended (mounted
+      1.8-2.2 m high, tilted down, the room lit).</p>
+    <p><a class="btn btn-secondary btn-small" href="/d/{{ d.id }}/live" target="_blank" rel="noopener">Open the live view</a>
+      {% if not item.online %}<span class="small muted">The device is offline: connect it to the internet first.</span>{% endif %}</p>
+    {{ ui.checkbox('view_checked', 'I have checked the view.', form_values.get('view_checked'), errors=errors) }}
+    <div class="actions"><button class="btn" type="submit">Save and continue</button></div>
+  </form>
+</section>
+{% endfor %}
+<p><a href="/onboarding/4">Back</a></p>
+{% endblock %}

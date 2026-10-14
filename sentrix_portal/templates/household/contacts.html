@@ -1,0 +1,48 @@
+{% extends "acct/layout.html" %}
+{% import "acct/macros.html" as ui %}
+{% block title %}Emergency contacts · SENTRIX Portal{% endblock %}
+{% block page_content %}
+<h1>Emergency contacts</h1>
+<p class="small"><a href="/household">Back to the household</a></p>
+{{ ui.notice(notice) }}
+{{ ui.error_summary(errors) }}
+<section class="card">
+  {% set action_url = '/household/contacts' %}
+  {% set contact_form = contact_form or {} %}
+  {% include "onboarding/_contacts.html" %}
+</section>
+{% if editable %}
+{% set editable_contacts = contacts | selectattr('consent_status', 'in', ['PENDING', 'CONFIRMED']) | list %}
+{% if editable_contacts %}
+<section class="card">
+  <h2>Change a contact</h2>
+  <p class="help">A new mobile number or e-mail needs a new confirmation from the contact.</p>
+  {% for c in editable_contacts %}
+  <details>
+    <summary>{{ c.name }}</summary>
+    <form class="form" method="post" action="/household/contacts">
+      {{ ui.csrf(principal) }}<input type="hidden" name="action" value="update_contact">
+      <input type="hidden" name="contact_id" value="{{ c.id }}">
+      <div class="grid-2">
+        {{ ui.input('name', 'Name', c.name, required=True, maxlength=80, uid='name-' ~ c.id) }}
+        {{ ui.input('relation', 'Relation', c.relation, required=True, maxlength=40, uid='relation-' ~ c.id) }}
+      </div>
+      <div class="grid-2">
+        {{ ui.input('phone', 'Mobile', '', type='tel', required=True, maxlength=20, help='Re-enter the number (currently ' ~ phones.get(c.id) ~ ').', uid='phone-' ~ c.id) }}
+        {{ ui.input('email', 'E-mail', c.email, type='email', maxlength=254, uid='email-' ~ c.id) }}
+      </div>
+      <div class="field">
+        <label for="f-priority-{{ c.id }}">Priority</label>
+        <select id="f-priority-{{ c.id }}" name="priority">
+          {% for p in range(1, max_contacts + 1) %}{% if p in free_priorities or p == c.priority %}<option value="{{ p }}"{% if p == c.priority %} selected{% endif %}>{{ p }}</option>{% endif %}{% endfor %}
+        </select>
+      </div>
+      {{ ui.checkbox('can_reach_30min', 'Can reach the home within 30 minutes.', c.can_reach_30min, uid='reach-' ~ c.id) }}
+      <div class="actions"><button class="btn btn-secondary" type="submit">Save</button></div>
+    </form>
+  </details>
+  {% endfor %}
+</section>
+{% endif %}
+{% endif %}
+{% endblock %}

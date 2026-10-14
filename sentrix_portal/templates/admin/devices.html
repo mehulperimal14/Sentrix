@@ -1,0 +1,67 @@
+{% extends "acct/layout.html" %}
+{% import "acct/macros.html" as ui %}
+{% block title %}Devices · SENTRIX admin{% endblock %}
+{% block page_content %}
+<h1>Devices</h1>
+{% include "admin/_nav.html" %}
+{{ ui.notice(notice) }}
+{{ ui.error_summary(errors) }}
+<section class="card">
+  <h2>Provision a device</h2>
+  <p class="help">Makes the device id, claim code, bootstrap secret and Wi-Fi setup code. The
+    secrets are shown once, on the label page. For an SD card image use
+    <span class="mono">python tools/provision_device.py --out &lt;dir&gt;</span>, which writes
+    <span class="mono">identity.json</span> directly.</p>
+  <form class="form" method="post" action="/admin/devices">
+    {{ ui.csrf(principal) }}
+    <div class="grid-2">
+      {{ ui.input('serial', 'Serial (optional)', values.get('serial'), errors=errors, maxlength=16, placeholder=next_serial, help='Leave empty for the next free serial.') }}
+      {{ ui.input('name', 'Name (optional)', values.get('name'), errors=errors, maxlength=60) }}
+    </div>
+    <div class="actions"><button class="btn" type="submit">Provision</button></div>
+  </form>
+</section>
+<section class="card table-wrap">
+  <form class="row" method="get" action="/admin/devices">
+    <select name="state" aria-label="Filter by state">
+      <option value="">all states</option>
+      {% for s in ('UNASSIGNED', 'ASSIGNED', 'CLAIMED', 'RETIRED') %}<option value="{{ s }}"{% if state == s %} selected{% endif %}>{{ s | lower }}</option>{% endfor %}
+    </select>
+    <button class="btn btn-secondary btn-small" type="submit">Filter</button>
+  </form>
+  <table class="table">
+    <thead><tr><th>Serial</th><th>State</th><th>Customer</th><th>Link</th><th>Last seen (UTC)</th><th>Firmware</th><th>Actions</th></tr></thead>
+    <tbody>
+    {% for row in rows %}{% set d = row.device %}
+      <tr>
+        <td class="mono">{{ d.serial }}<br><span class="small muted">{{ d.id[:8] }}</span></td>
+        <td>{{ ui.state_badge(d.state) }}</td>
+        <td>{% if row.household %}<a class="mono" href="/admin/customers/{{ row.household.id }}">{{ row.household.customer_code }}</a>{% else %}—{% endif %}</td>
+        <td>{% if d.state == 'CLAIMED' %}{% if row.online %}<span class="badge badge-ok">online</span>{% if row.ai_hz is not none %} {{ '%.1f' | format(row.ai_hz) }} Hz{% endif %}{% else %}<span class="badge badge-bad">offline</span>{% endif %}
+          {% if row.profile_behind %}<br><span class="small badge badge-warn">profile not acked</span>{% endif %}{% else %}—{% endif %}</td>
+        <td class="small">{{ d.last_seen_at.strftime('%d %b %H:%M') if d.last_seen_at else 'never' }}</td>
+        <td class="small mono">{{ d.firmware or '—' }}</td>
+        <td>
+          {% if d.state == 'UNASSIGNED' %}
+          <form class="row" method="post" action="/admin/devices/{{ d.id }}/assign">{{ ui.csrf(principal) }}
+            <input name="customer_code" placeholder="SX-0001" maxlength="16" aria-label="Customer code" required>
+            <button class="btn btn-secondary btn-small" type="submit">Assign</button></form>
+          {% endif %}
+          {% if d.state in ('UNASSIGNED', 'ASSIGNED') %}<a class="small" href="/admin/devices/{{ d.id }}/label">Label</a>{% endif %}
+          {% if d.state in ('ASSIGNED', 'CLAIMED') %}
+          <form method="post" action="/admin/devices/{{ d.id }}/transfer" class="inline" data-confirm="Transfer {{ d.serial }}? It is unpaired from its customer and gets a new claim code.">{{ ui.csrf(principal) }}
+            <button class="btn btn-ghost btn-small" type="submit">Transfer</button></form>
+          {% endif %}
+          {% if d.state != 'RETIRED' %}
+          <form method="post" action="/admin/devices/{{ d.id }}/retire" class="inline" data-confirm="Retire {{ d.serial }}? It can never connect again.">{{ ui.csrf(principal) }}
+            <button class="btn btn-ghost btn-small" type="submit">Retire</button></form>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="muted">No devices.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

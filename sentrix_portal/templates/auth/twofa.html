@@ -1,0 +1,72 @@
+{% extends "acct/layout.html" %}
+{% import "acct/macros.html" as ui %}
+{% block title %}Two-factor authentication · SENTRIX Portal{% endblock %}
+{% block page_content %}
+<div class="card form">
+  <h1>Two-factor authentication</h1>
+  {{ ui.notice(error, 'error') }}
+
+  {% if codes %}
+    <div class="alert alert-warn" role="status">
+      <strong>Your recovery codes.</strong> Each works once if you lose your phone. They are
+      shown only now: print them or store them somewhere safe.
+    </div>
+    <pre class="text" id="recovery-codes">{% for code in codes %}{{ code }}
+{% endfor %}</pre>
+    <div class="actions">
+      <button type="button" class="btn btn-secondary" data-copy="#recovery-codes">Copy</button>
+      <button type="button" class="btn btn-secondary" data-print>Print</button>
+      <a class="btn" href="{{ next or ('/admin' if user.role == 'company_admin' else '/desk') }}">Continue</a>
+    </div>
+
+  {% elif user.totp_enabled and not verified %}
+    <p class="lead">Enter the 6-digit code from your authenticator app, or one of your
+      recovery codes.</p>
+    <form class="form" method="post" action="/account/2fa">
+      {{ ui.csrf(principal) }}
+      <input type="hidden" name="action" value="verify">
+      <input type="hidden" name="next" value="{{ next }}">
+      {{ ui.input('code', 'Code', '', required=True, autocomplete='one-time-code', inputmode='text', maxlength=16) }}
+      <div class="actions"><button class="btn" type="submit">Verify</button></div>
+    </form>
+    <form method="post" action="/logout">{{ ui.csrf(principal) }}<button class="btn btn-ghost btn-small" type="submit">Sign out</button></form>
+
+  {% elif user.totp_enabled %}
+    <p><span class="badge badge-ok">on</span> Two-factor authentication protects this account.
+      Recovery codes left: <strong>{{ remaining }}</strong>.</p>
+    {{ ui.step_up(principal, '/account/2fa', stepped_up) }}
+    <form method="post" action="/account/2fa" data-confirm="Replace your recovery codes? The old ones stop working.">
+      {{ ui.csrf(principal) }}
+      <input type="hidden" name="action" value="regenerate">
+      <button class="btn btn-secondary" type="submit"{% if not stepped_up %} disabled{% endif %}>New recovery codes</button>
+    </form>
+
+  {% elif required %}
+    <p class="lead">Staff accounts (SENTRIX admin and Desk) need a second factor. Scan the
+      QR code with an authenticator app (Google Authenticator, Aegis, 1Password...), then
+      enter the code it shows.</p>
+    <div class="row">
+      <div>{{ qr | safe }}</div>
+      <div>
+        <p class="small muted">Or type this key:</p>
+        <p class="mono">{{ secret }}</p>
+      </div>
+    </div>
+    <form class="form" method="post" action="/account/2fa">
+      {{ ui.csrf(principal) }}
+      <input type="hidden" name="action" value="setup">
+      <input type="hidden" name="next" value="{{ next }}">
+      {{ ui.input('code', '6-digit code', '', required=True, autocomplete='one-time-code', inputmode='numeric', maxlength=6, pattern='[0-9]{6}') }}
+      <div class="actions"><button class="btn" type="submit">Turn on</button></div>
+    </form>
+    <form method="post" action="/account/2fa">{{ ui.csrf(principal) }}
+      <input type="hidden" name="action" value="restart">
+      <button class="btn btn-ghost btn-small" type="submit">Start again with a new key</button></form>
+
+  {% else %}
+    <p>Household accounts sign in with a password; two-factor authentication for owners
+      is planned. Keep your password unique to SENTRIX.</p>
+    <p><a href="/account">Back to your account</a></p>
+  {% endif %}
+</div>
+{% endblock %}

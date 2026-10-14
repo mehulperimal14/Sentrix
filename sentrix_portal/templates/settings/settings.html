@@ -1,0 +1,85 @@
+{% extends "acct/layout.html" %}
+{% import "acct/macros.html" as ui %}
+{% block title %}Settings · SENTRIX Portal{% endblock %}
+{% block page_content %}
+<h1>Settings</h1>
+{{ ui.notice(notice) }}
+{{ ui.error_summary(errors) }}
+{% if not editable %}<p class="lead">Only the account owner can change the settings.</p>{% endif %}
+
+<section class="card" id="sos">
+  <h2>SOS: window and safety defaults</h2>
+  <p class="help">Changes apply to future requests only: an open request keeps the policy it
+    started with.</p>
+  {% if editable %}{{ ui.step_up(principal, '/settings', stepped_up, step_up_seconds // 60) }}{% endif %}
+  <form class="form" method="post" action="/settings">
+    {{ ui.csrf(principal) }}<input type="hidden" name="section" value="sos">
+    {% set disabled = not editable %}
+    {% include "onboarding/_sos_fields.html" %}
+    {% if editable %}<div class="actions"><button class="btn" type="submit">Save safety settings</button></div>{% endif %}
+  </form>
+</section>
+
+{% if editable %}
+<section class="card" id="pins">
+  <h2>PINs</h2>
+  <p>{% if pin_set %}<span class="badge badge-ok">SOS PIN set</span>{% else %}<span class="badge badge-bad">no SOS PIN</span>{% endif %}
+    {% if duress_set %}<span class="badge badge-ok">duress PIN set</span>{% endif %}</p>
+  <p class="help">Enter both PINs together (the duress PIN is checked against the SOS PIN's
+    digits). Leave the duress PIN empty to remove it. Needs a confirmed password.</p>
+  <form class="form" method="post" action="/settings">
+    {{ ui.csrf(principal) }}<input type="hidden" name="section" value="pins">
+    {% set disabled = not stepped_up %}{% set pin_set = False %}
+    {% include "onboarding/_pin_fields.html" %}
+    <div class="actions"><button class="btn" type="submit"{% if not stepped_up %} disabled{% endif %}>Change PINs</button></div>
+  </form>
+</section>
+
+<section class="card" id="telegram">
+  <h2>Telegram</h2>
+  {% for link in telegram %}
+    <form method="post" action="/settings" class="row">{{ ui.csrf(principal) }}
+      <input type="hidden" name="section" value="telegram_unlink"><input type="hidden" name="link_id" value="{{ link.id }}">
+      <span>Chat linked {{ link.linked_at.strftime('%d %b %Y') }}</span>
+      <button class="btn btn-ghost btn-small" type="submit">Unlink</button></form>
+  {% endfor %}
+  {% set telegram_linked = telegram | length > 0 %}{% set action_url = '/settings' %}{% set section_field = ('section', 'telegram') %}
+  {% include "onboarding/_telegram.html" %}
+</section>
+{% endif %}
+
+<section class="card" id="devices">
+  <h2>Devices</h2>
+  {% for item in devices %}
+  {% set d = item.device %}
+  <fieldset>
+    <legend><span class="mono">{{ d.serial }}</span> {{ ui.state_badge(d.state) }}
+      {% if d.state == 'CLAIMED' %}{% if item.online %}<span class="badge badge-ok">online</span>{% else %}<span class="badge badge-bad">offline</span>{% endif %}{% endif %}</legend>
+    {% if d.state == 'CLAIMED' %}
+      <form class="form" method="post" action="/settings">
+        {{ ui.csrf(principal) }}<input type="hidden" name="section" value="device">
+        <input type="hidden" name="device_id" value="{{ d.id }}">
+        <div class="grid-3">
+          {{ ui.input('name', 'Device name', d.name, errors=errors, required=True, maxlength=60, disabled=not editable, uid='name-' ~ d.id) }}
+          {{ ui.input('room_label', 'Room label', item.camera.room_label if item.camera else '', errors=errors, required=True, maxlength=40, disabled=not editable, uid='room-' ~ d.id) }}
+          {{ ui.input('floor', 'Floor', item.camera.floor if item.camera else '', errors=errors, maxlength=20, disabled=not editable, uid='floor-' ~ d.id) }}
+        </div>
+        {% if editable %}<div class="actions"><button class="btn btn-secondary" type="submit">Save</button></div>{% endif %}
+      </form>
+      {% if editable %}
+      <form method="post" action="/settings" data-confirm="Unpair {{ d.serial }}? It stops sending alerts to the Portal until SENTRIX gives you a new claim code.">
+        {{ ui.csrf(principal) }}<input type="hidden" name="section" value="unpair"><input type="hidden" name="device_id" value="{{ d.id }}">
+        {{ ui.err(errors, 'unpair_' ~ d.id) }}
+        <button class="btn btn-danger btn-small" type="submit"{% if not stepped_up %} disabled{% endif %}>Unpair</button>
+        {% if not stepped_up %}<span class="small muted">Confirm your password above to unpair.</span>{% endif %}
+      </form>
+      {% endif %}
+    {% elif editable %}
+      <p><a class="btn btn-small" href="/claim?sn={{ d.serial | urlencode }}">Claim this device</a></p>
+    {% endif %}
+  </fieldset>
+  {% else %}
+  <p class="muted">No device yet.</p>
+  {% endfor %}
+</section>
+{% endblock %}

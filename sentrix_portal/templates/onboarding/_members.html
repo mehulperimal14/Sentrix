@@ -1,0 +1,38 @@
+{#- Household members list and add form (wizard step 3, /household/members).
+    Needs `members`, `errors`, `member_form`, `age_bands`, `editable`,
+    `action_url`. -#}
+{% import "acct/macros.html" as ui %}
+<div class="table-wrap">
+<table class="table">
+  <thead><tr><th>Name</th><th>Relation</th><th>Age band</th><th>Portal account</th><th></th></tr></thead>
+  <tbody>
+  {% for m in members %}
+    <tr>
+      <td>{{ m.name }}</td><td>{{ m.relation or '—' }}</td><td>{{ m.age_band }}</td>
+      <td>{% if m.user_id %}invited{% else %}—{% endif %}</td>
+      <td class="right">{% if editable %}
+        <form method="post" action="{{ action_url }}" class="inline" data-confirm="Remove {{ m.name }}? Their Portal account (if any) is closed.">
+          {{ ui.csrf(principal) }}<input type="hidden" name="action" value="remove_member">
+          <input type="hidden" name="member_id" value="{{ m.id }}">
+          <button class="btn btn-ghost btn-small" type="submit">Remove</button></form>{% endif %}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5" class="muted">No members added. That is fine: occupants above are enough for an SOS.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% if editable %}
+<form class="form" method="post" action="{{ action_url }}">
+  {{ ui.csrf(principal) }}<input type="hidden" name="action" value="add_member">
+  <h3>Add a member</h3>
+  <div class="grid-3">
+    {{ ui.input('member_name', 'Name', member_form.get('member_name'), errors=errors, required=True, maxlength=80) }}
+    {{ ui.input('member_relation', 'Relation', member_form.get('member_relation'), errors=errors, maxlength=40) }}
+    {{ ui.select('age_band', 'Age band', [('adult', 'Adult'), ('minor', 'Minor (under 18)'), ('senior', 'Senior')], member_form.get('age_band') or 'adult', errors=errors, required=True) }}
+  </div>
+  {{ ui.input('invite_email', 'Invite as a Portal member (e-mail, adults only)', member_form.get('invite_email'), errors=errors, type='email', maxlength=254, help='Members can view, approve help and mark false alarms with the PIN; they cannot edit the profile. They get an e-mail to choose their own password.') }}
+  <p class="help">Minors get no account, and SENTRIX never enrols minors' faces.</p>
+  <div class="actions"><button class="btn btn-secondary" type="submit">Add member</button></div>
+</form>
+{% endif %}

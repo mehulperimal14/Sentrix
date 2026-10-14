@@ -1,0 +1,24 @@
+{#- Telegram linking (wizard step 6, /settings). Needs `telegram_linked`,
+    `bot_configured`, optional `telegram_code` / `telegram_link`,
+    `action_url`, `section_field` (hidden input name/value pair or none). -#}
+{% import "acct/macros.html" as ui %}
+<fieldset>
+  <legend>Telegram</legend>
+  {% if telegram_linked %}<p><span class="badge badge-ok">linked</span> Telegram prompts come to your private chat.</p>{% endif %}
+  {% if telegram_code %}
+    <div class="alert alert-ok" role="status">
+      {% if telegram_link %}<p><a class="btn btn-small" href="{{ telegram_link }}" target="_blank" rel="noopener">Open Telegram</a>
+        and press Start. Or send the bot:</p>{% else %}<p>Send the SENTRIX bot this message within 24 hours:</p>{% endif %}
+      <p class="mono">/start {{ telegram_code }}</p>
+      <p class="small">The code works once. Private chats only; never add the bot to a group.</p>
+    </div>
+  {% elif bot_configured %}
+    <form method="post" action="{{ action_url }}">{{ ui.csrf(principal) }}
+      <input type="hidden" name="{{ section_field[0] }}" value="{{ section_field[1] }}">
+      <button class="btn btn-secondary btn-small" type="submit">{% if telegram_linked %}Link another chat{% else %}Link Telegram{% endif %}</button></form>
+    <p class="help">Telegram gets a short text and a Portal link only: never the picture,
+      address or medical notes.</p>
+  {% else %}
+    <p class="help">Telegram is not configured on this Portal yet.</p>
+  {% endif %}
+</fieldset>

@@ -1,0 +1,38 @@
+{% extends "acct/layout.html" %}
+{% import "acct/macros.html" as ui %}
+{% block title %}Household · SENTRIX Portal{% endblock %}
+{% block page_content %}
+<h1>Household</h1>
+<nav class="row small" aria-label="Household pages">
+  <a href="/household">Profile</a> · <a href="/household/members">Members ({{ members | length }})</a>
+  · <a href="/household/contacts">Emergency contacts ({{ contacts | length }})</a>
+  · <a href="/household/audit">Activity log</a>
+</nav>
+{{ ui.notice(notice) }}
+{{ ui.error_summary(errors) }}
+{% if not editable %}<p class="lead">Only the account owner can change the household profile.</p>{% endif %}
+<form class="form" method="post" action="/household">
+  {{ ui.csrf(principal) }}
+  {% set disabled = not editable %}
+  <section class="card">
+    <h2>Address</h2>
+    {% include "onboarding/_address_fields.html" %}
+  </section>
+  <section class="card">
+    <h2>Who lives here</h2>
+    {% include "onboarding/_household_fields.html" %}
+  </section>
+  {% if editable %}<div class="actions"><button class="btn" type="submit">Save</button></div>{% endif %}
+</form>
+<section class="card">
+  <h2>Devices</h2>
+  <ul class="plain stack">
+  {% for d in devices %}
+    <li><span class="mono">{{ d.serial }}</span> {{ d.name or '' }} {{ ui.state_badge(d.state) }}</li>
+  {% else %}
+    <li class="muted">No device yet.</li>
+  {% endfor %}
+  </ul>
+  <p class="small"><a href="/settings#devices">Device names and room labels</a></p>
+</section>
+{% endblock %}

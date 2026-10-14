@@ -1,0 +1,69 @@
+{% extends "acct/layout.html" %}
+{% import "acct/macros.html" as ui %}
+{% block title %}{{ household.customer_code }} · SENTRIX admin{% endblock %}
+{% block page_content %}
+<h1>{{ household.display_name }} <span class="mono muted">{{ household.customer_code }}</span></h1>
+{% include "admin/_nav.html" %}
+{{ ui.notice(notice) }}
+<div class="grid-2">
+<section class="card">
+  <h2>Account</h2>
+  <dl class="facts">
+    <dt>Household</dt><dd>{{ ui.state_badge(household.status) }}</dd>
+    {% if owner %}
+    <dt>Owner</dt><dd class="mono">{{ owner.username }}</dd>
+    <dt>Status</dt><dd>{{ ui.state_badge(owner.status) }}</dd>
+    <dt>E-mail</dt><dd>{{ masked_email or '—' }} {% if owner.email_verified_at %}<span class="badge badge-ok">confirmed</span>{% endif %}</dd>
+    <dt>Mobile</dt><dd>{{ masked_phone or '—' }}</dd>
+    <dt>Last sign-in</dt><dd>{{ owner.last_login_at.strftime('%d %b %Y %H:%M') if owner.last_login_at else 'never' }}</dd>
+    {% endif %}
+    <dt>Members</dt><dd>{{ members }}</dd>
+    <dt>Setup</dt><dd>{% if household.onboarding_completed_at %}complete{% else %}step {{ household.onboarding_step or 1 }} of 7{% endif %}</dd>
+  </dl>
+  <div class="actions">
+    {% if owner and owner.status == 'pending_activation' and household.status == 'active' %}
+      <a class="btn" href="/admin/customers/{{ household.id }}/letter">Print welcome letter</a>
+    {% endif %}
+    {% if owner and owner.email and owner.status in ('pending_activation', 'active') %}
+    <form method="post" action="/admin/customers/{{ household.id }}/resend" class="inline"
+          data-confirm="{% if owner.status == 'pending_activation' %}E-mail a new activation code? The code on a printed letter stops working.{% else %}E-mail a reset link to the customer? Their current password keeps working until they use it.{% endif %}">
+      {{ ui.csrf(principal) }}
+      <button class="btn btn-secondary" type="submit">{% if owner.status == 'pending_activation' %}E-mail activation{% else %}Send reset e-mail{% endif %}</button></form>
+    {% endif %}
+    {% if household.status in ('active', 'disabled') %}
+    <form method="post" action="/admin/customers/{{ household.id }}/status" class="inline"
+          data-confirm="{% if household.status == 'active' %}Deactivate this customer? Every session ends and sign-in is blocked.{% else %}Reactivate this customer?{% endif %}">
+      {{ ui.csrf(principal) }}
+      <input type="hidden" name="action" value="{{ 'deactivate' if household.status == 'active' else 'reactivate' }}">
+      <button class="btn {{ 'btn-danger' if household.status == 'active' else 'btn-secondary' }}" type="submit">{{ 'Deactivate' if household.status == 'active' else 'Reactivate' }}</button></form>
+    {% endif %}
+  </div>
+  <p class="small muted">Staff never see or set a customer's password. A reset e-mail goes to the customer only.</p>
+</section>
+<section class="card">
+  <h2>Devices</h2>
+  <ul class="plain stack">
+  {% for item in devices %}
+    <li><span class="mono">{{ item.device.serial }}</span> {{ ui.state_badge(item.device.state) }}
+      {% if item.device.state == 'CLAIMED' %}{% if item.online %}<span class="badge badge-ok">online</span>{% else %}<span class="badge badge-bad">offline</span>{% endif %}{% endif %}</li>
+  {% else %}<li class="muted">None assigned.</li>{% endfor %}
+  </ul>
+  {% if unassigned and household.status == 'active' %}
+  <form class="row" method="post" action="/admin/customers/{{ household.id }}/assign">
+    {{ ui.csrf(principal) }}
+    <select name="serial" aria-label="Device to assign">{% for d in unassigned %}<option value="{{ d.serial }}">{{ d.serial }}</option>{% endfor %}</select>
+    <button class="btn btn-secondary btn-small" type="submit">Assign</button>
+  </form>
+  {% endif %}
+</section>
+</div>
+<section class="card table-wrap">
+  <h2>Recent account events</h2>
+  <table class="table">
+    <thead><tr><th>When (UTC)</th><th>Event</th><th>By</th></tr></thead>
+    <tbody>{% for e in events %}
+      <tr><td>{{ e.at.strftime('%d %b %Y %H:%M') }}</td><td class="mono small">{{ e.event }}</td><td>{{ e.actor_type }}</td></tr>
+    {% else %}<tr><td colspan="3" class="muted">None.</td></tr>{% endfor %}</tbody>
+  </table>
+</section>
+{% endblock %}

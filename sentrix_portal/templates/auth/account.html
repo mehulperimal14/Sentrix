@@ -1,0 +1,65 @@
+{% extends "acct/layout.html" %}
+{% import "acct/macros.html" as ui %}
+{% block title %}Account · SENTRIX Portal{% endblock %}
+{% block page_content %}
+<h1>Your account</h1>
+{% set saved_text = {'1': 'Saved.', 'password': 'Password changed. Your other sessions were signed out.', 'verify': 'A new confirmation link was sent.',
+     'phone_sent': 'Your device is sending the code by SMS. Enter it below within 10 minutes.',
+     'phone_ok': 'Mobile number confirmed.'} %}
+{% set saved_warn = {'phone_failed': 'The device could not send the SMS (offline, no modem, or test mode refused it). Try again later.',
+     'phone_bad': 'That code is not right or has expired.', 'phone_wait': 'Too many codes or attempts; wait a while.',
+     'phone_no_device': 'Claim your device first: it sends the code from its own SIM.', 'phone_missing': 'Add your mobile number first (setup step 1).'} %}
+{{ ui.notice(saved_text.get(saved)) }}
+{{ ui.notice(saved_warn.get(saved), 'warn') }}
+{{ ui.error_summary(errors) }}
+<div class="card">
+  <dl class="facts">
+    <dt>Username</dt><dd class="mono">{{ user.username }}</dd>
+    <dt>Role</dt><dd>{{ user.role | replace('_', ' ') }}</dd>
+    <dt>Mobile</dt><dd>{{ masked_phone or '—' }}
+      {% if masked_phone %}{% if user.phone_verified_at %}<span class="badge badge-ok">confirmed</span>{% else %}<span class="badge badge-warn">unverified</span>{% endif %}{% endif %}
+      {% if user.role == 'owner' %} <a class="small" href="/onboarding/1">change</a>{% endif %}</dd>
+    <dt>E-mail</dt><dd>{{ user.email or '—' }}
+      {% if user.email %}{% if user.email_verified_at %}<span class="badge badge-ok">confirmed</span>{% else %}<span class="badge badge-warn">not confirmed</span>{% endif %}{% endif %}</dd>
+    <dt>Two-factor</dt><dd>{% if user.totp_enabled %}<span class="badge badge-ok">on</span>{% elif user.role in ('company_admin', 'operator') %}<span class="badge badge-bad">required</span>{% else %}not used for household accounts{% endif %}</dd>
+  </dl>
+  {% if user.email and not user.email_verified_at %}
+  <form method="post" action="/account/verify-email" class="inline">{{ ui.csrf(principal) }}
+    <button class="btn btn-secondary btn-small" type="submit">Send the confirmation link again</button></form>
+  {% endif %}
+  {% if user.role == 'owner' and masked_phone and not user.phone_verified_at %}
+  <h3>Confirm your mobile</h3>
+  <p class="help">Your SENTRIX device texts a 6-digit code from its own SIM to this number.</p>
+  <div class="row">
+    <form method="post" action="/account/phone" class="inline">{{ ui.csrf(principal) }}
+      <input type="hidden" name="action" value="send">
+      <button class="btn btn-secondary btn-small" type="submit">Send me a code</button></form>
+    <form method="post" action="/account/phone" class="row">{{ ui.csrf(principal) }}
+      <input type="hidden" name="action" value="confirm">
+      <input name="code" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" autocomplete="one-time-code" aria-label="Code from the SMS" required>
+      <button class="btn btn-small" type="submit">Confirm</button></form>
+  </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Name and e-mail</h2>
+  {{ ui.step_up(principal, '/account', stepped_up) }}
+  <form class="form" method="post" action="/account">
+    {{ ui.csrf(principal) }}
+    {{ ui.input('display_name', 'Name', user.display_name, errors=errors, required=True, maxlength=80, autocomplete='name') }}
+    {{ ui.input('email', 'E-mail', user.email, errors=errors, type='email', required=user.role != 'member', maxlength=254, autocomplete='email', help='Used for alerts and to recover the account. Changing it needs your password and a new confirmation.') }}
+    <div class="actions"><button class="btn" type="submit">Save</button></div>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Security</h2>
+  <ul class="plain stack">
+    <li><a href="/account/password">Change password</a></li>
+    {% if user.role in ('company_admin', 'operator') %}<li><a href="/account/2fa">Two-factor authentication and recovery codes</a></li>{% endif %}
+    <li><a href="/account/sessions">Signed-in sessions</a></li>
+    {% if user.role in ('owner', 'member') %}<li><a href="/household/audit">Activity log</a></li>{% endif %}
+  </ul>
+</div>
+{% endblock %}

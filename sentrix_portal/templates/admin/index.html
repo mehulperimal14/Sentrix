@@ -1,0 +1,27 @@
+{% extends "acct/layout.html" %}
+{% block title %}Admin · SENTRIX Portal{% endblock %}
+{% block page_content %}
+<h1>SENTRIX admin</h1>
+{% include "admin/_nav.html" %}
+<div class="cards">
+  <section class="card"><h2>Customers</h2>
+    <p class="code-big">{{ customers }}</p>
+    <p class="muted">{{ pending }} not activated yet</p>
+    <a class="btn btn-small" href="/admin/customers">Manage</a></section>
+  <section class="card"><h2>Devices</h2>
+    <dl class="facts">{% for state in ('UNASSIGNED', 'ASSIGNED', 'CLAIMED', 'RETIRED') %}
+      <dt>{{ state | lower }}</dt><dd>{{ device_states.get(state, 0) }}</dd>{% endfor %}
+      <dt>online</dt><dd>{{ online }} of {{ claimed }} claimed</dd></dl>
+    <a class="btn btn-small" href="/admin/devices">Fleet</a></section>
+  <section class="card"><h2>Desk</h2>
+    <p class="code-big">{{ operators }}</p><p class="muted">operators</p>
+    <a class="btn btn-small" href="/admin/operators">Staff</a></section>
+  <section class="card"><h2>Audit chain</h2>
+    {% if chain.ok %}<p><span class="badge badge-ok">verified</span> {{ chain.entries }} entries</p>
+    {% else %}<p><span class="badge badge-bad">{{ chain.problems | length }} problem(s)</span></p>{% endif %}
+    {% if chain.retention_gaps %}<p class="small muted">Oldest rows pruned by retention (signed boundary).</p>{% endif %}
+    <a class="btn btn-small" href="/admin/audit">Open</a></section>
+</div>
+<p class="small muted">The admin console never shows customers' passwords, video, faces or
+  evidence.</p>
+{% endblock %}

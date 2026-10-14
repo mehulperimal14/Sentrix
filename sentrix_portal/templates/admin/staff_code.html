@@ -1,0 +1,17 @@
+{% extends "acct/layout.html" %}
+{% block title %}Staff activation · SENTRIX admin{% endblock %}
+{% block page_content %}
+<h1>Activation code for <span class="mono">{{ user.username }}</span></h1>
+{% include "admin/_nav.html" %}
+<article class="print-sheet">
+  <p>{{ user.display_name }} ({{ user.role | replace('_', ' ') }}) activates the account at
+    <span class="mono">{{ activation_url }}</span> or with this code on the activation page:</p>
+  <p class="code-big">{{ code }}</p>
+  <p class="small muted">Works once, for {{ ttl_hours }} hours. Shown only now. At the first
+    sign-in the account sets up TOTP.</p>
+</article>
+<div class="actions no-print">
+  <button type="button" class="btn btn-secondary" data-print>Print</button>
+  <a class="btn" href="/admin/operators">Done</a>
+</div>
+{% endblock %}

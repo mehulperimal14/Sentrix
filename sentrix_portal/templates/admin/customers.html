@@ -1,0 +1,60 @@
+{% extends "acct/layout.html" %}
+{% import "acct/macros.html" as ui %}
+{% block title %}Customers · SENTRIX admin{% endblock %}
+{% block page_content %}
+<h1>Customers</h1>
+{% include "admin/_nav.html" %}
+{{ ui.notice(notice) }}
+{{ ui.error_summary(errors) }}
+<section class="card">
+  <h2>New customer</h2>
+  <p class="help">The account starts without a password. Print the welcome letter next: it
+    carries a single-use activation code, and the customer chooses their own password.</p>
+  <form class="form" method="post" action="/admin/customers">
+    {{ ui.csrf(principal) }}
+    <div class="grid-2">
+      {{ ui.input('name', 'Customer name', values.get('name'), errors=errors, required=True, maxlength=80) }}
+      {{ ui.input('username', 'Username', values.get('username'), errors=errors, required=True, maxlength=32, help='Lower-case letters, digits, . _ -') }}
+    </div>
+    <div class="grid-2">
+      {{ ui.input('email', 'E-mail', values.get('email'), errors=errors, type='email', required=True, maxlength=254, help='Activation and reset links go here, never to staff.') }}
+      {{ ui.input('phone', 'Mobile (optional)', values.get('phone'), errors=errors, type='tel', maxlength=20) }}
+    </div>
+    <div class="grid-2">
+      {{ ui.input('city', 'City', values.get('city'), errors=errors, maxlength=80) }}
+      <div class="field">
+        <label for="f-serial">Assign a device (optional)</label>
+        <select id="f-serial" name="serial">
+          <option value="">none</option>
+          {% for d in unassigned %}<option value="{{ d.serial }}"{% if values.get('serial') == d.serial %} selected{% endif %}>{{ d.serial }}{% if d.name %} ({{ d.name }}){% endif %}</option>{% endfor %}
+        </select>
+        {{ ui.err(errors, 'serial') }}
+      </div>
+    </div>
+    <div class="actions"><button class="btn" type="submit">Create customer</button></div>
+  </form>
+</section>
+<section class="card table-wrap">
+  <form class="row" method="get" action="/admin/customers">
+    <input type="search" name="q" value="{{ q }}" placeholder="Search code, name, city or username" aria-label="Search customers">
+    <button class="btn btn-secondary btn-small" type="submit">Search</button>
+  </form>
+  <table class="table">
+    <thead><tr><th>Code</th><th>Name</th><th>Username</th><th>Account</th><th>Devices</th><th>Setup</th></tr></thead>
+    <tbody>
+    {% for row in rows %}
+      <tr>
+        <td><a class="mono" href="/admin/customers/{{ row.household.id }}">{{ row.household.customer_code }}</a></td>
+        <td>{{ row.household.display_name }}{% if row.household.city %} <span class="muted">· {{ row.household.city }}</span>{% endif %}</td>
+        <td class="mono">{{ row.owner.username if row.owner else '—' }}</td>
+        <td>{{ ui.state_badge(row.household.status if row.household.status != 'active' else (row.owner.status if row.owner else 'active')) }}</td>
+        <td>{{ row.devices }}</td>
+        <td>{% if row.household.onboarding_completed_at %}done{% else %}step {{ row.household.onboarding_step or 1 }}{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="muted">No customers.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

@@ -1,0 +1,19 @@
+{% extends "onboarding/_wizard.html" %}
+{% block step_content %}
+<section class="card">
+  <h2>6. Alerts and SOS</h2>
+  <p class="lead">When SENTRIX confirms a weapon or fire it asks you "Do you need assistance?".
+    SENTRIX does not contact 112 itself: you choose who is alerted.</p>
+  {% if pin_set and not stepped_up %}{{ ui.step_up(principal, '/onboarding/6', stepped_up) }}{% endif %}
+  <form class="form" method="post" action="/onboarding/6">
+    {{ ui.csrf(principal) }}<input type="hidden" name="action" value="save">
+    {% set disabled = False %}
+    {% include "onboarding/_sos_fields.html" %}
+    {% include "onboarding/_pin_fields.html" %}
+    <div class="actions"><button class="btn" type="submit">Save and continue</button>
+      <a href="/onboarding/5">Back</a></div>
+  </form>
+  {% set action_url = '/onboarding/6' %}{% set section_field = ('action', 'telegram') %}
+  {% include "onboarding/_telegram.html" %}
+</section>
+{% endblock %}

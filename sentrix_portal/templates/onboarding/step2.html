@@ -1,0 +1,14 @@
+{% extends "onboarding/_wizard.html" %}
+{% block step_content %}
+<section class="card">
+  <h2>2. Home address</h2>
+  <p class="lead">This is the address in your SOS: make it findable by a stranger at night.</p>
+  <form class="form" method="post" action="/onboarding/2">
+    {{ ui.csrf(principal) }}
+    {% set disabled = False %}
+    {% include "onboarding/_address_fields.html" %}
+    <div class="actions"><button class="btn" type="submit">Save and continue</button>
+      <a href="/onboarding/1">Back</a></div>
+  </form>
+</section>
+{% endblock %}
