@@ -14,14 +14,28 @@ from dotenv import load_dotenv
 from sentrix.paths import ROOT_DIR
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="python -m sentrix_portal",
+        description="SENTRIX Portal: accounts, onboarding, SOS, Desk and the device link hub.",
+        epilog="Settings come from the environment (PORTAL_*; .env.example). Test mode "
+               "(PORTAL_TEST_MODE) is on by default; background workers run only with "
+               "PORTAL_WORKERS=1.")
+    parser.add_argument("--host", default=None, help="bind address (PORTAL_HOST, default 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=None, help="port (PORTAL_PORT, default 8100)")
+    args = parser.parse_args(argv)
+
     import uvicorn
 
     load_dotenv(ROOT_DIR / ".env")
     from sentrix_portal.app import create_app
     from sentrix_portal.settings import PortalSettings
 
-    settings = PortalSettings.from_env()
+    overrides = {key: value for key, value in (("host", args.host), ("port", args.port))
+                 if value is not None}
+    settings = PortalSettings.from_env(**overrides)
     if settings.extras.get("key_files"):
         made = settings.extras.get("key_files_created") or []
         print(f"PORTAL_SECRET_KEY / PORTAL_DATA_KEY not set: using the key files in "

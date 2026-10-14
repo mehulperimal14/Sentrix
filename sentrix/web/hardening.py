@@ -139,11 +139,10 @@ def websocket_origin_ok(headers: Headers) -> bool:
 # ── CSRF ──────────────────────────────────────────────────────────────────────
 def _session_cookie(headers: Headers) -> tuple[str | None, str | None]:
     """(cookie name, value) of the console session, as ``auth`` picks it."""
-    from sentrix.web.auth import LEGACY_COOKIE
     cookies = cookie_parser(headers.get("cookie", ""))
-    for name in (settings.web.cookie_name, LEGACY_COOKIE):
-        if cookies.get(name):
-            return name, cookies[name]
+    name = settings.web.cookie_name
+    if cookies.get(name):
+        return name, cookies[name]
     return None, None
 
 
@@ -158,9 +157,9 @@ def csrf_refusal(scope: dict, identity: tunnel_auth.TunnelIdentity | None) -> st
     headers = Headers(scope=scope)
     if is_cross_site(headers):
         return "cross-site request refused"
-    from sentrix.web.auth import LEGACY_COOKIE, csrf_for_session
+    from sentrix.web.auth import csrf_for_session
     from sentrix.web.security import verify_token
-    name, cookie = _session_cookie(headers)
+    _, cookie = _session_cookie(headers)
     password = _password()
     if not cookie or not verify_token(cookie, password):
         return None                         # not signed in: the route answers 401/307
@@ -170,8 +169,6 @@ def csrf_refusal(scope: dict, identity: tunnel_auth.TunnelIdentity | None) -> st
         if hmac.compare_digest(supplied.encode(), expected.encode()):
             return None
         return "invalid CSRF token; reload the page"
-    if name == LEGACY_COOKIE:
-        return None                         # pre-upgrade tab, already same-site
     return "missing CSRF token; reload the page"
 
 

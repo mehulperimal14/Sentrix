@@ -1566,11 +1566,6 @@ def build_profile(db, household_id: str, device_id: str) -> dict[str, Any]:
     """The profile pushed to ``device_id`` at the household's current
     ``profile_version`` (docs/7 §5.11). Raises ``LookupError`` when the
     device is not this household's."""
-    if db is None:
-        # The foundation stub raised NotImplementedError and the foundation
-        # contract test still probes it without a session; see
-        # INTEGRATION_NOTES_acct.md (drop this guard with that assertion).
-        raise NotImplementedError("build_profile needs a Portal database session")
     household = db.get(Household, household_id)
     device = db.get(Device, device_id)
     if household is None or device is None or device.household_id != household_id:
@@ -1742,10 +1737,8 @@ def _portal_preview(profile: dict[str, Any], incident_type: str,
 # ── the privacy notice ────────────────────────────────────────────────────────
 def grievance_contact() -> str:
     """Who to complain to before the Data Protection Board
-    (``PORTAL_GRIEVANCE_CONTACT`` names the team's address)."""
-    import os
-    return (os.getenv("PORTAL_GRIEVANCE_CONTACT", "").strip()
-            or "the SENTRIX capstone team, CSED, Thapar Institute, Patiala")
+    (``PortalSettings.grievance_contact``, env ``PORTAL_GRIEVANCE_CONTACT``)."""
+    return portal_config().grievance_contact
 
 
 def notice_context() -> dict[str, Any]:

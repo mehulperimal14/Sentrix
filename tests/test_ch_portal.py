@@ -494,7 +494,6 @@ class TestWebhook:
 class TestWorker:
     def test_polling_and_delivery(self, portal_app, fakes, bot, sos, linked, monkeypatch):
         monkeypatch.setenv("TELEGRAM_BOT_TOKEN", TOKEN)
-        monkeypatch.setenv("SENTRIX_TELEGRAM_MODE", "polling")
         bot.updates = [[callback_update(callback_data(linked["nonce"], "checking"),
                                         update_id=500)]]
 
@@ -524,9 +523,8 @@ class TestWorker:
 
     def test_webhook_mode_registers_the_https_url(self, portal_app, bot, monkeypatch):
         monkeypatch.setenv("TELEGRAM_BOT_TOKEN", TOKEN)
-        monkeypatch.setenv("SENTRIX_TELEGRAM_MODE", "webhook")
         monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "hook-secret")
-        portal_app.state.settings = replace(portal_app.state.settings,
+        portal_app.state.settings = replace(portal_app.state.settings, telegram_mode="webhook",
                                             base_url="https://portal.example.in")
 
         async def scenario():

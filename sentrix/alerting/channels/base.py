@@ -105,11 +105,22 @@ def parse_callback_data(data: str | None) -> tuple[str, str] | None:
 class Message:
     """One message, already rendered. Channels may shorten it (SMS)."""
 
-    template: str                    # sos.prompt | sos.reminder | sos.full | ...
+    #: sos.prompt | sos.reminder | sos.lapse_warning | sos.lapsed | sos.full |
+    #: sos.duress | sos.resolved | sos.failed | sos.unacknowledged |
+    #: sos.acknowledged | sos.sms; legacy.l4_sms | legacy.l5_call |
+    #: legacy.dispatch; telegram.linked | telegram.link_failed | telegram.help;
+    #: account.activation | account.reset | account.verify_email |
+    #: account.security | contact.consent.
+    template: str
     #: Dedupe step. SOS messages use ``sentrix.sos.states`` step names (t0,
     #: r120, r300, r600, r1200, lapse, lapsed, rise4, rise5, contacts_t0,
-    #: desk_t0, repage1..n, resolved, duress); other messages a unique one
-    #: ("activation:<code id>", "consent:<token id>", "test:<unix ms>").
+    #: desk_t0, repage1..n, resolved, duress) plus failed<n>, undelivered,
+    #: unacknowledged, acknowledged, help_now<n> (unique per request); other
+    #: messages a unique one: "activation:<code id>", "verify:<token id>",
+    #: "consent:<token id>", "password:<unix s>", "newip:<audit id>:<ip
+    #: digest>", "test:<unix ms>", "l4:<unix ms>", "l5:<unix ms>",
+    #: "dispatch:<unix ms>", "tglink:<token id>", "tgbad:<update id>",
+    #: "tghelp:<update id>".
     step: str
     text: str
     request_id: str | None = None
@@ -131,11 +142,18 @@ class SendResult:
     #: False for errors a retry cannot fix (bad address, refused by the guard).
     retryable: bool = True
     suppressed: bool = False
+    #: The provider asked to wait at least this many seconds before a retry
+    #: (Telegram 429 ``retry_after``); the router never retries sooner.
+    retry_after: float | None = None
 
 
 @runtime_checkable
 class Transport(Protocol):
-    """Network I/O for one channel. ``send`` must not raise."""
+    """Network I/O for one channel. ``send`` must not raise.
+
+    Optional conventions the router reads (T-CH): ``state() -> (available,
+    detail)`` for readiness, and ``delivers_on_send = True`` when a
+    successful send already means DELIVERED (Telegram)."""
 
     name: str
 

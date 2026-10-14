@@ -1,9 +1,10 @@
-"""Hardware tunables that ``sentrix/config.py`` does not carry yet.
+"""Hardware tunables: ``settings.gpio`` / ``settings.node`` fields with a
+call-time environment override.
 
-``config.py`` is a shared file (docs/7 §2.2); track T-HW asked integration to
-add these fields (``INTEGRATION_NOTES_hw.md``). Until then each value is read
-from its environment variable at call time, and the moment the field exists
-on ``settings`` it wins, so nothing here changes when the fields land.
+The fields live in ``sentrix/config.py`` (read once at import, like every
+setting). Each accessor here first reads the environment variable at call
+time, so a value set after import (a test, the doctor, a supervisor that
+re-reads ``pi.env``) still applies, then the field, then the default.
 
 Defaults and why:
 
@@ -28,7 +29,10 @@ from typing import Any
 _MISSING = object()
 
 
-def _field(section: str, name: str) -> Any:
+def _field(section: str, name: str, env: str | None = None) -> Any:
+    """The environment override when set, else the config field."""
+    if env and _env(env):
+        return _MISSING
     from sentrix.config import settings
     return getattr(getattr(settings, section, None), name, _MISSING)
 
@@ -38,7 +42,7 @@ def _env(name: str) -> str:
 
 
 def _bool(section: str, field: str, env: str, default: bool) -> bool:
-    value = _field(section, field)
+    value = _field(section, field, env)
     if value is not _MISSING:
         return bool(value)
     raw = _env(env).lower()
@@ -46,7 +50,7 @@ def _bool(section: str, field: str, env: str, default: bool) -> bool:
 
 
 def _float(section: str, field: str, env: str, default: float) -> float:
-    value = _field(section, field)
+    value = _field(section, field, env)
     if value is not _MISSING:
         return float(value)
     try:
@@ -56,7 +60,7 @@ def _float(section: str, field: str, env: str, default: float) -> float:
 
 
 def _optional_pin(section: str, field: str, env: str) -> int | None:
-    value = _field(section, field)
+    value = _field(section, field, env)
     if value is not _MISSING:
         return None if value in (None, "") else int(value)
     raw = _env(env)
@@ -70,7 +74,7 @@ def _optional_pin(section: str, field: str, env: str) -> int | None:
 
 
 def _size(section: str, field: str, env: str, default: tuple[int, int]) -> tuple[int, int]:
-    value = _field(section, field)
+    value = _field(section, field, env)
     if value is not _MISSING:
         return parse_size(value, default)
     return parse_size(_env(env), default)

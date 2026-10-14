@@ -178,7 +178,7 @@ decision                                    ▲ n            ▲ n+1
 |---|---|---|---|---|
 | S0 gate | always | motion energy (frame diff on 320×240, computed during capture), audio RMS, PIR/door state | — | ≈ 0 (precomputed) |
 | S1 objects | S0 active | **one unified YOLO11n/YOLO26n** (person, pistol, knife, fire) NCNN @640 | 6 keyframes | 0.40–0.55 s |
-| S2 scene | S1 saw a person or a fire candidate | EfficientNet-B0 scene head (or DINOv2-S/14) | 2 keyframes | 0.03 s (0.3–0.55 s) |
+| S2 scene | S1 saw a person or a fire candidate | DINOv2 ViT-B/14 on at most 1 keyframe (the slim heads failed, see below; DINOv2-S/14 untested) | 1 keyframe | ≈ 0.6–1 s est. |
 | S3 identity | persons present; ≤ 1 per 2 s | SCRFD-500M + MobileFaceNet (`buffalo_s`) on person crops | 2 keyframes | ≈ 0.1–0.15 s est. |
 | S4 action | ≥ 2 persons and high motion | ResNet-18 per frame, 16 frames (existing violence model) | 16 | ≈ 0.32 s |
 | S5 audio | always | log-mel + audio CNN over the full 4 s | 1 | < 0.02 s |
@@ -220,9 +220,12 @@ loop today); dropped clips are counted on the dashboard.
 **Model changes needed for T1** (all trainable/exportable on the laptop now):
 - Merge the three YOLO passes into **one YOLO11n/26n detector** (person, pistol,
   knife, fire) — already milestone M7; export to NCNN.
-- Replace DINOv2-B with an **EfficientNet-B0 or MobileNetV3 scene head** trained on
-  the same custom data (or DINOv2-S/14 if accuracy demands it, then on 1 keyframe).
-  Validate with LOVO CV exactly as docs/6 did; never select on `wa02`.
+- ~~Replace DINOv2-B with an EfficientNet-B0 or MobileNetV3 scene head.~~ Tried
+  (T-MODEL, `training/runs/custom/slim/REPORT.md`): MobileNetV3-L LOVO macro-F1
+  0.229 and EfficientNet-B0 0.211 vs DINOv2-B 0.440 (pre-registered bar 0.396);
+  distillation from DINOv2 did not help. **S2 stays DINOv2 ViT-B/14 on at most one
+  keyframe per clip**; DINOv2-S/14 is the untested fallback and needs its own LOVO
+  run. The slim checkpoints are in `models/v5_slim/` for evaluation only.
 - Switch identity to **`buffalo_s`** (SCRFD-500M + MobileFaceNet).
 - Keep the audio CNN; consider YAMNet / EfficientAT later (M-audio track).
 
@@ -482,8 +485,18 @@ L4 p95 ≤ 2 s, HEF accuracy within 2 points of the PyTorch models on val.
 
 **Gates for clip mode.** CLAUDE.md G4 ("loop ≥ 5 Hz, detect → alert p95 ≤ 2 s")
 assumes per-frame analysis. For T1 it becomes: fast-lane L3 p95 ≤ 2 s, clip
-decision every ≤ 2 s, L4/L5 p95 ≤ 6 s. Record the change in CLAUDE.md M9 when T1 is
-adopted.
+decision every ≤ 2 s, L4/L5 p95 ≤ 6 s (recorded in CLAUDE.md M9).
+
+**Clip mode on the laptop (T-CLIP, `training/runs/custom_eval/clip/`).** All 10
+custom videos, shipped models, 4 threads, evaluation only: 0 false onsets at every
+level; weapon at L3 9/12 with the fast lane (8/12 without; M5 tick mode 9/12),
+fire 3/3; weapon at L5 5/12 (M5 2/12); robbery no longer reaches L2. Weapon L3
+latency median / p95 1.00 / 7.21 s with the fast lane (clip-end stamps; live adds
+compute). Gate A's replay criterion is met. Bench on 4 CPUs: ONNX + fast lane clip
+compute p50 1060 / p95 2145 ms — **over the 1.6 s budget at p95**; torch + fast
+lane collapses (70 % dropped), so on a Pi the fast lane must run on onnx/ncnn. The
+dominant stages are S1 (three YOLO passes per keyframe) and S2 (DINOv2-B), so the Pi
+budget needs M7's single YOLO; no Pi measurement exists yet.
 
 ---
 

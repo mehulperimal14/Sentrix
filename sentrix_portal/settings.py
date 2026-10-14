@@ -101,6 +101,11 @@ class PortalSettings:
     #: Shown instead of 112 in test mode, and the simulated Desk's number.
     desk_number: str = ""
     telegram_bot_name: str = ""
+    #: ``polling`` (dev: getUpdates long polling) or ``webhook``
+    #: (``<base_url>/hooks/telegram``, https, TELEGRAM_WEBHOOK_SECRET required).
+    telegram_mode: str = "polling"
+    #: Who to complain to before the Data Protection Board (privacy notice).
+    grievance_contact: str = "the SENTRIX capstone team, CSED, Thapar Institute, Patiala"
     notice_version: str = "2026-10-1"
     api_docs: bool = False
     #: Key files, exports, and SOS snapshots when not in the database.
@@ -125,6 +130,9 @@ class PortalSettings:
                 "PORTAL_TRUSTED_PROXIES", "127.0.0.1,::1").split(",") if p.strip()),
             desk_number=_str("PORTAL_DESK_NUMBER", ""),
             telegram_bot_name=_str("PORTAL_TELEGRAM_BOT_NAME", ""),
+            telegram_mode=_str("SENTRIX_TELEGRAM_MODE", "polling").lower(),
+            grievance_contact=_str("PORTAL_GRIEVANCE_CONTACT",
+                                   "the SENTRIX capstone team, CSED, Thapar Institute, Patiala"),
             api_docs=_flag("PORTAL_API_DOCS", False),
             data_dir=_default_data_dir(),
             workers=_flag("PORTAL_WORKERS", False),

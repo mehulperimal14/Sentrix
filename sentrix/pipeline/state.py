@@ -48,6 +48,18 @@ NODE_IDLE: dict[str, Any] = {
     "under_voltage": None, "ext5v_v": None, "mains": None, "pir": None,
     "door": None, "siren_armed": None, "gpio": None,
     "uptime_s": None, "updated_at": None,
+    # written by sentrix.io.node / gpio once they run (same shape idle)
+    "temp_state": None, "throttled_raw": None, "throttle_flags": None,
+    "under_voltage_occurred": None, "power_w": None, "environment": None,
+    "tamper": None, "platform": None, "telemetry": False,
+}
+#: The ``clip`` block (track T-CLIP: ``ClipStrategy`` writes
+#: ``ClipRunner.status()`` after every clip). Idle = the tick loop.
+CLIP_IDLE: dict[str, Any] = {
+    "mode": "tick", "window_s": None, "hop_s": None, "clips": 0, "dropped": 0,
+    "dropped_fraction": 0.0, "compute_ms": {"p50": None, "p95": None, "max": None},
+    "budget_ms": None, "runtime": None, "threads": None, "fast_lane": None,
+    "fast_lane_decisions": 0, "last": None,
 }
 #: The ``channels`` block (track T-CH fills it; the app lifespan reports the
 #: legacy Twilio notifier while no router runs): is anything able to leave?
@@ -99,6 +111,7 @@ _INITIAL: dict[str, Any] = {
     "link": LINK_IDLE,
     "node": NODE_IDLE,
     "channels": CHANNELS_IDLE,
+    "clip": CLIP_IDLE,
     "mode": MODE_IDLE,
     "remote_viewers": 0,
 }
@@ -164,11 +177,11 @@ class SystemState:
         data["camera_available"] = data.get("camera_online", False)
         data["mic_available"] = data.get("audio_label") not in (
             "disabled", "initializing", "mic_unavailable")
-        # No cloud dependency remains — inference is fully local. Reported as
-        # True so the existing status badge does not show a spurious outage.
-        # (The link block carries the real Portal link state.)
-        data.setdefault("cloud_online", True)
-        data.setdefault("cloud_available", True)
+        # Inference is fully local; "cloud" now means the Portal link, so the
+        # legacy keys follow the link block (False while no link runs).
+        link = data.get("link") or {}
+        data.setdefault("cloud_online", bool(link.get("connected")))
+        data.setdefault("cloud_available", bool(link.get("enabled")))
         data.setdefault("dispatch_package", None)
         data.setdefault("latest_snapshot", None)
         return data
@@ -182,11 +195,13 @@ class SystemState:
         self.remote_viewers = 0
 
     def ws_payload(self) -> str:
-        """JSON for the websocket. Never raises — a serialisation failure
-        must not take the dashboard connection down."""
+        """JSON for the websocket and the link's state messages, with
+        credentials redacted from every string (docs/7 §12). Never raises — a
+        serialisation failure must not take the dashboard connection down."""
+        from sentrix.utils.redact import redact_tree
         data = self.get()
         try:
-            return json.dumps(data, default=str)
+            return json.dumps(redact_tree(data), default=str)
         except (TypeError, ValueError):
             return json.dumps({
                 "tci": data.get("tci", 0.0),
@@ -199,4 +214,4 @@ class SystemState:
 state = SystemState()
 
 __all__ = ["SystemState", "state", "SOS_IDLE", "LINK_IDLE", "NODE_IDLE",
-           "CHANNELS_IDLE", "MODE_IDLE", "LEVEL_HISTORY_MAX"]
+           "CHANNELS_IDLE", "CLIP_IDLE", "MODE_IDLE", "LEVEL_HISTORY_MAX"]

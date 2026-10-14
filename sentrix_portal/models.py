@@ -40,8 +40,12 @@ CONSENT_STATUSES = ("PENDING", "CONFIRMED", "DECLINED", "REVOKED")
 #: Consent purposes (DPDP Rule 3: one toggle each).
 CONSENT_PURPOSES = ("account_sos", "face_recognition", "medical_notes", "sos_snapshot",
                     "remote_view", "desk_live_view", "model_improvement")
+#: ``action_tokens.purpose`` values (``phone_verify``: T-ACCT's mobile
+#: verification codes). A contact's opt-out is a ``consents``
+#: row with ``subject_type="contact"``, ``granted_at`` NULL and
+#: ``withdrawn_at`` = the decision time (retention counts 7 days from it).
 TOKEN_PURPOSES = ("contact_page", "contact_consent", "action_link", "telegram_link",
-                  "email_verify")
+                  "email_verify", "phone_verify")
 
 
 # ── accounts ──────────────────────────────────────────────────────────────────
@@ -51,7 +55,9 @@ class Household(Base):
     id = Column(String(36), primary_key=True, default=_uuid)
     customer_code = Column(String(16), unique=True, index=True)        # SX-0007
     display_name = Column(String(100))
-    status = Column(String(16), default="active")                       # active | closed
+    #: active | disabled (admin deactivation) | erasing (erasure scheduled;
+    #: closed_at = when it was requested) | closed
+    status = Column(String(16), default="active")
     language = Column(String(4), default="en")
     # address (onboarding step 2)
     house = Column(String(80))

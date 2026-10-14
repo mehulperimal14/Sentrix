@@ -245,6 +245,20 @@ def check_camera(report: Report) -> None:
         # it: the hardware section enumerated it through libcamera instead.
         report.add(OK, "camera source", f"{spec} (Picamera2; see the hardware section)")
         return
+    parts = [part.strip() for part in spec.split(",") if part.strip()]
+    if parts and not any(part.isdigit() for part in parts):
+        # Files and stream URLs: nothing to probe, and no webcam is opened.
+        from pathlib import Path
+
+        from sentrix.utils.redact import redact_url
+        for part in parts:
+            if "://" in part:
+                report.add(OK, "camera source", f"{redact_url(part)} (stream; not opened)")
+            else:
+                exists = Path(part).expanduser().is_file()
+                report.add(OK if exists else FAIL, "camera source",
+                           f"{part} ({'video file' if exists else 'file not found'})")
+        return
     try:
         import cv2
     except ImportError:
@@ -312,17 +326,63 @@ def check_hardware(report: Report, rows: list[dict] | None = None) -> None:
                    row.get("detail", ""))
 
 
-def main() -> int:
+def check_exports(report: Report, directory=None) -> None:
+    """Exported models for ``SENTRIX_RUNTIME`` onnx / ncnn (T-CLIP): which
+    exports exist, their recorded parity, and that a model without one falls
+    back to torch. Nothing is loaded."""
+    import json
+
+    from sentrix.runtime import EXPORT_DIR, installed, resolve_backend
+
+    report.section("model runtime")
+    backend = resolve_backend()
+    if backend == "torch":
+        report.add(OK, "runtime", "torch (no exported models needed)")
+        return
+    report.add(OK if installed(backend) else FAIL, "runtime",
+               f"{backend} ({'installed' if installed(backend) else 'package missing'})")
+    directory = EXPORT_DIR if directory is None else directory
+    manifest = {}
+    try:
+        manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        pass
+    entries = manifest.get("exports") or {}
+    suffix = "_ncnn_model" if backend == "ncnn" else ".onnx"
+    found = sorted(p.name for p in directory.glob(f"*{suffix}")) if directory.is_dir() else []
+    if not found:
+        report.add(WARN, "exports", f"none in {directory.name}/ for {backend}: every model "
+                   "falls back to torch (python tools/export_models.py)")
+        return
+    for name in found:
+        parity = (entries.get(name) or {}).get("parity") or {}
+        ok = parity.get("parity_ok")
+        report.add(OK if ok else WARN, f"export {name}",
+                   "parity OK" if ok else ("parity MISMATCH" if ok is False
+                                           else "no parity record in manifest.json"))
+    report.add(OK, "fallback", "models without an export run on torch")
+
+
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+
     from dotenv import load_dotenv
 
     from sentrix.paths import ROOT_DIR
+    parser = argparse.ArgumentParser(description="SENTRIX installation checks")
+    parser.add_argument("--no-camera", action="store_true",
+                        help="do not probe camera indices (no device is opened)")
+    args = parser.parse_args(argv)
     load_dotenv(ROOT_DIR / ".env")
 
     print("SENTRIX doctor")
     print("=" * 68)
     report = Report()
-    for check in (check_dependencies, check_models, check_config,
-                  check_services, check_hardware, check_engines, check_camera):
+    checks = [check_dependencies, check_models, check_config, check_services,
+              check_hardware, check_exports, check_engines]
+    if not args.no_camera:
+        checks.append(check_camera)
+    for check in checks:
         try:
             check(report)
         except Exception as exc:

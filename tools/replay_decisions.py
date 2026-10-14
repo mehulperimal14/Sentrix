@@ -45,9 +45,25 @@ def invert_align(value: float, threshold: float, anchor: float) -> float:
     return threshold
 
 
+class ClipSessionError(ValueError):
+    """The log is a clip-mode session: its tick rows were decided per clip."""
+
+
+def is_clip_row(row: dict) -> bool:
+    extra = row.get("extra") if isinstance(row.get("extra"), dict) else {}
+    return row.get("kind") == "clip" or extra.get("mode") in ("clip", "fast_lane")
+
+
 def load(path: Path) -> list[dict]:
+    """The tick rows of a tick-mode session. This tool re-applies the *tick*
+    k-of-n rule to the logged votes, so a clip-mode session (any ``"kind":
+    "clip"`` row, or tick rows marked ``extra.mode`` clip / fast_lane) is
+    refused instead of being replayed under the wrong rule."""
     rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()
             if line.strip()]
+    if any(is_clip_row(r) for r in rows):
+        raise ClipSessionError(f"{path.name} is a clip-mode session; replay_decisions "
+                               "only replays tick-mode logs")
     return [r for r in rows if "features" in r]
 
 
@@ -94,7 +110,10 @@ def main(argv: list[str] | None = None) -> int:
     from sentrix.fusion.tci import TCIEngine
     from sentrix.pipeline.incidents import IncidentManager
 
-    rows = load(args.log)
+    try:
+        rows = load(args.log)
+    except ClipSessionError as exc:
+        raise SystemExit(str(exc))
     if not rows:
         raise SystemExit(f"no feature rows in {args.log}")
     threat = dataclasses.replace(settings.threat, armed=args.armed)

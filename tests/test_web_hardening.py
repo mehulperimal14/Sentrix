@@ -133,19 +133,16 @@ class TestCsrf:
         assert client.post("/login", data={"password": PASSWORD},
                            headers={"Origin": "http://testserver"}).status_code == 302
 
-    def test_legacy_cookie_works_for_an_old_tab_but_not_cross_site(self, console):
+    def test_legacy_cookie_is_not_a_session(self, console):
+        # Retired at integration: it used to skip the CSRF header.
         from sentrix.web import auth
         from sentrix.web.security import generate_token
         client = TestClient(console.app)
         cookie = generate_token(PASSWORD)
         client.cookies.set("session_token", cookie)
-        assert client.post("/api/mode", json={"armed": True}).status_code == 200
+        assert client.post("/api/mode", json={"armed": True}).status_code == 401
         assert client.post("/api/mode", json={"armed": True},
-                           headers={"Origin": "https://evil.example"}).status_code == 403
-        assert client.post("/api/mode", json={"armed": True},
-                           headers={"X-CSRF-Token": "wrong"}).status_code == 403
-        assert client.post("/api/mode", json={"armed": True},
-                           headers={"X-CSRF-Token": auth.csrf_for_session(cookie)}).status_code == 200
+                           headers={"X-CSRF-Token": auth.csrf_for_session(cookie)}).status_code == 401
 
     def test_tunnelled_requests_were_checked_by_the_portal(self, console):
         client = tunnel_client(console)

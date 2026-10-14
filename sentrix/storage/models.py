@@ -218,6 +218,9 @@ class LinkOutboxRecord(Base):
     """
 
     __tablename__ = "link_outbox"
+    #: AUTOINCREMENT on new databases: a seq is never reused, even after the
+    #: newest row is pruned (existing databases keep link_store's guard).
+    __table_args__ = {"sqlite_autoincrement": True}
 
     seq = Column(Integer, primary_key=True, autoincrement=True)
     kind = Column(String(32), index=True)                     # docs/7 §5.5

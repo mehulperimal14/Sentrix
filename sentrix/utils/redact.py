@@ -12,6 +12,7 @@ Stdlib only, so the Portal can import it too.
 from __future__ import annotations
 
 import re
+from typing import Any
 
 #: ``scheme://user[:password]@`` — the userinfo part of any URL in a string.
 _USERINFO = re.compile(r"(?P<scheme>[a-zA-Z][a-zA-Z0-9+.\-]*://)(?P<userinfo>[^/@\s]+)@")
@@ -70,4 +71,19 @@ def mask_recipient(address: str | None) -> str:
     return mask_phone(text)
 
 
-__all__ = ["redact_url", "mask_phone", "mask_email", "mask_recipient", "MASK"]
+def redact_tree(value: Any) -> Any:
+    """``value`` with credentials removed from every string in it (camera
+    URLs such as ``rtsp://user:pw@host``, secret query values), recursively
+    through dicts, lists and tuples. Applied to every console JSON output and
+    to the live state payload (LC websocket and the link's state messages;
+    docs/7 §12)."""
+    if isinstance(value, str):
+        return redact_url(value) if "://" in value or "=" in value else value
+    if isinstance(value, dict):
+        return {key: redact_tree(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [redact_tree(item) for item in value]
+    return value
+
+
+__all__ = ["redact_url", "redact_tree", "mask_phone", "mask_email", "mask_recipient", "MASK"]

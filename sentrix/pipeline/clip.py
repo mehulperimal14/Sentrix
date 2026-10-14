@@ -93,9 +93,9 @@ try:
 except ImportError:                                    # pragma: no cover
     cv2 = None                                         # type: ignore[assignment]
 
-#: Clip-mode tunables that ``ClipConfig`` (docs/7 §3.4) does not carry yet.
-#: Read through :func:`option`, so a config field of the same name takes over
-#: without a code change (INTEGRATION_NOTES_clip.md).
+#: Clip-mode engine tunables and their reasons. ``ClipConfig`` (docs/7 §3.4)
+#: carries the same fields since integration; :func:`option` reads the field
+#: of a config object and falls back to these for a partial one (tests).
 DEFAULTS: dict[str, float] = {
     #: Frames per second kept in the ring (the Pi's lores analysis stream).
     "buffer_fps": 15.0,
@@ -1286,7 +1286,9 @@ class ClipRunner:
             if isinstance(policy, ClipPolicy):
                 policy.evidence_span = span
             try:
-                out = pipeline.decide(frame, features, now, label, started=started)
+                extra = {"mode": kind, "clip": scores.seq if scores is not None else None}
+                out = pipeline.decide(frame, features, now, label, started=started,
+                                      extra=extra)
             finally:
                 if isinstance(policy, ClipPolicy):
                     policy.evidence_span = 0.0
@@ -1422,8 +1424,16 @@ class ClipStrategy:
         with self._fast_cond:
             self._fast_cond.notify_all()
 
+    def _on_audio(self, samples: np.ndarray, end_at: float) -> None:
+        self.runner.buffer.add_audio(samples, end_at)
+
     def run(self, stop: threading.Event) -> None:
         fast = None
+        audio = getattr(self.pipeline, "audio", None)
+        listen = getattr(audio, "add_sample_listener", None)
+        if callable(listen):
+            # S5 then classifies the clip's own window, not the engine's.
+            listen(self._on_audio)
         if self.runner.fast_lane is not None:
             fast = threading.Thread(target=self._fast_loop, args=(stop,), daemon=True,
                                     name="sentrix-fastlane")
@@ -1443,6 +1453,9 @@ class ClipStrategy:
                 self.pipeline.note_inference(end)
                 state.update(clip=self.runner.status())
         finally:
+            unlisten = getattr(audio, "remove_sample_listener", None)
+            if callable(unlisten):
+                unlisten(self._on_audio)
             self.wake()
             if fast is not None:
                 fast.join(timeout=5.0)

@@ -226,48 +226,95 @@ def _iso_utc(value: datetime | None) -> str | None:
     return (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).isoformat()
 
 
-def recent_incidents(limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
-    """Newest first. ``limit`` is capped at 500; page with ``offset``."""
+def _incident_dict(r: IncidentRecord) -> dict[str, Any]:
+    return {
+        "id": r.id,
+        "started_at": str(r.started_at),
+        # Stored as naive UTC; the page renders it in local time.
+        "started_iso": (r.started_at.replace(tzinfo=timezone.utc).isoformat()
+                        if r.started_at else None),
+        "duration_seconds": r.duration_seconds,
+        "peak_level": r.peak_level,
+        "peak_tci": r.peak_tci,
+        "incident_type": r.incident_type,
+        "reason": r.reason,
+        "frames": r.frames,
+        "evidence_count": r.evidence_count,
+        "evidence_bundle": r.evidence_bundle,
+        "authorized": r.authorized,
+        "verdict": r.verdict,
+        "verdict_note": r.verdict_note,
+        "verdict_by": r.verdict_by,
+        "verdict_at": _iso_utc(r.verdict_at),
+        "request_id": r.request_id,
+        "ended_at": str(r.ended_at) if r.ended_at else None,
+        "session_id": r.session_id,
+        "trigger": json.loads(r.trigger_json) if r.trigger_json else None,
+        # Legacy aliases for the existing events.html template.
+        "created_at": str(r.started_at),
+        "level": r.peak_level,
+        "tci": r.peak_tci,
+        "camera_id": r.camera_id,
+        "status": _STATUS_NAMES.get(r.peak_level, "UNKNOWN"),
+        "snapshot_path": r.snapshot_path,
+    }
+
+
+def _incident_query(session, *, incident_type: str | None = None,
+                    min_level: int | None = None, verdict: str | None = None,
+                    since: datetime | None = None, until: datetime | None = None):
+    """Incidents matching every given filter. ``verdict`` TRUE / FALSE, or
+    NONE for unreviewed; ``since`` / ``until`` are naive UTC (``until``
+    exclusive), compared with ``started_at``."""
+    query = session.query(IncidentRecord)
+    if incident_type:
+        query = query.filter(IncidentRecord.incident_type == incident_type)
+    if min_level is not None:
+        query = query.filter(IncidentRecord.peak_level >= int(min_level))
+    if verdict == "NONE":
+        query = query.filter(IncidentRecord.verdict.is_(None))
+    elif verdict:
+        query = query.filter(IncidentRecord.verdict == verdict)
+    if since is not None:
+        query = query.filter(IncidentRecord.started_at >= since)
+    if until is not None:
+        query = query.filter(IncidentRecord.started_at < until)
+    return query
+
+
+def recent_incidents(limit: int = 100, offset: int = 0, *,
+                     incident_type: str | None = None, min_level: int | None = None,
+                     verdict: str | None = None, since: datetime | None = None,
+                     until: datetime | None = None) -> list[dict[str, Any]]:
+    """Newest first. ``limit`` is capped at 500; page with ``offset``;
+    optional filters as in :func:`count_incidents`."""
     limit = max(1, min(int(limit), 500))
     try:
         with session_scope() as session:
-            rows = (session.query(IncidentRecord)
+            rows = (_incident_query(session, incident_type=incident_type,
+                                    min_level=min_level, verdict=verdict,
+                                    since=since, until=until)
                     .order_by(IncidentRecord.started_at.desc())
                     .offset(max(0, int(offset))).limit(limit).all())
-            return [{
-                "id": r.id,
-                "started_at": str(r.started_at),
-                # Stored as naive UTC; the page renders it in local time.
-                "started_iso": (r.started_at.replace(tzinfo=timezone.utc).isoformat()
-                                if r.started_at else None),
-                "duration_seconds": r.duration_seconds,
-                "peak_level": r.peak_level,
-                "peak_tci": r.peak_tci,
-                "incident_type": r.incident_type,
-                "reason": r.reason,
-                "frames": r.frames,
-                "evidence_count": r.evidence_count,
-                "evidence_bundle": r.evidence_bundle,
-                "authorized": r.authorized,
-                "verdict": r.verdict,
-                "verdict_note": r.verdict_note,
-                "verdict_by": r.verdict_by,
-                "verdict_at": _iso_utc(r.verdict_at),
-                "request_id": r.request_id,
-                "ended_at": str(r.ended_at) if r.ended_at else None,
-                "session_id": r.session_id,
-                "trigger": json.loads(r.trigger_json) if r.trigger_json else None,
-                # Legacy aliases for the existing events.html template.
-                "created_at": str(r.started_at),
-                "level": r.peak_level,
-                "tci": r.peak_tci,
-                "camera_id": r.camera_id,
-                "status": _STATUS_NAMES.get(r.peak_level, "UNKNOWN"),
-                "snapshot_path": r.snapshot_path,
-            } for r in rows]
+            return [_incident_dict(r) for r in rows]
     except Exception as exc:
         log.error("recent_incidents failed: %s", exc)
         return []
+
+
+def count_incidents(*, incident_type: str | None = None, min_level: int | None = None,
+                    verdict: str | None = None, since: datetime | None = None,
+                    until: datetime | None = None) -> int:
+    """How many incidents match (``verdict`` TRUE / FALSE / NONE; ``since`` /
+    ``until`` naive UTC, ``until`` exclusive)."""
+    try:
+        with session_scope() as session:
+            return int(_incident_query(session, incident_type=incident_type,
+                                       min_level=min_level, verdict=verdict,
+                                       since=since, until=until).count())
+    except Exception as exc:
+        log.error("count_incidents failed: %s", exc)
+        return 0
 
 
 def set_verdict(incident_id: str, verdict: str, note: str | None = None, *,

@@ -138,7 +138,10 @@ def test_claim_tunnel_relays_sos_desk_end_to_end(world):
     assert page.status_code == 200, page.text[:300]
     for dom_id in ("incident-badge", "gauge-svg", "level-badge", "live-feed"):
         assert f'id="{dom_id}"' in page.text
-    assert "x-frame-options" not in page.headers, "the console's own headers pass through"
+    # The console's own hardening headers pass through the tunnel (its CSP
+    # carries the nonce of the scripts in this very page).
+    assert page.headers["x-frame-options"] == "DENY"
+    assert "nonce-" in page.headers["content-security-policy"]
     who = browser.get(f"/d/{device_id}/api/test-whoami").json()
     assert who == {"role": "owner", "actor": f"portal:{seeded.owner_id}", "csrf": owner_csrf,
                    "base": f"/d/{device_id}", "cookies": [], "forwarded_for": None}

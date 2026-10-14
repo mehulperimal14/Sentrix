@@ -733,11 +733,32 @@ class NotifyWorker:
             self.telegram_state = f"webhook not registered: {exc}"
             log.error("telegram: %s", self.telegram_state)
 
+    def sos_feedback(self, item: OutboxItem) -> None:
+        """Delivery feedback for SOS messages (T-LINK's contract): every
+        status change of an ``sos.*`` message goes to
+        ``services.sos.notification_status`` (online: ``sos.update
+        notification`` to the device; offline: the cloud chain)."""
+        message = item.message
+        if not message.request_id or not str(message.template).startswith("sos."):
+            return
+        from sentrix_portal.services import sos
+        status = getattr(item, "status", None)
+        status = getattr(status, "value", status)
+        try:
+            with self.app.state.db.session() as db:
+                sos.notification_status(db, request_id=message.request_id,
+                                        channel=item.recipient.channel,
+                                        recipient_ref=item.recipient.ref, step=message.step,
+                                        status=str(status), error=item.error)
+        except Exception as exc:                # feedback never stops delivery
+            log.error("notify: SOS delivery feedback failed: %s", exc)
+
     def start(self) -> None:
         self._loop = asyncio.get_running_loop()
         self._wake = asyncio.Event()
+        add_listener(self.sos_feedback)
         self._tasks.append(self._loop.create_task(self._deliver_loop()))
-        mode = os.getenv("SENTRIX_TELEGRAM_MODE", "polling").strip().lower() or "polling"
+        mode = (getattr(self.app.state.settings, "telegram_mode", "") or "polling").lower()
         if not telegram.bot_token():
             self.telegram_state = "off (TELEGRAM_BOT_TOKEN not set)"
         elif mode == "webhook":
@@ -752,6 +773,7 @@ class NotifyWorker:
     async def stop(self) -> None:
         global _worker
         self._stopping = True
+        remove_listener(self.sos_feedback)
         if self._wake is not None:
             self._wake.set()
         for task in self._tasks:

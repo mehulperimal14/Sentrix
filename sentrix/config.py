@@ -48,6 +48,12 @@ def _env_str(name: str, default: str) -> str:
     return os.getenv(name, "").strip() or default
 
 
+def _env_pin(name: str) -> int | None:
+    """An optional BCM GPIO number (0-27); unset or invalid -> None."""
+    pin = _env_int(name, -1)
+    return pin if 0 <= pin <= 27 else None
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Pipeline timing
 # ──────────────────────────────────────────────────────────────────────────────
@@ -693,6 +699,18 @@ class GpioConfig:
     #: PC817 output is pulled low while mains power is present.
     mains_present_low: bool = True
     input_bounce_seconds: float = 0.05
+    #: One relay on-period never exceeds this, whatever asked for it (hearing
+    #: note: ~90 s daily dose at 110 dB at the rated distance). Alarms use 5 s.
+    siren_max_on_seconds: float = _env_float("SENTRIX_SIREN_MAX_ON_SECONDS", 90.0)
+    #: GPIO of the siren arming key's second contact (closed to GND = armed);
+    #: None = no input, ``siren_armed`` states the key position.
+    siren_arm_pin: int | None = _env_pin("SENTRIX_SIREN_ARM_PIN")
+    #: Arming state without that input; False refuses siren tests (409).
+    siren_armed: bool = _env_bool("SENTRIX_SIREN_ARMED", True)
+    #: Enclosure lid switch (closed to GND = shut); None = not fitted.
+    tamper_pin: int | None = _env_pin("SENTRIX_TAMPER_PIN")
+    #: Local buzzer chirps on level rises (HARDWARE.md §6).
+    buzzer_enabled: bool = _env_bool("SENTRIX_BUZZER_ENABLED", True)
 
 
 @dataclass(frozen=True)
@@ -721,6 +739,29 @@ class ClipConfig:
     #: PolicyConfig.min_escalate_observations). The clip strategy builds its
     #: LevelPolicy with this.
     min_escalate_observations: int = 1
+    # Engine tunables (``sentrix.pipeline.clip.option``; reasons in clip.DEFAULTS).
+    #: Frames per second kept in the ring (the Pi's lores analysis stream).
+    buffer_fps: float = 15.0
+    #: Frames wider than this are downscaled on capture (640x480 lores).
+    analysis_width: int = 640
+    #: New scene-classifier inferences per clip (S2).
+    scene_keyframes: int = 2
+    #: S0: clip motion peak that opens the cascade (a still, empty room gate).
+    gate_motion_floor: float = 0.015
+    #: S0 stays open this long after a clip saw a person or a fire candidate.
+    gate_hold_seconds: float = 10.0
+    #: A full cascade runs at least this often, whatever the gate says.
+    idle_refresh_seconds: float = 10.0
+    #: S3 (identity) at most this often (a new track is checked at once).
+    identity_interval_seconds: float = 2.0
+    #: S4 runs the action model only above this clip motion peak.
+    action_motion_floor: float = 0.10
+    #: Share of bright flame-coloured pixels that makes a fire candidate.
+    flame_fraction: float = 0.0005
+    #: Frames per second sealed into an evidence clip bundle.
+    evidence_fps: float = 5.0
+    #: Seconds sealed after an evidence capture (HARDWARE.md T1: 4-8 s).
+    post_roll_seconds: float = 8.0
 
 
 @dataclass(frozen=True)
@@ -733,6 +774,12 @@ class NodeConfig:
     interval_seconds: float = 5.0
     temp_warn_c: float = 80.0
     temp_critical_c: float = 85.0
+    #: Room sensors through the kernel IIO drivers (off unless fitted).
+    bme280: bool = _env_bool("SENTRIX_SENSOR_BME280", False)
+    dht22: bool = _env_bool("SENTRIX_SENSOR_DHT22", False)
+    #: Picamera2 streams: main (evidence/preview) and lores (analysis).
+    picamera_main: str = _env_str("SENTRIX_PICAMERA_MAIN", "1280x720")
+    picamera_lores: str = _env_str("SENTRIX_PICAMERA_LORES", "640x480")
 
 
 @dataclass(frozen=True)

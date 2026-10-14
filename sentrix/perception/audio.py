@@ -158,6 +158,8 @@ class AudioEngine:
         self._front_end = "logmel"
         self._meta: dict = {}
         self._ring = np.zeros(0, dtype=np.float32)
+        #: ``callback(samples, end_at)`` per captured hop (the clip buffer).
+        self._sample_listeners: list = []
 
         self._load()
         self._start_capture()
@@ -247,6 +249,7 @@ class AudioEngine:
                 if self._stop.is_set():
                     break
                 samples = np.nan_to_num(chunk.flatten().astype(np.float32))
+                self._notify_samples(samples, time.monotonic())
 
                 # Ring buffer holds exactly one analysis window.
                 self._ring = np.concatenate([self._ring, samples])[-window_samples:]
@@ -347,7 +350,38 @@ class AudioEngine:
             log.debug("audio inference failed: %s", exc)
             return AudioResult(0.0, "normal_ambient", 0.0)
 
+    def _notify_samples(self, samples: np.ndarray, end_at: float) -> None:
+        for callback in list(self._sample_listeners):
+            try:
+                callback(samples, end_at)
+            except Exception as exc:          # a listener never stops capture
+                log.debug("audio sample listener failed: %s", exc)
+
     # ── public API ────────────────────────────────────────────────────────────
+    def classify_window(self, samples: np.ndarray, rms: float | None = None) -> AudioResult:
+        """Classify one window of mono samples at ``audio_sample_rate`` (the
+        clip engine's own 4 s window). Below the RMS floor the room is quiet
+        and no inference runs, as in the live loop."""
+        samples = np.nan_to_num(np.asarray(samples, dtype=np.float32).reshape(-1))
+        if rms is None:
+            rms = float(np.sqrt(np.mean(samples ** 2))) if len(samples) else 0.0
+        if rms < self.cfg.audio_rms_floor:
+            return AudioResult(0.0, "normal_ambient", 1.0)
+        return self._classify(samples, rms)
+
+    def add_sample_listener(self, callback) -> None:
+        """``callback(samples, end_at)`` for every captured hop of microphone
+        samples (``end_at`` = ``time.monotonic()`` of the last sample, the
+        pipeline's clock). Called on the audio thread; must be cheap."""
+        if callback not in self._sample_listeners:
+            self._sample_listeners.append(callback)
+
+    def remove_sample_listener(self, callback) -> None:
+        try:
+            self._sample_listeners.remove(callback)
+        except ValueError:
+            pass
+
     def result(self) -> AudioResult:
         with self._lock:
             return AudioResult(self._result.score, self._result.label,

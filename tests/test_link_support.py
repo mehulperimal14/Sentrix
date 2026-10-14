@@ -15,7 +15,7 @@ in-memory pipe or loopback sockets (the conftest socket guard is on).
   code: T-SOS owns the real engine.
 * :func:`seed_portal`: a household with owner, member, Desk operator,
   contacts, consents and a provisioned device; :func:`login` makes sessions.
-* :func:`lc_app`: the Local Console app with a stand-in for T-WEB's hardening
+* :func:`lc_app`: the Local Console app with T-WEB's real hardening
   (verifies the tunnel bridge and stores the identity, as the contract says).
 """
 
@@ -217,8 +217,9 @@ class FakePipeline:
 
 
 def fake_hardening_install(app) -> None:
-    """What T-WEB's hardening does for the tunnel (docs/7 §5.8): verify the
-    bridge headers and store the identity on the scope; strip them otherwise."""
+    """A minimal stand-in for T-WEB's hardening (docs/7 §5.8): verify the
+    bridge headers and store the identity on the scope. Kept for tests that
+    want the console without CSP/CSRF; ``lc_app`` uses the real hardening."""
     from sentrix.link import tunnel_auth
 
     @app.middleware("http")
@@ -231,12 +232,11 @@ def fake_hardening_install(app) -> None:
 
 def lc_app(monkeypatch):
     """A fresh Local Console app (no lifespan: no pipeline, no camera) with
-    the stand-in hardening and two probe routes."""
+    the real hardening (``sentrix.web.hardening``) and two probe routes."""
     from fastapi.responses import JSONResponse, RedirectResponse
     from sentrix.link import tunnel_auth
-    from sentrix.web import auth, hardening
+    from sentrix.web import auth
 
-    monkeypatch.setattr(hardening, "install", fake_hardening_install)
     from sentrix.app import create_app
     app = create_app()
 

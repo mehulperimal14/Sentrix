@@ -28,6 +28,16 @@ _stop = threading.Event()
 _thread: threading.Thread | None = None
 
 
+def live_loop_alive() -> bool:
+    """False only when the live loop thread has died while the app was not
+    stopping (the T-HW watchdog stops feeding systemd then). Not started yet,
+    or stopping: True."""
+    thread = _thread
+    if thread is None or _stop.is_set():
+        return True
+    return thread.is_alive()
+
+
 def _loop() -> None:
     """Live loop: capture and preview on this thread, inference on its own.
 
@@ -171,10 +181,29 @@ def create_app() -> FastAPI:
 app = create_app()
 
 
-def main() -> None:
+_EPILOG = """Starting the server opens the camera (CAMERA_SOURCES) and, unless
+SENTRIX_AUDIO=0, the microphone. Every background service is off unless its
+flag is set: SENTRIX_SOS_ENABLED, SENTRIX_LINK_ENABLED,
+SENTRIX_CHANNELS_ENABLED, SENTRIX_GPIO_ENABLED, SENTRIX_NODE_ENABLED. Test mode
+(SENTRIX_TEST_MODE) is on by default; real sending needs SENTRIX_LIVE_ALERTS=1
+plus the channel's own switch. .env.example documents every setting."""
+
+
+def main(argv: list[str] | None = None) -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="python -m sentrix", description="SENTRIX device: the Local Console "
+        "(dashboard) and the live pipeline.", epilog=_EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--host", default=os.getenv("SENTRIX_HOST", "127.0.0.1"),
+                        help="bind address (SENTRIX_HOST, default 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=int(os.getenv("SENTRIX_PORT", "8000")),
+                        help="port (SENTRIX_PORT, default 8000)")
+    args = parser.parse_args(argv)
+
     import uvicorn
-    uvicorn.run(app, host=os.getenv("SENTRIX_HOST", "127.0.0.1"),
-                port=int(os.getenv("SENTRIX_PORT", "8000")), log_level="warning")
+    uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
 
 
 if __name__ == "__main__":

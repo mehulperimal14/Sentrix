@@ -9,7 +9,8 @@ below is in place before anything imports ``sentrix``:
   alerts and every channel switch off, no allowlist, no provider keys). A
   developer's ``.env`` with live Twilio keys therefore reaches no test.
 * **Every service is off** and runtime files go to a temporary directory
-  (Portal data dir and database, device identity dir).
+  (the device ``var/`` tree via ``SENTRIX_VAR_DIR``, Portal data dir and
+  database, device identity dir).
 * **No network.** A socket guard allows loopback only; anything else raises
   :class:`NetworkBlocked` (an ``OSError``) and is recorded in
   ``BLOCKED_CONNECTIONS``.
@@ -48,7 +49,11 @@ _FORCED_ENV = {
     "TWILIO_ACCOUNT_SID": "", "TWILIO_AUTH_TOKEN": "", "TWILIO_PHONE_NUMBER": "",
     "TELEGRAM_BOT_TOKEN": "", "TELEGRAM_WEBHOOK_SECRET": "", "BREVO_API_KEY": "",
     "RESEND_API_KEY": "", "SENTRIX_PORTAL_URL": "",
-    # runtime files of the new components
+    # runtime files: the whole device var/ tree (database, events, evidence,
+    # snapshots, faces, calibration, mode) in the session dir, never var/
+    "SENTRIX_VAR_DIR": str(_SESSION_DIR / "var"),
+    # no systemd notify socket: a lifespan test never builds the watchdog
+    "NOTIFY_SOCKET": "", "WATCHDOG_USEC": "",
     "PORTAL_DATA_DIR": str(_SESSION_DIR / "portal"),
     "PORTAL_DATABASE_URL": f"sqlite:///{(_SESSION_DIR / 'portal' / 'portal.db').as_posix()}",
     "SENTRIX_DEVICE_IDENTITY_DIR": str(_SESSION_DIR / "identity"),
@@ -151,7 +156,11 @@ def _sentrix_isolation(tmp_path, monkeypatch):
     if "sentrix.link.profile" in sys.modules:
         sys.modules["sentrix.link.profile"].forget_cache()
     if "sentrix.io.actuators" in sys.modules:
-        sys.modules["sentrix.io.actuators"]._reset_siren_test_limiter()
+        actuators = sys.modules["sentrix.io.actuators"]
+        actuators._reset_siren_test_limiter()
+        actuators.clear_arming_source()
+    if "sentrix.io.gpio" in sys.modules:
+        sys.modules["sentrix.io.gpio"]._reset_shared_pin_factory()
 
 
 # ── shared fixtures ───────────────────────────────────────────────────────────

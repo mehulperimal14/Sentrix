@@ -431,7 +431,9 @@ class TestSession:
         rows = client.get("/api/link/remote-audit?limit=5").json()["rows"]
         assert isinstance(rows, list)
         count = len(rig.network.pipes)
-        assert client.post("/api/link/reconnect").json() == {"status": "reconnecting"}
+        from sentrix.web import auth
+        csrf = {"X-CSRF-Token": auth.csrf_for_session(generate_token("pw"))}
+        assert client.post("/api/link/reconnect", headers=csrf).json() == {"status": "reconnecting"}
         wait_for(lambda: len(rig.network.pipes) > count and online(rig), what="redial")
         from sentrix.link import tunnel_auth
         tunnelled = TestClient(rig.ctx.extras["app"])

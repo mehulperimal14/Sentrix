@@ -7,6 +7,10 @@
   {# Session CSRF token: page scripts send it back as X-CSRF-Token (docs/7 §11). #}
   {% if principal %}<meta name="csrf-token" content="{{ principal.csrf_token }}">{% endif %}
   <link rel="stylesheet" href="/static/css/portal.css">
+  {# The global "Do you need assistance?" banner (T-LINK) on every page an
+     owner or member sees. #}
+  {% set sos_banner = principal and principal.role in ('owner', 'member') %}
+  {% if sos_banner %}<link rel="stylesheet" href="/static/sos/sos.css">{% endif %}
   {% block extra_head %}{% endblock %}
 </head>
 <body data-base="" data-active="{{ active_page | default('') }}">
@@ -39,7 +43,7 @@
     </div>
     <form class="nav-logout" method="post" action="/logout">
       <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
-      <span class="nav-user">{{ principal.display_name }}</span>
+      <a class="nav-user" href="/account">{{ principal.display_name }}</a>
       <button type="submit" class="btn btn-ghost">Sign out</button>
     </form>
     {% endif %}
@@ -53,5 +57,6 @@
   {# External files only, each with the request's CSP nonce:
      <script src="/static/<area>/x.js" nonce="{{ csp_nonce }}"></script> #}
   {% block scripts %}{% endblock %}
+  {% if sos_banner %}<script src="/static/sos/sos.js" nonce="{{ csp_nonce }}"></script>{% endif %}
 </body>
 </html>

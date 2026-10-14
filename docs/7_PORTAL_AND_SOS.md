@@ -1441,7 +1441,9 @@ Foundation: `camera_source` redacted; `armed` from the runtime mode;
 `services` (per-service status + health), `send_guard`, `test_mode`, `mode`.
 Tracks add their fields through their service's `health()` (they appear under
 `services.<name>`), not by editing the route. The route body is
-`routes.health_payload()` (also the link's `hello.health`).
+`routes.health_payload()` (also the link's `hello.health`). Integration added
+`identity_model` (`buffalo_l` / `buffalo_s`) and `scene_runtime` (torch /
+onnx / ncnn).
 
 ### 9.4 Live state blocks *(foundation: `sentrix/pipeline/state.py`)*
 
@@ -1451,12 +1453,14 @@ Single writer per block:
 |---|---|---|
 | `sos` | T-SOS (`state.update(sos=service.status())`) | `SOS_IDLE` (`active: false`, …); owner view only, never `duress` |
 | `link` | T-LINK | `LINK_IDLE` (`state: "disabled"`, `connected: false`, …) |
-| `node` | T-HW | `NODE_IDLE` (all None, `profile: "laptop"`) |
+| `node` | T-HW (`io.node.merge_node_block`, the single writer) | `NODE_IDLE` (all None, `profile: "laptop"`, `telemetry: false`; also `temp_state`, `throttled_raw`, `throttle_flags`, `under_voltage_occurred`, `power_w`, `environment`, `tamper`, `platform`) |
+| `clip` | T-CLIP (`ClipStrategy`: `state.update(clip=runner.status())` after every clip) | `CLIP_IDLE` (`mode: "tick"`, `clips: 0`, `dropped: 0`, `compute_ms`, `budget_ms`, `runtime`, `threads`, `fast_lane`, `last`) |
 | `channels` | T-CH (the lifespan while no router runs) | `CHANNELS_IDLE` (`outbound_ready`, `legacy_twilio`, `warn`, `modem: null`) |
 | `mode` | `sentrix.mode.set_armed` | `MODE_IDLE` |
 | `remote_viewers` | T-LINK via `state.set_remote_viewers(n)` | 0 (HUD shows "REMOTE VIEW: n" when > 0) |
 | `test_mode` | foundation | `settings.test_mode` |
-| `dispatch_package` (legacy) | T-SOS until T-WEB moves the panel to `sos` | null |
+| `dispatch_package` (legacy) | T-SOS (owner view of the open request's package while SOS is on) | null |
+| `cloud_online` / `cloud_available` (legacy aliases) | derived from `link.connected` / `link.enabled` | false |
 
 `sos` fields: active, request_id, short_id, state, label, incident_id,
 incident_type, level, urgency, evidence_state, created_at, expires_at,
@@ -1464,8 +1468,13 @@ remaining_s, seen, repeat, authority, recommended_authority, sos_text,
 snapshot, actions (allowed buttons, names from `sentrix.sos.SOS_ACTIONS`:
 `approve`, `call_112`, `checking`, `decline`, `safe`, `help_now`), last (the
 most recent closed request: id, state, label, at), desk_number (shown instead
-of 112 in test mode: `profile.desk_number()`). `state.level_history()` returns
-the last 50 committed level changes.
+of 112 in test mode: `profile.desk_number()`); T-SOS adds `flags`
+(owner-visible: `repeat`, `undelivered`, `resident_safe`, `unacknowledged`,
+`simulated`, `camera_degraded`), `call_number` (112, or the Desk number in
+test mode), `test_mode`, and `last.actions` (`["help_now"]` for EXPIRED /
+DECLINED / CANCELLED). `state.level_history()` returns the last 50 committed
+level changes. `SystemState.ws_payload()` (LC websocket and the link's state
+messages) is redacted with `sentrix.utils.redact.redact_tree`.
 
 **Paths in state blocks are base-relative** (`"media/snapshot/<name>"`, no
 leading slash): one websocket payload reaches LC and tunnel viewers alike, so
@@ -1595,7 +1604,8 @@ Device JSONL audit rows (`EventLog.audit(event, **detail)`): existing
 `dispatch_sent`, `mode_set`, `login`, `login_failed`, `remote_access`,
 `siren_test` *(foundation: `actuators.siren_test`)*, `incident_closed`
 *(foundation: `request_close_incident`)*, `profile_applied`, `link_connected`,
-`link_lost`, `channel_suppressed`. `mode_set` *(foundation: `mode.set_armed`)*.
+`link_lost`, `channel_suppressed`, `node_input` (input, value) and
+`node_alert` (kind, detail) *(T-HW)*. `mode_set` *(foundation: `mode.set_armed`)*.
 Every audit row also reaches the `audit` listeners (§6.3). Remote requests and
 commands also go to `remote_audit`.
 
@@ -1610,7 +1620,17 @@ Portal `audit_log` events: `auth.login`, `auth.login_failed`, `auth.logout`,
 `desk.acknowledged`, `desk.resolved`, `contact_page.opened`,
 `action_link.used`, `telegram.linked`, `telegram.callback`, `verdict.set`,
 `mode.set`, `siren.test`, `privacy.export`, `privacy.erasure_requested`,
-`security.admin_then_new_ip`.
+`security.admin_then_new_ip`; added by T-ACCT: `auth.activation_failed`,
+`auth.totp_failed`, `auth.recovery_code_used`, `auth.recovery_codes_regenerated`,
+`auth.step_up_failed`, `auth.email_verified`, `account.updated`,
+`account.phone_code_sent`, `account.phone_verified`, `admin.staff_created`,
+`admin.staff_<disable|enable|reset_2fa|resend>`, `admin.customer_deactivated`,
+`admin.customer_reactivated`, `admin.letter_printed`, `admin.claim_code_reissued`,
+`admin.device_retired`, `device.unpaired_by_owner`, `contact.updated`,
+`contact.removed`, `member.added`, `member.removed`, `profile.pins_changed`,
+`onboarding.completed`, `telegram.unlinked`, `privacy.erasure_cancelled`,
+`privacy.erased`, `retention.audit_pruned`; by T-LINK: `device.outbox_reset`,
+`device.node_alert`, `device.tamper`, `desk.note`.
 
 ---
 
@@ -1620,16 +1640,20 @@ Portal `audit_log` events: `auth.login`, `auth.login_failed`, `auth.logout`,
   mode on, `SENTRIX_LIVE_ALERTS=0`, every channel switch `0`, no allowlist,
   provider keys empty (so `load_dotenv` in `sentrix/app.py` cannot bring a
   developer's live `.env` switches or Twilio keys into the session), every
-  service flag off, the Portal data dir and database and the device identity
-  dir in a session temp dir. An **always-on socket guard** allows loopback only
+  service flag off, no systemd `NOTIFY_SOCKET`, and the device `var/` tree
+  (`SENTRIX_VAR_DIR`: database, events, evidence, snapshots, faces,
+  calibration), the Portal data dir and database and the device identity dir
+  in a session temp dir. Before integration a test without `temp_db` opened
+  the developer's `var/sentrix.db`. An **always-on socket guard** allows loopback only
   (`socket.connect`, `getaddrinfo`, and the Windows Proactor's `ConnectEx`);
   blocked attempts are listed at the end of the run.
 * Shared fixtures: `temp_db` (the device database on a temporary file, tables
   created), `portal_app` (`create_app(PortalSettings.for_tests(tmp_path))`),
   `fake_router` (`(router, transports)`: a `FakeTransport` per channel, memory
   outbox, `live_test_policy()`). After every test the listener and service
-  registries, the runtime mode (`MODE_PATH` is per-test), the cached profile
-  and the siren-test limiter are reset. Tracks use these instead of their own
+  registries, the runtime mode (`MODE_PATH` is per-test), the cached profile,
+  the siren-test limiter, the siren arming source and the shared GPIO pin
+  factory are reset. Tracks use these instead of their own
   copies.
 * Never a real alert: transports are `FakeTransport`; the guard refuses by
   default.
@@ -1676,6 +1700,166 @@ Portal `audit_log` events: `auth.login`, `auth.login_failed`, `auth.logout`,
    (≤ 1 false prompt per 3 h of normal footage; unlocks
    `contacts_for_single_source_l3`).
 
+### 15.1 Contract amendments at integration (from the tracks' hand-off notes)
+
+The eight tracks were merged onto `sentrix/portal` in the order above (T-HW,
+T-CLIP, T-CH, T-SOS, T-WEB, T-ACCT, T-LINK, then T-MODEL); no file was edited
+by two tracks. Their `INTEGRATION_NOTES_<track>.md` were applied and removed;
+what they changed in this contract is recorded here (the code is the
+reference), and what was not applied is in §16.
+
+**Configuration (§3).**
+* `settings.gpio` gained `siren_max_on_seconds` (90, `SENTRIX_SIREN_MAX_ON_SECONDS`),
+  `siren_arm_pin` (None, `SENTRIX_SIREN_ARM_PIN`), `siren_armed` (True,
+  `SENTRIX_SIREN_ARMED`; False refuses siren tests), `tamper_pin` (None,
+  `SENTRIX_TAMPER_PIN`), `buzzer_enabled` (True); `settings.node` gained
+  `bme280`, `dht22` (False), `picamera_main` "1280x720", `picamera_lores`
+  "640x480". `sentrix.io.tunables` reads the environment at call time first,
+  then the field.
+* `settings.clip` gained the engine tunables `buffer_fps` 15, `analysis_width`
+  640, `scene_keyframes` 2, `gate_motion_floor` 0.015, `gate_hold_seconds` 10,
+  `idle_refresh_seconds` 10, `identity_interval_seconds` 2,
+  `action_motion_floor` 0.10, `flame_fraction` 0.0005, `evidence_fps` 5,
+  `post_roll_seconds` 8 (`clip.option(name)` reads them).
+  `SENTRIX_SCENE_RUNTIME` overrides `SENTRIX_RUNTIME` for the scene classifier
+  only (read by `perception/scene.py` at load time).
+* `PortalSettings` gained `telegram_mode` (`SENTRIX_TELEGRAM_MODE`, polling |
+  webhook) and `grievance_contact` (`PORTAL_GRIEVANCE_CONTACT`). The Portal
+  still reads `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`,
+  `SENTRIX_EMAIL_PROVIDER`, `BREVO_API_KEY` / `RESEND_API_KEY` and
+  `SENTRIX_EMAIL_FROM` from its environment at use time; the webhook is
+  `<PORTAL_BASE_URL>/hooks/telegram`, https only.
+* `SENTRIX_VAR_DIR` moves the device's whole `var/` tree (read at import by
+  `sentrix/paths.py`); the test suite uses it.
+* Login back-off (T-ACCT, §10): per (key, address) 4 free failures, then 30 s
+  doubling to 15 min; per address across keys 20 free; never a lockout. Keys:
+  the lower-cased username, `activate:<username>` / `activate:link`,
+  `stepup:<user id>`, `totp:<user id>`, `phone:<user id>`.
+
+**Portal service seams (§4.2).**
+* `hub.issue_token(db, id)` commits `db` before sending (the device reconnects
+  within milliseconds). `hub.unpair` revokes the token and closes 4003; the
+  caller then sets the device row (owner unpair: ASSIGNED; admin transfer:
+  UNASSIGNED + new claim code; retire: RETIRED; erasure: UNASSIGNED).
+* `notify.enqueue(db, ...)` commits with the caller's transaction (`ON
+  CONFLICT DO NOTHING` on the dedupe key). The notification worker reports
+  every status change of an `sos.*` message to
+  `services.sos.notification_status` (online: `sos.update notification` to the
+  device; offline: the cloud chain).
+* `accounts.render_sos_preview` uses `sentrix.sos.templates.render_preview`
+  (the device's wording: `preview()` with the profile's test mode).
+* Telegram `/start <code>` consumes an `ActionToken(purpose="telegram_link",
+  token_hash=security.token_digest(code))`; buttons carry
+  `callback_data(nonce, approve|checking|acknowledge)` on an `action_link` /
+  `contact_page` token; "False alarm (PIN)" is a URL button. Presses are
+  accepted only from the linked private chat.
+
+**Link protocol (§5).**
+* `hello.outbox.epoch` (ISO `created_at` of the oldest outbox row): a changed
+  epoch, or `tail_seq` below the Portal's watermark, is a factory-reset device;
+  the Portal drops its dedupe rows and resets `last_acked_seq`
+  (`device.outbox_reset`). The same seq with a different payload counts as new.
+* The Portal answers every `heartbeat` with `ack{seqs: [], upto}`; the device
+  treats any Portal message as liveness and drops a connection silent for
+  `offline_after_seconds` (30 s).
+* `welcome.subscriptions.video` is always `null`: the hub sends
+  `video.subscribe` with the viewer's actor right after the welcome (the device
+  checks consent per actor).
+* The tunnel replays the path unchanged (no `root_path`); the base travels in
+  `x-sentrix-base`. The console's own security headers (its CSP with the
+  page's nonce, `X-Frame-Options`) pass through the tunnel unchanged.
+* Relay override while a device is offline: `camera_online=false`,
+  `camera_available=false`, `ai_hz=0`, `video_fps=0`, `link={..., connected:
+  false, state: "offline"}`, `link_online=false`, `device_offline=true`.
+* `device_commands.args` never stores `pin` or `text`; `sms.send` is never
+  queued. Command to SOS service: `sos.respond` -> `respond`, `sos.update` ->
+  `cloud_event`, `sos.sync` -> `sync`, `verdict.set` FALSE -> `false_verdict`,
+  `mode.set` -> `set_mode`, `demo.*` -> `demo_trigger` / `demo_close_incident`.
+* `link_outbox` is created with SQLite AUTOINCREMENT (a seq is never reused);
+  on older databases `link_store.prune` keeps the oldest and newest rows.
+
+**SOS (§7), as T-SOS implemented it.**
+* Armed intrusion reaches the engine through `on_level` (the committed L3 of an
+  `intrusion` incident), not `trigger`: `wants("intrusion", ...)` is False, so
+  a weapon appearing during the 30 s entry delay can still trigger its own
+  request, and a face or PIN disarm leaves nothing claimed. `trigger()` still
+  accepts an intrusion trigger (held the same way).
+* Silent requests (`flags.silent`): the duress PIN at a disarm with nothing
+  open, or on a closed request, opens a request the household never sees
+  (restricted `created` event; owner views answer 404; the LC block ignores
+  it; no incident row; `incident_type: "duress"`). A duress decline also labels
+  the incidents FALSE (the Events page matches a real decline). **M8 dataset
+  builders must drop or relabel incidents of requests whose chain has a
+  restricted `approve` with `detail.duress`.**
+* Owner SMS: T0 when no remote prompt is possible (link down, or a standalone
+  device without owner Telegram/e-mail); every reminder from T+10 min while
+  the prompt is unseen (every reminder while offline); `rise4` / `rise5`
+  always (the legacy L4 SMS and, as a `modem_call`, the L5 call fold in there).
+  Contacts and the Desk get modem SMS from the device only while the link is
+  down or none is configured; online, the Portal pages them.
+* Repeat throttle: at most one re-prompt per `repeat_window_seconds` after a
+  decline of the same incident type; a corroborated L4/L5 is never suppressed.
+* `demo.close_incident` (test mode) also resets the request: prompting ->
+  CANCELLED (`reason: test_reset`), DISPATCHED / ACKNOWLEDGED -> CLOSED
+  (`no_action_needed`, no verdict). APPROVED and FAILED never close by
+  themselves (only a delivery, the Desk or a contact moves them on).
+* Store additions (`storage/requests.py`): keyword-only `at` on
+  `create_request` / `try_transition` / `transition`; `create_request(...,
+  snapshot_path, evidence_bundle, evidence_hash, urgency, peak_level,
+  restricted)`; `force_transition`; `open_requests()`;
+  `requests_for_incident()`; `request_dict` carries `repage_count`.
+* `sos.snapshot` is published once per request when the frozen policy has the
+  `sos_snapshot` consent and the link is enabled (at most 640 px, 256 KiB).
+
+**Channels (§8.2).** The device `channels` service (a `DeviceChannels`) adds
+`cancel(request_id, reason, steps=None)`, `send_now(recipient, message)`,
+`recent(limit, request_id)`, `channels_for("sms" | "call")`, `owner_target()`,
+and `router.notification_payload(item)` (the masked `notification.status`
+payload). Transports may expose `state() -> (available, detail)` and
+`delivers_on_send = True`. `SendResult.retry_after` (Telegram 429) is a floor
+on the next retry. The modem's 30/day cap counts SMS **segments** (`daily_cap:`
+error); numbers outside the profile are SUPPRESSED (`not_allowed_recipient:`).
+`SENTRIX_MODEM_PORT` also accepts `mmcli` / `mmcli:<index>`. Templates and
+step names beyond the fixed list are in the `Message` docstring
+(`sentrix/alerting/channels/base.py`).
+
+**LC endpoints and the pipeline (§9).** `GET /api/node` also returns `siren`,
+`siren_arming`, `siren_test`, `camera`, `services`; `POST /api/node/siren-test`
+answers 409 `conflict` while the siren line is disarmed (`siren_test`'s
+result gained `armed`; `Actuator` gained `armed` and `status()`). `GET
+/api/sos` returns `{current, recent, status}`; `POST /api/sos/demo/trigger
+{incident_type}` (test mode only). `GET /api/channels`, `POST
+/api/channels/test` (device admin); `GET /api/link`, `GET
+/api/link/remote-audit`, `POST /api/link/reconnect` (device admin). The legacy
+`session_token` cookie is no longer a session (it skipped the CSRF header);
+login and logout still delete it. `database.recent_incidents` takes the
+Events filters and `database.count_incidents` counts them. Clip mode: tick rows
+written by a clip decision carry `extra: {"mode": "clip" | "fast_lane",
+"clip": seq}` (`Pipeline.decide(..., extra=)`), `tools/replay_decisions.py`
+refuses clip-mode logs, and the HUD's "AI STALLED" limit is
+`max(stale_overlay_seconds, hop * (1 + budget_fraction))` in clip mode.
+`AudioEngine.classify_window(samples, rms)` and
+`add_sample_listener(callback(samples, end_at))` feed the clip buffer the
+microphone's own samples. The Node page shows the `clip` block.
+
+**Portal endpoints (§11), T-ACCT additions:** `POST /account/step-up`,
+`POST /account/phone`, `POST /account/verify-email` (re-send),
+`/household/audit`, `/privacy/notice`, `POST /privacy/consents`,
+`POST /admin/customers/{id}/resend|status|assign`, `POST /admin/devices`
+(provision), `POST /admin/devices/{id}/assign|transfer|retire`,
+`POST /admin/operators/{id}`. The unauthenticated list is unchanged.
+Vocabulary: token purpose `phone_verify`; household status `active | disabled
+| erasing | closed`; a contact's opt-out is a withdrawn `consents` row.
+`base.html` carries the global SOS banner (`/static/sos/sos.js`) on every
+owner/member page and links the user's name to `/account`.
+
+**Tools.** `python -m sentrix` and `python -m sentrix_portal` take `--help`,
+`--host`, `--port`. `tools/doctor.py --no-camera` never opens a camera, and a
+file or stream `CAMERA_SOURCES` is never probed; a "model runtime" section
+lists the exports for `SENTRIX_RUNTIME` onnx/ncnn. `deploy/pi5/pi.env` sets
+the clip profile (`SENTRIX_PIPELINE_MODE=clip`, `SENTRIX_RUNTIME=onnx`,
+`SENTRIX_FAST_LANE=1`, `SENTRIX_FACE_DET_SIZE=320`).
+
 ---
 
 ## 16. Open questions and contract-review decisions
@@ -1720,13 +1904,37 @@ Contract-review findings answered differently (with the reason):
 
 Still open:
 
-3. Siren relay polarity: roadmap v2 uses an NPN driver (`active_high=True`);
-   HARDWARE.md §6 still says active-low and amber on GPIO6. T-HW must settle
-   both on the bench and update HARDWARE.md.
+3. Siren relay polarity — **settled by T-HW** as active-high (NPN driver,
+   `gpio=17=op,dl`; `SENTRIX_SIREN_ACTIVE_HIGH=0` with `gpio=17=op,dh` for
+   opto boards); HARDWARE.md §6 updated. Still to verify on the bench with an
+   LED in place of the siren (`deploy/pi5/README.md`).
 4. Whether owners may ever log in to the LC directly (currently: no — LC keeps
    `SENTRIX_PASSWORD` only; owners use the Portal or the LC via the tunnel).
 5. The multi-process Pi layout (review blocker) is deferred by the
    single-process decision; revisit if Gate A fails with the link running.
 6. Liveness for the authorised-face disarm (a photograph could clear the entry
    delay): out of scope for the capstone; state it in the report.
+
+Integration requests not applied (with the reason):
+
+7. *`devices.bootstrap_revoked_at` column* (T-LINK). Not added: the Portal has
+   no migration baseline yet (Alembic is a §15 deploy step) and `create_all`
+   does not add columns to an existing `portal.db`. The hub keeps the
+   server-computed `devices.last_hello["token_confirmed"]` flag, which has the
+   same meaning; move it to a column with the Alembic baseline.
+8. *The Portal's own SOS texts from `sentrix/sos/templates.py`* (T-LINK:
+   "switch `services/sos._after_event` once its API exists"). Not switched:
+   the owner prompts the Portal writes use the fixed §7.10 wording in
+   `sentrix_portal/services/sos.py`, and contacts and the Desk get the
+   device's `sos_text_full`; moving every Portal message to the template module
+   touches most of T-LINK's message logic and needs its own tests. The SOS
+   preview already uses the template module.
+9. *Bundled Inter / JetBrains Mono fonts* (T-WEB): needs a download; the CSS
+   falls back to system fonts (CSP `font-src 'self'`).
+10. *`ncnn` / `pnnx` and the `buffalo_s` face pack* (T-CLIP): not installed
+    (each downloads binaries or models); the backends are tested with fakes.
+    `buffalo_s`'s match threshold needs a re-check on enrolled team faces.
+11. *Promoting a slim scene model* (T-MODEL): neither slim head passes its
+    pre-registered bar (LOVO macro-F1 0.229 vs DINOv2 0.440); `models/v5_slim`
+    stays out of `SceneEngine._WEIGHTS` and DINOv2 stays the scene model.
 

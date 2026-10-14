@@ -77,8 +77,12 @@ def temperature_state(temp_c: float | None, warn_c: float, critical_c: float) ->
 # ── liveness for the watchdog ─────────────────────────────────────────────────
 def live_loop_alive() -> bool:
     """False only when the app's live loop thread has died while the app was
-    not stopping (``sentrix/app.py``; read defensively, it is not an API)."""
+    not stopping (``sentrix.app.live_loop_alive``). The app module is never
+    imported from here (it configures logging and loads .env): no app, alive."""
     app_module = sys.modules.get("sentrix.app")
+    probe = getattr(app_module, "live_loop_alive", None)
+    if callable(probe):
+        return bool(probe())
     thread = getattr(app_module, "_thread", None)
     stopping = getattr(app_module, "_stop", None)
     if not isinstance(thread, threading.Thread):

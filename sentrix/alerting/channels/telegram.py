@@ -345,14 +345,23 @@ class TelegramTransport:
             sent = self.api.send_message(chat_id, message.text, message.buttons)
         except TelegramError as exc:
             if not (exc.button_refused and any(b.url for b in message.buttons)):
-                return SendResult(False, error=str(exc), retryable=exc.retryable)
+                return SendResult(False, error=str(exc), retryable=exc.retryable,
+                                  retry_after=_seconds(exc.retry_after))
             log.info("telegram refused a URL button (%s): links go in the text", exc.description)
             try:
                 sent = self.api.send_message(chat_id, fold_links(message.text, message.buttons),
                                              message.buttons, with_urls=False)
             except TelegramError as again:
-                return SendResult(False, error=str(again), retryable=again.retryable)
+                return SendResult(False, error=str(again), retryable=again.retryable,
+                                  retry_after=_seconds(again.retry_after))
         return SendResult(True, provider_id=f"tg:{chat_id}:{(sent or {}).get('message_id')}")
+
+
+def _seconds(value) -> float | None:
+    try:
+        return max(0.0, float(value)) if value is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 # ── inbound updates ───────────────────────────────────────────────────────────

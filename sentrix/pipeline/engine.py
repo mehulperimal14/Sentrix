@@ -553,12 +553,15 @@ class Pipeline:
         return self.decide(frame, features, now, label, started=started)
 
     def decide(self, frame: np.ndarray, features: FeatureVector, now: float,
-               label: str | None = None, *, started: float | None = None) -> dict[str, Any]:
+               label: str | None = None, *, started: float | None = None,
+               extra: dict[str, Any] | None = None) -> dict[str, Any]:
         """Steps 8-10 for one observation: TCI, committed level, incident and
         its side effects, event log, state, overlay. ``frame`` is the clean
         frame the snapshot/evidence capture (the clip engine passes the
         trigger keyframe); ``started`` is the ``perf_counter`` at which the
-        observation began, for the latency figures."""
+        observation began, for the latency figures; ``extra`` goes into the
+        tick row's ``extra`` key (the clip engine marks its decisions
+        ``{"mode": "clip" | "fast_lane", "clip": seq}``)."""
         started = time.perf_counter() if started is None else started
         self._frame_count += 1
         clean = frame
@@ -586,7 +589,7 @@ class Pipeline:
         latency = time.perf_counter() - started
         self._latencies.append(latency)
         self.events.write(result, level, status,
-                          incident.id if incident else None, latency, label)
+                          incident.id if incident else None, latency, label, extra=extra)
 
         ordered = sorted(self._latencies)
         p95 = ordered[min(len(ordered) - 1, int(len(ordered) * 0.95))]
@@ -855,6 +858,16 @@ class Pipeline:
         self._close_requested = None
 
     # ── presentation ──────────────────────────────────────────────────────────
+    def _stale_overlay_seconds(self) -> float:
+        """Overlay age at which the HUD says "AI STALLED". The clip engine
+        refreshes the overlay once per hop plus the clip compute, so in clip
+        mode the limit is at least ``hop * (1 + budget_fraction)``."""
+        limit = self.cfg.pipeline.stale_overlay_seconds
+        if getattr(self._strategy, "name", "tick") == "clip":
+            clip = self.cfg.clip
+            limit = max(limit, clip.hop_seconds * (1.0 + clip.budget_fraction))
+        return limit
+
     def _draw(self, frame, overlay: "Overlay | None", now: float):
         """Composite the latest inference overlay onto a captured frame."""
         if cv2 is None or frame is None:
@@ -897,7 +910,7 @@ class Pipeline:
                 # Anyone watching through the Portal is visible in the room.
                 cv2.putText(frame, f"REMOTE VIEW: {viewers}", (12, 92),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 200, 255), 2)
-            if age > self.cfg.pipeline.stale_overlay_seconds:
+            if age > self._stale_overlay_seconds():
                 # Boxes this old describe a scene that has moved on.
                 cv2.putText(frame, f"AI STALLED {age:.0f}s  VIDEO {self._video_fps:.0f} fps",
                             (info_x, 66), cv2.FONT_HERSHEY_SIMPLEX, 0.45,

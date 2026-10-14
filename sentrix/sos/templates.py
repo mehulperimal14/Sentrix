@@ -642,7 +642,16 @@ def preview(profile: Mapping | None, *, incident_type: str = "weapon",
     }
 
 
-__all__ = ["TEMPLATE_VERSION", "IST", "DISCLAIMER", "WORDING_CORROBORATED",
+def render_preview(profile: Mapping | None, *, incident_type: str = "weapon",
+                   **kwargs: Any) -> dict[str, Any]:
+    """The Portal's preview seam (T-ACCT ``accounts.render_sos_preview``):
+    :func:`preview` with the profile's own test mode, so the wizard and the
+    settings page show exactly the device's wording (``full``, ``sms``, ...)."""
+    kwargs.setdefault("test_mode", bool((profile or {}).get("test_mode", True)))
+    return preview(profile, incident_type=incident_type, **kwargs)
+
+
+__all__ = ["render_preview", "TEMPLATE_VERSION", "IST", "DISCLAIMER", "WORDING_CORROBORATED",
            "WORDING_SINGLE_SOURCE", "WORDING_DEGRADED", "WORDING_SIMULATED",
            "DURESS_BANNER", "BUTTONS", "AUTHORITY_LABELS", "EVENT_NAMES",
            "MESSAGE_TEMPLATES", "BUILTIN", "clean", "clock_time", "to_ist", "gsm_text",

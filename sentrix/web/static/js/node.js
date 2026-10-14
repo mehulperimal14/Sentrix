@@ -189,6 +189,26 @@
             : result.detail);
     }
 
+    function renderClip(clip) {
+        // state.clip (track T-CLIP): the 4-second clip engine, or the tick loop.
+        clip = clip || {};
+        if (clip.mode !== "clip") {
+            fillTable("node-clip", [["Mode", "tick loop (SENTRIX_PIPELINE_MODE=tick)"]]);
+            return;
+        }
+        const compute = clip.compute_ms || {};
+        const lane = clip.fast_lane || null;
+        fillTable("node-clip", [
+            ["Mode", `clip (${fmt(clip.window_s)} s window, ${fmt(clip.hop_s)} s hop)`],
+            ["Runtime / threads", `${fmt(clip.runtime)} / ${fmt(clip.threads)}`],
+            ["Clip compute p50 / p95 (ms)", `${fmt(compute.p50)} / ${fmt(compute.p95)}`],
+            ["Budget (ms)", clip.budget_ms],
+            ["Clips / dropped", `${fmt(clip.clips)} / ${fmt(clip.dropped)}`],
+            ["Fast lane", lane ? "on" : "off"],
+            ["Fast-lane decisions", clip.fast_lane_decisions],
+        ]);
+    }
+
     function onState(data) {
         const now = Date.now();
         if (now - lastRender < 1000) return;
@@ -197,6 +217,7 @@
         renderLink(data.link, data.remote_viewers || 0);
         renderChannels(data.channels);
         renderMode(data.mode);
+        renderClip(data.clip);
     }
 
     document.addEventListener("DOMContentLoaded", () => {

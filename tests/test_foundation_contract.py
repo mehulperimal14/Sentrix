@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 import socket
+import sys
 import threading
 import time
 from types import SimpleNamespace
@@ -707,12 +708,17 @@ class TestLcPrincipal:
         assert auth.csrf_for_session(cookie) == auth.csrf_for_session(cookie)
         assert auth.csrf_for_session(cookie) != auth.csrf_for_session(cookie + "x")
 
-    def test_legacy_cookie_still_accepted(self, monkeypatch):
+    def test_legacy_cookie_is_no_longer_a_session(self, monkeypatch):
+        # T-WEB's lc_session rename landed; the old cookie skipped the CSRF
+        # header, so integration retired it.
         from fastapi.testclient import TestClient
         from sentrix.web.security import generate_token
         monkeypatch.setenv("SENTRIX_PASSWORD", "pw")
         client = TestClient(_lc_app())
         client.cookies.set("session_token", generate_token("pw"))
+        assert client.get("/api/who").status_code == 401
+        client.cookies.clear()
+        client.cookies.set("lc_session", generate_token("pw"))
         assert client.get("/api/who").status_code == 200
 
     def test_tunnel_identity_and_role_rules(self, monkeypatch):
@@ -764,8 +770,11 @@ class TestLcRoutesAreThinWrappers:
         from sentrix.app import app
         from sentrix.web.security import generate_token
         monkeypatch.setenv("SENTRIX_PASSWORD", "pw")
+        from sentrix.web import auth
         client = TestClient(app)                 # no lifespan: no pipeline, no camera
-        client.cookies.set("session_token", generate_token("pw"))
+        cookie = generate_token("pw")
+        client.cookies.set("lc_session", cookie)
+        client.headers["X-CSRF-Token"] = auth.csrf_for_session(cookie)
         return client
 
     def test_false_verdict_goes_through_the_sos_service(self, client):
@@ -874,6 +883,9 @@ class TestPipelineSeams:
     def test_clip_mode_falls_back_to_ticks_without_the_engine(self, monkeypatch):
         from sentrix.pipeline.engine import Pipeline, TickStrategy
         from sentrix.config import settings
+        # The clip engine exists now (T-CLIP): hide it to test the
+        # "module missing" branch, not build_strategy's own fallback.
+        monkeypatch.setitem(sys.modules, "sentrix.pipeline.clip", None)
         pipeline = Pipeline.__new__(Pipeline)
         pipeline.cfg = SimpleNamespace(clip=SimpleNamespace(mode="clip"),
                                        pipeline=settings.pipeline)
@@ -1148,7 +1160,10 @@ class TestPortalSecurityFixes:
         database.dispose()
 
 
-class TestPortalServiceStubs:
+class TestPortalServiceSeams:
+    """The frozen Portal service functions, now implemented by T-LINK, T-CH
+    and T-ACCT: still safe without a device, a session or a recipient."""
+
     def test_signatures_and_safe_defaults(self, portal_app):
         from sentrix_portal.models import EmergencyContact, Household
         from sentrix_portal.services import accounts, hub, notify, sos
@@ -1172,5 +1187,5 @@ class TestPortalServiceStubs:
             assert [c.name for c in accounts.confirmed_contacts(db, home.id)] == ["A"]
             assert accounts.bump_profile_version(db, home.id) == 1
             assert accounts.bump_profile_version(db, home.id) == 2
-        with pytest.raises(NotImplementedError):
-            accounts.build_profile(None, "h", "d")
+            with pytest.raises(LookupError):
+                accounts.build_profile(db, home.id, "no-such-device")

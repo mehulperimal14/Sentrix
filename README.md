@@ -151,6 +151,13 @@ mode (the default) that is only logged.
 `.env.example` documents every setting (camera, armed mode, thresholds, alerts);
 the algorithmic constants live in `sentrix/config.py`.
 
+### 6. Raspberry Pi 5
+
+The Pi path (Picamera2, gpiozero siren and inputs, node telemetry, systemd
+watchdog, Wi-Fi/4G failover) is in [`deploy/pi5/README.md`](deploy/pi5/README.md):
+bring-up order, `install_pi.sh`, and the relay test with an LED in place of the
+siren. `run.sh` detects a Pi and installs `requirements-pi.txt`.
+
 ---
 
 ## Project layout
@@ -633,6 +640,8 @@ rate per hour of an empty room.
 | [`docs/4_DEPLOYMENT_AND_RUNBOOK.md`](docs/4_DEPLOYMENT_AND_RUNBOOK.md) | Deployment and operations |
 | [`docs/5_FUTURE_ADVANCEMENTS_AND_CLOUD_DEPLOYMENT.md`](docs/5_FUTURE_ADVANCEMENTS_AND_CLOUD_DEPLOYMENT.md) | Roadmap |
 | [`docs/6_CUSTOM_DATASET_EVALUATION.md`](docs/6_CUSTOM_DATASET_EVALUATION.md) | Custom-dataset protocol and results |
+| [`docs/7_PORTAL_AND_SOS.md`](docs/7_PORTAL_AND_SOS.md) | Portal, onboarding and SOS: developer contract |
+| [`HARDWARE.md`](HARDWARE.md), [`deploy/pi5/README.md`](deploy/pi5/README.md) | Raspberry Pi 5 plan, pin table, Pi deployment |
 
 All six were rewritten for v3. Each carries explicit **"Corrected from v2.1"**
 callouts where the previous version stated something that was not true of the

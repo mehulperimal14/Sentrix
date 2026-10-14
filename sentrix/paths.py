@@ -16,6 +16,7 @@ Two rules that the previous layout broke:
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 #: ``<repo>/sentrix/paths.py`` -> ``<repo>``
@@ -31,8 +32,11 @@ WEB_DIR = PACKAGE_DIR / "web"
 STATIC_DIR = WEB_DIR / "static"
 TEMPLATES_DIR = WEB_DIR / "templates"
 
-# Runtime output — gitignored, never web-mounted.
-VAR_DIR = ROOT_DIR / "var"
+# Runtime output — gitignored, never web-mounted. ``SENTRIX_VAR_DIR`` moves the
+# whole tree (tests, demos and measurement runs use a temporary one so they
+# never open the developer's ``var/sentrix.db``); read once at import.
+VAR_DIR = Path(os.environ["SENTRIX_VAR_DIR"]).expanduser() if os.getenv(
+    "SENTRIX_VAR_DIR", "").strip() else ROOT_DIR / "var"
 EVIDENCE_DIR = VAR_DIR / "evidence"
 SNAPSHOT_DIR = VAR_DIR / "snapshots"
 EVENTLOG_DIR = VAR_DIR / "events"

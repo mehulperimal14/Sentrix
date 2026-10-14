@@ -42,7 +42,8 @@ from sentrix.link import tunnel_auth
 
 #: Roles a console principal can have.
 LC_ROLES = ("device_admin", "owner", "member", "operator")
-#: The pre-M10 cookie name, still accepted until T-WEB's rename lands.
+#: The pre-M10 cookie name. No longer a session (it skipped the CSRF
+#: header); login and logout still delete it from old browsers.
 LEGACY_COOKIE = "session_token"
 
 
@@ -93,7 +94,7 @@ def _password() -> str:
 
 def session_cookie(request: Any) -> str | None:
     cookies = getattr(request, "cookies", None) or {}
-    return cookies.get(settings.web.cookie_name) or cookies.get(LEGACY_COOKIE)
+    return cookies.get(settings.web.cookie_name)
 
 
 def csrf_for_session(cookie: str) -> str:

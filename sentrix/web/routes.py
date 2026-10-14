@@ -62,7 +62,7 @@ from sentrix.pipeline.engine import get_pipeline
 from sentrix.pipeline.state import state
 from sentrix.storage import database
 from sentrix.utils.logging import get_logger, telemetry
-from sentrix.utils.redact import redact_url
+from sentrix.utils.redact import redact_tree, redact_url
 from sentrix.perception.identity import person_name
 from sentrix.sos import current_service as sos_service
 from sentrix.web import auth
@@ -182,13 +182,7 @@ def redacted(value: Any) -> Any:
     """``value`` with credentials removed from every string in it (camera
     URLs such as ``rtsp://user:pw@host``, secret query values), recursively.
     Applied to every console JSON output (docs/7 §12)."""
-    if isinstance(value, str):
-        return redact_url(value) if "://" in value or "=" in value else value
-    if isinstance(value, dict):
-        return {key: redacted(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [redacted(item) for item in value]
-    return value
+    return redact_tree(value)
 
 
 def capabilities(principal: auth.LcPrincipal | None) -> frozenset[str]:
@@ -448,64 +442,19 @@ def incident_filters(*, incident_type: str | None = None, level: int | str | Non
     return filters
 
 
-def _incident_row(r) -> dict[str, Any]:
-    """The ``database.recent_incidents`` row shape, for filtered pages."""
-    return {
-        "id": r.id, "started_at": str(r.started_at),
-        "started_iso": (r.started_at.replace(tzinfo=timezone.utc).isoformat()
-                        if r.started_at else None),
-        "duration_seconds": r.duration_seconds, "peak_level": r.peak_level,
-        "peak_tci": r.peak_tci, "incident_type": r.incident_type, "reason": r.reason,
-        "frames": r.frames, "evidence_count": r.evidence_count,
-        "evidence_bundle": r.evidence_bundle, "authorized": r.authorized,
-        "verdict": r.verdict, "verdict_note": r.verdict_note,
-        "verdict_by": r.verdict_by,
-        "verdict_at": (r.verdict_at.replace(tzinfo=timezone.utc).isoformat()
-                       if r.verdict_at else None),
-        "request_id": r.request_id,
-        "ended_at": str(r.ended_at) if r.ended_at else None,
-        "session_id": r.session_id,
-        "trigger": json.loads(r.trigger_json) if r.trigger_json else None,
-        "created_at": str(r.started_at), "level": r.peak_level, "tci": r.peak_tci,
-        "camera_id": r.camera_id,
-        "status": {1: "SECURE", 2: "SUSPICIOUS", 3: "ELEVATED", 4: "HIGH",
-                   5: "CRITICAL"}.get(r.peak_level, "UNKNOWN"),
-        "snapshot_path": r.snapshot_path,
-    }
-
-
 def query_incidents(filters: dict[str, Any], limit: int = EVENTS_PAGE_SIZE,
                     offset: int = 0) -> tuple[list[dict[str, Any]], int]:
-    """A page of incidents (newest first) and the number that match.
-    Without filters this is ``database.recent_incidents`` (limit <= 500)."""
+    """A page of incidents (newest first) and the number that match
+    (``database.recent_incidents`` / ``count_incidents``, limit <= 500)."""
     limit = max(1, min(int(limit), 500))
     offset = max(0, int(offset))
     if not any(not key.startswith("_") for key in filters):
         stats = database.incident_stats()
         return database.recent_incidents(limit, offset), int(stats.get("total") or 0)
-    from sentrix.storage.models import IncidentRecord
-    try:
-        with database.session_scope() as session:
-            query = session.query(IncidentRecord)
-            if "type" in filters:
-                query = query.filter(IncidentRecord.incident_type == filters["type"])
-            if "level" in filters:
-                query = query.filter(IncidentRecord.peak_level >= filters["level"])
-            if filters.get("verdict") == "NONE":
-                query = query.filter(IncidentRecord.verdict.is_(None))
-            elif "verdict" in filters:
-                query = query.filter(IncidentRecord.verdict == filters["verdict"])
-            if "_since_utc" in filters:
-                query = query.filter(IncidentRecord.started_at >= filters["_since_utc"])
-            if "_until_utc" in filters:
-                query = query.filter(IncidentRecord.started_at < filters["_until_utc"])
-            total = query.count()
-            rows = (query.order_by(IncidentRecord.started_at.desc())
-                    .offset(offset).limit(limit).all())
-            return [_incident_row(r) for r in rows], total
-    except Exception as exc:
-        log.error("incident query failed: %s", exc)
-        return [], 0
+    where = {"incident_type": filters.get("type"), "min_level": filters.get("level"),
+             "verdict": filters.get("verdict"), "since": filters.get("_since_utc"),
+             "until": filters.get("_until_utc")}
+    return database.recent_incidents(limit, offset, **where), database.count_incidents(**where)
 
 
 def request_views(request_ids: list[str | None]) -> dict[str, dict[str, Any]]:
@@ -672,10 +621,13 @@ def health_payload() -> dict:
         "scene_model": pipeline.scene.weights_name,
         "scene_device": str(pipeline.scene.device) if pipeline.scene.available else None,
         "scene_thresholds": pipeline.scene.thresholds if pipeline.scene.available else None,
+        "scene_runtime": (getattr(pipeline.scene, "runtime", None)
+                          if pipeline.scene.available else None),
         "threat_sources": settings.threat.sources,
         "armed": runtime_mode.is_armed(),
         "violence_model_loaded": pipeline.violence is not None,
         "identity_backend": pipeline.identity.backend,
+        "identity_model": getattr(pipeline.identity, "model_name", None),
         # True while no face backend works, i.e. nobody can be authorised now.
         "identity_failing_closed": pipeline.identity.backend is None,
         "enrolled_faces": len(pipeline.identity.enrolled),

@@ -316,8 +316,11 @@ class Router(ChannelRouter):
             item.next_attempt_at = math.inf
         else:
             item.status, item.error = FAILED, scrub(result.error)
-            item.next_attempt_at = (now + self.retry_delay(item.attempts)
-                                    if result.retryable else math.inf)
+            delay = self.retry_delay(item.attempts)
+            wait = getattr(result, "retry_after", None)
+            if wait is not None and not math.isinf(delay):
+                delay = max(delay, float(wait))      # the provider's floor
+            item.next_attempt_at = now + delay if result.retryable else math.inf
 
     def _finish(self, item: OutboxItem) -> None:
         self.outbox.update(item)
