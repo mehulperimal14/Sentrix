@@ -1,0 +1,101 @@
+/* SENTRIX Portal: same palette as the Local Console (sentrix/web/static/css/style.css),
+   system fonts only (no external requests). */
+
+:root {
+  --bg-main: #0b0f19;
+  --bg-card: rgba(22, 28, 45, 0.85);
+  --text-main: #f0f4ff;
+  --text-muted: #8a9bb8;
+  --border-light: rgba(138, 155, 184, 0.18);
+  --accent-blue: #3b82f6;
+  --level-1: #22c55e;
+  --level-2: #facc15;
+  --level-3: #f97316;
+  --level-4: #ef4444;
+  --level-5: #dc2626;
+  --danger: #ef4444;
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg-main);
+  color: var(--text-main);
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+a { color: var(--accent-blue); }
+
+.test-banner {
+  background: var(--danger);
+  color: #fff;
+  font-weight: 600;
+  text-align: center;
+  padding: 0.4rem 1rem;
+  font-size: 0.9rem;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.75rem 1.5rem;
+  border-bottom: 1px solid var(--border-light);
+  flex-wrap: wrap;
+}
+.nav-brand { color: var(--text-main); font-weight: 800; letter-spacing: 0.08em; text-decoration: none; }
+.nav-icon { color: var(--accent-blue); }
+.nav-links { display: flex; gap: 0.25rem; flex-wrap: wrap; }
+.nav-link {
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: 0.3rem 0.7rem;
+  border-radius: 6px;
+}
+.nav-link.active, .nav-link:hover { color: var(--text-main); background: var(--bg-card); }
+.nav-logout { margin-left: auto; display: flex; align-items: center; gap: 0.75rem; }
+.nav-user { color: var(--text-muted); font-size: 0.9rem; }
+
+.main { max-width: 1100px; margin: 0 auto; padding: 1.5rem 16px; }
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.btn {
+  font: inherit;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 0.45rem 0.9rem;
+  background: var(--accent-blue);
+  color: #fff;
+  cursor: pointer;
+}
+.btn-ghost { background: transparent; color: var(--text-main); }
+.btn-danger { background: var(--danger); }
+
+input, select, textarea {
+  font: inherit;
+  color: var(--text-main);
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 0.45rem 0.6rem;
+  width: 100%;
+}
+
+.muted { color: var(--text-muted); }
+.mono { font-family: var(--font-mono); }
+
+@media (max-width: 640px) {
+  .nav { gap: 0.75rem; padding: 0.6rem 16px; }
+  .nav-logout { margin-left: 0; }
+}

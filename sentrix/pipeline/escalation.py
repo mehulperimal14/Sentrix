@@ -39,11 +39,14 @@ class ActionPlan:
     siren: bool = False
     dispatch: bool = False
     call: bool = False
+    #: Offer the incident to the SOS service (decision D8: confirmed L3+; the
+    #: service decides which incident types it wants).
+    sos: bool = False
 
     @property
     def any_side_effect(self) -> bool:
         return any((self.snapshot, self.evidence, self.sms, self.siren,
-                    self.dispatch, self.call))
+                    self.dispatch, self.call, self.sos))
 
 
 def plan_for(level: int) -> ActionPlan:
@@ -63,6 +66,7 @@ def plan_for(level: int) -> ActionPlan:
         siren=level >= alert.siren_min_level,
         dispatch=level >= alert.dispatch_min_level,
         call=level >= alert.call_min_level,
+        sos=level >= settings.sos.min_level,
     )
 
 

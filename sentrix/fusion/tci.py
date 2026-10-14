@@ -38,6 +38,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from sentrix import mode as runtime_mode
 from sentrix.config import settings
 from sentrix.fusion import calibration
 from sentrix.fusion.evidence import CLASS_ORDER, strongest
@@ -132,7 +133,9 @@ class TCIEngine:
             # Recognised, or gone for longer than a missed detection explains.
             self._unknown_since = None
             return None
-        if not self.threat.armed:
+        # A runtime HOME/ARMED toggle (sentrix/mode.py) overrides SENTRIX_ARMED.
+        override = runtime_mode.armed_override()
+        if not (self.threat.armed if override is None else override):
             return None
         held = now - self._unknown_since
         return held if held >= self.threat.intrusion_dwell_seconds else None

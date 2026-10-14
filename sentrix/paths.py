@@ -41,6 +41,11 @@ LOG_DIR = VAR_DIR / "logs"
 #: Per-deployment calibration (thresholds fitted on this room's normal footage).
 CALIBRATION_DIR = VAR_DIR / "calibration"
 DB_PATH = VAR_DIR / "sentrix.db"
+#: Development fallback for the device identity (docs/7 §5.2). On a Pi the
+#: identity lives in /etc/sentrix so a factory reset (wipe var/) keeps it.
+LINK_DIR = VAR_DIR / "link"
+#: The Portal's development SQLite database and files (sentrix_portal).
+PORTAL_VAR_DIR = VAR_DIR / "portal"
 
 _RUNTIME_DIRS = (
     VAR_DIR, EVIDENCE_DIR, SNAPSHOT_DIR, EVENTLOG_DIR, FACES_DIR, LOG_DIR,
@@ -62,6 +67,6 @@ __all__ = [
     "ROOT_DIR", "PACKAGE_DIR", "MODELS_DIR", "TRAINING_DIR", "DOCS_DIR",
     "WEB_DIR", "STATIC_DIR", "TEMPLATES_DIR",
     "VAR_DIR", "EVIDENCE_DIR", "SNAPSHOT_DIR", "EVENTLOG_DIR", "FACES_DIR",
-    "LOG_DIR", "CALIBRATION_DIR", "DB_PATH",
+    "LOG_DIR", "CALIBRATION_DIR", "DB_PATH", "LINK_DIR", "PORTAL_VAR_DIR",
     "ensure_runtime_dirs", "model_path",
 ]

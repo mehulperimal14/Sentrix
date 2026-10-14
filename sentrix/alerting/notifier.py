@@ -6,6 +6,15 @@ bypassed the cooldown entirely, so a flapping level-5 signal could send
 unbounded messages. Here every send is claimed against the incident (see
 ``IncidentManager.claim``), so a channel fires at most once per incident, with
 the time-based cooldown as a second, independent guard.
+
+**Nothing leaves the machine unless explicitly enabled** (decision D13). The
+Twilio client is built only when ``SENTRIX_TWILIO_ENABLED=1``, and every SMS and
+call then asks :mod:`sentrix.alerting.guard`, which also needs
+``SENTRIX_LIVE_ALERTS=1`` and, in test mode (the default), an allowlisted
+``ALERT_PHONE_NUMBER``. Otherwise the message is logged and the call returns
+False, exactly like the console fallback. ``.env`` may hold live keys: a test,
+replay or rehearsal must never text anyone by accident. (T-CH routes these two
+legacy paths through the channel router; the guard stays in front of both.)
 """
 
 from __future__ import annotations
@@ -15,10 +24,13 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from xml.sax.saxutils import escape
 
+from sentrix.alerting import guard
 from sentrix.config import settings
 from sentrix.paths import SNAPSHOT_DIR
 from sentrix.utils.logging import get_logger
+from sentrix.utils.redact import mask_recipient
 
 log = get_logger("notifier")
 
@@ -50,7 +62,7 @@ class Credentials:
 
 
 class Notifier:
-    """Twilio-backed alerts that degrade to structured logs."""
+    """Twilio-backed alerts behind the send guard; degrade to structured logs."""
 
     def __init__(self) -> None:
         self.cfg = settings.alert
@@ -58,11 +70,16 @@ class Notifier:
         self._client = None
         self._lock = threading.Lock()
         self._last: dict[str, float] = {}
-        if self.creds.complete:
+        enabled = guard.SendPolicy.from_env().switches.get("twilio_sms", False)
+        if not enabled:
+            log.info("Twilio disabled (SENTRIX_TWILIO_ENABLED is off) — alerts "
+                     "log to console")
+        elif self.creds.complete:
             try:
                 from twilio.rest import Client
                 self._client = Client(self.creds.sid, self.creds.token)
-                log.info("Twilio ready (to %s)", self.creds.to_number)
+                log.info("Twilio client ready (to %s); every send still passes "
+                         "the send guard", mask_recipient(self.creds.to_number))
             except ImportError:
                 log.warning("twilio not installed — alerts log to console")
             except Exception as exc:
@@ -72,7 +89,20 @@ class Notifier:
 
     @property
     def online(self) -> bool:
-        return self._client is not None
+        """True only when a real SMS could leave right now."""
+        return (self._client is not None
+                and bool(guard.may_send("twilio_sms", self.creds.to_number)))
+
+    def _guarded(self, channel: str, body: str) -> tuple[bool, str]:
+        """(may send, text to send). Logs the reason and a console copy if not."""
+        decision = guard.may_send(channel, self.creds.to_number)
+        text = guard.prepare_text(channel, body)
+        if self._client is None or not decision:
+            reason = ("Twilio client not built" if self._client is None
+                      else decision.reason)
+            log.warning("%s suppressed (%s) — console copy:\n%s", channel, reason, text)
+            return False, text
+        return True, text
 
     def _cooldown_ok(self, channel: str, seconds: float) -> bool:
         now = time.monotonic()
@@ -112,9 +142,8 @@ class Notifier:
         if not self._cooldown_ok("sms", self.cfg.sms_cooldown_seconds):
             log.debug("SMS suppressed by cooldown")
             return False
-        body = self._format(result, level, status)
-        if self._client is None:
-            log.warning("SMS (console fallback):\n%s", body)
+        ok, body = self._guarded("twilio_sms", self._format(result, level, status))
+        if not ok:
             return False
         try:
             self._client.messages.create(body=body, from_=self.creds.from_number,
@@ -128,13 +157,14 @@ class Notifier:
     def make_call(self, result, level: int, status: str) -> bool:
         if not self._cooldown_ok("call", self.cfg.call_cooldown_seconds):
             return False
-        message = (f"Sentrix critical alert. Level {level}. "
-                   f"{result.incident_type}. {result.reason}.")
-        if self._client is None:
-            log.warning("VOICE CALL (console fallback): %s", message)
+        ok, message = self._guarded("twilio_call",
+                                    f"Sentrix critical alert. Level {level}. "
+                                    f"{result.incident_type}. {result.reason}.")
+        if not ok:
             return False
         try:
-            twiml = f'<Response><Say voice="alice">{message}</Say></Response>'
+            # The reason is free text: escape it, or "<" / "&" break the TwiML.
+            twiml = f'<Response><Say voice="alice">{escape(message)}</Say></Response>'
             self._client.calls.create(twiml=twiml, from_=self.creds.from_number,
                                       to=self.creds.to_number)
             log.info("voice call placed (level %d)", level)
@@ -144,8 +174,8 @@ class Notifier:
             return False
 
     def send_raw(self, body: str) -> bool:
-        if self._client is None:
-            log.warning("SMS (console fallback): %s", body)
+        ok, body = self._guarded("twilio_sms", body)
+        if not ok:
             return False
         try:
             self._client.messages.create(body=body, from_=self.creds.from_number,

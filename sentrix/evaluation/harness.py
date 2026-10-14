@@ -13,6 +13,9 @@ measurement:
   be enrolled on this machine would floor the TCI and hide the threat signal
   being measured, so every person is scored as a non-degraded unknown.
 * **No microphone.** Live room audio is uncorrelated with a replayed clip.
+* **No SOS, link or channels.** The pipeline keeps ``NullSosService`` and the
+  harness refuses to run while any background service is running
+  (``sentrix.services.assert_measurement_safe``; decision D13).
 """
 
 from __future__ import annotations
@@ -28,6 +31,8 @@ from sentrix.fusion.features import FeatureVector
 from sentrix.fusion.tci import TCIResult
 from sentrix.io.sources import FrameSource
 from sentrix.perception.identity import IdentityResult
+from sentrix.services import assert_measurement_safe
+from sentrix.sos import NullSosService
 
 
 class _NullSource(FrameSource):
@@ -77,6 +82,8 @@ def build_eval_pipeline():
     pipeline._act = _noop            # snapshots, evidence, SMS, siren, dispatch, call
     pipeline._submit = _noop         # background writes, incl. incident DB rows
     pipeline._save_open_incident = _noop     # the shutdown save as well
+    pipeline.sos = NullSosService()          # never opens an assistance request
+    assert_measurement_safe(pipeline)
     return pipeline
 
 

@@ -127,6 +127,8 @@ def main(argv: list[str] | None = None) -> int:
     pipeline._act = noop                 # snapshots, evidence, SMS, siren, dispatch
     pipeline._submit = noop              # incident rows and other background writes
     pipeline._save_open_incident = noop  # and the synchronous save at shutdown
+    from sentrix.services import assert_measurement_safe
+    assert_measurement_safe(pipeline)    # null SOS service, no link/channels running
     scratch = Path(tempfile.mkdtemp(prefix="sentrix_bench_"))
     pipeline.events = EventLog(directory=scratch, source="bench")
 

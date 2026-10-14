@@ -112,6 +112,8 @@ def main(argv: list[str] | None = None) -> int:
     pipeline._act = _noop
     pipeline._submit = _noop
     pipeline._save_open_incident = _noop
+    from sentrix.services import assert_measurement_safe
+    assert_measurement_safe(pipeline)   # null SOS service, no link/channels running
     print(f"event log: {pipeline.events.path}\n")
 
     started = time.time()

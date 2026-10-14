@@ -57,7 +57,19 @@ soundfile>=0.12.1
 librosa>=0.10.2               # fallback mel front end
 
 # ── notifications (optional, degrades to console) ─────────────────────────────
+# Every send passes sentrix/alerting/guard.py: nothing leaves the machine
+# unless SENTRIX_LIVE_ALERTS=1 and the channel's own switch are set.
 twilio>=9.0.0
+httpx>=0.27.0                 # Telegram / e-mail HTTPS APIs; the in-process tunnel
+pyserial>=3.5                 # USB 4G modem (AT commands)
+
+# ── portal and accounts (sentrix_portal, docs/7) ─────────────────────────────
+argon2-cffi>=23.1.0           # Argon2id passwords and SOS PINs (device verifies PINs too)
+pyotp>=2.9.0                  # TOTP for admin and Desk operator accounts
+qrcode[pil]>=7.4.2            # device labels and the claim QR
+
+# ── Raspberry Pi hardware (pure Python; mock pins on a laptop) ───────────────
+gpiozero>=2.0.1               # siren relay, LEDs, buzzer, PIR, door, mains-sense
 
 # ── development ───────────────────────────────────────────────────────────────
 pytest>=8.0.0

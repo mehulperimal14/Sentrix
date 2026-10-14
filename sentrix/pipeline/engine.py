@@ -39,6 +39,7 @@ from typing import Any
 
 import numpy as np
 
+from sentrix import mode as runtime_mode
 from sentrix.alerting.dispatch import dispatch_service
 from sentrix.alerting.notifier import notifier
 from sentrix.config import settings
@@ -62,6 +63,7 @@ from sentrix.pipeline.escalation import plan_for
 from sentrix.pipeline.events import EventLog
 from sentrix.pipeline.incidents import IncidentManager
 from sentrix.pipeline.state import state
+from sentrix.sos import LevelChange, NullSosService, SosTrigger
 from sentrix.storage import database
 from sentrix.utils.logging import get_logger, telemetry
 
@@ -127,6 +129,11 @@ class Pipeline:
         self.siren = build_siren()
         self.events = EventLog(source=event_source)
         self.session_id = self.events.session_id
+        #: SOS assistance requests (docs/7 §7). Null unless the app lifespan
+        #: installs the real service (SENTRIX_SOS_ENABLED=1); measurement
+        #: pipelines must keep the null one (services.assert_measurement_safe).
+        self.sos = NullSosService()
+        self._committed_level = 1
 
         self._latencies: deque[float] = deque(maxlen=200)
         self._frame_count = 0
@@ -356,6 +363,15 @@ class Pipeline:
             self._submit(self._capture_evidence, incident, frame.copy(), result,
                          level, status, detections, self._evidence_context(result))
 
+        if (plan.sos and "sos" not in incident.actions
+                and self.sos.wants(result.incident_type, level)):
+            # Claimed only once the service wants this incident type, so an
+            # incident that becomes a weapon after an experimental L2 still
+            # opens a request. Queued after the snapshot and evidence above,
+            # so the trigger carries their paths; never dropped (D8).
+            incident.actions.add("sos")
+            self._submit_or_run(self._sos_trigger, incident, result, level, now)
+
         if plan.sms and claim(incident, "sms"):
             self._submit(notifier.send_sms, result, level, status)
 
@@ -373,6 +389,51 @@ class Pipeline:
 
         if plan.call and claim(incident, "call"):
             self._submit(notifier.make_call, result, level, status)
+
+    def _submit_or_run(self, func, *args) -> None:
+        """Queue behind earlier side effects; run inline if the queue is full
+        (an SOS trigger must never be dropped)."""
+        try:
+            self._tasks.put_nowait((func, args, {}))
+        except queue.Full:
+            log.warning("task queue full — running %s inline",
+                        getattr(func, "__name__", func))
+            try:
+                func(*args)
+            except Exception as exc:
+                log.error("%s failed: %s", getattr(func, "__name__", func), exc)
+
+    def _sos_trigger(self, incident, result: TCIResult, level: int, now: float) -> None:
+        """Hand the incident to the SOS service (worker thread, after its
+        snapshot and first evidence capture)."""
+        extras = result.features.extras or {}
+        votes = extras.get("evidence") or {}
+        self.sos.trigger(SosTrigger(
+            incident_id=incident.id, level=level, incident_type=result.incident_type,
+            evidence_state=(votes.get(result.incident_type) or {}).get("state", "none"),
+            tci=result.tci, reason=result.reason, session_id=self.session_id,
+            camera_id="CAM_0", armed=runtime_mode.is_armed(), at_wall=time.time(),
+            at_mono=now, snapshot_path=incident.snapshot_path,
+            evidence_bundle=incident.evidence_bundle,
+            evidence_hash=incident.evidence_hash, votes=votes))
+
+    def _level_changed(self, level: int, status: str, result: TCIResult,
+                       incident, now: float) -> None:
+        """Committed level moved: Event Log history and the SOS service."""
+        previous, self._committed_level = self._committed_level, level
+        votes = (result.features.extras or {}).get("evidence") or {}
+        state.record_level_change(level, previous, status, result.reason,
+                                  incident.id if incident else None,
+                                  result.incident_type)
+        try:
+            self.sos.on_level(LevelChange(
+                level=level, previous_level=previous,
+                incident_id=incident.id if incident else None,
+                incident_type=result.incident_type,
+                evidence_state=(votes.get(result.incident_type) or {}).get("state", "none"),
+                tci=result.tci, at_wall=time.time(), at_mono=now))
+        except Exception as exc:
+            log.error("sos.on_level failed: %s", exc)
 
     # ── main entry point ──────────────────────────────────────────────────────
     def process(self, frame: np.ndarray, now: float | None = None,
@@ -398,6 +459,8 @@ class Pipeline:
             trigger=features.extras.get("evidence"))
         if incident is not None and closed is None:
             self._persist_open(incident, now)
+        if level != self._committed_level:
+            self._level_changed(level, status, result, incident, now)
         plan = plan_for(level)
         if incident is not None and plan.any_side_effect:
             self._act(incident, plan, clean, result, level, status, now)
@@ -499,6 +562,17 @@ class Pipeline:
         never queued. In the first live test the preview was drawn only after
         inference, so the video froze at the AI rate (0.3 Hz, CLAUDE.md §5).
         """
+        if self.cfg.clip.mode == "clip":
+            # The 4-second clip engine (HARDWARE.md T1, track T-CLIP) owns the
+            # live loop in clip mode; it reuses process()'s decision path.
+            try:
+                from sentrix.pipeline.clip import run_clip_live
+            except ImportError as exc:
+                log.error("SENTRIX_PIPELINE_MODE=clip but the clip engine is "
+                          "missing (%s); running the tick loop", exc)
+            else:
+                run_clip_live(self, stop)
+                return
         identity = getattr(self, "identity", None)
         if getattr(identity, "available", False) and self._identity_worker is None:
             self._identity_worker = IdentityWorker(identity)
@@ -648,6 +722,7 @@ class Pipeline:
         self.detector.reset_tracks()
         self._latencies.clear()
         self._frame_count = 0
+        self._committed_level = 1
 
     # ── presentation ──────────────────────────────────────────────────────────
     def _draw(self, frame, overlay: "Overlay | None", now: float):
@@ -687,6 +762,11 @@ class Pipeline:
                 auth_text, auth_colour = "UNKNOWN", (0, 0, 220)
             cv2.putText(frame, auth_text, (info_x, 46),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.55, auth_colour, 2)
+            viewers = state.remote_viewers
+            if viewers:
+                # Anyone watching through the Portal is visible in the room.
+                cv2.putText(frame, f"REMOTE VIEW: {viewers}", (12, 92),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 200, 255), 2)
             if age > self.cfg.pipeline.stale_overlay_seconds:
                 # Boxes this old describe a scene that has moved on.
                 cv2.putText(frame, f"AI STALLED {age:.0f}s  VIDEO {self._video_fps:.0f} fps",

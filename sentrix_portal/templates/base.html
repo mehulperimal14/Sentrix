@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="{{ lang | default('en') }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}SENTRIX Portal{% endblock %}</title>
+  {# Session CSRF token: page scripts send it back as X-CSRF-Token (docs/7 §11). #}
+  {% if principal %}<meta name="csrf-token" content="{{ principal.csrf_token }}">{% endif %}
+  <link rel="stylesheet" href="/static/css/portal.css">
+  {% block extra_head %}{% endblock %}
+</head>
+<body data-base="" data-active="{{ active_page | default('') }}">
+  {% if test_mode %}
+  <div class="test-banner" role="status">
+    SENTRIX DEMO &ndash; TEST MODE, NOT A REAL EMERGENCY SERVICE.
+    SENTRIX does not contact 112 itself{% if desk_number %}; the simulated Desk is {{ desk_number }}{% endif %}.
+  </div>
+  {% endif %}
+
+  <nav class="nav">
+    <a class="nav-brand" href="/home"><span class="nav-icon">&#x2B21;</span> SENTRIX</a>
+    {% block nav %}
+    {% if principal %}
+    <div class="nav-links">
+      {% set links = [] %}
+      {% if principal.role in ('owner', 'member') %}
+        {% set links = [('home', '/home', 'Home'), ('sos', '/sos', 'SOS'),
+                        ('household', '/household', 'Household'),
+                        ('settings', '/settings', 'Settings'),
+                        ('privacy', '/privacy', 'Privacy')] %}
+      {% elif principal.role == 'operator' %}
+        {% set links = [('desk', '/desk', 'Desk')] %}
+      {% elif principal.role == 'company_admin' %}
+        {% set links = [('admin', '/admin', 'Admin'), ('audit', '/admin/audit', 'Audit')] %}
+      {% endif %}
+      {% for key, href, label in links %}
+        <a href="{{ href }}" class="nav-link{% if active_page == key %} active{% endif %}">{{ label }}</a>
+      {% endfor %}
+    </div>
+    <form class="nav-logout" method="post" action="/logout">
+      <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+      <span class="nav-user">{{ principal.display_name }}</span>
+      <button type="submit" class="btn btn-ghost">Sign out</button>
+    </form>
+    {% endif %}
+    {% endblock %}
+  </nav>
+
+  <main class="main">
+    {% block content %}{% endblock %}
+  </main>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

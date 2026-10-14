@@ -43,8 +43,31 @@ def _loop() -> None:
     log.info("processing loop exited")
 
 
+def _start_services(pipeline) -> None:
+    """Build and start the enabled background services (docs/7 §3.4) and
+    hand the SOS service to the pipeline. Every service is off unless its own
+    env flag is set, so this is a no-op on a default install."""
+    from sentrix import services
+    from sentrix.config import settings
+    from sentrix.pipeline.engine import get_pipeline
+    from sentrix.pipeline.state import state
+
+    if not settings.test_mode:
+        log.warning("SENTRIX_TEST_MODE is OFF: live alerts can reach anyone the "
+                    "profile names once their channel switches are on")
+    ctx = services.ServiceContext(settings=settings, state=state,
+                                  get_pipeline=get_pipeline,
+                                  registry=services.registry)
+    services.registry.load_builtin(ctx)
+    services.registry.start_all()
+    sos = services.registry.get("sos")
+    if sos is not None:
+        pipeline.sos = sos
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from sentrix import services
     from sentrix.pipeline.engine import get_pipeline, shutdown_pipeline
     from sentrix.storage import database
 
@@ -64,6 +87,8 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         log.warning("retention prune skipped: %s", exc)
 
+    _start_services(pipeline)      # before the loop, so the first L3 can reach SOS
+
     _stop.clear()
     _thread = threading.Thread(target=_loop, daemon=True, name="sentrix-pipeline")
     _thread.start()
@@ -76,19 +101,28 @@ async def lifespan(app: FastAPI):
     _stop.set()
     if _thread is not None:
         _thread.join(timeout=5.0)
+    services.registry.clear()      # stops link, SOS, channels, gpio, node (reverse order)
     shutdown_pipeline()
     log.info("shutdown complete")
 
 
 def create_app() -> FastAPI:
+    from sentrix.config import settings
+    from sentrix.web import extensions
     from sentrix.web.routes import router as main_router
     from sentrix.web.streaming import router as stream_router
 
+    # The API map is not public: /docs, /redoc and /openapi.json exist only
+    # with SENTRIX_API_DOCS=1 (docs/7 §9.1).
+    docs = settings.web.api_docs
     app = FastAPI(
         title="SENTRIX",
         description="Multimodal edge threat intelligence and physical security",
         version="3.0.0",
         lifespan=lifespan,
+        docs_url="/docs" if docs else None,
+        redoc_url="/redoc" if docs else None,
+        openapi_url="/openapi.json" if docs else None,
     )
 
     # Package assets only. Runtime output lives in var/ and is served through
@@ -96,6 +130,8 @@ def create_app() -> FastAPI:
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
     app.include_router(main_router)
     app.include_router(stream_router)
+    # Track routers (/api/sos, /api/node, ...) and the hardening middleware.
+    extensions.install(app)
     return app
 
 

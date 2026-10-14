@@ -128,6 +128,7 @@ The product did not work as a whole — see section 5.
 | `sentrix/finetuned-v3` | `66accb9` | baseline + scene integration + training tooling + fine-tuned v3 models |
 | `sentrix/custom-v4` | `3772acf` | baseline + scene integration + training tooling + new DINOv2/YOLO11n models (recommended) |
 | `sentrix/e2e-repair` | same as `main` | custom-v4 + this plan + M1–M5 + fresh-clone setup (commits below) |
+| `sentrix/portal` | (M10) | main + HARDWARE.md + Portal/SOS foundation; tracks branch from it (M10 below) |
 
 Published to `github.com/mehulperimal14/Sentrix` on 2026-10-10. Before publishing,
 history was rewritten once: private runtime data that earlier commits had
@@ -270,6 +271,13 @@ video/session is never used for tuning.
 | D5 | Darkness and faces < 1 m are **out of scope** for an RGB webcam: the HUD shows `DEGRADED` and threat typing is held. | Physics, not model tuning. |
 | D6 | Fusion becomes **transparent per-class evidence** (published rules) until a fitted, calibrated model exists from ≥ 4 recorded sessions. The synthetic booster is retired. | It is polarity-inverted and ranks worse than its inputs. |
 | D7 | The 7 incidents of session `c27258a25457` are false alarms; the team labels them through the new verdict buttons (M3). They become the first real fusion labels. | Operator feedback loop. |
+| D8 | (amends D3/D4) A **confirmed L3** of an alarm class (weapon, fire) or an armed intrusion after a 30 s entry delay opens an SOS assistance request; the owner is prompted on Portal, LC, Telegram, e-mail; SMS only offline or unseen after 10 min; no siren at L3. | The team's SOS flow without prompt storms. |
+| D9 | Window 30/45/60 min (default 30); no answer = EXPIRED ("unanswered", never "safe"); "Request help now" opens a linked request. Safety defaults ON (corroborated L4/L5, fire at T+2 min, armed intrusion, device offline during an open L2+ incident → confirmed contacts); single-source weapon L3 → owner only until gate P8. Duress PIN; policy frozen per request. | Silence must not fail the user who cannot answer. |
+| D10 | Parity by **tunnel**: Portal `/d/{id}/...` replays into the device's own LC app in-process; `/video` and `/ws/threat` relayed; remote video adaptive ≤ 15 fps. | One code path, no drift. |
+| D11 | Oracle Always Free (India) + `.in` domain + Caddy; Render + Supabase fallback; e-mail by HTTPS API. | ₹0 hosting, data in India. |
+| D12 | Cloud keeps profiles, metadata and one consented SOS snapshot per request (30 d); faces, evidence and video stay on the device (viewed on demand only). | Minimisation. |
+| D13 | **Test mode is the default and the only mode this semester**; sending needs `SENTRIX_LIVE_ALERTS=1` + the channel switch, and only to `SENTRIX_TEST_RECIPIENTS` in test mode; the legacy Twilio path is a no-op unless enabled; link, modem, SOS sweeper opt-in. | `.env` may hold live keys. |
+| D14 | Accounts by username + single-use activation code; admin/Desk TOTP; the LC keeps `SENTRIX_PASSWORD`; Portal password hashes never reach the device. | No admin takeover, no hashes on the SD card. |
 
 ### Milestones
 
@@ -344,6 +352,13 @@ G2 ≥ 27/30 episodes per class confirmed within 2 s · G3 0 L4/L5 in ≥ 3 h
 normal + all hard negatives, ≤ 1 L3/h · G4 loop ≥ 5 Hz, detect→alert p95 ≤ 2 s ·
 G5 30-min live dry run, 10/10 scripted events, 0 unscripted L3+. A failing class
 is dropped from the promise or re-tested on a fresh S5 — never tuned on S4.
+
+**M10 — Customer Portal, onboarding and SOS (branch `sentrix/portal`)** —
+contract: `docs/7_PORTAL_AND_SOS.md` (ownership, config, schemas, link protocol
+v1, tunnel + auth bridge, SOS state machine, channels, roles, endpoints).
+- [x] **Foundation** (commit "feat(foundation): contracts, config, guard, schema, services, portal skeleton"): `SosConfig`/`LinkConfig`/`ChannelConfig`/`GpioConfig`/`ClipConfig`/`NodeConfig`/`WebConfig`; send guard `sentrix/alerting/guard.py` (legacy Twilio SMS/call now a no-op unless `SENTRIX_TWILIO_ENABLED=1` + `SENTRIX_LIVE_ALERTS=1` + allowlist in test mode); additive device tables (assistance_requests, request_events, link_outbox, profile_cache, notifications, remote_audit) and columns; `set_verdict` by request state; services registry + lifespan; pipeline SOS hook (`NullSosService` default, asserted by the eval harness and tools); state blocks (sos, link, node, channels, mode, remote_viewers, test_mode); runtime HOME/ARMED; link protocol + tunnel auth; channel interfaces; LC extension routers; camera-URL redaction; `/docs` off by default; `sentrix_portal` skeleton (all tables, Argon2id, sessions, CSRF, `require_role`, audit chain, `/healthz`). 266 tests pass.
+- [ ] Tracks (parallel, own worktrees): T-HW (Pi I/O, deploy), T-CLIP (clip engine), T-SOS (device SOS engine), T-CH (channels), T-WEB (LC hardening + SOS/Node pages), T-LINK (link client, Portal hub/tunnel/SOS/Desk/contacts), T-ACCT (accounts, admin, onboarding, household, settings, privacy), T-MODEL (slim scene model).
+- [ ] Integration: merge order T-HW, T-CLIP, T-CH, T-SOS, T-WEB, T-ACCT, T-LINK; end-to-end tests; demo tools; Docker/Caddy deploy; README; gates P1–P8.
 
 ### Owners (from the README team table)
 

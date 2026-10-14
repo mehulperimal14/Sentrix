@@ -33,6 +33,8 @@ from fastapi.responses import (HTMLResponse, JSONResponse, RedirectResponse,
 from fastapi.templating import Jinja2Templates
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
+from sentrix import mode as runtime_mode
+from sentrix import services
 from sentrix.config import settings
 from sentrix.evidence.vault import vault
 from sentrix.alerting.dispatch import dispatch_service
@@ -41,6 +43,7 @@ from sentrix.pipeline.engine import get_pipeline
 from sentrix.pipeline.state import state
 from sentrix.storage import database
 from sentrix.utils.logging import get_logger, telemetry
+from sentrix.utils.redact import redact_url
 from sentrix.perception.identity import person_name
 from sentrix.web.security import (RateLimiter, generate_token, login_limiter,
                                   sanitize_filename, validate_image,
@@ -242,7 +245,8 @@ async def api_health() -> JSONResponse:
     live = state.get()
     return JSONResponse({
         "camera": pipeline.source.online,
-        "camera_source": pipeline.source.name,
+        # Redacted: rtsp://user:pw@host must never leave this route (docs/7 §12).
+        "camera_source": redact_url(pipeline.source.name),
         "video_fps": live.get("video_fps", 0.0),
         "ai_hz": live.get("ai_hz", 0.0),
         "frame_age_ms": live.get("frame_age_ms"),
@@ -251,7 +255,7 @@ async def api_health() -> JSONResponse:
         "scene_device": str(pipeline.scene.device) if pipeline.scene.available else None,
         "scene_thresholds": pipeline.scene.thresholds if pipeline.scene.available else None,
         "threat_sources": settings.threat.sources,
-        "armed": settings.threat.armed,
+        "armed": runtime_mode.is_armed(),
         "violence_model_loaded": pipeline.violence is not None,
         "identity_backend": pipeline.identity.backend,
         # True while no face backend works, i.e. nobody can be authorised now.
@@ -266,6 +270,8 @@ async def api_health() -> JSONResponse:
         "evidence_key_persistent": vault.persistent,
         "session": pipeline.session_id,
         "latency": telemetry.stats(),
+        # services, send_guard, test_mode, mode (docs/7 §9.3)
+        **services.health_fields(),
     })
 
 

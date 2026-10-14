@@ -24,6 +24,7 @@ import numpy as np
 
 from sentrix.config import settings
 from sentrix.utils.logging import get_logger
+from sentrix.utils.redact import redact_url
 
 log = get_logger("sources")
 
@@ -99,7 +100,9 @@ class CaptureSource(FrameSource):
 
     def __init__(self, source: int | str, reconnect_seconds: float = 2.0) -> None:
         self.source = source
-        self.name = f"capture:{source}"
+        # Never the raw URL: rtsp://user:pw@host would reach /api/health, the
+        # link heartbeat and the Portal (docs/7 §12).
+        self.name = f"capture:{redact_url(str(source))}"
         self._reconnect = reconnect_seconds
         self._cap = None
         self._frame: np.ndarray | None = None
@@ -110,7 +113,7 @@ class CaptureSource(FrameSource):
         self._online = False
         self._last_attempt = 0.0
         self._thread = threading.Thread(target=self._loop, daemon=True,
-                                        name=f"sentrix-cam-{source}")
+                                        name=f"sentrix-cam-{redact_url(str(source))}")
         self._thread.start()
 
     def _open(self) -> bool:
@@ -143,7 +146,7 @@ class CaptureSource(FrameSource):
             except Exception:
                 pass
             self._cap = cap
-            log.info("camera %s opened", self.source)
+            log.info("camera %s opened", redact_url(str(self.source)))
             return True
         except Exception as exc:
             log.debug("camera %s open failed: %s", self.source, exc)

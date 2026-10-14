@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import threading
+from collections import deque
 from datetime import datetime, timezone
 from typing import Any
 
@@ -11,6 +13,47 @@ from typing import Any
 def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
+
+def _test_mode_default() -> bool:
+    try:
+        from sentrix.config import settings
+        return bool(settings.test_mode)
+    except Exception:                  # never let config break the dashboard
+        return True
+
+
+#: The ``sos`` block while no request is open (docs/7 §9.4). Owner-facing: it
+#: never carries the duress flag (``sentrix.sos.states.owner_view``).
+SOS_IDLE: dict[str, Any] = {
+    "active": False, "request_id": None, "short_id": None, "state": None,
+    "label": None, "incident_id": None, "incident_type": None, "level": None,
+    "urgency": None, "evidence_state": None, "created_at": None,
+    "expires_at": None, "remaining_s": None, "seen": False, "repeat": False,
+    "authority": None, "recommended_authority": None, "sos_text": None,
+    "snapshot": None, "actions": [], "last": None,
+}
+#: The ``link`` block (track T-LINK fills it).
+LINK_IDLE: dict[str, Any] = {
+    "enabled": False, "state": "disabled", "connected": False, "claimed": False,
+    "device_id": None, "portal": None, "since": None, "last_message_at": None,
+    "outbox_depth": 0, "profile_version": None,
+}
+#: The ``node`` block (track T-HW fills it).
+NODE_IDLE: dict[str, Any] = {
+    "profile": "laptop", "cpu_temp_c": None, "throttled": None,
+    "under_voltage": None, "ext5v_v": None, "mains": None, "pir": None,
+    "door": None, "siren_armed": None, "gpio": None,
+    "uptime_s": None, "updated_at": None,
+}
+#: The ``channels`` block (track T-CH fills it): is anything able to leave?
+#: ``modem`` is the 4G modem worker's status (present, registered, signal).
+CHANNELS_IDLE: dict[str, Any] = {
+    "enabled": False, "outbound_ready": False, "live": False, "channels": {},
+    "outbox_depth": 0, "last_error": None, "modem": None,
+}
+#: Runtime HOME/ARMED mode (``sentrix.mode``).
+MODE_IDLE: dict[str, Any] = {"armed": False, "source": "config",
+                             "changed_by": None, "changed_at": None}
 
 _INITIAL: dict[str, Any] = {
     "tci": 0.0,
@@ -43,7 +86,17 @@ _INITIAL: dict[str, Any] = {
     "queue_depth": 0,
     "camera_online": False,
     "events_logged": 0,
+    # Portal and SOS (docs/7 §9.4); every block has a safe idle value.
+    "sos": SOS_IDLE,
+    "link": LINK_IDLE,
+    "node": NODE_IDLE,
+    "channels": CHANNELS_IDLE,
+    "mode": MODE_IDLE,
+    "remote_viewers": 0,
 }
+
+#: Committed level changes kept for the dashboard's Event Log (survives a reload).
+LEVEL_HISTORY_MAX = 50
 
 
 class SystemState:
@@ -51,8 +104,12 @@ class SystemState:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._data = dict(_INITIAL)
+        self._data = copy.deepcopy(_INITIAL)
+        self._data["test_mode"] = _test_mode_default()
         self._data["timestamp"] = _iso_now()
+        self._history: deque[dict[str, Any]] = deque(maxlen=LEVEL_HISTORY_MAX)
+        #: Read on every preview frame by the HUD, so a plain attribute.
+        self.remote_viewers = 0
 
     def update(self, **kwargs: Any) -> None:
         with self._lock:
@@ -62,6 +119,27 @@ class SystemState:
     def get(self) -> dict[str, Any]:
         with self._lock:
             return self._with_aliases(dict(self._data))
+
+    def set_remote_viewers(self, count: int) -> None:
+        """Remote (Portal) viewers of the live video; shown on the LC and HUD."""
+        count = max(0, int(count))
+        self.remote_viewers = count
+        self.update(remote_viewers=count)
+
+    def record_level_change(self, level: int, previous: int, status: str,
+                            reason: str = "", incident_id: str | None = None,
+                            incident_type: str = "normal") -> None:
+        """A committed level change, for ``level_history()``."""
+        with self._lock:
+            self._history.append({"at": _iso_now(), "level": int(level),
+                                  "previous": int(previous), "status": status,
+                                  "reason": reason, "incident_id": incident_id,
+                                  "incident_type": incident_type})
+
+    def level_history(self) -> list[dict[str, Any]]:
+        """Newest last; at most ``LEVEL_HISTORY_MAX`` entries."""
+        with self._lock:
+            return list(self._history)
 
     @staticmethod
     def _with_aliases(data: dict[str, Any]) -> dict[str, Any]:
@@ -80,6 +158,7 @@ class SystemState:
             "disabled", "initializing", "mic_unavailable")
         # No cloud dependency remains — inference is fully local. Reported as
         # True so the existing status badge does not show a spurious outage.
+        # (The link block carries the real Portal link state.)
         data.setdefault("cloud_online", True)
         data.setdefault("cloud_available", True)
         data.setdefault("dispatch_package", None)
@@ -88,8 +167,11 @@ class SystemState:
 
     def reset(self) -> None:
         with self._lock:
-            self._data = dict(_INITIAL)
+            self._data = copy.deepcopy(_INITIAL)
+            self._data["test_mode"] = _test_mode_default()
             self._data["timestamp"] = _iso_now()
+            self._history.clear()
+        self.remote_viewers = 0
 
     def ws_payload(self) -> str:
         """JSON for the websocket. Never raises — a serialisation failure
@@ -108,4 +190,5 @@ class SystemState:
 
 state = SystemState()
 
-__all__ = ["SystemState", "state"]
+__all__ = ["SystemState", "state", "SOS_IDLE", "LINK_IDLE", "NODE_IDLE",
+           "CHANNELS_IDLE", "MODE_IDLE", "LEVEL_HISTORY_MAX"]

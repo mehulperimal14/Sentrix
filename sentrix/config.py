@@ -44,6 +44,10 @@ def _env_bool(name: str, default: bool) -> bool:
     return raw in ("1", "true", "yes", "on")
 
 
+def _env_str(name: str, default: str) -> str:
+    return os.getenv(name, "").strip() or default
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Pipeline timing
 # ──────────────────────────────────────────────────────────────────────────────
@@ -332,6 +336,11 @@ class IdentityConfig:
     #: Identity score fed to fusion when an unknown person is present.
     unknown_person_score: float = 0.60
 
+    #: InsightFace model pack. ``buffalo_s`` (SCRFD-500M + MobileFaceNet) is
+    #: the Pi 5 option (HARDWARE.md T1, S3); embeddings of the two packs are
+    #: not comparable, so switching re-embeds the gallery.
+    face_model: str = _env_str("SENTRIX_FACE_MODEL", "buffalo_l")
+
     #: InsightFace modules actually used: detection (for the 5-point alignment)
     #: and recognition (the ArcFace embedding). buffalo_l also ships 3D/2D
     #: landmark and gender/age models that cost CPU on every face and are unused.
@@ -512,6 +521,229 @@ class AlertConfig:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Portal, SOS and device (docs/7_PORTAL_AND_SOS.md)
+#
+# Every service below is OFF unless its own env flag is set, so a tool, a test
+# or a replay that imports the package never starts a link, a modem or a
+# sweeper (decision D13). Secrets (bot tokens, API keys, the device token) are
+# never fields here: ``/api/config`` publishes ``to_dict()``.
+# ──────────────────────────────────────────────────────────────────────────────
+@dataclass(frozen=True)
+class SosConfig:
+    """Assistance requests opened at a confirmed L3 commit (decisions D8, D9).
+
+    A request opens only for the D1 alarm classes (``alarm_classes``) and, in
+    armed mode, for an intrusion that outlives the SIA-style entry delay. The
+    household's window (30/45/60 min) bounds the *outside-help question*; the
+    safety defaults alert confirmed contacts without waiting for it when the
+    evidence is strong (corroborated L4/L5), the class is fire, the intrusion
+    is armed, or the device drops off the link during an open L2+ incident.
+    No answer ends in EXPIRED ("unanswered"), never "safe". The policy is
+    frozen on each request when it opens.
+    """
+
+    enabled: bool = _env_bool("SENTRIX_SOS_ENABLED", False)
+    min_level: int = 3
+    alarm_classes: tuple = ("weapon", "fire")
+    #: Armed-mode intrusion opens a request only after this entry delay, unless
+    #: disarmed by the SOS PIN or an authorised face in the meantime.
+    intrusion_entry_delay_seconds: float = 30.0
+
+    window_seconds: int = _env_int("SENTRIX_SOS_WINDOW_SECONDS", 1800)
+    window_choices: tuple = (1800, 2700, 3600)
+    #: Test mode only (ignored otherwise), clamped to >= 60 s: demo window.
+    demo_window_seconds: int = _env_int("SENTRIX_SOS_DEMO_WINDOW_SECONDS", 0)
+    reminder_offsets_seconds: tuple = (120, 300, 600, 1200)
+    lapse_warning_seconds: float = 300.0
+    #: "I'm checking" pauses reminders only, never the expiry or safety timers.
+    seen_snooze_seconds: float = 300.0
+    #: Owner SMS (modem) when the link is down, or the prompt is unseen this long.
+    owner_sms_unseen_after_seconds: float = 600.0
+    #: A remote channel that has not delivered within this raises "undelivered".
+    delivery_warning_seconds: float = 60.0
+
+    safety_defaults: bool = True
+    #: Committed levels that alert confirmed contacts at once (corroborated).
+    contacts_immediate_levels: tuple = (4, 5)
+    fire_contacts_after_seconds: float = 120.0
+    #: Single-source weapon L3 alerts the owner only until gate P8 passes.
+    contacts_for_single_source_l3: bool = _env_bool(
+        "SENTRIX_SOS_CONTACTS_SINGLE_SOURCE_L3", False)
+    single_source_contacts_after_seconds: float = 300.0
+    #: Cloud side: no message from the device for this long = heartbeat lost.
+    heartbeat_lost_seconds: float = 45.0
+
+    #: After a decline, the same threat re-prompts at most once per window.
+    repeat_window_seconds: float = 600.0
+    pin_length: int = 6
+    pin_attempts: int = 5
+    pin_window_seconds: float = 600.0
+    duress_min_digit_difference: int = 2
+
+    #: Approved requests never expire; the Desk and contacts are re-paged.
+    repage_offsets_seconds: tuple = (120, 300, 600)
+    repage_interval_seconds: float = 3600.0
+    repage_cap: int = 10
+    repage_cap_test_mode: int = 3
+    stale_close_seconds: float = 86400.0
+    sweep_interval_seconds: float = 15.0
+    #: Contact pages and action links live until the request closes + this.
+    link_grace_seconds: float = 7200.0
+
+
+@dataclass(frozen=True)
+class LinkConfig:
+    """The device's outbound WSS link to the Portal (protocol v1, docs/7 §5).
+
+    The device never accepts inbound connections (home lines sit behind
+    CGNAT). Identity (device id, bootstrap secret, device token) lives in
+    ``identity_dir``, outside ``var/`` so a factory reset cannot strand the
+    unit: ``/etc/sentrix`` when it exists, otherwise ``var/link``.
+    """
+
+    enabled: bool = _env_bool("SENTRIX_LINK_ENABLED", False)
+    #: Portal base URL, e.g. https://sentrix.example.in; the socket is
+    #: ``wss://<host>/device/v1/link`` (``ws://`` for an http:// dev Portal).
+    portal_url: str = _env_str("SENTRIX_PORTAL_URL", "")
+    identity_dir: str = _env_str("SENTRIX_DEVICE_IDENTITY_DIR", "")
+    protocol_version: int = 1
+    heartbeat_seconds: float = 10.0
+    #: Device: no message from the Portal for this long = offline (SMS ladder).
+    offline_after_seconds: float = 30.0
+    reconnect_min_seconds: float = 1.0
+    reconnect_max_seconds: float = 60.0
+    #: Outbox events in flight before the device waits for an ack.
+    outbox_window: int = 64
+    state_hz_subscribed: float = 2.0
+    state_idle_seconds: float = 10.0
+    #: Subscriptions are leases the Portal renews; an orphan stops itself.
+    subscription_lease_seconds: float = 75.0
+    #: Remote video: adaptive up to ``video_max_fps``; JPEG quality equals the
+    #: MJPEG stream's so the once-per-frame encode cache is reused.
+    video_max_fps: float = 15.0
+    video_min_fps: float = 2.0
+    video_jpeg_quality: int = 70
+    video_idle_stop_seconds: float = 10.0
+    max_viewers: int = 3
+    tunnel_timeout_seconds: float = 20.0
+    tunnel_upload_timeout_seconds: float = 60.0
+    tunnel_max_inflight: int = 8
+    tunnel_inline_body_bytes: int = 256 * 1024
+    tunnel_chunk_bytes: int = 256 * 1024
+    tunnel_max_request_bytes: int = 11 * 1024 * 1024
+    tunnel_max_response_bytes: int = 16 * 1024 * 1024
+    #: Device-enforced limits on commands from the cloud (decisions).
+    sms_daily_cap: int = 30
+    siren_test_min_interval_seconds: float = 60.0
+    siren_test_seconds: float = 1.0
+    media_requests_per_minute: int = 60
+
+
+@dataclass(frozen=True)
+class ChannelConfig:
+    """Outbound channels and the test-mode send guard (decision D13).
+
+    Test mode is the default and the only mode this semester. A message leaves
+    the machine only when SENTRIX_LIVE_ALERTS=1 *and* the channel's own flag is
+    set; in test mode it may then go only to SENTRIX_TEST_RECIPIENTS and starts
+    with the test banner. ``sentrix/alerting/guard.py`` re-reads the
+    environment on every send; these fields mirror it for display.
+    """
+
+    #: The channel router and its outbox worker (a service).
+    enabled: bool = _env_bool("SENTRIX_CHANNELS_ENABLED", False)
+    test_mode: bool = _env_bool("SENTRIX_TEST_MODE", True)
+    live_alerts: bool = _env_bool("SENTRIX_LIVE_ALERTS", False)
+    modem_live: bool = _env_bool("SENTRIX_MODEM_LIVE", False)
+    twilio_enabled: bool = _env_bool("SENTRIX_TWILIO_ENABLED", False)
+    telegram_live: bool = _env_bool("SENTRIX_TELEGRAM_LIVE", False)
+    email_live: bool = _env_bool("SENTRIX_EMAIL_LIVE", False)
+    #: The USB 4G modem worker (AT commands over pyserial).
+    modem_enabled: bool = _env_bool("SENTRIX_MODEM_ENABLED", False)
+    modem_port: str = _env_str("SENTRIX_MODEM_PORT", "")
+    modem_baud: int = _env_int("SENTRIX_MODEM_BAUD", 115200)
+    telegram_mode: str = _env_str("SENTRIX_TELEGRAM_MODE", "polling")
+    email_provider: str = _env_str("SENTRIX_EMAIL_PROVIDER", "")
+    #: Each message: this many attempts, waiting these offsets between them
+    #: ("3 tries over 2 min"); then FAILED, retried every failed_retry_seconds.
+    max_attempts: int = 3
+    retry_backoff_seconds: tuple = (30.0, 90.0)
+    failed_retry_seconds: float = 120.0
+    request_timeout_seconds: float = 15.0
+
+
+@dataclass(frozen=True)
+class GpioConfig:
+    """Pi 5 header (roadmap v2 pin table; gpiozero on lgpio, mock elsewhere)."""
+
+    enabled: bool = _env_bool("SENTRIX_GPIO_ENABLED", False)
+    #: "" = auto (lgpio on a Pi, gpiozero's mock factory elsewhere).
+    pin_factory: str = _env_str("SENTRIX_GPIO_PIN_FACTORY", "")
+    siren_pin: int = 17
+    #: NPN driver with ``gpio=17=op,dl`` in config.txt: HIGH = siren on.
+    siren_active_high: bool = _env_bool("SENTRIX_SIREN_ACTIVE_HIGH", True)
+    led_green_pin: int = 5
+    led_amber_pin: int = 12
+    led_red_pin: int = 13
+    buzzer_pin: int = 26
+    pir_pin: int = 23
+    door_pin: int = 24
+    door_pull_up: bool = True
+    mains_sense_pin: int = 16
+    #: PC817 output is pulled low while mains power is present.
+    mains_present_low: bool = True
+    input_bounce_seconds: float = 0.05
+
+
+@dataclass(frozen=True)
+class ClipConfig:
+    """The 4-second clip engine (HARDWARE.md T1). ``mode=tick`` is today's loop."""
+
+    mode: str = _env_str("SENTRIX_PIPELINE_MODE", "tick")
+    window_seconds: float = 4.0
+    hop_seconds: float = 2.0
+    keyframes: int = 6
+    uniform_keyframes: int = 4
+    motion_keyframes: int = 2
+    #: A class is confirmed in a clip on this many keyframes of one track.
+    confirm_keyframes: int = 2
+    #: Clip compute must stay under this fraction of the hop at p95.
+    budget_fraction: float = 0.8
+    fast_lane: bool = _env_bool("SENTRIX_FAST_LANE", False)
+    fast_lane_imgsz: int = 320
+    fast_lane_every_n: int = 4
+    fast_lane_hits: int = 2
+    #: Model runtime for exported models: torch | onnx | ncnn.
+    runtime: str = _env_str("SENTRIX_RUNTIME", "torch")
+    threads: int = _env_int("SENTRIX_CLIP_THREADS", 4)
+
+
+@dataclass(frozen=True)
+class NodeConfig:
+    """Device telemetry (Node page, heartbeat)."""
+
+    enabled: bool = _env_bool("SENTRIX_NODE_ENABLED", False)
+    #: laptop | pi5-clip | pi5-hailo | pi5-node | hub (HARDWARE.md §9).
+    profile: str = _env_str("SENTRIX_PROFILE", "laptop")
+    interval_seconds: float = 5.0
+    temp_warn_c: float = 80.0
+    temp_critical_c: float = 85.0
+
+
+@dataclass(frozen=True)
+class WebConfig:
+    """Local Console (LC) web hardening (docs/7 §9)."""
+
+    #: FastAPI /docs, /redoc, /openapi.json (off unless asked for).
+    api_docs: bool = _env_bool("SENTRIX_API_DOCS", False)
+    cookie_name: str = "lc_session"
+    csrf_header: str = "X-CSRF-Token"
+    csp: bool = _env_bool("SENTRIX_CSP", True)
+    #: /setup/wifi exists only while the unit is in physical setup mode.
+    setup_mode: bool = _env_bool("SENTRIX_SETUP_MODE", False)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Root
 # ──────────────────────────────────────────────────────────────────────────────
 @dataclass(frozen=True)
@@ -529,6 +761,19 @@ class Config:
     incident: IncidentConfig = field(default_factory=IncidentConfig)
     evidence: EvidenceConfig = field(default_factory=EvidenceConfig)
     alert: AlertConfig = field(default_factory=AlertConfig)
+    sos: SosConfig = field(default_factory=SosConfig)
+    link: LinkConfig = field(default_factory=LinkConfig)
+    channels: ChannelConfig = field(default_factory=ChannelConfig)
+    gpio: GpioConfig = field(default_factory=GpioConfig)
+    clip: ClipConfig = field(default_factory=ClipConfig)
+    node: NodeConfig = field(default_factory=NodeConfig)
+    web: WebConfig = field(default_factory=WebConfig)
+
+    @property
+    def test_mode(self) -> bool:
+        """Decision D13: on unless SENTRIX_TEST_MODE=0 (display value; the send
+        guard re-reads the environment on every send)."""
+        return self.channels.test_mode
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
