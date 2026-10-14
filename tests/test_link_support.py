@@ -477,7 +477,6 @@ class FakeSosService:
                             "authority_side": authority_side, "events": events})
         current = requests.get_request(request_id)
         if current is None:
-            first = events[0] if events else {}
             requests.create_request(request_id, incident_id=None, incident_type="unknown",
                                     level=2, evidence_state="unconfirmed", policy={},
                                     expires_at=None, test_mode=True, origin="cloud")

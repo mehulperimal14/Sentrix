@@ -42,7 +42,7 @@ from sentrix_portal.db import get_db
 from sentrix_portal.models import (AssistanceRequest, Device, DispatchMirror,
                                    IncidentMirror, utcnow)
 from sentrix_portal.services import sos as sos_service
-from sentrix_portal.services.hub import UUID_RE, Viewer, hub_for, offline_state
+from sentrix_portal.services.hub import UUID_RE, Viewer, hub_for
 
 router = APIRouter()
 
@@ -59,6 +59,9 @@ NEVER_EXACT = frozenset({"/login", "/logout", "/docs", "/redoc", "/openapi.json"
                          "/video"})
 NEVER_PREFIXES = ("/setup/", "/docs/", "/redoc/", "/ws/")
 METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]
+#: What the Desk may open through the tunnel (the device's table says the
+#: same; the Portal checks it first so nothing else is even forwarded).
+DESK_PATHS = frozenset({"/dashboard", "/live", "/api/health", "/api/metrics"})
 _tunnel_role = security.require_role("owner", "member", "operator", csrf="header")
 _view_role = security.require_role("owner", "member", "operator", csrf=False)
 
@@ -269,6 +272,11 @@ async def tunnel(device_id: str, path: str, request: Request,
     if inner in NEVER_EXACT or inner.startswith(NEVER_PREFIXES):
         return JSONResponse({"detail": "not available through the Portal",
                              "code": "not_found"}, status_code=404)
+    if principal.role == "operator" and not (
+            request.method in ("GET", "HEAD")
+            and (inner in DESK_PATHS or inner.startswith("/static/"))):
+        return JSONResponse({"detail": "the Desk may only view the live console",
+                             "code": "forbidden_role"}, status_code=403)
     hub = hub_for(request.app)
     if not hub.online(device.id):
         return await _offline(request, db, principal, device, inner)
@@ -376,10 +384,11 @@ async def _queue_verdict(request: Request, principal, device: Device,
 
 
 def _offline_page(request: Request, db: Session, principal, device: Device) -> Response:
+    household = principal.role in ("owner", "member")      # the Desk sees no history
     incidents = (db.query(IncidentMirror).filter_by(device_id=device.id)
-                 .order_by(IncidentMirror.started_at.desc()).limit(50).all())
+                 .order_by(IncidentMirror.started_at.desc()).limit(50).all()) if household else []
     packages = (db.query(DispatchMirror).filter_by(device_id=device.id)
-                .order_by(DispatchMirror.created_at.desc()).limit(20).all())
+                .order_by(DispatchMirror.created_at.desc()).limit(20).all()) if household else []
     requests_open = [sos_service.request_view(r, "desk" if principal.role == "operator"
                                               else "owner")
                      for r in db.query(AssistanceRequest)

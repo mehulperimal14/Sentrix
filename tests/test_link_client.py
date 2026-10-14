@@ -20,7 +20,7 @@ from sentrix.actor import Actor
 from sentrix.link import client as link_client
 from sentrix.link import protocol
 
-from test_link_support import (MemoryNetwork, Seeded, lc_app, login, make_device,
+from test_link_support import (MemoryNetwork, lc_app, make_device,
                                profile_for, run_on, seed_portal, wait_for)
 
 OWNER_ACTOR = Actor("owner", id="u1", name="Riya", step_up_at=time.time()).to_dict()

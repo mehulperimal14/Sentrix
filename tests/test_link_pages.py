@@ -15,7 +15,6 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
-from sentrix.actor import Actor
 
 from test_link_support import DESK_PHONE, DURESS_PIN, PIN, Outbox, login, seed_portal
 
@@ -408,9 +407,18 @@ class TestOfflineProxy:
         desk, _ = client_for(app, seeded.operator_id, totp=True)
         assert desk.get(f"/d/{seeded.device_id}/live").status_code == 403, \
             "the Desk sees a home only while its request is on the help path"
-        open_request(app, seeded, state="DISPATCHED")
+        _rid, incident = open_request(app, seeded, state="DISPATCHED")
         assert desk.get(f"/d/{seeded.device_id}/api/health").status_code == 503, \
             "allowed now (and the device is offline)"
+        assert desk.get(f"/d/{seeded.device_id}/events").status_code == 403, \
+            "the Desk may view the live console only"
+        token = login(app, seeded.operator_id, totp=True)
+        desk.cookies.set("portal_session", token[0])
+        assert desk.post(f"/d/{seeded.device_id}/api/mode", json={"armed": False},
+                         headers={"X-CSRF-Token": token[1]}).status_code == 403
+        offline = desk.get(f"/d/{seeded.device_id}/live", headers={"accept": "text/html"})
+        assert offline.status_code == 503 and incident not in offline.text, \
+            "no incident history for the Desk"
         anonymous = TestClient(app, follow_redirects=False)
         bookmark = anonymous.get(f"/d/{seeded.device_id}/dashboard",
                                  headers={"accept": "text/html"})
