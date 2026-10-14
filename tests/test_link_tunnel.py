@@ -173,8 +173,6 @@ class TestTunnelExecutor:
         assert ex.timeout_for(upload, "POST", "/authorized/upload") == 60.0
 
     def test_cancel_propagates(self, app):
-        started = asyncio.Event() if False else None
-
         @app.get("/api/test-forever")
         async def forever():
             await asyncio.sleep(30)

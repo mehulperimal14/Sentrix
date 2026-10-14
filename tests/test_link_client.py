@@ -89,6 +89,17 @@ def online(rig):
     return hub.is_online(rig.seeded.device_id)
 
 
+def claim_offline(rig):
+    """Claimed before the device ever connects: its token is already on disk."""
+    from sentrix_portal import security
+    from sentrix_portal.models import Device
+    token = "pre-issued-" + "t" * 40
+    link_client.save_token(rig.identity_dir, token)
+    with rig.app.state.db.session() as db:
+        device = db.get(Device, rig.seeded.device_id)
+        device.state, device.token_hash = "CLAIMED", security.token_digest(token)
+
+
 def start_claimed(rig):
     rig.service.start()
     wait_for(lambda: rig.network.hub.sessions.get(rig.seeded.device_id), what="bootstrap session")
@@ -176,7 +187,7 @@ class TestPairing:
         wait_for(lambda: len(rig.network.headers) >= 2, what="second attempt")
         assert rig.network.headers[0]["Authorization"].startswith("Bearer stale-token")
         assert rig.network.headers[1]["Authorization"].startswith("Bootstrap ")
-        assert rig.service.last_close_code in (protocol.CLOSE_UNAUTHORISED, None) or True
+        assert rig.service.reconnects >= 1
         # unclaimed on the bootstrap secret: the stale token is wiped
         wait_for(lambda: link_client.load_token(rig.identity_dir) is None, what="stale wiped")
 
@@ -214,6 +225,22 @@ class TestSession:
             mirror = db.get(IncidentMirror, incident)
             assert mirror.peak_level == 3 and mirror.incident_type == "weapon"
             assert db.query(DeviceEvent).count() >= 1
+
+    def test_sos_events_jump_the_queue(self, rig):
+        from sentrix import link
+        from sentrix.storage import link_store
+        claim_offline(rig)
+        for n in range(5):
+            link.publish("incident.upsert", {"id": f"4f1d3b52-2b6e-4a43-9a0a-1c2d3e4f5a{n:02d}"})
+        sos_seq = link.publish("sos.event", {"request_id": "r", "event": {}},
+                               dedupe_key=protocol.sos_dedupe_key("r", "device", 1))
+        rig.service.start()
+        wait_for(lambda: online(rig), what="online")
+        wait_for(lambda: link_store.depth() == 0, what="drained")
+        sent = [json.loads(m) for m in rig.network.pipes[-1].device.sent if isinstance(m, str)]
+        events = [m for m in sent if m["type"] == "event"]
+        assert events[0]["seq"] == sos_seq and events[0]["priority"] == 0
+        assert [e["seq"] for e in events[1:]] == sorted(e["seq"] for e in events[1:])
 
     def test_listeners_turn_writes_into_events(self, rig):
         from sentrix import listeners
@@ -383,7 +410,7 @@ class TestSession:
             hub._on_heartbeat = silent
         run_on(rig.service._loop, mute())
         wait_for(lambda: len(rig.network.pipes) > count, timeout=10, what="redial")
-        assert not rig.service.is_online() or True
+        assert rig.network.pipes[count - 1].code == protocol.CLOSE_GOING_AWAY,             "the device left the silent connection itself"
 
     def test_reconnect_now_and_api_link(self, rig, monkeypatch):
         from fastapi.testclient import TestClient

@@ -419,6 +419,37 @@ class TestSosMirror:
             assert desk["duress"] and desk["banner"] == "Do not go to the home. Call 112."
 
 
+class TestDeliveryFeedback:
+    def test_portal_channel_statuses_reach_the_device_or_the_cloud_chain(self, rig):
+        from sentrix_portal.models import RequestEvent
+        from sentrix_portal.services import sos as portal_sos
+        connect(rig)
+        request = rig.sos.open()
+        wait_for(lambda: (r := mirror(rig.app, request["id"])) and r.state == "PENDING",
+                 what="PENDING")
+        with rig.app.state.db.session() as db:
+            assert portal_sos.notification_status(
+                db, request_id=request["id"], channel="telegram", recipient_ref="owner",
+                step="t0", status="QUEUED") is None, "not a final status"
+            assert portal_sos.notification_status(
+                db, request_id=request["id"], channel="telegram", recipient_ref="owner",
+                step="t0", status="SENT") == "device"
+        wait_for(lambda: any(c[0] == "cloud_event" and c[2] == "notification"
+                             for c in rig.sos.calls), what="sos.update notification")
+        call = next(c for c in rig.sos.calls if c[2] == "notification")
+        assert call[3] == "cloud" and call[4]["status"] == "SENT" and call[4]["step"] == "t0"
+        rig.service.stop()
+        wait_for(lambda: not rig.network.hub.online(rig.seeded.device_id), what="offline")
+        with rig.app.state.db.session() as db:
+            assert portal_sos.notification_status(
+                db, request_id=request["id"], channel="email", recipient_ref="owner",
+                step="t0", status="SUPPRESSED", error="dry run") == "cloud"
+        with rig.app.state.db.session() as db:
+            event = (db.query(RequestEvent).filter_by(request_id=request["id"], origin="cloud")
+                     .one())
+            assert event.event == "notification" and event.detail["status"] == "SUPPRESSED"
+
+
 # ── offline: watcher, tamper, cloud authority, sync ───────────────────────────
 class TestCloudAuthority:
     def _offline(self, rig, request_id=None):

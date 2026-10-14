@@ -224,6 +224,8 @@ class LinkHub:
         self._renewers: dict[str, asyncio.Task] = {}
         self._idle_stops: dict[str, asyncio.Task] = {}
         self._background: set[asyncio.Task] = set()
+        #: The event loop the device sockets run on (set by the first one).
+        self.loop: asyncio.AbstractEventLoop | None = None
 
     @property
     def db(self):
@@ -239,6 +241,20 @@ class LinkHub:
         task.add_done_callback(self._background.discard)
         return task
 
+    def schedule(self, coro) -> None:
+        """Run ``coro`` on the hub's loop from any thread (workers, listeners)."""
+        loop = self.loop
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+        if running is not None and (loop is None or running is loop):
+            self._spawn(coro)
+        elif loop is not None and not loop.is_closed():
+            asyncio.run_coroutine_threadsafe(coro, loop)
+        else:
+            coro.close()
+
     def online(self, device_id: str) -> bool:
         session = self.sessions.get(device_id)
         return session is not None and session.full and not session.closed
@@ -246,6 +262,7 @@ class LinkHub:
     # ── the socket ────────────────────────────────────────────────────────────
     async def serve(self, conn: Any, authorization: str | None) -> None:
         """Run one device connection until it closes."""
+        self.loop = asyncio.get_running_loop()
         found = await asyncio.to_thread(self._authenticate, authorization or "")
         if found is None:
             await conn.close(protocol.CLOSE_UNAUTHORISED, "unauthorised")
@@ -1322,6 +1339,12 @@ def offline_state(payload: dict | None) -> dict:
     out.update(camera_online=False, camera_available=False, ai_hz=0.0, fps=0.0,
                video_fps=0.0, link=link, link_online=False, device_offline=True)
     return out
+
+
+def cloud_actor() -> dict:
+    """The actor of the Portal's own automated commands."""
+    from sentrix.actor import Actor
+    return Actor.cloud().to_dict()
 
 
 def _cloud_actor() -> dict:

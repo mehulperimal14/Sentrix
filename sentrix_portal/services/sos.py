@@ -903,6 +903,38 @@ async def mark_seen(db, request_id: str, actor: dict) -> None:
     _cloud_event(db, row, S.SEEN, actor_type="owner", actor_id=None, channel="portal")
 
 
+#: Portal outbox statuses the device hears about (it derives ``delivered`` /
+#: ``undelivered`` itself; SUPPRESSED, a dry run, never counts as delivered).
+NOTIFIED_STATUSES = frozenset({"SENT", "DELIVERED", "FAILED", "SUPPRESSED"})
+
+
+def notification_status(db, *, request_id: str | None, channel: str, recipient_ref: str,
+                        step: str, status: str, error: str | None = None) -> str | None:
+    """Delivery feedback from the Portal's channels (T-CH's outbox worker
+    calls this after a status change of an SOS message). Online, the device
+    gets ``sos.update notification`` (queued if it drops meanwhile); offline,
+    the cloud records the ``notification`` event in its own chain. Returns
+    "device", "cloud" or None (not an SOS message, or not a final status)."""
+    from sentrix_portal.services import hub
+    if not request_id or status not in NOTIFIED_STATUSES:
+        return None
+    row = db.get(AssistanceRequest, request_id)
+    if row is None:
+        return None
+    detail = {"channel": channel, "recipient_ref": recipient_ref, "step": step,
+              "status": status, "error": (error or "")[:200] or None}
+    current = hub.current_hub()
+    if (row.device_id and current is not None and current.online(row.device_id)
+            and row.authority_side != "cloud"):
+        current.schedule(current.send_command(
+            row.device_id, "sos.update", {"request_id": row.id, "event": "notification",
+                                          "detail": detail}, hub._cloud_actor(), timeout=10,
+            queue_if_offline=True))
+        return "device"
+    _cloud_event(db, row, S.NOTIFICATION, detail=detail)
+    return "cloud"
+
+
 async def record_note(db, request_id: str, *, actor: dict, detail: dict) -> dict:
     """A Desk note that changes no state ("Called 112 (simulated)"): a
     ``notification`` event on the device (online) or in the cloud chain."""
