@@ -14,7 +14,21 @@ One recipe, two starting points:
 ``--init pretrained``
     Any architecture from its generic public weights (torchvision ImageNet, or
     ``timm:<name>`` — e.g. self-supervised DINOv2), trained on this dataset
-    only. (branch ``sentrix/custom-v4``)
+    only. (branch ``sentrix/custom-v4``; the slim Raspberry Pi heads
+    ``timm:efficientnet_b0`` and ``timm:mobilenetv3_large_100`` of
+    ``models/v5_slim/``)
+
+``--train-last-blocks N`` freezes everything but the head and the last N
+``blocks``: a ViT's transformer blocks, or a timm CNN's stages (EfficientNet-B0
+and MobileNetV3-Large have seven). Frozen BatchNorm layers keep their
+pretrained statistics.
+
+``--teacher TAG`` distils from the recipe of an earlier ``cv`` run (e.g. the
+DINOv2 ``dino_b_last4``). The teacher is retrained on exactly the student's
+training frames - per fold in ``cv``, on the train split in ``fit`` - so it has
+never seen the frames the student is scored on; trained teachers are cached
+(``SENTRIX_TEACHER_CACHE``). Teacher and student see the same augmented batch
+(function matching, Beyer et al. 2022), mixed up with ``--mixup``.
 
 Subcommands
 -----------
@@ -33,12 +47,15 @@ Examples::
     python training/custom/train_scene_classifier.py fit --init violence_v3 \\
         --arch resnet18 --rehearsal 600 --cv-tag ft_r18_reh \\
         --out models/v4_finetuned/scene_classifier_ft_v4.pt
+    python training/custom/train_scene_classifier.py cv --arch timm:efficientnet_b0 \\
+        --teacher dino_b_last4 --mixup 1.0 --epochs 40 --tag effb0_kd
 """
 
 from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import math
 import os
@@ -61,17 +78,30 @@ sys.path.insert(0, str(ROOT))
 from sentrix.evaluation.custom_dataset import CLASSES, Frame, load_frames  # noqa: E402
 from sentrix.evaluation.metrics import classification_report  # noqa: E402
 from sentrix.perception.scene import (PRIORITY, base_fingerprint,  # noqa: E402
-                                      build_scene_model, decide_label)
+                                      build_scene_model, decide_label, merge_delta)
 
 VIOLENCE_V3 = ROOT / "models" / "v3_real" / "violence_classifier_real_v3.pt"
 RWF_DIR = Path(os.getenv("SENTRIX_VIOLENCE_DATA", ROOT / "data" / "violence_data"))
 RUNS = ROOT / "training" / "runs" / "custom"
+#: Teachers trained for distillation, one per training set. Two students share
+#: them, and a DINOv2 teacher takes minutes to train, so they are cached -
+#: outside the repository (a DINOv2 delta is ~110 MB).
+TEACHER_CACHE = Path(os.getenv("SENTRIX_TEACHER_CACHE",
+                               Path.home() / ".cache" / "sentrix" / "scene_teachers"))
 MEAN, STD = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
 NORMAL, ASSAULT = CLASSES.index("normal"), CLASSES.index("assault")
 #: Robbery is one event in one video: out-of-fold it is never seen, so its
 #: threshold cannot be tuned. Fixed, and deliberately above an argmax tie.
 ROBBERY_THRESHOLD = 0.60
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+#: Options added after the first ``cv`` runs were written, with the value that
+#: reproduces those runs - so an old summary still describes its recipe.
+RECIPE_DEFAULTS = {"teacher": None, "kd_weight": 0.5, "kd_temperature": 2.0, "mixup": 0.0}
+#: Everything that changes a trained model. A teacher cache entry is keyed by
+#: these and by the exact training frames.
+RECIPE_KEYS = ("arch", "init", "size", "epochs", "batch", "lr", "head_lr_mult",
+               "weight_decay", "label_smoothing", "rehearsal", "rehearsal_share",
+               "train_last_blocks", "seed", *RECIPE_DEFAULTS)
 
 
 def seed_all(seed: int) -> None:
@@ -175,11 +205,16 @@ def build(arch: str, init: str, size: int = 224) -> nn.Module:
 
 
 def freeze(net: nn.Module, train_last_blocks: int | None) -> None:
-    """Train only the head (``0``) or the head plus the last N ViT blocks.
+    """Train only the head (``0``) or the head plus the last N ``blocks``.
 
     Screening showed frozen DINOv2 features generalise across videos better
     than any fine-tuned CNN; updating the whole backbone on eight videos
     mostly teaches it which room it is in.
+
+    ``blocks`` are a ViT's transformer blocks or a timm CNN's stages. What runs
+    after the last block trains with it, because the head reads its output: a
+    ViT's final norm, a CNN's 1x1 head convolution and its BatchNorm
+    (EfficientNet ``conv_head``/``bn2``, MobileNetV3 ``conv_head``/``norm_head``).
     """
     if train_last_blocks is None:
         return
@@ -189,12 +224,63 @@ def freeze(net: nn.Module, train_last_blocks: int | None) -> None:
     if train_last_blocks > 0:
         blocks = getattr(net, "blocks", None)
         if blocks is None:
-            raise SystemExit("--train-last-blocks needs a transformer with .blocks")
-        for block in list(blocks)[-train_last_blocks:]:
-            for p in block.parameters():
+            raise SystemExit("--train-last-blocks needs a model with .blocks "
+                             "(ViT blocks or timm CNN stages)")
+        for module in [*list(blocks)[-train_last_blocks:], *post_block_modules(net)]:
+            for p in module.parameters():
                 p.requires_grad = True
-        for p in getattr(net, "norm", nn.Identity()).parameters():
-            p.requires_grad = True
+
+
+def post_block_modules(net: nn.Module) -> list[nn.Module]:
+    """The children of ``net`` that run after ``net.blocks``, in order.
+
+    timm declares a model's children in forward order, so this is a ViT's
+    ``norm``/``fc_norm``/``head`` and a CNN's ``conv_head``, its norm, pooling
+    and ``classifier``.
+    """
+    children = list(net.named_children())
+    names = [name for name, _ in children]
+    if "blocks" not in names:
+        return []
+    return [module for _, module in children[names.index("blocks") + 1:]]
+
+
+def train_mode(net: nn.Module) -> None:
+    """``net.train()``, except BatchNorm layers whose weights are frozen.
+
+    In train mode BatchNorm keeps re-estimating its running statistics from
+    the batches, weights frozen or not, so a "frozen" stage would drift
+    towards these eight videos - and a delta checkpoint, which stores only
+    what training changed, would silently miss the drift. A ViT has no
+    BatchNorm and a fully trained network has none frozen: both unchanged.
+    """
+    net.train()
+    for module in net.modules():
+        if isinstance(module, nn.modules.batchnorm._BatchNorm):
+            params = list(module.parameters(recurse=False))
+            if params and not any(p.requires_grad for p in params):
+                module.eval()
+
+
+def delta_state(net: nn.Module) -> tuple[dict[str, torch.Tensor], str]:
+    """The tensors training changed, and a fingerprint of everything else.
+
+    Kept: the trainable parameters, the buffers (BatchNorm running statistics)
+    of every module that trained, and the position embedding (timm resamples
+    it to the input size, and that resampling may differ between timm
+    versions). Everything else is the public checkpoint, which
+    :func:`sentrix.perception.scene.merge_delta` verifies against the
+    fingerprint before overlaying the delta.
+    """
+    full = net.state_dict()
+    keep = {n for n, p in net.named_parameters() if p.requires_grad}
+    keep |= {n for n in full if n == "pos_embed"}
+    for name, module in net.named_modules():
+        if any(p.requires_grad for p in module.parameters(recurse=False)):
+            keep |= {f"{name}.{b}" if name else b
+                     for b, _ in module.named_buffers(recurse=False)}
+    fingerprint = base_fingerprint(full, frozenset(keep))
+    return {k: v for k, v in full.items() if k in keep}, fingerprint
 
 
 def head_params(net: nn.Module) -> list[nn.Parameter]:
@@ -204,11 +290,19 @@ def head_params(net: nn.Module) -> list[nn.Parameter]:
 
 
 def train_model(args, items: list[tuple[Path, int]], rehearsal: list[tuple[Path, int]],
-                log_prefix: str = "") -> nn.Module:
+                log_prefix: str = "", teacher: nn.Module | None = None,
+                teacher_size: int | None = None) -> nn.Module:
+    """Train one model. With ``teacher``, distil from it (``args.kd_weight``)."""
     seed_all(args.seed)
     net = build(args.arch, args.init, args.size)
     freeze(net, args.train_last_blocks)
     net = net.to(DEVICE)
+    mixup = float(getattr(args, "mixup", 0.0) or 0.0)
+    kd_weight = float(getattr(args, "kd_weight", RECIPE_DEFAULTS["kd_weight"]))
+    kd_temperature = float(getattr(args, "kd_temperature",
+                                   RECIPE_DEFAULTS["kd_temperature"]))
+    if teacher is not None:
+        teacher.eval()
     all_items = items + rehearsal
     dataset = ImageSet(all_items, args.size, train=True)
 
@@ -239,12 +333,21 @@ def train_model(args, items: list[tuple[Path, int]], rehearsal: list[tuple[Path,
     loss_fn = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing)
 
     for epoch in range(1, args.epochs + 1):
-        net.train()
+        train_mode(net)
         t0, total, seen = time.time(), 0.0, 0
         for x, y in loader:
             x, y = x.to(DEVICE, non_blocking=True), y.to(DEVICE, non_blocking=True)
+            x, partner, lam = mixup_batch(x, y, mixup)
             with torch.autocast(DEVICE.type, enabled=DEVICE.type == "cuda"):
-                loss = loss_fn(net(x), y)
+                logits = net(x)
+                loss = loss_fn(logits, y)
+                if lam < 1.0:
+                    loss = lam * loss + (1 - lam) * loss_fn(logits, partner)
+                if teacher is not None:
+                    with torch.no_grad():
+                        target = teacher(resize_batch(x, teacher_size or args.size))
+                    loss = ((1 - kd_weight) * loss
+                            + kd_weight * distillation_loss(logits, target, kd_temperature))
             opt.zero_grad(set_to_none=True)
             scaler.scale(loss).backward()
             scaler.unscale_(opt)
@@ -270,6 +373,101 @@ def predict_logits(net: nn.Module, items: list[tuple[Path, int]], size: int) -> 
         with torch.autocast(DEVICE.type, enabled=DEVICE.type == "cuda"):
             out.append(net(x.to(DEVICE)).float().cpu())
     return torch.cat(out).numpy()
+
+
+# ── distillation ──────────────────────────────────────────────────────────────
+def mixup_batch(x: torch.Tensor, y: torch.Tensor,
+                alpha: float) -> tuple[torch.Tensor, torch.Tensor, float]:
+    """Mix a batch with a shuffled copy of itself (Zhang et al. 2018).
+
+    Returns the mixed images, each image's partner label and the weight
+    ``lam ~ Beta(alpha, alpha)`` of the original. With ``alpha <= 0`` the batch
+    passes through (``lam = 1``) and no random number is drawn, so a run
+    without mixup is the run it was before mixup existed.
+    """
+    if alpha <= 0:
+        return x, y, 1.0
+    lam = float(np.random.beta(alpha, alpha))
+    perm = torch.randperm(len(y), device=x.device)
+    return lam * x + (1 - lam) * x[perm], y[perm], lam
+
+
+def resize_batch(x: torch.Tensor, size: int) -> torch.Tensor:
+    """A normalised batch at ``size`` x ``size`` (the teacher's input size)."""
+    if x.shape[-1] == size and x.shape[-2] == size:
+        return x
+    return F.interpolate(x, size=(size, size), mode="bilinear", align_corners=False,
+                         antialias=True)
+
+
+def distillation_loss(student_logits: torch.Tensor, teacher_logits: torch.Tensor,
+                      temperature: float) -> torch.Tensor:
+    """KL(teacher || student) at ``temperature``, times T² (Hinton et al. 2015).
+
+    The T² keeps the gradient on the same scale as the label loss whatever
+    the temperature, so ``--kd-weight`` means the same at every T.
+    """
+    t = float(temperature)
+    return F.kl_div(F.log_softmax(student_logits.float() / t, dim=1),
+                    F.log_softmax(teacher_logits.float() / t, dim=1),
+                    reduction="batchmean", log_target=True) * t * t
+
+
+def teacher_recipe(tag: str) -> argparse.Namespace:
+    """The configuration of the ``cv`` run ``tag``, to retrain it as a teacher."""
+    path = RUNS / "scene_cv" / tag / "summary.json"
+    if not path.exists():
+        raise SystemExit(f"--teacher {tag}: no cv run at {path}")
+    config = json.loads(path.read_text(encoding="utf-8"))["config"]
+    if config.get("teacher"):
+        raise SystemExit(f"--teacher {tag} is itself distilled; name its teacher instead")
+    return argparse.Namespace(**{**RECIPE_DEFAULTS, **config, "verbose": False})
+
+
+def teacher_key(recipe: argparse.Namespace, items: list[tuple[Path, int]]) -> str:
+    """Cache key: the recipe and the exact training frames.
+
+    A fold's cached teacher can therefore only be one trained without that
+    fold's held-out video.
+    """
+    source = json.dumps({"recipe": {k: getattr(recipe, k, None) for k in RECIPE_KEYS},
+                         "items": sorted(("/".join(p.parts[-3:]), int(y)) for p, y in items)},
+                        sort_keys=True)
+    return hashlib.sha256(source.encode()).hexdigest()[:16]
+
+
+def train_teacher(recipe: argparse.Namespace, items: list[tuple[Path, int]],
+                  log_prefix: str = "") -> nn.Module:
+    """The teacher for one training set: from the cache, or trained and cached.
+
+    Stored as a float32 delta when the recipe freezes most of the backbone
+    (exact, and a third of the size), else as a full state dict.
+    """
+    path = TEACHER_CACHE / f"{recipe.tag}_{teacher_key(recipe, items)}.pt"
+    if path.exists():
+        cached = torch.load(path, map_location="cpu", weights_only=False)
+        net = build(recipe.arch, recipe.init, recipe.size)
+        if cached["storage"] == "delta":
+            merge_delta(net, cached["state"], cached["base_fingerprint"])
+        else:
+            net.load_state_dict(cached["state"])
+        print(f"{log_prefix}teacher {recipe.tag}: cached {path.name}")
+        return net.to(DEVICE).eval()
+
+    rehearsal = rwf_items("train.csv", recipe.rehearsal, recipe.seed) if recipe.rehearsal else []
+    net = train_model(recipe, items, rehearsal, log_prefix=f"{log_prefix}teacher ")
+    if recipe.train_last_blocks is not None and recipe.init != "violence_v3":
+        state, fingerprint = delta_state(net)
+        record = {"storage": "delta", "state": state, "base_fingerprint": fingerprint}
+    else:
+        record = {"storage": "full", "state": net.state_dict()}
+    record["state"] = {k: v.detach().cpu() for k, v in record["state"].items()}
+    record["recipe"] = {k: getattr(recipe, k, None) for k in RECIPE_KEYS}
+    TEACHER_CACHE.mkdir(parents=True, exist_ok=True)
+    partial = path.with_suffix(".part")
+    torch.save(record, partial)
+    os.replace(partial, path)
+    return net.eval()
 
 
 # ── calibration and thresholds ────────────────────────────────────────────────
@@ -338,19 +536,29 @@ def cmd_cv(args) -> int:
     frames = [f for f in load_frames(("train", "val"), args.dataset)]
     videos = sorted({f.video for f in frames})
     rehearsal = rwf_items("train.csv", args.rehearsal, args.seed) if args.rehearsal else []
+    recipe = teacher_recipe(args.teacher) if args.teacher else None
     out = RUNS / "scene_cv" / args.tag
     out.mkdir(parents=True, exist_ok=True)
     print(f"CV {args.tag}: {len(videos)} folds, {len(frames)} frames, "
-          f"{len(rehearsal)} rehearsal frames, device {DEVICE}")
+          f"{len(rehearsal)} rehearsal frames, device {DEVICE}"
+          + (f", teacher {recipe.tag}" if recipe else ""))
 
     oof_logits = np.zeros((len(frames), len(CLASSES)), dtype=np.float32)
+    teacher_oof = np.zeros_like(oof_logits)
     started = time.time()
     for k, video in enumerate(videos, 1):
+        prefix = f"  [{k}/{len(videos)} {video}] "
         train_items = frame_items([f for f in frames if f.video != video])
         held = [i for i, f in enumerate(frames) if f.video == video]
-        net = train_model(args, train_items, rehearsal, log_prefix=f"  [{k}/{len(videos)} {video}] ")
-        oof_logits[held] = predict_logits(net, frame_items([frames[i] for i in held]), args.size)
-        del net
+        held_items = frame_items([frames[i] for i in held])
+        teacher = None
+        if recipe is not None:
+            teacher = train_teacher(recipe, train_items, log_prefix=prefix)
+            teacher_oof[held] = predict_logits(teacher, held_items, recipe.size)
+        net = train_model(args, train_items, rehearsal, log_prefix=prefix, teacher=teacher,
+                          teacher_size=recipe.size if recipe else None)
+        oof_logits[held] = predict_logits(net, held_items, args.size)
+        del net, teacher
         torch.cuda.empty_cache()
 
     y_idx = np.array([f.class_id for f in frames])
@@ -373,6 +581,17 @@ def cmd_cv(args) -> int:
                "temperature": temperature, "thresholds": thresholds,
                "minutes": round((time.time() - started) / 60, 1),
                "reports": reports, "per_video_accuracy": per_video}
+    if recipe is not None:
+        # The teachers' own out-of-fold result, tuned the same way: shows
+        # what the student is distilled from (and that the retrained teachers
+        # reproduce the teacher's cv run).
+        t_temperature = fit_temperature(teacher_oof, y_idx)
+        t_probs = softmax(teacher_oof, t_temperature)
+        t_thresholds = tune_thresholds(t_probs, y_true)
+        summary["teacher"] = {"tag": recipe.tag, "temperature": t_temperature,
+                              "thresholds": t_thresholds,
+                              "report": classification_report(
+                                  y_true, labels_from(t_probs, t_thresholds))}
     (out / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     with open(out / "oof.csv", "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
@@ -390,6 +609,10 @@ def cmd_cv(args) -> int:
     print("  per-video acc: " + " ".join(f"{v}={a:.2f}" for v, a in per_video.items()))
     print(f"  macro-F1 excl. robbery: "
           f"{np.mean([tuned['per_class'][c]['f1'] for c in CLASSES[:4]]):.3f}")
+    if recipe is not None:
+        t_rep = summary["teacher"]["report"]
+        print(f"  teacher {recipe.tag} OOF: acc={t_rep['accuracy']:.3f} "
+              f"macroF1={t_rep['macro_f1']:.3f}")
     print(f"written {out}")
     return 0
 
@@ -398,19 +621,38 @@ def cmd_fit(args) -> int:
     if not args.cv_tag:
         raise SystemExit("fit needs --cv-tag: temperature and thresholds come from CV")
     cv = json.loads((RUNS / "scene_cv" / args.cv_tag / "summary.json").read_text(encoding="utf-8"))
-    for key in ("arch", "init", "size", "epochs", "lr", "rehearsal", "train_last_blocks"):
-        if cv["config"].get(key) != getattr(args, key):
+    for key in ("arch", "init", "size", "epochs", "lr", "rehearsal", "train_last_blocks",
+                *RECIPE_DEFAULTS):
+        if cv["config"].get(key, RECIPE_DEFAULTS.get(key)) != getattr(args, key):
             raise SystemExit(f"--{key} differs from cv run {args.cv_tag}: "
                              f"{getattr(args, key)} vs {cv['config'].get(key)}")
     temperature, thresholds = cv["temperature"], cv["thresholds"]
 
     train = load_frames(("train",), args.dataset)
     rehearsal = rwf_items("train.csv", args.rehearsal, args.seed) if args.rehearsal else []
+    recipe = teacher_recipe(args.teacher) if args.teacher else None
+    # The teacher is trained on the train split too: val and test stay unseen
+    # by both models, as they were by every fold's teacher in cv.
+    teacher = train_teacher(recipe, frame_items(train), log_prefix="  ") if recipe else None
     started = time.time()
-    net = train_model(args, frame_items(train), rehearsal, log_prefix="  ")
+    net = train_model(args, frame_items(train), rehearsal, log_prefix="  ", teacher=teacher,
+                      teacher_size=recipe.size if recipe else None)
     minutes = round((time.time() - started) / 60, 1)
 
     metrics: dict = {"cv_oof": cv["reports"]["tuned"], "cv_tag": args.cv_tag}
+    if recipe is not None:
+        # The teacher on val, with its own cv run's temperature and thresholds.
+        t_cv = json.loads((RUNS / "scene_cv" / recipe.tag / "summary.json")
+                          .read_text(encoding="utf-8"))
+        val = load_frames(("val",), args.dataset)
+        t_probs = softmax(predict_logits(teacher, frame_items(val), recipe.size),
+                          t_cv["temperature"])
+        metrics["teacher_val"] = classification_report(
+            [f.label for f in val], labels_from(t_probs, t_cv["thresholds"]))
+        print(f"  teacher {recipe.tag} val: acc={metrics['teacher_val']['accuracy']:.3f} "
+              f"macroF1={metrics['teacher_val']['macro_f1']:.3f}")
+        del teacher
+        torch.cuda.empty_cache()
     rows = []
     for split in ("val", "test"):
         frames = load_frames((split,), args.dataset)
@@ -437,17 +679,13 @@ def cmd_fit(args) -> int:
     full = net.state_dict()
     storage = "full"
     if args.delta:
-        # Only what training changed, plus the position embedding (timm
-        # resamples it to the input size, and that resampling may differ
-        # between timm versions). Everything else is the public checkpoint.
-        keep = {n for n, p in net.named_parameters() if p.requires_grad}
-        keep |= {n for n in full if n == "pos_embed"}
-        fingerprint = base_fingerprint(full, frozenset(keep))
-        full = {k: v for k, v in full.items() if k in keep}
+        full, fingerprint = delta_state(net)
         storage = "delta"
     state = {k: (v.half() if args.fp16 and v.is_floating_point() else v)
              for k, v in full.items()}
     init_from = VIOLENCE_V3.name if args.init == "violence_v3" else f"{args.arch} pretrained"
+    if recipe is not None:
+        init_from += f", distilled from {recipe.tag} ({recipe.arch})"
     ckpt = {
         "model_state_dict": state,
         "state_dtype": "float16" if args.fp16 else "float32",
@@ -509,7 +747,16 @@ def main(argv=None) -> int:
         p.add_argument("--rehearsal-share", type=float, default=0.3)
         p.add_argument("--train-last-blocks", type=int, default=None,
                        help="freeze the backbone except the head (0) or the head "
-                            "plus the last N transformer blocks")
+                            "plus the last N transformer blocks / CNN stages")
+        p.add_argument("--teacher", default=RECIPE_DEFAULTS["teacher"],
+                       help="distil from the recipe of this cv run, retrained on "
+                            "the student's training frames")
+        p.add_argument("--kd-weight", type=float, default=RECIPE_DEFAULTS["kd_weight"],
+                       help="weight of the distillation term (the rest is the label loss)")
+        p.add_argument("--kd-temperature", type=float,
+                       default=RECIPE_DEFAULTS["kd_temperature"])
+        p.add_argument("--mixup", type=float, default=RECIPE_DEFAULTS["mixup"],
+                       help="Beta(a, a) mixup of each batch; 0 = off")
         p.add_argument("--seed", type=int, default=42)
         p.add_argument("--dataset", type=Path, default=None)
         p.add_argument("--tag", required=True)
@@ -527,6 +774,10 @@ def main(argv=None) -> int:
     if getattr(args, "delta", False) and (args.init == "violence_v3"
                                           or args.train_last_blocks is None):
         raise SystemExit("--delta needs --init pretrained and --train-last-blocks")
+    if not 0.0 <= args.kd_weight <= 1.0 or args.kd_temperature <= 0:
+        raise SystemExit("--kd-weight must be in [0, 1] and --kd-temperature > 0")
+    if args.teacher == args.tag:
+        raise SystemExit("--teacher must name another cv run")
     if not args.rehearsal:
         args.rehearsal_share = 0.0
     return args.func(args)

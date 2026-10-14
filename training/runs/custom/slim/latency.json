@@ -1,0 +1,99 @@
+{
+  "measured": "2026-10-15T02:33:43",
+  "machine": {
+    "cpu": "Intel(R) Core(TM) i7-14650HX",
+    "os": "Windows-11-10.0.26200-SP0",
+    "logical_cpus": 24,
+    "cpu_load_before_percent": 10.0,
+    "on_mains_power": true
+  },
+  "threads": 4,
+  "batch": 1,
+  "runs_per_model": 200,
+  "warmup": 20,
+  "versions": {
+    "python": "3.14.4",
+    "torch": "2.13.0+cpu",
+    "onnxruntime": "1.29.0"
+  },
+  "models": [
+    {
+      "checkpoint": "scene_classifier_effb0_v5.pt",
+      "architecture": "timm:efficientnet_b0",
+      "image_size": 224,
+      "storage": "full",
+      "params_m": 4.01,
+      "checkpoint_mb": 16.3,
+      "gflops": 0.769,
+      "torch": {
+        "n": 200,
+        "median_ms": 9.47,
+        "p95_ms": 10.32,
+        "mean_ms": 9.56,
+        "min_ms": 8.97
+      },
+      "onnxruntime": {
+        "n": 200,
+        "median_ms": 4.31,
+        "p95_ms": 5.31,
+        "mean_ms": 4.44,
+        "min_ms": 3.88
+      }
+    },
+    {
+      "checkpoint": "scene_classifier_mnv3l_v5.pt",
+      "architecture": "timm:mobilenetv3_large_100",
+      "image_size": 224,
+      "storage": "full",
+      "params_m": 4.21,
+      "checkpoint_mb": 17.0,
+      "gflops": 0.431,
+      "torch": {
+        "n": 200,
+        "median_ms": 6.61,
+        "p95_ms": 7.51,
+        "mean_ms": 6.74,
+        "min_ms": 6.27
+      },
+      "onnxruntime": {
+        "n": 200,
+        "median_ms": 2.41,
+        "p95_ms": 3.1,
+        "mean_ms": 2.52,
+        "min_ms": 2.23
+      }
+    },
+    {
+      "checkpoint": "scene_classifier_custom_v4.pt",
+      "architecture": "timm:vit_base_patch14_dinov2.lvd142m",
+      "image_size": 224,
+      "storage": "delta",
+      "params_m": 85.73,
+      "checkpoint_mb": 57.1,
+      "gflops": 43.888,
+      "torch": {
+        "n": 200,
+        "median_ms": 96.89,
+        "p95_ms": 104.86,
+        "mean_ms": 99.71,
+        "min_ms": 95.34
+      },
+      "onnxruntime": {
+        "n": 200,
+        "median_ms": 106.41,
+        "p95_ms": 110.03,
+        "mean_ms": 106.73,
+        "min_ms": 102.36
+      }
+    }
+  ],
+  "preprocess": {
+    "224": {
+      "n": 200,
+      "median_ms": 1.43,
+      "p95_ms": 1.56,
+      "mean_ms": 1.45,
+      "min_ms": 1.35
+    }
+  }
+}

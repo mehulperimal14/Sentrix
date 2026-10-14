@@ -1,0 +1,920 @@
+{
+  "commit": "44390fa",
+  "branch": "wip/model",
+  "videos": [
+    "vid04",
+    "gun",
+    "wa02"
+  ],
+  "inference_hz": 6.0,
+  "tolerance_s": 0.25,
+  "grace_s": 1.0,
+  "models": {
+    "person": "yolov8n.pt",
+    "weapon": "weapon_detector_custom_v4.pt",
+    "fire": "fire_detector_custom_v4.pt",
+    "violence": null,
+    "scene": "scene_classifier_custom_v4.pt",
+    "fusion": "evidence"
+  },
+  "splits": {
+    "all": {
+      "frames": {
+        "n": 403,
+        "accuracy": 0.7717,
+        "macro_f1": 0.6997,
+        "balanced_accuracy": 0.6827,
+        "classes_scored": [
+          "normal",
+          "fire",
+          "weapon"
+        ],
+        "per_class": {
+          "normal": {
+            "precision": 0.7473,
+            "recall": 1.0,
+            "f1": 0.8553,
+            "support": 272,
+            "predicted": 364
+          },
+          "fire": {
+            "precision": 1.0,
+            "recall": 0.8571,
+            "f1": 0.9231,
+            "support": 21,
+            "predicted": 18
+          },
+          "weapon": {
+            "precision": 1.0,
+            "recall": 0.1909,
+            "f1": 0.3206,
+            "support": 110,
+            "predicted": 21
+          },
+          "assault": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0,
+            "predicted": 0
+          },
+          "robbery": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0,
+            "predicted": 0
+          }
+        },
+        "confusion": {
+          "labels": [
+            "normal",
+            "fire",
+            "weapon",
+            "assault",
+            "robbery"
+          ],
+          "matrix": [
+            [
+              272,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              3,
+              18,
+              0,
+              0,
+              0
+            ],
+            [
+              89,
+              0,
+              21,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          ]
+        },
+        "threat_detection": {
+          "tp": 39,
+          "fp": 0,
+          "fn": 92,
+          "tn": 272,
+          "precision": 1.0,
+          "recall": 0.2977,
+          "f1": 0.4588,
+          "false_positive_rate": 0.0
+        }
+      },
+      "events": {
+        "episodes": 5,
+        "detected": 2,
+        "episode_recall": 0.4,
+        "episode_recall_any_threat": 0.4,
+        "by_label": {
+          "fire": {
+            "episodes": 1,
+            "detected": 1,
+            "recall": 1.0,
+            "median_latency": 0.336
+          },
+          "weapon": {
+            "episodes": 4,
+            "detected": 1,
+            "recall": 0.25,
+            "median_latency": 6.254
+          }
+        },
+        "false_alarms": 0,
+        "normal_minutes": 0.872,
+        "false_alarms_per_normal_minute": 0.0,
+        "episode_detail": [
+          {
+            "video": "vid04",
+            "label": "fire",
+            "start": 10.614,
+            "end": 13.814,
+            "duration": 3.2,
+            "detected": true,
+            "detected_any_threat": true,
+            "latency": 0.336
+          },
+          {
+            "video": "gun",
+            "label": "weapon",
+            "start": 1.014,
+            "end": 11.832,
+            "duration": 10.818,
+            "detected": true,
+            "detected_any_threat": true,
+            "latency": 6.254
+          },
+          {
+            "video": "wa02",
+            "label": "weapon",
+            "start": 39.481,
+            "end": 42.481,
+            "duration": 3.0,
+            "detected": false,
+            "detected_any_threat": false,
+            "latency": null
+          },
+          {
+            "video": "wa02",
+            "label": "weapon",
+            "start": 44.161,
+            "end": 47.481,
+            "duration": 3.32,
+            "detected": false,
+            "detected_any_threat": false,
+            "latency": null
+          },
+          {
+            "video": "wa02",
+            "label": "weapon",
+            "start": 52.161,
+            "end": 53.841,
+            "duration": 1.68,
+            "detected": false,
+            "detected_any_threat": false,
+            "latency": null
+          }
+        ],
+        "false_alarm_detail": []
+      },
+      "levels": {
+        "threat_ticks_at_L3plus": 0.3511,
+        "normal_ticks_at_L3plus": 0.0846
+      },
+      "committed": {
+        "L2": {
+          "onsets": 2,
+          "false_onsets": 0,
+          "false_onsets_per_hour": 0.0,
+          "false_onsets_per_hour_ci95": [
+            0.0,
+            220.2389
+          ],
+          "normal_time_at_level": 0.1013,
+          "episodes": {
+            "fire": {
+              "episodes": 1,
+              "caught": 1,
+              "recall": 1.0,
+              "recall_ci95": [
+                0.025,
+                1.0
+              ],
+              "median_latency": 0.336,
+              "p95_latency": 0.336,
+              "within_2s": 1
+            },
+            "weapon": {
+              "episodes": 4,
+              "caught": 1,
+              "recall": 0.25,
+              "recall_ci95": [
+                0.0063,
+                0.8059
+              ],
+              "median_latency": 6.254,
+              "p95_latency": 6.254,
+              "within_2s": 0
+            }
+          }
+        },
+        "L3": {
+          "onsets": 2,
+          "false_onsets": 0,
+          "false_onsets_per_hour": 0.0,
+          "false_onsets_per_hour_ci95": [
+            0.0,
+            220.2389
+          ],
+          "normal_time_at_level": 0.1013,
+          "episodes": {
+            "fire": {
+              "episodes": 1,
+              "caught": 1,
+              "recall": 1.0,
+              "recall_ci95": [
+                0.025,
+                1.0
+              ],
+              "median_latency": 0.336,
+              "p95_latency": 0.336,
+              "within_2s": 1
+            },
+            "weapon": {
+              "episodes": 4,
+              "caught": 1,
+              "recall": 0.25,
+              "recall_ci95": [
+                0.0063,
+                0.8059
+              ],
+              "median_latency": 6.254,
+              "p95_latency": 6.254,
+              "within_2s": 0
+            }
+          }
+        },
+        "L4": {
+          "onsets": 0,
+          "false_onsets": 0,
+          "false_onsets_per_hour": 0.0,
+          "false_onsets_per_hour_ci95": [
+            0.0,
+            220.2389
+          ],
+          "normal_time_at_level": 0.0,
+          "episodes": {
+            "fire": {
+              "episodes": 1,
+              "caught": 0,
+              "recall": 0.0,
+              "recall_ci95": [
+                0.0,
+                0.975
+              ],
+              "median_latency": null,
+              "p95_latency": null,
+              "within_2s": 0
+            },
+            "weapon": {
+              "episodes": 4,
+              "caught": 0,
+              "recall": 0.0,
+              "recall_ci95": [
+                0.0,
+                0.6024
+              ],
+              "median_latency": null,
+              "p95_latency": null,
+              "within_2s": 0
+            }
+          }
+        },
+        "L5": {
+          "onsets": 0,
+          "false_onsets": 0,
+          "false_onsets_per_hour": 0.0,
+          "false_onsets_per_hour_ci95": [
+            0.0,
+            220.2389
+          ],
+          "normal_time_at_level": 0.0,
+          "episodes": {
+            "fire": {
+              "episodes": 1,
+              "caught": 0,
+              "recall": 0.0,
+              "recall_ci95": [
+                0.0,
+                0.975
+              ],
+              "median_latency": null,
+              "p95_latency": null,
+              "within_2s": 0
+            },
+            "weapon": {
+              "episodes": 4,
+              "caught": 0,
+              "recall": 0.0,
+              "recall_ci95": [
+                0.0,
+                0.6024
+              ],
+              "median_latency": null,
+              "p95_latency": null,
+              "within_2s": 0
+            }
+          }
+        },
+        "normal_hours": 0.0167
+      }
+    },
+    "val": {
+      "frames": {
+        "n": 153,
+        "accuracy": 0.6863,
+        "macro_f1": 0.7131,
+        "balanced_accuracy": 0.7251,
+        "classes_scored": [
+          "normal",
+          "fire",
+          "weapon"
+        ],
+        "per_class": {
+          "normal": {
+            "precision": 0.5789,
+            "recall": 1.0,
+            "f1": 0.7333,
+            "support": 66,
+            "predicted": 114
+          },
+          "fire": {
+            "precision": 1.0,
+            "recall": 0.8571,
+            "f1": 0.9231,
+            "support": 21,
+            "predicted": 18
+          },
+          "weapon": {
+            "precision": 1.0,
+            "recall": 0.3182,
+            "f1": 0.4828,
+            "support": 66,
+            "predicted": 21
+          },
+          "assault": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0,
+            "predicted": 0
+          },
+          "robbery": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0,
+            "predicted": 0
+          }
+        },
+        "confusion": {
+          "labels": [
+            "normal",
+            "fire",
+            "weapon",
+            "assault",
+            "robbery"
+          ],
+          "matrix": [
+            [
+              66,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              3,
+              18,
+              0,
+              0,
+              0
+            ],
+            [
+              45,
+              0,
+              21,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          ]
+        },
+        "threat_detection": {
+          "tp": 39,
+          "fp": 0,
+          "fn": 48,
+          "tn": 66,
+          "precision": 1.0,
+          "recall": 0.4483,
+          "f1": 0.619,
+          "false_positive_rate": 0.0
+        }
+      },
+      "events": {
+        "episodes": 2,
+        "detected": 2,
+        "episode_recall": 1.0,
+        "episode_recall_any_threat": 1.0,
+        "by_label": {
+          "fire": {
+            "episodes": 1,
+            "detected": 1,
+            "recall": 1.0,
+            "median_latency": 0.336
+          },
+          "weapon": {
+            "episodes": 1,
+            "detected": 1,
+            "recall": 1.0,
+            "median_latency": 6.254
+          }
+        },
+        "false_alarms": 0,
+        "normal_minutes": 0.185,
+        "false_alarms_per_normal_minute": 0.0,
+        "episode_detail": [
+          {
+            "video": "vid04",
+            "label": "fire",
+            "start": 10.614,
+            "end": 13.814,
+            "duration": 3.2,
+            "detected": true,
+            "detected_any_threat": true,
+            "latency": 0.336
+          },
+          {
+            "video": "gun",
+            "label": "weapon",
+            "start": 1.014,
+            "end": 11.832,
+            "duration": 10.818,
+            "detected": true,
+            "detected_any_threat": true,
+            "latency": 6.254
+          }
+        ],
+        "false_alarm_detail": []
+      },
+      "levels": {
+        "threat_ticks_at_L3plus": 0.5287,
+        "normal_ticks_at_L3plus": 0.3485
+      },
+      "committed": {
+        "L2": {
+          "onsets": 2,
+          "false_onsets": 0,
+          "false_onsets_per_hour": 0.0,
+          "false_onsets_per_hour_ci95": [
+            0.0,
+            868.0851
+          ],
+          "normal_time_at_level": 0.3516,
+          "episodes": {
+            "fire": {
+              "episodes": 1,
+              "caught": 1,
+              "recall": 1.0,
+              "recall_ci95": [
+                0.025,
+                1.0
+              ],
+              "median_latency": 0.336,
+              "p95_latency": 0.336,
+              "within_2s": 1
+            },
+            "weapon": {
+              "episodes": 1,
+              "caught": 1,
+              "recall": 1.0,
+              "recall_ci95": [
+                0.025,
+                1.0
+              ],
+              "median_latency": 6.254,
+              "p95_latency": 6.254,
+              "within_2s": 0
+            }
+          }
+        },
+        "L3": {
+          "onsets": 2,
+          "false_onsets": 0,
+          "false_onsets_per_hour": 0.0,
+          "false_onsets_per_hour_ci95": [
+            0.0,
+            868.0851
+          ],
+          "normal_time_at_level": 0.3516,
+          "episodes": {
+            "fire": {
+              "episodes": 1,
+              "caught": 1,
+              "recall": 1.0,
+              "recall_ci95": [
+                0.025,
+                1.0
+              ],
+              "median_latency": 0.336,
+              "p95_latency": 0.336,
+              "within_2s": 1
+            },
+            "weapon": {
+              "episodes": 1,
+              "caught": 1,
+              "recall": 1.0,
+              "recall_ci95": [
+                0.025,
+                1.0
+              ],
+              "median_latency": 6.254,
+              "p95_latency": 6.254,
+              "within_2s": 0
+            }
+          }
+        },
+        "L4": {
+          "onsets": 0,
+          "false_onsets": 0,
+          "false_onsets_per_hour": 0.0,
+          "false_onsets_per_hour_ci95": [
+            0.0,
+            868.0851
+          ],
+          "normal_time_at_level": 0.0,
+          "episodes": {
+            "fire": {
+              "episodes": 1,
+              "caught": 0,
+              "recall": 0.0,
+              "recall_ci95": [
+                0.0,
+                0.975
+              ],
+              "median_latency": null,
+              "p95_latency": null,
+              "within_2s": 0
+            },
+            "weapon": {
+              "episodes": 1,
+              "caught": 0,
+              "recall": 0.0,
+              "recall_ci95": [
+                0.0,
+                0.975
+              ],
+              "median_latency": null,
+              "p95_latency": null,
+              "within_2s": 0
+            }
+          }
+        },
+        "L5": {
+          "onsets": 0,
+          "false_onsets": 0,
+          "false_onsets_per_hour": 0.0,
+          "false_onsets_per_hour_ci95": [
+            0.0,
+            868.0851
+          ],
+          "normal_time_at_level": 0.0,
+          "episodes": {
+            "fire": {
+              "episodes": 1,
+              "caught": 0,
+              "recall": 0.0,
+              "recall_ci95": [
+                0.0,
+                0.975
+              ],
+              "median_latency": null,
+              "p95_latency": null,
+              "within_2s": 0
+            },
+            "weapon": {
+              "episodes": 1,
+              "caught": 0,
+              "recall": 0.0,
+              "recall_ci95": [
+                0.0,
+                0.975
+              ],
+              "median_latency": null,
+              "p95_latency": null,
+              "within_2s": 0
+            }
+          }
+        },
+        "normal_hours": 0.0042
+      }
+    },
+    "test": {
+      "frames": {
+        "n": 250,
+        "accuracy": 0.824,
+        "macro_f1": 0.4517,
+        "balanced_accuracy": 0.5,
+        "classes_scored": [
+          "normal",
+          "weapon"
+        ],
+        "per_class": {
+          "normal": {
+            "precision": 0.824,
+            "recall": 1.0,
+            "f1": 0.9035,
+            "support": 206,
+            "predicted": 250
+          },
+          "fire": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0,
+            "predicted": 0
+          },
+          "weapon": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 44,
+            "predicted": 0
+          },
+          "assault": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0,
+            "predicted": 0
+          },
+          "robbery": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0,
+            "predicted": 0
+          }
+        },
+        "confusion": {
+          "labels": [
+            "normal",
+            "fire",
+            "weapon",
+            "assault",
+            "robbery"
+          ],
+          "matrix": [
+            [
+              206,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              44,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          ]
+        },
+        "threat_detection": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 44,
+          "tn": 206,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "false_positive_rate": 0.0
+        }
+      },
+      "events": {
+        "episodes": 3,
+        "detected": 0,
+        "episode_recall": 0.0,
+        "episode_recall_any_threat": 0.0,
+        "by_label": {
+          "weapon": {
+            "episodes": 3,
+            "detected": 0,
+            "recall": 0.0,
+            "median_latency": null
+          }
+        },
+        "false_alarms": 0,
+        "normal_minutes": 0.687,
+        "false_alarms_per_normal_minute": 0.0,
+        "episode_detail": [
+          {
+            "video": "wa02",
+            "label": "weapon",
+            "start": 39.481,
+            "end": 42.481,
+            "duration": 3.0,
+            "detected": false,
+            "detected_any_threat": false,
+            "latency": null
+          },
+          {
+            "video": "wa02",
+            "label": "weapon",
+            "start": 44.161,
+            "end": 47.481,
+            "duration": 3.32,
+            "detected": false,
+            "detected_any_threat": false,
+            "latency": null
+          },
+          {
+            "video": "wa02",
+            "label": "weapon",
+            "start": 52.161,
+            "end": 53.841,
+            "duration": 1.68,
+            "detected": false,
+            "detected_any_threat": false,
+            "latency": null
+          }
+        ],
+        "false_alarm_detail": []
+      },
+      "levels": {
+        "threat_ticks_at_L3plus": 0.0,
+        "normal_ticks_at_L3plus": 0.0
+      },
+      "committed": {
+        "L2": {
+          "onsets": 0,
+          "false_onsets": 0,
+          "false_onsets_per_hour": 0.0,
+          "false_onsets_per_hour_ci95": [
+            0.0,
+            295.1104
+          ],
+          "normal_time_at_level": 0.0,
+          "episodes": {
+            "weapon": {
+              "episodes": 3,
+              "caught": 0,
+              "recall": 0.0,
+              "recall_ci95": [
+                0.0,
+                0.7076
+              ],
+              "median_latency": null,
+              "p95_latency": null,
+              "within_2s": 0
+            }
+          }
+        },
+        "L3": {
+          "onsets": 0,
+          "false_onsets": 0,
+          "false_onsets_per_hour": 0.0,
+          "false_onsets_per_hour_ci95": [
+            0.0,
+            295.1104
+          ],
+          "normal_time_at_level": 0.0,
+          "episodes": {
+            "weapon": {
+              "episodes": 3,
+              "caught": 0,
+              "recall": 0.0,
+              "recall_ci95": [
+                0.0,
+                0.7076
+              ],
+              "median_latency": null,
+              "p95_latency": null,
+              "within_2s": 0
+            }
+          }
+        },
+        "L4": {
+          "onsets": 0,
+          "false_onsets": 0,
+          "false_onsets_per_hour": 0.0,
+          "false_onsets_per_hour_ci95": [
+            0.0,
+            295.1104
+          ],
+          "normal_time_at_level": 0.0,
+          "episodes": {
+            "weapon": {
+              "episodes": 3,
+              "caught": 0,
+              "recall": 0.0,
+              "recall_ci95": [
+                0.0,
+                0.7076
+              ],
+              "median_latency": null,
+              "p95_latency": null,
+              "within_2s": 0
+            }
+          }
+        },
+        "L5": {
+          "onsets": 0,
+          "false_onsets": 0,
+          "false_onsets_per_hour": 0.0,
+          "false_onsets_per_hour_ci95": [
+            0.0,
+            295.1104
+          ],
+          "normal_time_at_level": 0.0,
+          "episodes": {
+            "weapon": {
+              "episodes": 3,
+              "caught": 0,
+              "recall": 0.0,
+              "recall_ci95": [
+                0.0,
+                0.7076
+              ],
+              "median_latency": null,
+              "p95_latency": null,
+              "within_2s": 0
+            }
+          }
+        },
+        "normal_hours": 0.0125
+      }
+    }
+  },
+  "latency_ms": {
+    "mean": 467.5,
+    "p95": 591.3
+  }
+}
