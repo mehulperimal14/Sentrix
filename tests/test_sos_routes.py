@@ -10,9 +10,8 @@ from sentrix import services
 from sentrix.sos import states as S
 from sentrix.storage import requests
 
-from test_sos_engine import (DURESS_PIN, SOS_PIN, Channels, Clock, FakePipeline,  # noqa: E501
+from test_sos_engine import (DURESS_PIN, SOS_PIN, STANDALONE, Channels, Clock, FakePipeline,
                              fire_trigger, make_profile)
-from test_sos_engine import STANDALONE
 
 PASSWORD = "correct horse"
 

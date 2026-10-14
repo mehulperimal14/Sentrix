@@ -274,9 +274,16 @@ def call_number(profile: Mapping | None, test_mode: bool) -> str:
     """112, or in test mode the Desk number (no 112 link ever in test mode)."""
     if not test_mode:
         return "112"
-    desk = ((profile or {}).get("desk") or {}) if isinstance(profile, Mapping) else {}
-    return clean(desk.get("phone"), 20) if isinstance(desk, Mapping) and desk.get("phone") \
-        else "the SENTRIX desk"
+    desk = profile.get("desk") if isinstance(profile, Mapping) else None
+    phone = clean(desk.get("phone"), 20) if isinstance(desk, Mapping) else ""
+    return phone or "the SENTRIX desk"
+
+
+def _int(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def build_context(profile: Mapping | None, request: Mapping, *, audience: str = "owner",
@@ -291,11 +298,12 @@ def build_context(profile: Mapping | None, request: Mapping, *, audience: str = 
     or the literal ``{link}`` placeholder the Portal fills in.
     """
     profile = profile if isinstance(profile, Mapping) else {}
-    request = request or {}
-    flags = request.get("flags") or {}
+    request = request if isinstance(request, Mapping) else {}
+    flags = request.get("flags") if isinstance(request.get("flags"), Mapping) else {}
+    policy = request.get("policy") if isinstance(request.get("policy"), Mapping) else {}
     if test_mode is None:
         test_mode = bool(request.get("test_mode", True))
-    level = int(request.get("peak_level") or request.get("trigger_level") or 3)
+    level = _int(request.get("peak_level") or request.get("trigger_level"), 3)
     incident_type = clean(request.get("incident_type"), 24) or "alert"
     evidence = clean(request.get("evidence_state"), 16)
     room, floor = _room(profile, request.get("camera_id"))
@@ -334,7 +342,7 @@ def build_context(profile: Mapping | None, request: Mapping, *, audience: str = 
         "time": clock_time(created),
         "expires_time": clock_time(expires),
         "remaining_min": remaining,
-        "window_min": str(int((request.get("policy") or {}).get("window_seconds", 1800)) // 60),
+        "window_min": str(_int(policy.get("window_seconds"), 1800) // 60),
         "approved_by": clean(approved_by, 120),
         "authority": AUTHORITY_LABELS.get(str(request.get("authority") or ""), ""),
         "simulated": WORDING_SIMULATED if flags.get("simulated") else "",

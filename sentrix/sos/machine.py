@@ -402,12 +402,16 @@ def attach_steps(snap: Snapshot, facts: TriggerFacts, rules: Rules) -> tuple:
 # ── prompting ─────────────────────────────────────────────────────────────────
 def prompt(snap: Snapshot, now: float, rules: Rules, reach: Reach) -> Step:
     """DRAFTED -> PENDING: the window starts at the request's creation; the
-    owner is asked (modem SMS too when no remote prompt is possible)."""
+    owner is asked (modem SMS too when no remote prompt is possible, and
+    when the request opens already at L4/L5: the legacy L4 SMS and L5 call
+    fold into the prompt as they would into ``rise4``/``rise5``)."""
     expires = snap.created_at + snap.window
     if snap.expires_at is not None:
         expires = max(expires, snap.expires_at)
+    corroborated = snap.peak_level >= 4
     owner = Notice("owner", S.STEP_T0, T_PROMPT, urgency=snap.urgency,
-                   sms=not reach.remote_prompt, sms_template=T_OFFLINE)
+                   sms=corroborated or not reach.remote_prompt, sms_template=T_OFFLINE,
+                   call=snap.peak_level >= 5)
     return _restricted(snap, Step(S.PROMPTED, detail={"window_seconds": int(snap.window)},
                                   fields={"expires_at": expires}, notices=(owner,)))
 
@@ -490,15 +494,16 @@ def _duress(snap: Snapshot, action: str, actor: Actor, channel: str,
         return Outcome(message="Marked as false alarm", steps=(step,))
     if snap.help_open:
         if snap.duress:
-            return Outcome("conflict", "this request is closed")
+            return Outcome("conflict", f"the request is {S.DECLINED}")
+        # From now on every owner surface shows "Marked as false alarm"
+        # (states.owner_view), so the answer says the same.
         step = Step(S.CONTACTS_NOTIFIED, restricted=True,
                     flags={"duress": True, "contacts_notified": True},
                     detail={"step": S.STEP_DURESS, "duress": True, "via": action},
                     notices=help_notices(snap, duress=True))
-        message = "Marked as false alarm" if action == "decline" else "Marked as safe"
-        return Outcome(message=message, steps=(step,))
+        return Outcome(message="Marked as false alarm", steps=(step,))
     # Closed already: answer like a closed request, open a silent one.
-    return Outcome("conflict", "this request is closed",
+    return Outcome("conflict", f"the request is {snap.state}",
                    linked=LinkedRequest(snap.id, authority, duress=True))
 
 
@@ -535,7 +540,7 @@ def respond(snap: Snapshot, action: str, *, actor: Actor, channel: str, now: flo
                         detail={"step": f"help_now{snap.repage_count + 1}", "duress": True},
                         notices=help_notices(snap, duress=True))
             return Outcome(message="Help requested", steps=(step,))
-        return Outcome("conflict", "this request is closed")
+        return Outcome("conflict", f"the request is {S.DECLINED}")
 
     if action == "approve" or (action == "help_now" and snap.prompting):
         if snap.prompting:

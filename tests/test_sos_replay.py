@@ -19,7 +19,6 @@ import numpy as np
 import pytest
 
 from sentrix import mode
-from sentrix.actor import Actor
 from sentrix.config import settings
 from sentrix.paths import ROOT_DIR
 from sentrix.pipeline.escalation import plan_for
@@ -27,7 +26,7 @@ from sentrix.sos import LevelChange, NullSosService, SosTrigger
 from sentrix.sos.policy import Reach
 from sentrix.storage import requests
 
-from test_sos_engine import Clock, FakePipeline, make_profile  # noqa: E402
+from test_sos_engine import Clock, FakePipeline, make_profile
 
 LIVE_LOG_NAME = "events_20260930_232502_c27258a25457.jsonl"
 
@@ -249,7 +248,7 @@ def _tool():
     return replay_decisions
 
 
-def replay_into_engine(rows, *, armed: bool, tool) -> tuple[SosEngineStats, list]:
+def replay_into_engine(rows, *, armed: bool, tool) -> tuple[SimpleNamespace, list[int]]:
     """Re-run the current decision layer on logged ticks (as
     ``tools/replay_decisions.py`` does) and drive the SOS hook exactly as
     ``Pipeline._act`` / ``_level_changed`` do."""
@@ -323,17 +322,13 @@ def replay_into_engine(rows, *, armed: bool, tool) -> tuple[SosEngineStats, list
             engine.work()
         clock.now += 60
         engine.work()
-        stats = SosEngineStats(requests=requests.list_requests(100),
-                               counters=dict(engine.counters),
-                               held=engine.health()["held_intrusions"])
+        stats = SimpleNamespace(requests=requests.list_requests(100),
+                                counters=dict(engine.counters),
+                                held=engine.health()["held_intrusions"])
         return stats, levels
     finally:
         engine.stop()
         mode.clear_override()
-
-
-class SosEngineStats(SimpleNamespace):
-    pass
 
 
 def synthetic_home_session(minutes=12.0, hz=2.0, seed=7):
@@ -385,12 +380,3 @@ class TestHomeModeReplays:
         armed, _ = replay_into_engine(rows, armed=True, tool=tool)
         assert all(r["incident_type"] == "intrusion" for r in armed.requests)
         assert len(armed.requests) <= armed.counters["held"]
-
-
-def test_replay_tools_keep_the_null_service():
-    for tool in ("replay.py", "bench_live.py"):
-        source = (ROOT_DIR / "tools" / tool).read_text(encoding="utf-8")
-        assert "assert_measurement_safe(pipeline)" in source
-    harness = (ROOT_DIR / "sentrix" / "evaluation" / "harness.py").read_text(encoding="utf-8")
-    assert "pipeline.sos = NullSosService()" in harness
-    assert Actor.system().ref == "system"

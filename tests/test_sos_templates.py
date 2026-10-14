@@ -173,6 +173,9 @@ class TestProfileSafety:
         for absent in ("MAP:", "HOME:", "MEDICAL:", "NEAREST:", "EVIDENCE:"):
             assert absent not in text
         assert T.render_full(None, {}).endswith(T.DISCLAIMER)
+        odd = {"id": "x", "peak_level": "high", "policy": "{}", "flags": "duress",
+               "created_at": 12, "expires_at": "soon"}
+        assert T.render_full(PROFILE, odd).endswith(T.DISCLAIMER), "bad types never crash"
 
     def test_tier2_profile_templates_are_sandboxed_and_keep_the_rules(self):
         custom = copy.deepcopy(PROFILE)

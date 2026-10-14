@@ -519,7 +519,7 @@ class TestAnswers:
         duress = world.engine.respond(old["id"], "decline", actor=OWNER, channel="lc",
                                       pin=DURESS_PIN)
         assert real["code"] == duress["code"] == "conflict"
-        assert real["request"] == duress["request"]
+        assert real["message"] == duress["message"] and real["request"] == duress["request"]
         silent = [r for r in requests.list_requests(5) if r["id"] != old["id"]]
         assert len(silent) == 1 and silent[0]["state"] == S.APPROVED
         assert silent[0]["flags"]["silent"] and silent[0]["parent_request_id"] == old["id"]

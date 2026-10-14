@@ -455,6 +455,17 @@ class TestAnswers:
         later = M.respond(duress, "help_now", actor=OWNER, channel="lc", now=T0, rules=RULES)
         assert later.ok and all(s.restricted for s in later.steps)
 
+    def test_a_duress_request_answers_exactly_like_a_declined_one(self):
+        duress = snap(S.APPROVED, flags={"duress": True})
+        declined = snap(S.DECLINED)
+        for action, pin in (("approve", None), ("checking", None), ("decline", "ok"),
+                            ("safe", "ok"), ("decline", "duress")):
+            a = M.respond(duress, action, actor=OWNER, channel="lc", now=T0, rules=RULES,
+                          pin=pin)
+            b = M.respond(declined, action, actor=OWNER, channel="lc", now=T0, rules=RULES,
+                          pin=pin)
+            assert (a.code, a.message) == (b.code, b.message), action
+
     def test_duress_pin_on_the_help_path_and_on_a_closed_request(self):
         outcome = M.respond(snap(S.DISPATCHED), "safe", actor=OWNER, channel="lc", now=T0,
                             rules=RULES, pin="duress")
