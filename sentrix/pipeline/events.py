@@ -200,3 +200,39 @@ def load_dataset(directory: Path | None = None):
 
 
 __all__ = ["EventLog", "read_events", "load_dataset", "SCHEMA_VERSION"]
+
+
+# ── clip rows (docs/7 §2.4 seam, track T-CLIP) ────────────────────────────────
+#: One row per analysed clip (HARDWARE.md T1): the gate, every stage's timing,
+#: the keyframes and their votes, the per-class evidence and the decision it
+#: led to. Tick rows stay schema 3. A clip row carries ``"kind": "clip"`` and
+#: no ``features`` key, so ``load_dataset`` and the replay tools skip it.
+CLIP_SCHEMA_VERSION = 4
+
+
+def _write_clip(self: EventLog, clip: dict[str, Any], *,
+                decision_seq: int | None = None, label: str | None = None) -> None:
+    """Record one analysed clip (``clip`` is ``ClipScores.to_dict()``).
+
+    ``decision_seq`` is the ``seq`` of the tick row the clip's decision wrote.
+    """
+    row = {"schema": CLIP_SCHEMA_VERSION, "kind": "clip", "session": self.session_id,
+           "source": self.source, "ts": round(time.time(), 3),
+           **{k: v for k, v in clip.items() if k not in ("features", "schema", "kind")}}
+    if decision_seq is not None:
+        row["decision_seq"] = decision_seq
+    if label is not None:
+        row["label"] = label
+    with self._lock:
+        handle = self._open()
+        if handle is None:
+            return
+        try:
+            handle.write(json.dumps(row, default=str) + "\n")
+            handle.flush()
+        except (OSError, TypeError, ValueError) as exc:
+            log.debug("clip row write failed: %s", exc)
+
+
+EventLog.write_clip = _write_clip
+__all__ += ["CLIP_SCHEMA_VERSION"]

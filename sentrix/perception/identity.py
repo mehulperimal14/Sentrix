@@ -66,6 +66,29 @@ except ImportError:
 
 _IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
 
+#: InsightFace model packs the identity engine runs (``SENTRIX_FACE_MODEL``).
+#: ``buffalo_s`` is the Pi 5 pack (HARDWARE.md T1, S3): about 20x less face
+#: detection compute and a much smaller recogniser. The packs' embeddings are
+#: not comparable; the gallery is embedded from its images at start-up with
+#: the configured pack, so switching packs re-embeds it. A pack missing from
+#: ``~/.insightface/models`` is downloaded by insightface on first use.
+FACE_MODELS: dict[str, str] = {
+    "buffalo_l": "SCRFD-10G + ArcFace R50",
+    "buffalo_s": "SCRFD-500M + MobileFaceNet",
+}
+DEFAULT_FACE_MODEL = "buffalo_l"
+
+
+def face_model_name(name: str | None = None) -> str:
+    """The configured pack, or the default when the name is not supported."""
+    chosen = (name if name is not None else settings.identity.face_model) or ""
+    chosen = chosen.strip().lower()
+    if chosen in FACE_MODELS:
+        return chosen
+    log.error("unsupported SENTRIX_FACE_MODEL %r (use one of %s); using %s", chosen,
+              ", ".join(FACE_MODELS), DEFAULT_FACE_MODEL)
+    return DEFAULT_FACE_MODEL
+
 
 @dataclass
 class IdentityResult:
@@ -139,6 +162,8 @@ class IdentityEngine:
         self._last_match = 0.0
         self._last_name: str | None = None
         self.backend = _BACKEND
+        #: The InsightFace pack in use (None for the dlib backend).
+        self.model_name: str | None = None
 
         if self.backend is None:
             log.warning(
@@ -157,15 +182,17 @@ class IdentityEngine:
             return
         try:
             from insightface.app import FaceAnalysis
-            app = FaceAnalysis(name="buffalo_l",
+            pack = face_model_name(self.cfg.face_model)
+            app = FaceAnalysis(name=pack,
                                allowed_modules=list(self.cfg.face_modules),
                                providers=["CPUExecutionProvider"])
             self._quiet_sessions(app)
             size = int(self.cfg.det_size)
             app.prepare(ctx_id=-1, det_size=(size, size))
             self._app = app
-            log.info("identity backend: insightface buffalo_l (ArcFace, 512-d; "
-                     "modules %s, det %d, ORT %d threads, no spinning)",
+            self.model_name = pack
+            log.info("identity backend: insightface %s (%s, 512-d; modules %s, det %d, "
+                     "ORT %d threads, no spinning)", pack, FACE_MODELS[pack],
                      "+".join(sorted(app.models)), size, self.cfg.ort_threads)
         except Exception as exc:
             log.error("insightface init failed (%s) — falling back", exc)
@@ -608,5 +635,6 @@ class IdentityWorker:
         self._thread.join(timeout=5.0)
 
 
-__all__ = ["EnrolmentCheck", "FaceCheck", "FaceMatch", "IdentityEngine",
-           "IdentityResult", "IdentityWorker", "TrackIdentity", "person_name"]
+__all__ = ["DEFAULT_FACE_MODEL", "EnrolmentCheck", "FACE_MODELS", "FaceCheck", "FaceMatch",
+           "IdentityEngine", "IdentityResult", "IdentityWorker", "TrackIdentity",
+           "face_model_name", "person_name"]
