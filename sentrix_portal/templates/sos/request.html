@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}{{ req.short_id }} - SENTRIX SOS{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/sos/sos.css">{% endblock %}
+{% block content %}
+<div id="sos-request" data-request="{{ req.id }}" data-state="{{ req.state }}"
+     data-expires="{{ req.expires_at or '' }}">
+  <p class="muted"><a href="/sos">&larr; All requests</a></p>
+  <h1 class="page-title">
+    {% if req.state in ('DRAFTED', 'PENDING') %}Do you need assistance?{% else %}Request {{ req.short_id }}{% endif %}
+  </h1>
+
+  {% if message %}<p class="notice" role="status">{{ message }}</p>{% endif %}
+
+  <section class="card sos-card sos-state-{{ req.state | lower }}">
+    <p class="sos-label"><span class="mono">{{ req.short_id }}</span>
+      <strong id="sos-state-label">{{ req.label }}</strong></p>
+    <p>{{ req.incident_type }} &middot; level {{ req.peak_level }}
+      {% if req.evidence_state == 'corroborated' %}&middot; confirmed by two different models
+      {% elif req.evidence_state == 'confirmed' %}&middot; possible (one camera check){% endif %}</p>
+    {% if req.remaining_s is not none %}
+    <p class="countdown-big" aria-live="polite">Answer within
+      <span class="countdown" data-expires="{{ req.expires_at }}">{{ req.remaining_s // 60 }}:{{ '%02d' % (req.remaining_s % 60) }}</span></p>
+    {% endif %}
+    {% if has_snapshot %}
+    <img class="sos-snapshot" src="/sos/{{ req.id }}/snapshot.jpg" alt="Snapshot from the camera when the alarm was confirmed">
+    {% endif %}
+    {% if req.sos_text %}<pre class="sos-text">{{ req.sos_text }}</pre>{% endif %}
+    {% if req.device_id %}<p><a href="/d/{{ req.device_id }}/live">Open the live view</a></p>{% endif %}
+  </section>
+
+  <section class="card sos-actions" aria-label="Answers">
+    {% if 'call_112' in req.actions %}
+      {% if call.href %}<a class="btn btn-danger btn-call" href="{{ call.href }}">{{ call.label }}</a>
+      {% else %}<span class="btn btn-ghost btn-disabled">{{ call.label }}</span>{% endif %}
+    {% endif %}
+
+    {% if 'approve' in req.actions %}
+    <form method="post" action="/sos/{{ req.id }}/approve" class="sos-form">
+      <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+      <label for="authority">Who is needed</label>
+      <select id="authority" name="authority">
+        {% for key, label in authorities.items() %}
+        <option value="{{ key }}"{% if key == default_authority %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-danger">Alert my contacts and the SENTRIX desk</button>
+    </form>
+    {% endif %}
+
+    {% if 'checking' in req.actions %}
+    <form method="post" action="/sos/{{ req.id }}/checking" class="sos-form">
+      <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+      <button type="submit" class="btn btn-ghost">I'm checking</button>
+    </form>
+    {% endif %}
+
+    {% if 'decline' in req.actions %}
+    <form method="post" action="/sos/{{ req.id }}/decline" class="sos-form">
+      <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+      <label for="pin-decline">SOS PIN</label>
+      <input id="pin-decline" name="pin" type="password" inputmode="numeric" autocomplete="off"
+             pattern="[0-9]{4,8}" required>
+      <button type="submit" class="btn btn-ghost">False alarm (PIN)</button>
+    </form>
+    {% endif %}
+
+    {% if 'safe' in req.actions %}
+    <form method="post" action="/sos/{{ req.id }}/safe" class="sos-form">
+      <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+      <label for="pin-safe">SOS PIN</label>
+      <input id="pin-safe" name="pin" type="password" inputmode="numeric" autocomplete="off"
+             pattern="[0-9]{4,8}" required>
+      <button type="submit" class="btn btn-ghost">I'm safe now (PIN)</button>
+      <p class="muted">Help already asked for stays on its way; only the Desk or a contact closes it.</p>
+    </form>
+    {% endif %}
+
+    {% if 'help_now' in req.actions %}
+    <form method="post" action="/sos/{{ req.id }}/help_now" class="sos-form">
+      <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+      <button type="submit" class="btn btn-danger">Request help now</button>
+      <p class="muted">Opens a new request linked to this one.</p>
+    </form>
+    {% endif %}
+    <p class="muted">SENTRIX does not contact 112 itself.</p>
+  </section>
+
+  <section class="card" aria-labelledby="timeline-title">
+    <h2 id="timeline-title">Timeline</h2>
+    <ol class="timeline" id="sos-timeline">
+      {% for e in events %}
+      <li><time datetime="{{ e.at }}">{{ e.at }}</time> <strong>{{ e.event }}</strong>
+        <span class="muted">{{ e.actor_type }}{% if e.channel %} via {{ e.channel }}{% endif %}{% if e.origin == 'cloud' %} (Portal){% endif %}</span></li>
+      {% endfor %}
+    </ol>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/sos/sos.js" nonce="{{ csp_nonce }}"></script>{% endblock %}

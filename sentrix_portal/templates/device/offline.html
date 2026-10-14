@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Device offline - SENTRIX Portal{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/sos/sos.css">{% endblock %}
+{% block content %}
+<div id="device-offline" data-device="{{ device.id }}">
+  <h1 class="page-title">{{ device.name or device.serial }} is offline</h1>
+  <p class="notice" role="status">The device has not been heard from since
+    <time datetime="{{ device.last_seen_at.isoformat() if device.last_seen_at else '' }}">{{ device.last_seen_at or 'never' }}</time>.
+    Detection, the siren and the evidence vault keep working on the device; this page shows
+    the copy the Portal keeps. Verdicts you set here are queued and sync when it is back.</p>
+
+  {% if requests %}
+  <section class="card">
+    <h2>Open requests</h2>
+    <ul class="sos-list">
+      {% for r in requests %}<li><a href="/sos/{{ r.id }}" class="mono">{{ r.short_id }}</a> {{ r.label }}</li>{% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  <section class="card">
+    <h2>Incidents</h2>
+    <table class="sos-table">
+      <thead><tr><th>Started</th><th>Type</th><th>Peak</th><th>Reason</th><th>Verdict</th></tr></thead>
+      <tbody>
+      {% for i in incidents %}
+        <tr data-incident="{{ i.id }}">
+          <td>{{ i.started_at or '' }}</td><td>{{ i.incident_type }}</td><td>{{ i.peak_level }}</td>
+          <td>{{ i.reason or '' }}</td>
+          <td>{{ i.verdict or 'unreviewed' }}
+            {% if can_label %}
+            <button type="button" class="btn btn-ghost js-verdict" data-incident="{{ i.id }}" data-verdict="TRUE">Real</button>
+            <button type="button" class="btn btn-ghost js-verdict" data-incident="{{ i.id }}" data-verdict="FALSE">False alarm</button>
+            <span class="muted js-verdict-status" data-incident="{{ i.id }}"></span>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  {% if packages %}
+  <section class="card">
+    <h2>Dispatch packages</h2>
+    <table class="sos-table">
+      <thead><tr><th>Created</th><th>Status</th><th>Authority</th></tr></thead>
+      <tbody>{% for p in packages %}<tr><td>{{ p.created_at or '' }}</td><td>{{ p.status }}</td><td>{{ p.chosen_authority or p.authority or '' }}</td></tr>{% endfor %}</tbody>
+    </table>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/device/offline.js" nonce="{{ csp_nonce }}"></script>{% endblock %}

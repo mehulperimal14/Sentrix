@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ req.short_id }} - SENTRIX{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/sos/sos.css">{% endblock %}
+{% block content %}
+<h1 class="page-title">{% if can_act %}Do you need assistance?{% else %}Request {{ req.short_id }}{% endif %}</h1>
+<section class="card sos-card sos-state-{{ req.state | lower }}">
+  <p>Hello {{ name }}. Request <span class="mono">{{ req.short_id }}</span>:
+     <strong>{{ req.label }}</strong> ({{ req.incident_type }}, level {{ req.peak_level }}).</p>
+  {% if req.remaining_s is not none %}<p>{{ req.remaining_s // 60 }} minutes left to answer.</p>{% endif %}
+</section>
+{% if can_act %}
+<section class="card sos-actions">
+  {% if call.href %}<a class="btn btn-danger btn-call" href="{{ call.href }}">{{ call.label }}</a>{% endif %}
+  <form method="post" action="/a/{{ token }}" class="sos-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <input type="hidden" name="action" value="approve">
+    <label for="authority">Who is needed</label>
+    <select id="authority" name="authority">
+      {% for key, label in authorities.items() %}
+      <option value="{{ key }}"{% if key == default_authority %} selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-danger">Alert my contacts and the SENTRIX desk</button>
+  </form>
+  <form method="post" action="/a/{{ token }}" class="sos-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <input type="hidden" name="action" value="checking">
+    <button type="submit" class="btn btn-ghost">I'm checking</button>
+  </form>
+  <p class="muted">False alarm? <a href="/sos/{{ req.id }}">Sign in</a> and enter your SOS PIN.
+    A link can only ask for help, never cancel it.</p>
+</section>
+{% endif %}
+<p class="muted">SENTRIX does not contact 112 itself.</p>
+{% endblock %}

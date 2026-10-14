@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}SENTRIX{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/sos/sos.css">{% endblock %}
+{% block content %}
+<section class="card">
+  <h1 class="page-title">{% if outcome.ok %}Thank you{% else %}Not done{% endif %}</h1>
+  <p>{{ message }}</p>
+  {% if outcome.request %}<p>Request <span class="mono">{{ outcome.request.short_id }}</span>:
+    <strong>{{ outcome.request.label }}</strong></p>{% endif %}
+  <p class="muted">SENTRIX does not contact 112 itself.</p>
+</section>
+{% endblock %}

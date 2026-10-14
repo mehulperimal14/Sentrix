@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}SOS requests - SENTRIX Portal{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/sos/sos.css">{% endblock %}
+{% block content %}
+<h1 class="page-title">Assistance requests</h1>
+<p class="muted">An alarm confirmed at level 3 asks you whether you need assistance. Unanswered
+requests lapse as <strong>unanswered</strong>, never as "safe". SENTRIX does not contact 112 itself.</p>
+
+<section class="card" aria-labelledby="open-title">
+  <h2 id="open-title">Open now</h2>
+  {% if open %}
+  <ul class="sos-list">
+    {% for r in open %}
+    <li class="sos-item sos-state-{{ r.state | lower }}">
+      <a href="/sos/{{ r.id }}"><span class="mono">{{ r.short_id }}</span>
+        <strong>{{ r.label }}</strong></a>
+      <span class="muted">{{ r.incident_type }} &middot; level {{ r.peak_level }}</span>
+      {% if r.remaining_s is not none %}
+      <span class="countdown" data-expires="{{ r.expires_at }}">{{ (r.remaining_s // 60) }} min left</span>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted" id="no-open">Nothing is open.</p>
+  {% endif %}
+</section>
+
+<section class="card" aria-labelledby="recent-title">
+  <h2 id="recent-title">Recent</h2>
+  {% if recent %}
+  <table class="sos-table">
+    <thead><tr><th>Request</th><th>State</th><th>Type</th><th>Opened</th></tr></thead>
+    <tbody>
+    {% for r in recent %}
+      <tr><td><a class="mono" href="/sos/{{ r.id }}">{{ r.short_id }}</a></td>
+          <td>{{ r.label }}</td><td>{{ r.incident_type }}</td>
+          <td><time datetime="{{ r.created_at }}">{{ r.created_at }}</time></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No earlier requests.</p>
+  {% endif %}
+</section>
+{% endblock %}
+{% block scripts %}<script src="/static/sos/sos.js" nonce="{{ csp_nonce }}"></script>{% endblock %}

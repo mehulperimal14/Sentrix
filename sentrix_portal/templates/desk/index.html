@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}SENTRIX Desk{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/sos/sos.css">{% endblock %}
+{% block content %}
+<div id="desk" data-queue-url="/desk/api/queue">
+  <h1 class="page-title">SENTRIX Desk <span class="muted">(simulated responder console)</span></h1>
+  <p class="muted">Requests appear here once help is asked for. The Desk never contacts 112:
+    "Called 112" only records what an operator would do.</p>
+  <p><button type="button" class="btn btn-ghost" id="desk-sound">Enable the alarm sound</button>
+     <span class="muted" id="desk-status" aria-live="polite"></span></p>
+
+  <section class="card" aria-labelledby="queue-title">
+    <h2 id="queue-title">Queue</h2>
+    <table class="sos-table" id="desk-queue">
+      <thead><tr><th>Request</th><th>State</th><th>Type</th><th>Level</th><th>Where</th><th>Resident</th><th>Opened</th></tr></thead>
+      <tbody>
+      {% for c in cards %}
+        <tr class="sos-state-{{ c.state | lower }}{% if c.duress %} duress{% endif %}" data-id="{{ c.id }}">
+          <td><a class="mono" href="/desk/requests/{{ c.id }}">{{ c.short_id }}</a>{% if c.duress %} <strong class="tag-duress">DURESS</strong>{% endif %}</td>
+          <td>{{ c.label }}</td><td>{{ c.incident_type }}</td><td>{{ c.peak_level }}</td>
+          <td>{{ c.locality or '' }} {{ c.city or '' }}</td><td>{{ c.resident or '' }}</td>
+          <td><time datetime="{{ c.created_at }}">{{ c.created_at }}</time></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% if not cards %}<p class="muted" id="desk-empty">The queue is empty.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/desk/desk.js" nonce="{{ csp_nonce }}"></script>{% endblock %}
