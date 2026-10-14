@@ -191,6 +191,22 @@
             : S.sos.failureText(result));
     }
 
+    async function demoTrigger(button) {
+        const status = document.getElementById("sos-history-message");
+        const select = document.getElementById("sos-demo-trigger-type");
+        const kind = select ? select.value : "weapon";
+        if (!window.confirm(`Open a SIMULATED ${kind} detection? Disclose it to the audience.`)) return;
+        button.disabled = true;
+        const result = await S.api("/api/sos/demo/trigger", {
+            method: "POST", json: { incident_type: kind },
+        });
+        button.disabled = false;
+        S.message(status, result.ok, result.ok
+            ? ((result.data && result.data.message) || "SIMULATED DETECTION")
+            : S.sos.failureText(result));
+        if (result.ok) loadHistory();
+    }
+
     async function helpNow(button) {
         const status = document.getElementById("sos-history-message");
         if (!window.confirm("Open a new assistance request from this one?")) return;
@@ -228,6 +244,8 @@
         });
         const demo = document.getElementById("sos-demo-close");
         if (demo) demo.addEventListener("click", () => demoClose(demo));
+        const trigger = document.getElementById("sos-demo-trigger");
+        if (trigger) trigger.addEventListener("click", () => demoTrigger(trigger));
         loadHistory();
         loadPreview();
         if (selected) loadAudit(selected);

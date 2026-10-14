@@ -51,6 +51,18 @@
       <button type="button" class="btn btn-sm btn-outline" id="sos-demo-close">Close the current incident (demo)</button>
       <p class="sos-note">Test mode only: the next scene then opens a new incident and a new request.</p>
     </div>
+    {% if role == 'device_admin' %}
+    <div class="mt-2" id="sos-demo-trigger-box">
+      <label class="sos-note" for="sos-demo-trigger-type">Scripted trigger</label>
+      <select id="sos-demo-trigger-type" class="text-input" aria-label="Scripted trigger type">
+        <option value="weapon">weapon</option>
+        <option value="fire">fire</option>
+        <option value="intrusion">intrusion (armed mode)</option>
+      </select>
+      <button type="button" class="btn btn-sm btn-outline" id="sos-demo-trigger">Scripted trigger (SIMULATED DETECTION)</button>
+      <p class="sos-note">Test mode, device admin only. Opens a confirmed L3 that is not a detection: the SOS text and the audit say SIMULATED DETECTION. Tell the audience when you use it.</p>
+    </div>
+    {% endif %}
     {% endif %}
   </div>
 </div>

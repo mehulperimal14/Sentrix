@@ -1,0 +1,31 @@
+# SENTRIX Portal behind Caddy: automatic HTTPS (Let's Encrypt), HSTS, and a
+# reverse proxy that carries the device link and the live-state WebSockets
+# (/device/v1/link, /d/{id}/ws/...) and streams the MJPEG relay unbuffered.
+{
+	email {$ACME_EMAIL}
+	# Caddy is the edge: it never trusts an incoming X-Forwarded-For, so the
+	# Portal sees the real client address (login back-off, audit IP hashes).
+}
+
+{$PORTAL_DOMAIN} {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	# The tunnel accepts up to 11 MiB per request (docs/7 §3.2).
+	request_body {
+		max_size 12MB
+	}
+
+	# WebSockets are proxied as-is by reverse_proxy (Upgrade handled).
+	# flush_interval -1: the /d/{id}/video MJPEG relay must not be buffered.
+	reverse_proxy portal:8100 {
+		flush_interval -1
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

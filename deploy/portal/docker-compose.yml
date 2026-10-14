@@ -1,0 +1,94 @@
+# SENTRIX Portal on one VM (Oracle Always Free, India region; README.md).
+#
+#   cp .env.example .env    # then fill in the values (names only in git)
+#   docker compose up -d --build
+#
+# Network rules (decisions: "Postgres on an internal network only; only Caddy
+# publishes 80/443"; reviews: a published Docker port bypasses ufw/iptables):
+#   * db      - on "backend" only, which is internal: no published port, no
+#               route to the Internet.
+#   * portal  - on "backend" (to reach db) and "frontend" (Caddy, and outbound
+#               HTTPS to the Telegram and e-mail APIs); no published port.
+#   * caddy   - the ONLY service with "ports": 80 and 443 (TCP + UDP for HTTP/3).
+name: sentrix-portal
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sentrix}
+      POSTGRES_USER: ${POSTGRES_USER:-sentrix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  portal:
+    build:
+      context: ../..
+      dockerfile: deploy/portal/Dockerfile
+    image: sentrix-portal:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORTAL_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-sentrix}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-sentrix}
+      PORTAL_BASE_URL: https://${PORTAL_DOMAIN:?set PORTAL_DOMAIN in .env}
+      PORTAL_HOST: 0.0.0.0
+      PORTAL_PORT: "8100"
+      PORTAL_WORKERS: "1"
+      PORTAL_SECURE_COOKIES: "1"
+      # Caddy's fixed address on "frontend": the only peer whose
+      # X-Forwarded-For / X-Forwarded-Proto are believed.
+      PORTAL_TRUSTED_PROXIES: 172.30.0.10
+      FORWARDED_ALLOW_IPS: 172.30.0.10
+    volumes:
+      - portal-data:/data
+    expose:
+      - "8100"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - backend
+      - frontend
+
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      PORTAL_DOMAIN: ${PORTAL_DOMAIN:?set PORTAL_DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - portal
+    networks:
+      frontend:
+        ipv4_address: 172.30.0.10
+
+networks:
+  backend:
+    internal: true
+  frontend:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+volumes:
+  pgdata:
+  portal-data:
+  caddy-data:
+  caddy-config:

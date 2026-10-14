@@ -29,7 +29,7 @@ POST        /api/sos/requests/{id}/safe                 {pin}
 POST        /api/sos/requests/{id}/help-now             {authority}: a new linked request
 GET         /api/sos/preview                            ?incident_type&level&evidence_state
 POST        /api/sos/demo/close-incident                test mode only
-POST        /api/sos/demo/trigger                       {incident_type}; test mode only
+POST        /api/sos/demo/trigger                       {incident_type}; test mode, device admin
 ==========  ==========================================  ===========================
 """
 
@@ -270,9 +270,12 @@ async def api_sos_demo_close(request: Request,
 @router.post("/api/sos/demo/trigger")
 async def api_sos_demo_trigger(request: Request,
                                incident_type: str = Body("weapon", embed=True),
-                               principal: auth.LcPrincipal = Depends(auth.require_lc())
+                               principal: auth.LcPrincipal = Depends(
+                                   auth.require_lc("device_admin"))
                                ) -> JSONResponse:
-    """A disclosed scripted L3 ("SIMULATED DETECTION"), test mode only."""
+    """A disclosed scripted L3 ("SIMULATED DETECTION"), test mode only, for
+    the device admin only (the demo's backup when a clip does not trigger;
+    design §6). The SOS text and the audit say SIMULATED DETECTION."""
     _require_csrf(request)
     result = await asyncio.to_thread(current_service().demo_trigger, incident_type,
                                      actor=principal.to_actor())

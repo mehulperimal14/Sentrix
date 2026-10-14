@@ -1,0 +1,13 @@
+# Build context of deploy/portal/Dockerfile (BuildKit reads <Dockerfile>.dockerignore).
+# Everything is excluded except what the image copies: no .env, var/, models/,
+# training/, .venv/ or .git ever reaches the Docker daemon.
+*
+!sentrix/
+!sentrix_portal/
+!deploy/portal/requirements.txt
+!tools/provision_device.py
+!tools/portal_pg_check.py
+**/__pycache__
+**/*.pyc
+sentrix/**/*.pt
+sentrix/**/*.onnx

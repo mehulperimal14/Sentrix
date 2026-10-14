@@ -1860,6 +1860,59 @@ lists the exports for `SENTRIX_RUNTIME` onnx/ncnn. `deploy/pi5/pi.env` sets
 the clip profile (`SENTRIX_PIPELINE_MODE=clip`, `SENTRIX_RUNTIME=onnx`,
 `SENTRIX_FAST_LANE=1`, `SENTRIX_FACE_DET_SIZE=320`).
 
+**Demo tools and deployment (§15 items 3–4).**
+* `tools/demo_reset.py [--dir var/demo] [--live-steps 0-3] [--activation]
+  [--safety-net on|off] [--window 90]` builds the demo world in a directory it
+  marks (`.sentrix-demo`) and wipes only such a directory (never `var/`):
+  `demo_admin` and `demo_desk` (password + TOTP secret printed once),
+  "Riya Sharma (demo)" (`riya_demo`), a CONFIRMED contact, a provisioned,
+  assigned and (unless step 5 is live) claimed device with
+  `<dir>/device/link/identity.json` and `label.html`. `--live-steps N` leaves
+  the last N of steps 5–7 for the stage. Team phones, e-mails and the
+  contact's Telegram chat come from `SENTRIX_DEMO_OWNER_PHONE`,
+  `SENTRIX_DEMO_OWNER_EMAIL`, `SENTRIX_DEMO_CONTACT_PHONE`,
+  `SENTRIX_DEMO_CONTACT_EMAIL`, `SENTRIX_DEMO_CONTACT_TELEGRAM` (env only);
+  `<dir>/demo.json` (0600) keeps only paths, ids and the demo device's own
+  LC password / session secret / evidence key.
+* `tools/demo_run.py [--dir] [start|scene NAME|close|trigger KIND|clips]`:
+  `start` runs `python -m sentrix_portal` (workers on) and `python -m sentrix`
+  (SOS, channels, link to `http://127.0.0.1:<portal port>`, node on, GPIO off,
+  console siren, `SENTRIX_AUDIO=0`) with every path in the demo dir, test mode
+  on, `SENTRIX_LIVE_ALERTS` and every channel switch forced to 0, provider
+  keys and `SENTRIX_USER_*` blanked, `SENTRIX_TEST_RECIPIENTS` from the
+  environment only, `SENTRIX_SOS_DEMO_WINDOW_SECONDS` = the demo window;
+  `assert_safe` refuses a webcam, a stream, the microphone, a live switch or
+  the real `var/`. Browsers use `http://portal.localhost:8100`
+  (`portal_session`) and `http://127.0.0.1:8000` (`lc_session`).
+* Camera: `CAMERA_SOURCES=demo-reel:<reel.json>` (`sentrix/io/demo_reel.py`):
+  normal footage (vid07 0–60 s) in a loop; `demo_run.py scene gun|fire|gun-b|fire-b`
+  writes `<dir>/scene.txt` and the reel plays that clip once, resized to the
+  idle size, then returns to idle. A token present at start is ignored. The
+  test video (wa02) is refused by file name and by the dataset's split table.
+  Scenes by measured reliability (M5 replay, commit `0b9e659`, 6 Hz):
+  `gun` = gun.mov (val) L3 at 7.3 s, `fire` = 4.mov (val) L3 at 10.9 s;
+  in-sample backups `gun-b` = 2.mov, `fire-b` = 6.mov (reach L5). The 10 live
+  pre-runs per clip (keep ≥ 9/10) are measured on the demo laptop.
+* `POST /api/sos/demo/trigger` is now **device admin only**
+  (`require_lc("device_admin")`; a tunnelled owner gets 403), still test mode
+  only in the engine, with a button on the LC SOS page and
+  `demo_run.py trigger`; `close-incident` stays open to the household (the
+  owner's own "next scene" control). Both are the `demo.*` seams of §5.6.
+* `deploy/portal/`: `Dockerfile` (python:3.12-slim, uid 10001, Portal
+  packages + `tools/provision_device.py` + `tools/portal_pg_check.py`;
+  `Dockerfile.dockerignore` denies everything else), `requirements.txt`
+  (Portal-only, `psycopg[binary]`), `docker-compose.yml` (`db` on the internal
+  `backend` network only, `portal` without ports, `caddy` the only service with
+  ports 80/443 at 172.30.0.10 = `PORTAL_TRUSTED_PROXIES` =
+  `FORWARDED_ALLOW_IPS`), `Caddyfile` (HSTS, WebSockets, `flush_interval -1`),
+  `.env.example` (names only, test mode on), `backup.sh` / `restore_test.sh` /
+  `check_ports.sh`, and the Oracle / Render + Supabase runbook. Validated by
+  `tests/test_deploy_portal.py`; Docker itself was not run.
+* `tools/portal_pg_check.py`: `ddl` (every table, index and the outbox
+  `ON CONFLICT` compile for PostgreSQL), `suite` (the Portal tests under a
+  VARCHAR length guard, which SQLite does not enforce), `live --url` (a
+  throwaway schema on a real server; needs psycopg, not in the laptop venv).
+
 ---
 
 ## 16. Open questions and contract-review decisions
