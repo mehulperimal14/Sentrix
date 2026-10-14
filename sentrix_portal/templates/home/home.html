@@ -1,0 +1,74 @@
+{% extends "acct/layout.html" %}
+{% import "acct/macros.html" as ui %}
+{% block title %}Home · SENTRIX Portal{% endblock %}
+{% block page_content %}
+<div class="row between">
+  <h1>{{ household.display_name or 'Your home' }}</h1>
+  <a class="small" href="/account">Account</a>
+</div>
+
+{% if erasure_due %}
+<div class="alert alert-error" role="alert">This account is scheduled for erasure on
+  <time datetime="{{ erasure_due }}">{{ erasure_due[:10] }}</time>.
+  <a href="/privacy/erase">Cancel the erasure</a></div>
+{% endif %}
+
+{% if requests %}
+<div class="card sos-banner" role="alert">
+  <h2>Open assistance request{{ 's' if requests | length > 1 }}</h2>
+  <ul class="plain stack">
+  {% for r in requests %}
+    <li><strong>{{ r.get('label') or r.get('state') }}</strong>
+      {% if r.get('incident_type') %}· {{ r.get('incident_type') }}{% endif %}
+      {% if r.get('expires_at') %}· answer by <time datetime="{{ r.get('expires_at') }}">{{ (r.get('expires_at') | string)[11:16] }} UTC</time>{% endif %}
+      <a class="btn btn-small" href="/sos/{{ r.get('id') }}">Open</a></li>
+  {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if not onboarding_done and principal.role == 'owner' %}
+<div class="alert alert-warn">Your home is not fully set up yet: SOS alerts need your address,
+  contacts and PIN. <a class="btn btn-small" href="/onboarding/{{ next_step }}">Continue setup (step {{ next_step }} of 7)</a></div>
+{% endif %}
+
+<div class="cards">
+{% for card in cards %}
+  <section class="card device-card" aria-label="Device {{ card.name }}">
+    <h2><span>{{ card.name }}</span>
+      {% if not card.claimed %}<span class="badge badge-warn">not claimed</span>
+      {% elif card.online %}<span class="badge badge-ok">online</span>
+      {% else %}<span class="badge badge-bad">offline</span>{% endif %}</h2>
+    <dl class="facts">
+      <dt>Serial</dt><dd class="mono">{{ card.serial }}</dd>
+      {% if card.room %}<dt>Camera</dt><dd>{{ card.room }}</dd>{% endif %}
+      {% if card.claimed %}
+      <dt>Mode</dt><dd>{% if card.armed %}<span class="badge badge-warn">ARMED</span>{% else %}<span class="badge badge-ok">HOME</span>{% endif %}</dd>
+      <dt>AI rate</dt><dd>{% if card.online and card.ai_hz is not none %}{{ '%.1f' | format(card.ai_hz) }} Hz{% else %}—{% endif %}</dd>
+      <dt>Last seen</dt><dd>{% if card.last_seen %}<time datetime="{{ card.last_seen }}">{{ card.last_seen[:16] | replace('T', ' ') }} UTC</time>{% else %}never{% endif %}</dd>
+      <dt>Last incident</dt><dd>{% if card.last_incident %}{{ card.last_incident.type or 'incident' }} · L{{ card.last_incident.level }}
+        · <time datetime="{{ card.last_incident.at }}">{{ (card.last_incident.at or '')[:16] | replace('T', ' ') }}</time>
+        {% if card.last_incident.verdict %}· {{ card.last_incident.verdict }}{% else %}· <span class="badge badge-warn">not reviewed</span>{% endif %}{% else %}none{% endif %}</dd>
+      {% endif %}
+    </dl>
+    {% for r in card.requests %}
+      <p><a class="btn btn-danger btn-small" href="/sos/{{ r.get('id') }}">SOS: {{ r.get('label') or r.get('state') }}</a></p>
+    {% endfor %}
+    <div class="links">
+      {% if card.claimed %}
+        <a class="btn btn-small" href="/d/{{ card.id }}/dashboard">Dashboard</a>
+        <a class="btn btn-secondary btn-small" href="/d/{{ card.id }}/live">Live view</a>
+        <a class="btn btn-secondary btn-small" href="/d/{{ card.id }}/events">Events</a>
+      {% elif principal.role == 'owner' %}
+        <a class="btn btn-small" href="/claim?sn={{ card.serial | urlencode }}">Claim this device</a>
+      {% endif %}
+    </div>
+  </section>
+{% else %}
+  <section class="card"><h2>No device yet</h2>
+    <p>Your SENTRIX device appears here once SENTRIX assigns it to your account.</p></section>
+{% endfor %}
+</div>
+<p class="small muted">The dashboard and live view open the device's own console through
+  the SENTRIX server. Video passes through the server in memory and is never stored.</p>
+{% endblock %}

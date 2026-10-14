@@ -1,0 +1,52 @@
+{% extends "acct/layout.html" %}
+{% block title %}Welcome letter {{ household.customer_code }} · SENTRIX{% endblock %}
+{% block page_content %}
+<div class="actions no-print">
+  <button type="button" class="btn" data-print>Print</button>
+  <a href="/admin/customers/{{ household.id }}">Back to the customer</a>
+  <span class="small muted">This page is not stored: printing again issues a new code.</span>
+</div>
+<article class="print-sheet">
+  <h1>Welcome to SENTRIX</h1>
+  <p>Dear {{ owner.display_name or household.display_name }},</p>
+  <p>Your SENTRIX home safety account is ready. Open the Portal, activate your account with the
+    code below and choose your own password. Nobody at SENTRIX knows it.</p>
+  <table class="table">
+    <tr><th>Portal</th><td class="mono">{{ base_url }}</td></tr>
+    <tr><th>Customer</th><td class="mono">{{ household.customer_code }}</td></tr>
+    <tr><th>Username</th><td class="mono">{{ owner.username }}</td></tr>
+    <tr><th>Activation code</th><td><span class="code-big">{{ code }}</span><br>
+      <span class="small muted">Works once, valid for {{ ttl_hours }} hours.</span></td></tr>
+  </table>
+  <div class="row">
+    <div>{{ activation_qr | safe }}</div>
+    <p class="small">Scan to activate:<br><span class="mono">{{ activation_url }}</span></p>
+  </div>
+
+  {% if devices %}
+  <h2>Your device</h2>
+  {% for d in devices %}
+  <div class="row">
+    <div class="qr-small">{{ d.qr | safe }}</div>
+    <table class="table">
+      <tr><th>Serial</th><td class="mono">{{ d.serial }}</td></tr>
+      <tr><th>Claim code</th><td>{% if d.claim_code %}<span class="code-big">{{ d.claim_code }}</span>{% else %}on the device label{% endif %}</td></tr>
+      <tr><th>Claim link</th><td class="mono small">{{ d.claim_url }}</td></tr>
+    </table>
+  </div>
+  {% endfor %}
+  <p class="small">During setup (step 5) you claim the device with its serial and claim code,
+    or by scanning the QR code.</p>
+  {% endif %}
+
+  <h2>Next steps</h2>
+  <ol class="bullets">
+    <li>Mount the device 1.8-2.2 m high, tilted down, and connect it to power and the internet.</li>
+    <li>Activate your account and complete the 7 setup steps: address, household, emergency
+      contacts, device, alerts and your SOS PIN, consent.</li>
+    <li>Your emergency contacts get a link to confirm; only confirmed contacts are ever alerted.</li>
+  </ol>
+  <p class="small muted">SENTRIX does not contact 112 itself. SENTRIX staff will never ask for
+    your password, PIN or codes. Keep this letter private.</p>
+</article>
+{% endblock %}

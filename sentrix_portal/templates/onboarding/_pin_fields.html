@@ -1,0 +1,26 @@
+{#- SOS and duress PINs, always entered together (wizard step 6, /settings).
+    Needs `errors`, `pin_length`, `duress_digits`, `contacts_exist`,
+    `pin_set`, `disabled`. -#}
+{% import "acct/macros.html" as ui %}
+<fieldset>
+  <legend>PINs</legend>
+  <p class="help">The SOS PIN marks a false alarm, so a stranger or a curious child cannot
+    cancel an alert. {{ pin_length }} digits; repeated, sequential and common PINs are refused.
+    {% if pin_set %}Leave both empty to keep your current PINs.{% endif %}</p>
+  <div class="grid-2">
+    {{ ui.input('sos_pin', 'SOS PIN', '', errors=errors, type='password', inputmode='numeric', maxlength=pin_length, pattern='[0-9]{' ~ pin_length ~ '}', autocomplete='off', disabled=disabled) }}
+    {{ ui.input('sos_pin_confirm', 'Repeat the SOS PIN', '', errors=errors, type='password', inputmode='numeric', maxlength=pin_length, autocomplete='off', disabled=disabled) }}
+  </div>
+  {% if contacts_exist %}
+  <p class="help"><strong>Duress PIN (recommended).</strong> If someone forces you to cancel,
+    type this PIN instead: the screen shows "Marked as false alarm" while your contacts and the
+    Desk are told "Do not go to the home. Call 112." It must differ from the SOS PIN in at least
+    {{ duress_digits }} digits.</p>
+  <div class="grid-2">
+    {{ ui.input('duress_pin', 'Duress PIN', '', errors=errors, type='password', inputmode='numeric', maxlength=pin_length, autocomplete='off', disabled=disabled) }}
+    {{ ui.input('duress_pin_confirm', 'Repeat the duress PIN', '', errors=errors, type='password', inputmode='numeric', maxlength=pin_length, autocomplete='off', disabled=disabled) }}
+  </div>
+  {% else %}
+  <p class="help">A duress PIN becomes available once you have an emergency contact.</p>
+  {% endif %}
+</fieldset>

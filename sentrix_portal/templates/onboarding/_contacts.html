@@ -1,0 +1,77 @@
+{#- Emergency contacts: list, consent state, warnings, add and edit forms
+    (wizard step 4 and /household/contacts). Needs `contacts`, `phones`,
+    `unreachable`, `errors`, `contact_form`, `editable`, `can_add`,
+    `free_priorities`, `max_contacts`, `action_url`, and optionally
+    `share_link`, `share_for`, `emailed`. -#}
+{% import "acct/macros.html" as ui %}
+{% if share_link %}
+<div class="alert alert-ok" role="status">
+  <p><strong>Ask {{ share_for }} to confirm.</strong>
+    {% if emailed %}We e-mailed them a confirmation link. You can also{% else %}They have no e-mail on file, so{% endif %}
+    send them this personal link yourself (WhatsApp, SMS from your phone). It is shown only now.</p>
+  <div class="copy-box">
+    <input id="share-link" type="text" readonly value="{{ share_link }}" aria-label="Confirmation link">
+    <button type="button" class="btn btn-secondary btn-small" data-copy="#share-link">Copy</button>
+  </div>
+</div>
+{% endif %}
+<p class="help">SENTRIX sends an SOS only to contacts who confirmed. Up to {{ max_contacts }} contacts.</p>
+<div class="table-wrap">
+<table class="table">
+  <thead><tr><th>#</th><th>Name</th><th>Mobile</th><th>Channels</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+  {% for c in contacts %}
+    <tr>
+      <td>{{ c.priority }}</td>
+      <td>{{ c.name }}{% if c.relation %} <span class="muted">({{ c.relation }})</span>{% endif %}
+        {% if c.can_reach_30min %}<br><span class="small muted">can reach the home within 30 min</span>{% endif %}</td>
+      <td class="mono">{{ phones.get(c.id) or '—' }}</td>
+      <td class="small">{% if c.email %}e-mail{% endif %}{% if telegram and c.id in telegram %} Telegram{% endif %}{% if c.consent_status in ('PENDING', 'CONFIRMED') %} SMS (device){% endif %}
+        {% if c.id in unreachable %}<br><span class="badge badge-warn">no Telegram or e-mail</span>{% endif %}</td>
+      <td>{{ ui.state_badge(c.consent_status) }}
+        {% if c.consent_status in ('DECLINED', 'REVOKED') %}<br><span class="small muted">details erased; removed within {{ declined_days or 7 }} days</span>{% endif %}</td>
+      <td class="right">{% if editable %}
+        {% if c.consent_status == 'PENDING' %}
+        <form method="post" action="{{ action_url }}" class="inline">{{ ui.csrf(principal) }}
+          <input type="hidden" name="action" value="resend_contact"><input type="hidden" name="contact_id" value="{{ c.id }}">
+          <button class="btn btn-secondary btn-small" type="submit">New link</button></form>
+        {% endif %}
+        <form method="post" action="{{ action_url }}" class="inline" data-confirm="Remove {{ c.name }} as an emergency contact?">{{ ui.csrf(principal) }}
+          <input type="hidden" name="action" value="remove_contact"><input type="hidden" name="contact_id" value="{{ c.id }}">
+          <button class="btn btn-ghost btn-small" type="submit">Remove</button></form>
+      {% endif %}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="muted">No contacts yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% if unreachable %}
+<div class="alert alert-warn">A contact with neither Telegram nor e-mail can only be reached by
+  the device's own SMS: while the device is offline (power cut, broken line) SENTRIX cannot
+  reach them. Add an e-mail, or ask them to link Telegram after confirming.</div>
+{% endif %}
+{% if editable and can_add %}
+<form class="form" method="post" action="{{ action_url }}">
+  {{ ui.csrf(principal) }}<input type="hidden" name="action" value="add_contact">
+  <h3>Add a contact</h3>
+  <div class="grid-2">
+    {{ ui.input('name', 'Name', contact_form.get('name'), errors=errors, required=True, maxlength=80) }}
+    {{ ui.input('relation', 'Relation', contact_form.get('relation'), errors=errors, required=True, maxlength=40, placeholder='brother, neighbour...') }}
+  </div>
+  <div class="grid-2">
+    {{ ui.input('phone', 'Mobile', contact_form.get('phone'), errors=errors, type='tel', required=True, maxlength=20, inputmode='tel', placeholder='+91 98...', help='Not your own number.') }}
+    {{ ui.input('email', 'E-mail (optional)', contact_form.get('email'), errors=errors, type='email', maxlength=254, help='Recommended: the Portal sends by e-mail and Telegram, not SMS.') }}
+  </div>
+  <div class="field">
+    <label for="f-priority">Priority <span class="req" aria-hidden="true">*</span></label>
+    <select id="f-priority" name="priority" required>
+      {% for p in free_priorities %}<option value="{{ p }}"{% if contact_form.get('priority')|string == p|string %} selected{% endif %}>{{ p }}</option>{% endfor %}
+    </select>
+    {{ ui.err(errors, 'priority') }}
+  </div>
+  {{ ui.checkbox('can_reach_30min', 'They can reach the home within 30 minutes.', contact_form.get('can_reach_30min'), errors=errors) }}
+  <div class="actions"><button class="btn btn-secondary" type="submit">Add and ask to confirm</button></div>
+</form>
+{% endif %}

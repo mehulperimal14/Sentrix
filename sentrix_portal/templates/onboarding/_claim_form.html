@@ -1,0 +1,12 @@
+{#- Claim by serial + claim code (wizard step 5 and /claim). Needs `values`,
+    `errors`, `action_url`. The label's QR opens /claim?sn=<serial>#code=<code>;
+    the script fills the code from the fragment. -#}
+{% import "acct/macros.html" as ui %}
+<form class="form" method="post" action="{{ action_url }}">
+  {{ ui.csrf(principal) }}<input type="hidden" name="action" value="claim">
+  <div class="grid-2">
+    {{ ui.input('serial', 'Serial number', values.get('serial'), errors=errors, required=True, maxlength=16, placeholder='SX5-000123', help='On the device label and your welcome letter.') }}
+    {{ ui.input('claim_code', 'Claim code', '', errors=errors, required=True, maxlength=16, autocomplete='off', placeholder='KTRW-BQXL', help='8 letters; capitals and the dash do not matter. Scanning the label QR fills it in.') }}
+  </div>
+  <div class="actions"><button class="btn" type="submit">Claim device</button></div>
+</form>

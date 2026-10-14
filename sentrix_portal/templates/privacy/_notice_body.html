@@ -1,0 +1,36 @@
+{#- The standalone privacy notice (DPDP Rule 3): each data item, its purpose,
+    how to withdraw, the rights, the grievance contact and the Board. Needs
+    `purposes`, `notice_version`, `grievance`, `caps`, `grace_days`. -#}
+<div class="notice-body">
+  <p class="small muted">Privacy notice, version {{ notice_version }}. This notice is separate
+    from the terms of sale.</p>
+  <h3>Who we are</h3>
+  <p>SENTRIX (a capstone project of CSED, Thapar Institute) runs this Portal and is the data
+    fiduciary for what it stores. Your household's own camera footage stays on your device.</p>
+  <h3>What we collect, and why (one purpose each)</h3>
+  <ul class="bullets">
+  {% for key, purpose in purposes.items() %}
+    <li><strong>{{ purpose.title }}</strong>{% if key == 'account_sos' %} (needed for the service){% else %} (optional, off unless you switch it on){% endif %}: {{ purpose.text }}</li>
+  {% endfor %}
+    <li><strong>Emergency contacts</strong> confirm by themselves before SENTRIX sends them
+      anything; a contact who opts out has their number and e-mail erased at once and the rest
+      within {{ caps.declined_contact_days }} days.</li>
+  </ul>
+  <h3>What never leaves your home</h3>
+  <p>Face photos and their embeddings, evidence images and continuous video stay on the
+    device. When you watch remotely the video passes through the SENTRIX server in memory over
+    an encrypted connection; it is not end-to-end encrypted and it is never stored.</p>
+  <h3>Where it is kept, and for how long</h3>
+  <p>Stored in India; messages transit Telegram and the e-mail provider. SOS snapshots are
+    deleted after {{ caps.sos_snapshot_days }} days, incident records after
+    {{ caps.unreviewed_days }} days (true alarms after {{ caps.true_days }} days), the audit
+    log after {{ caps.audit_days }} days. Closing your account erases your data after a
+    {{ grace_days }}-day grace period in which you can change your mind.</p>
+  <h3>Your rights</h3>
+  <p>You can see, export and correct your data, withdraw any optional consent as easily as you
+    gave it (Privacy page), and close the account. Minors never get an account and their faces
+    are never enrolled.</p>
+  <h3>Questions and complaints</h3>
+  <p>Contact {{ grievance }}. If we do not resolve your complaint you may complain to the Data
+    Protection Board of India.</p>
+</div>

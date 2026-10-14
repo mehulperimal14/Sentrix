@@ -1,0 +1,119 @@
+{#- Form and message macros of the T-ACCT pages. Everything is autoescaped;
+    no inline style or script. -#}
+
+{% macro csrf(principal) -%}
+<input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+{%- endmacro %}
+
+{% macro login_csrf(token) -%}
+<input type="hidden" name="csrf_token" value="{{ token }}">
+{%- endmacro %}
+
+{% macro err(errors, name) -%}
+{% if errors and errors.get(name) %}<p class="field-error" id="{{ name }}-error">{{ errors[name] }}</p>{% endif %}
+{%- endmacro %}
+
+{% macro _invalid(errors, name) -%}
+{% if errors and errors.get(name) %} aria-invalid="true" aria-describedby="{{ name }}-error"{% endif %}
+{%- endmacro %}
+
+{% macro input(name, label, value='', errors=None, type='text', required=False, help=None,
+               autocomplete=None, maxlength=None, inputmode=None, pattern=None,
+               placeholder=None, disabled=False, uid=None) -%}
+<div class="field{% if errors and errors.get(name) %} has-error{% endif %}">
+  <label for="f-{{ uid or name }}">{{ label }}{% if required %} <span class="req" aria-hidden="true">*</span>{% endif %}</label>
+  <input id="f-{{ uid or name }}" name="{{ name }}" type="{{ type }}"
+         {%- if type != 'password' %} value="{{ '' if value is none else value }}"{% endif %}
+         {%- if required %} required{% endif %}
+         {%- if autocomplete %} autocomplete="{{ autocomplete }}"{% endif %}
+         {%- if maxlength %} maxlength="{{ maxlength }}"{% endif %}
+         {%- if inputmode %} inputmode="{{ inputmode }}"{% endif %}
+         {%- if pattern %} pattern="{{ pattern }}"{% endif %}
+         {%- if placeholder %} placeholder="{{ placeholder }}"{% endif %}
+         {%- if disabled %} disabled{% endif %}{{ _invalid(errors, name) }}>
+  {% if help %}<p class="help">{{ help }}</p>{% endif %}
+  {{ err(errors, name) }}
+</div>
+{%- endmacro %}
+
+{% macro textarea(name, label, value='', errors=None, required=False, help=None,
+                  maxlength=None, disabled=False) -%}
+<div class="field{% if errors and errors.get(name) %} has-error{% endif %}">
+  <label for="f-{{ name }}">{{ label }}{% if required %} <span class="req" aria-hidden="true">*</span>{% endif %}</label>
+  <textarea id="f-{{ name }}" name="{{ name }}"
+            {%- if required %} required{% endif %}
+            {%- if maxlength %} maxlength="{{ maxlength }}"{% endif %}
+            {%- if disabled %} disabled{% endif %}{{ _invalid(errors, name) }}>{{ '' if value is none else value }}</textarea>
+  {% if help %}<p class="help">{{ help }}</p>{% endif %}
+  {{ err(errors, name) }}
+</div>
+{%- endmacro %}
+
+{% macro select(name, label, options, value=None, errors=None, required=False, help=None,
+                blank=None, disabled=False) -%}
+<div class="field{% if errors and errors.get(name) %} has-error{% endif %}">
+  <label for="f-{{ name }}">{{ label }}{% if required %} <span class="req" aria-hidden="true">*</span>{% endif %}</label>
+  <select id="f-{{ name }}" name="{{ name }}"{% if required %} required{% endif %}{% if disabled %} disabled{% endif %}{{ _invalid(errors, name) }}>
+    {% if blank is not none %}<option value="">{{ blank }}</option>{% endif %}
+    {% for option_value, option_label in options %}
+    <option value="{{ option_value }}"{% if value is not none and option_value|string == value|string %} selected{% endif %}>{{ option_label }}</option>
+    {% endfor %}
+  </select>
+  {% if help %}<p class="help">{{ help }}</p>{% endif %}
+  {{ err(errors, name) }}
+</div>
+{%- endmacro %}
+
+{% macro checkbox(name, label, checked=False, errors=None, help=None, disabled=False,
+                  uid=None) -%}
+<div class="check{% if errors and errors.get(name) %} has-error{% endif %}">
+  <input id="f-{{ uid or name }}" name="{{ name }}" type="checkbox" value="1"
+         {%- if checked %} checked{% endif %}{% if disabled %} disabled{% endif %}{{ _invalid(errors, name) }}>
+  <div>
+    <label for="f-{{ uid or name }}">{{ label }}</label>
+    {% if help %}<p class="help">{{ help }}</p>{% endif %}
+    {{ err(errors, name) }}
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro notice(text, kind='ok') -%}
+{% if text %}<div class="alert alert-{{ kind }}" role="status">{{ text }}</div>{% endif %}
+{%- endmacro %}
+
+{% macro error_summary(errors) -%}
+{% if errors %}
+<div class="alert alert-error" role="alert">
+  Please correct the following:
+  <ul>{% for message in errors.values() %}<li>{{ message }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+{%- endmacro %}
+
+{#- A fresh-password form for the sensitive sections; it comes back to `next`. -#}
+{% macro step_up(principal, next, stepped_up, minutes=5) -%}
+{% if stepped_up %}
+<p class="small muted">Password confirmed: sensitive changes are allowed for a few minutes.</p>
+{% else %}
+<form class="form" method="post" action="/account/step-up">
+  {{ csrf(principal) }}
+  <input type="hidden" name="next" value="{{ next }}">
+  <div class="row">
+    <div class="field">
+      <label for="f-stepup-password">Confirm your password to change these</label>
+      <input id="f-stepup-password" name="password" type="password" autocomplete="current-password" required>
+    </div>
+    <button type="submit" class="btn btn-secondary">Confirm</button>
+  </div>
+  <p class="help">Stays confirmed for {{ minutes }} minutes.</p>
+</form>
+{% endif %}
+{%- endmacro %}
+
+{% macro state_badge(state) -%}
+{% set kinds = {'CONFIRMED': 'ok', 'CLAIMED': 'ok', 'active': 'ok', 'PENDING': 'warn',
+                'ASSIGNED': 'warn', 'pending_activation': 'warn', 'DECLINED': 'bad',
+                'REVOKED': 'bad', 'disabled': 'bad', 'closed': 'bad', 'erasing': 'bad',
+                'RETIRED': 'muted', 'UNASSIGNED': 'muted'} %}
+<span class="badge badge-{{ kinds.get(state, 'muted') }}">{{ state | replace('_', ' ') }}</span>
+{%- endmacro %}

@@ -1,0 +1,20 @@
+{% extends "acct/layout.html" %}
+{% import "acct/macros.html" as ui %}
+{% block title %}Label {{ device.serial }} · SENTRIX admin{% endblock %}
+{% block page_content %}
+<h1>Label for <span class="mono">{{ device.serial }}</span></h1>
+{% include "admin/_nav.html" %}
+<div class="card form">
+  {% if reprintable %}
+  <p>The Portal keeps only a digest of the claim code, so a reprint makes a <strong>new claim
+    code</strong>: the old label stops working. The Wi-Fi setup code cannot be reprinted (it
+    lives in the device's identity file); re-provision the SD card to change it.</p>
+  <form method="post" action="/admin/devices/{{ device.id }}/label">{{ ui.csrf(principal) }}
+    <div class="actions"><button class="btn" type="submit">Reprint with a new claim code</button>
+      <a href="/admin/devices">Back</a></div></form>
+  {% else %}
+  <p>A {{ device.state | lower }} device has no claim code. Transfer it first to issue one.</p>
+  <p><a href="/admin/devices">Back</a></p>
+  {% endif %}
+</div>
+{% endblock %}

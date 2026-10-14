@@ -1,0 +1,13 @@
+{% extends "acct/layout.html" %}
+{% import "acct/macros.html" as ui %}
+{% block title %}Confirm your e-mail · SENTRIX Portal{% endblock %}
+{% block page_content %}
+<div class="card form">
+  <h1>Confirm your e-mail address</h1>
+  <p>Press the button to confirm that this address belongs to you.</p>
+  <form method="post">
+    {{ ui.login_csrf(csrf_token) }}
+    <button class="btn" type="submit">Confirm</button>
+  </form>
+</div>
+{% endblock %}

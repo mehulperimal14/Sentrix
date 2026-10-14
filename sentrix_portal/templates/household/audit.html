@@ -1,0 +1,28 @@
+{% extends "acct/layout.html" %}
+{% block title %}Activity log · SENTRIX Portal{% endblock %}
+{% block page_content %}
+<h1>Activity log</h1>
+<p class="lead">Sign-ins, profile and contact changes, consents, device events and SOS steps
+  on your household, newest first. The log is tamper-evident (hash-chained).</p>
+<div class="card table-wrap">
+  <table class="table">
+    <thead><tr><th>When (UTC)</th><th>What</th><th>Who</th><th>Details</th></tr></thead>
+    <tbody>
+    {% for row in rows %}
+      <tr>
+        <td><time datetime="{{ row.at }}">{{ (row.at or '')[:19] | replace('T', ' ') }}</time></td>
+        <td class="mono small">{{ row.event }}</td>
+        <td>{{ row.actor }}</td>
+        <td class="small">{% for key, value in row.detail.items() if key not in ('restricted',) %}{{ key | replace('_', ' ') }}: {{ value }}{% if not loop.last %}; {% endif %}{% endfor %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4" class="muted">Nothing yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="row">
+  {% if page > 1 %}<a href="/household/audit?page={{ page - 1 }}">Newer</a>{% endif %}
+  {% if more %}<a href="/household/audit?page={{ page + 1 }}">Older</a>{% endif %}
+</p>
+{% endblock %}

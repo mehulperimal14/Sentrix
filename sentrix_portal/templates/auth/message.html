@@ -1,0 +1,9 @@
+{% extends "acct/layout.html" %}
+{% block title %}{{ title }} · SENTRIX Portal{% endblock %}
+{% block page_content %}
+<div class="card form">
+  <h1>{{ title }}</h1>
+  <p>{{ text }}</p>
+  {% if link %}<p><a class="btn" href="{{ link[0] }}">{{ link[1] }}</a></p>{% endif %}
+</div>
+{% endblock %}

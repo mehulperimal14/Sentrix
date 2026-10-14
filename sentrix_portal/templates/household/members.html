@@ -1,0 +1,30 @@
+{% extends "acct/layout.html" %}
+{% import "acct/macros.html" as ui %}
+{% block title %}Members · SENTRIX Portal{% endblock %}
+{% block page_content %}
+<h1>Household members</h1>
+<p class="small"><a href="/household">Back to the household</a></p>
+{{ ui.notice(notice) }}
+{{ ui.error_summary(errors) }}
+<section class="card">
+  {% set action_url = '/household/members' %}
+  {% include "onboarding/_members.html" %}
+  {% if editable and members %}
+  <h3>Change a member</h3>
+  <form class="form" method="post" action="/household/members">
+    {{ ui.csrf(principal) }}<input type="hidden" name="action" value="update_member">
+    <div class="grid-3">
+      <div class="field">
+        <label for="f-member_id">Member <span class="req" aria-hidden="true">*</span></label>
+        <select id="f-member_id" name="member_id" required>
+          {% for m in members %}<option value="{{ m.id }}">{{ m.name }}</option>{% endfor %}
+        </select>
+      </div>
+      {{ ui.input('member_relation', 'Relation', '', errors=errors, maxlength=40) }}
+      {{ ui.select('age_band', 'Age band', [('adult', 'Adult'), ('minor', 'Minor (under 18)'), ('senior', 'Senior')], 'adult', errors=errors, required=True) }}
+    </div>
+    <div class="actions"><button class="btn btn-secondary" type="submit">Save</button></div>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

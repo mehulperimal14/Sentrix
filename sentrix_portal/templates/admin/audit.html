@@ -1,0 +1,40 @@
+{% extends "acct/layout.html" %}
+{% block title %}Audit log · SENTRIX admin{% endblock %}
+{% block page_content %}
+<h1>Audit log</h1>
+{% include "admin/_nav.html" %}
+<div class="card">
+  {% if chain.ok %}<p><span class="badge badge-ok">chain verified</span> {{ chain.entries }} entries, hash-chained with the Portal key.</p>
+  {% else %}<p><span class="badge badge-bad">chain broken</span> rows {{ chain.problems | join(', ') }} do not verify: investigate before trusting this log.</p>{% endif %}
+  {% for gap in chain.retention_gaps or [] %}<p class="small muted">{{ gap.deleted }} rows before #{{ gap.before_id }} were pruned by retention (signed boundary #{{ gap.recorded_by }}).</p>{% endfor %}
+  <form class="row" method="get" action="/admin/audit">
+    <input name="event" value="{{ event }}" placeholder="event prefix, e.g. auth." aria-label="Event prefix">
+    <input name="household" value="{{ household }}" placeholder="household id" aria-label="Household id">
+    <button class="btn btn-secondary btn-small" type="submit">Filter</button>
+  </form>
+</div>
+<div class="card table-wrap">
+  <table class="table">
+    <thead><tr><th>#</th><th>When (UTC)</th><th>Event</th><th>Actor</th><th>Target</th><th>Household</th><th>Detail</th></tr></thead>
+    <tbody>
+    {% for row in rows %}
+      <tr>
+        <td class="small">{{ row.id }}</td>
+        <td class="small">{{ row.at.strftime('%d %b %Y %H:%M:%S') }}</td>
+        <td class="mono small">{{ row.event }}</td>
+        <td class="small">{{ row.actor_type }}{% if row.actor_id %} <span class="mono">{{ row.actor_id[:8] }}</span>{% endif %}</td>
+        <td class="small">{{ row.target_type or '' }} <span class="mono">{{ (row.target_id or '')[:12] }}</span></td>
+        <td class="small mono">{{ (row.household_id or '')[:8] }}</td>
+        <td class="small">{% for key, value in (row.detail or {}).items() %}{{ key }}: {{ value }}{% if not loop.last %}; {% endif %}{% endfor %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="muted">No rows.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="row">
+  {% if page > 1 %}<a href="/admin/audit?page={{ page - 1 }}&amp;event={{ event | urlencode }}&amp;household={{ household | urlencode }}">Newer</a>{% endif %}
+  {% if more %}<a href="/admin/audit?page={{ page + 1 }}&amp;event={{ event | urlencode }}&amp;household={{ household | urlencode }}">Older</a>{% endif %}
+</p>
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends "acct/layout.html" %}
+{% import "acct/macros.html" as ui %}
+{% block title %}Welcome letter · SENTRIX admin{% endblock %}
+{% block page_content %}
+<h1>Welcome letter for {{ household.display_name }}</h1>
+{% include "admin/_nav.html" %}
+<div class="card form">
+  {% if printable %}
+  <p>The letter carries a <strong>new single-use activation code</strong>: any earlier code of
+    this customer stops working. The code is shown only on the letter: print it now and hand it
+    over with the device. It expires after 72 hours.</p>
+  <form method="post" action="/admin/customers/{{ household.id }}/letter">
+    {{ ui.csrf(principal) }}
+    {% if devices %}
+    {{ ui.checkbox('new_claim_codes', 'Print a new claim code for ' ~ (devices | map(attribute='serial') | join(', ')) ~ ' (it replaces the code on the device label).', True) }}
+    {% else %}
+    <p class="muted">No unclaimed device is assigned: the letter lists none.</p>
+    {% endif %}
+    <div class="actions"><button class="btn" type="submit">Make the letter</button>
+      <a href="/admin/customers/{{ household.id }}">Back</a></div>
+  </form>
+  {% else %}
+  <p>This customer already activated the account (or it is not active). A letter would need a
+    credential that staff must never see: send a reset e-mail instead.</p>
+  <p><a href="/admin/customers/{{ household.id }}">Back</a></p>
+  {% endif %}
+</div>
+{% endblock %}

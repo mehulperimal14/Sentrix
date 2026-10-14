@@ -1,0 +1,16 @@
+{% extends "onboarding/_wizard.html" %}
+{% block step_content %}
+<section class="card">
+  <h2>1. About you</h2>
+  <p class="lead">Responders ask for a named person and a number to call back.</p>
+  <form class="form" method="post" action="/onboarding/1">
+    {{ ui.csrf(principal) }}
+    {{ ui.input('display_name', 'Full name', values.get('display_name'), errors=errors, required=True, maxlength=80, autocomplete='name') }}
+    {{ ui.input('phone', 'Mobile number', values.get('phone'), errors=errors, type='tel', required=True, maxlength=20, autocomplete='tel', inputmode='tel', placeholder='+91 98123 45610', help='An Indian mobile: +91 and 10 digits. The SOS gives it as the callback number; the device can confirm it by SMS after pairing.') }}
+    {{ ui.input('email', 'E-mail', values.get('email'), errors=errors, type='email', required=True, maxlength=254, autocomplete='email', help='For lapse notices and account recovery. We send a confirmation link.') }}
+    {{ ui.select('language', 'Language of messages', [('en', 'English')], values.get('language') or 'en', errors=errors, required=True, help='Hindi messages are planned.') }}
+    {{ ui.checkbox('adult', 'I am 18 or older and set up SENTRIX for my household.', values.get('adult'), errors=errors, help='Only an adult can give consent for the household.') }}
+    <div class="actions"><button class="btn" type="submit">Save and continue</button></div>
+  </form>
+</section>
+{% endblock %}

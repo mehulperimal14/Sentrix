@@ -1,0 +1,23 @@
+{% extends "acct/layout.html" %}
+{% import "acct/macros.html" as ui %}
+{#- The wizard frame: the 7 steps (done / current / locked) and the step's own
+    content in `step_content`. -#}
+{% block title %}Set up · step {{ step }} of 7 · SENTRIX Portal{% endblock %}
+{% block page_content %}
+<h1>Set up your home</h1>
+<nav aria-label="Setup steps">
+  <ol class="steps">
+  {% for number, name in steps.items() %}
+    {% set state = 'current' if number == step else ('done' if done[number] else '') %}
+    <li class="{{ state }}{% if number > reachable_upto %} locked{% endif %}">
+      {% if number <= reachable_upto %}<a href="/onboarding/{{ number }}"{% if number == step %} aria-current="step"{% endif %}>{{ number }}. {{ name }}</a>
+      {% else %}<span>{{ number }}. {{ name }}</span>{% endif %}
+    </li>
+  {% endfor %}
+  </ol>
+</nav>
+{{ ui.notice(notice) }}
+{{ ui.error_summary(errors) }}
+{% block step_content %}{% endblock %}
+{% if completed %}<p class="small"><a href="/home">Back to home</a></p>{% endif %}
+{% endblock %}

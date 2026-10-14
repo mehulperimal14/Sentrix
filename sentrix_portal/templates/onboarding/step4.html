@@ -1,0 +1,18 @@
+{% extends "onboarding/_wizard.html" %}
+{% block step_content %}
+<section class="card">
+  <h2>4. Emergency contacts</h2>
+  <p class="lead">One to three people SENTRIX alerts when you approve help, or at once for
+    confirmed fire and corroborated threats while you are still being asked (safety
+    defaults). Each person confirms first; without their confirmation nothing reaches them.</p>
+  {{ ui.err(errors, 'contacts') }}
+  {% set editable = True %}{% set action_url = '/onboarding/4' %}
+  {% set contact_form = contact_form or {} %}{% set telegram = telegram or [] %}
+  {% include "onboarding/_contacts.html" %}
+</section>
+<form method="post" action="/onboarding/4" class="actions">
+  {{ ui.csrf(principal) }}<input type="hidden" name="action" value="continue">
+  <button class="btn" type="submit">Continue</button>
+  <a href="/onboarding/3">Back</a>
+</form>
+{% endblock %}

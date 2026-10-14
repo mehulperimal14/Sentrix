@@ -1,0 +1,33 @@
+{% extends "acct/layout.html" %}
+{% import "acct/macros.html" as ui %}
+{% block title %}Sessions · SENTRIX Portal{% endblock %}
+{% block page_content %}
+<h1>Signed-in sessions</h1>
+<p class="lead">Every browser where your account is signed in. Sign out anything you do not
+  recognise, then change your password.</p>
+<div class="card table-wrap">
+  <table class="table">
+    <thead><tr><th>Browser</th><th>Signed in</th><th>Last active</th><th></th></tr></thead>
+    <tbody>
+    {% for row in sessions %}
+      <tr>
+        <td>{{ (row.user_agent or 'unknown browser')[:80] }}{% if row.id_hash == current %} <span class="badge badge-ok">this browser</span>{% endif %}</td>
+        <td><time datetime="{{ row.created_at }}">{{ row.created_at.strftime('%d %b %Y %H:%M') }} UTC</time></td>
+        <td><time datetime="{{ row.last_seen_at }}">{{ row.last_seen_at.strftime('%d %b %Y %H:%M') }} UTC</time></td>
+        <td class="right">
+          <form method="post" action="/account/sessions" class="inline">{{ ui.csrf(principal) }}
+            <input type="hidden" name="session" value="{{ row.id_hash }}">
+            <button class="btn btn-ghost btn-small" type="submit">Sign out</button></form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if sessions | length > 1 %}
+<form method="post" action="/account/sessions" data-confirm="Sign out every other session?">
+  {{ ui.csrf(principal) }}<input type="hidden" name="session" value="others">
+  <button class="btn btn-danger" type="submit">Sign out all other sessions</button>
+</form>
+{% endif %}
+{% endblock %}

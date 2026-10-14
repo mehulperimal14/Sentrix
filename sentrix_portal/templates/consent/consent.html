@@ -1,0 +1,30 @@
+{% extends "acct/layout.html" %}
+{% import "acct/macros.html" as ui %}
+{% block title %}Emergency contact · SENTRIX{% endblock %}
+{% block page_content %}
+<div class="card form">
+  <h1>{% if contact.consent_status == 'CONFIRMED' %}You are an emergency contact{% else %}Be an emergency contact?{% endif %}</h1>
+  <p class="lead"><strong>{{ owner_name }}</strong> added you, {{ contact.name }}{% if contact.relation %} ({{ contact.relation }}){% endif %},
+    as an emergency contact for their SENTRIX home alarm.</p>
+  <h2>What this means</h2>
+  <ul class="bullets">
+    <li>If the alarm confirms a weapon or a fire and {{ owner_name }} asks for help, or does not
+      answer in time for the most serious alerts, SENTRIX sends you a short alert with a private
+      link: what happened, the address and a camera picture.</li>
+    <li>SENTRIX does not contact 112 itself. The alert tells you what to do, for example to call
+      112.</li>
+    <li>Nothing is sent to you unless you confirm. You can opt out at any time with the link we
+      give you.</li>
+    <li>We keep your name, relation, mobile number and (if given) e-mail only for this. If you opt
+      out, your number and e-mail are erased at once and the rest within {{ declined_days }} days.
+      (Notice version {{ notice_version }}.)</li>
+  </ul>
+  <form method="post" class="actions">
+    {{ ui.login_csrf(csrf_token) }}
+    {% if contact.consent_status != 'CONFIRMED' %}
+    <button class="btn" type="submit" name="decision" value="confirm">Yes, I confirm</button>
+    {% endif %}
+    <button class="btn btn-ghost" type="submit" name="decision" value="decline">{% if contact.consent_status == 'CONFIRMED' %}Opt out now{% else %}No, opt me out{% endif %}</button>
+  </form>
+</div>
+{% endblock %}

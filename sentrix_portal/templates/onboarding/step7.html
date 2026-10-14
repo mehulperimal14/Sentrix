@@ -1,0 +1,28 @@
+{% extends "onboarding/_wizard.html" %}
+{% block step_content %}
+<section class="card">
+  <h2>7. Consent and review</h2>
+  {{ ui.err(errors, 'steps') }}
+  <details>
+    <summary>Read the privacy notice (version {{ notice_version }})</summary>
+    {% include "privacy/_notice_body.html" %}
+  </details>
+  <form class="form" method="post" action="/onboarding/7">
+    {{ ui.csrf(principal) }}
+    <h3>Your choices</h3>
+    <p class="help">One toggle per purpose. You can withdraw any of them later on the Privacy
+      page, as easily as you give them.</p>
+    {% for key, purpose in purposes.items() %}
+      {{ ui.checkbox('consent_' ~ key, purpose.title ~ (' (required for the service)' if key == 'account_sos' else ''), consents.get(key), errors=errors, help=purpose.text) }}
+    {% endfor %}
+    <h3>Your SOS, as it would be sent</h3>
+    <p class="help">Rendered from what you entered. An SOS reaches only confirmed contacts:
+      {{ confirmed_contacts | length }} confirmed{% if pending_contacts %}, {{ pending_contacts | length }} still to confirm ({% for c in pending_contacts %}{{ c.name }}{% if not loop.last %}, {% endif %}{% endfor %}){% endif %}.</p>
+    <pre class="text" aria-label="SOS preview">{{ preview.full }}</pre>
+    <p class="small muted">SMS version:</p>
+    <pre class="text" aria-label="SMS preview">{{ preview.sms }}</pre>
+    <div class="actions"><button class="btn" type="submit">Finish</button>
+      <a href="/onboarding/6">Back</a></div>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends "acct/layout.html" %}
+{% import "acct/macros.html" as ui %}
+{% block title %}Claim a device · SENTRIX Portal{% endblock %}
+{% block page_content %}
+<div class="card form">
+  <h1>Claim a device</h1>
+  <p class="lead">Type the serial and claim code from the label or the welcome letter. Five
+    wrong tries lock claiming for 15 minutes.</p>
+  {{ ui.error_summary(errors) }}
+  {% set action_url = '/claim' %}
+  {% include "onboarding/_claim_form.html" %}
+</div>
+{% endblock %}

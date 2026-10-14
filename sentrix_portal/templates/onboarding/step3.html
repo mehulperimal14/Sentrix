@@ -1,0 +1,20 @@
+{% extends "onboarding/_wizard.html" %}
+{% block step_content %}
+<section class="card">
+  <h2>3. Household</h2>
+  <p class="lead">Responders need to know who may be inside.</p>
+  <form class="form" method="post" action="/onboarding/3">
+    {{ ui.csrf(principal) }}<input type="hidden" name="action" value="save">
+    {% set disabled = False %}
+    {% include "onboarding/_household_fields.html" %}
+    <div class="actions"><button class="btn" type="submit">Save and continue</button>
+      <a href="/onboarding/2">Back</a></div>
+  </form>
+</section>
+<section class="card">
+  <h2>Members (optional)</h2>
+  {% set editable = True %}{% set action_url = '/onboarding/3' %}
+  {% set member_form = member_form or {} %}
+  {% include "onboarding/_members.html" %}
+</section>
+{% endblock %}

@@ -1,0 +1,62 @@
+{% extends "acct/layout.html" %}
+{% import "acct/macros.html" as ui %}
+{% block title %}Privacy · SENTRIX Portal{% endblock %}
+{% block page_content %}
+<h1>Privacy</h1>
+{{ ui.notice(notice) }}
+{{ ui.error_summary(errors) }}
+{% if erasure_due %}
+<div class="alert alert-error" role="alert">Your account will be erased on
+  <time datetime="{{ erasure_due }}">{{ erasure_due[:10] }}</time>.
+  {% if editable %}<form method="post" action="/privacy/erase" class="inline">{{ ui.csrf(principal) }}
+    <input type="hidden" name="action" value="cancel">
+    <button class="btn btn-small" type="submit">Keep my account</button></form>{% endif %}</div>
+{% endif %}
+
+<section class="card">
+  <h2>Your choices</h2>
+  <p class="help">Notice version {{ notice_version }}. Withdrawing a consent takes effect at
+    once{% if editable %}; medical notes are erased when you withdraw that consent{% endif %}.</p>
+  <form class="form" method="post" action="/privacy/consents">
+    {{ ui.csrf(principal) }}
+    {% for key, purpose in purposes.items() %}
+      {{ ui.checkbox('consent_' ~ key, purpose.title ~ (' (required for the service)' if key == 'account_sos' else ''), consents.get(key), errors=errors, help=purpose.text, disabled=not editable) }}
+    {% endfor %}
+    {% if editable %}<div class="actions"><button class="btn" type="submit">Save my choices</button></div>{% endif %}
+  </form>
+</section>
+
+<section class="card">
+  <h2>Privacy notice</h2>
+  <details><summary>Read the full notice</summary>{% include "privacy/_notice_body.html" %}</details>
+  <p class="small"><a href="/privacy/notice">Open the notice on its own page</a></p>
+</section>
+
+{% if history %}
+<section class="card table-wrap">
+  <h2>Consent history</h2>
+  <table class="table">
+    <thead><tr><th>Purpose</th><th>Given</th><th>Withdrawn</th><th>Notice</th><th>Where</th></tr></thead>
+    <tbody>
+    {% for row in history %}
+      <tr><td>{{ purposes.get(row.purpose, {}).get('title', row.purpose) }}</td>
+        <td>{{ row.granted_at.strftime('%d %b %Y %H:%M') if row.granted_at else '—' }}</td>
+        <td>{{ row.withdrawn_at.strftime('%d %b %Y %H:%M') if row.withdrawn_at else '—' }}</td>
+        <td>{{ row.notice_version }}</td><td>{{ row.method }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{% if editable %}
+<section class="card">
+  <h2>Your data</h2>
+  <ul class="plain stack">
+    <li><a href="/privacy/export">Download everything SENTRIX holds about your household (JSON)</a></li>
+    <li><a href="/household/audit">Activity log: who did what, when</a></li>
+    <li><a href="/privacy/erase">Close the account and erase your data</a></li>
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

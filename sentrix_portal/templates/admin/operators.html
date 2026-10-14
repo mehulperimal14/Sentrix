@@ -1,0 +1,51 @@
+{% extends "acct/layout.html" %}
+{% import "acct/macros.html" as ui %}
+{% block title %}Staff · SENTRIX admin{% endblock %}
+{% block page_content %}
+<h1>Staff: Desk operators and admins</h1>
+{% include "admin/_nav.html" %}
+{{ ui.notice(notice) }}
+{{ ui.error_summary(errors) }}
+<section class="card">
+  <h2>New staff account</h2>
+  <p class="help">Staff sign in with a password they choose plus a TOTP code (set up at the
+    first sign-in). The activation code is shown once to hand over in person, and e-mailed
+    when an address is given.</p>
+  <form class="form" method="post" action="/admin/operators">
+    {{ ui.csrf(principal) }}
+    <div class="grid-2">
+      {{ ui.select('role', 'Role', [('operator', 'Desk operator'), ('company_admin', 'Company admin')], values.get('role') or 'operator', errors=errors, required=True) }}
+      {{ ui.input('username', 'Username', values.get('username'), errors=errors, required=True, maxlength=32) }}
+    </div>
+    <div class="grid-2">
+      {{ ui.input('display_name', 'Name', values.get('display_name'), errors=errors, required=True, maxlength=80) }}
+      {{ ui.input('email', 'E-mail', values.get('email'), errors=errors, type='email', maxlength=254) }}
+    </div>
+    <div class="actions"><button class="btn" type="submit">Create</button></div>
+  </form>
+</section>
+<section class="card table-wrap">
+  <table class="table">
+    <thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Status</th><th>TOTP</th><th>Last sign-in</th><th></th></tr></thead>
+    <tbody>
+    {% for user in staff %}
+      <tr>
+        <td class="mono">{{ user.username }}</td><td>{{ user.display_name }}</td>
+        <td>{{ user.role | replace('_', ' ') }}</td><td>{{ ui.state_badge(user.status) }}</td>
+        <td>{% if user.totp_enabled %}<span class="badge badge-ok">on</span>{% else %}<span class="badge badge-warn">not set up</span>{% endif %}</td>
+        <td class="small">{{ user.last_login_at.strftime('%d %b %Y %H:%M') if user.last_login_at else 'never' }}</td>
+        <td>{% if user.id != me %}
+          {% for action, label in [('disable', 'Disable') if user.status in ('active', 'pending_activation') else ('enable', 'Enable'), ('reset_2fa', 'Reset TOTP'), ('resend', 'E-mail link')] %}
+            {% if action != 'resend' or (user.email and user.status in ('pending_activation', 'active')) %}
+            <form method="post" action="/admin/operators/{{ user.id }}" class="inline" data-confirm="{{ label }} for {{ user.username }}?">{{ ui.csrf(principal) }}
+              <input type="hidden" name="action" value="{{ action }}">
+              <button class="btn btn-ghost btn-small" type="submit">{{ label }}</button></form>
+            {% endif %}
+          {% endfor %}
+        {% else %}<span class="small muted">you</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

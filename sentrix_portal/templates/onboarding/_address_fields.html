@@ -1,0 +1,45 @@
+{#- Address and nearest services (wizard step 2 and /household). Needs `values`,
+    `errors`, `states_options`, `nearest_kinds` and `disabled`. -#}
+{% import "acct/macros.html" as ui %}
+<fieldset>
+  <legend>Address</legend>
+  <div class="grid-2">
+    {{ ui.input('house', 'House / flat number', values.get('house'), errors=errors, required=True, maxlength=80, disabled=disabled) }}
+    {{ ui.input('building', 'Building / society', values.get('building'), errors=errors, maxlength=80, disabled=disabled) }}
+  </div>
+  {{ ui.input('street', 'Street', values.get('street'), errors=errors, required=True, maxlength=120, autocomplete='address-line1', disabled=disabled) }}
+  <div class="grid-2">
+    {{ ui.input('locality', 'Locality / sector', values.get('locality'), errors=errors, required=True, maxlength=120, disabled=disabled) }}
+    {{ ui.input('landmark', 'Landmark', values.get('landmark'), errors=errors, required=True, maxlength=120, help='Indian addresses are found by landmark: "opposite the SBI ATM".', disabled=disabled) }}
+  </div>
+  <div class="grid-3">
+    {{ ui.input('city', 'City', values.get('city'), errors=errors, required=True, maxlength=80, autocomplete='address-level2', disabled=disabled) }}
+    {{ ui.input('district', 'District', values.get('district'), errors=errors, maxlength=80, disabled=disabled) }}
+    {{ ui.input('pincode', 'PIN code', values.get('pincode'), errors=errors, required=True, maxlength=6, inputmode='numeric', pattern='[1-8][0-9]{5}', autocomplete='postal-code', disabled=disabled) }}
+  </div>
+  <div class="grid-2">
+    {{ ui.select('state', 'State / union territory', states_options, values.get('state'), errors=errors, required=True, blank='Choose...', disabled=disabled) }}
+    {{ ui.input('floor', 'Floor', values.get('floor'), errors=errors, maxlength=20, disabled=disabled) }}
+  </div>
+</fieldset>
+<fieldset>
+  <legend>Map pin (strongly recommended)</legend>
+  <p class="help">The fastest way for a responder to find the home. Decimal degrees, e.g. 30.33980, 76.38690.</p>
+  <div class="grid-2">
+    {{ ui.input('lat', 'Latitude', values.get('lat'), errors=errors, maxlength=12, inputmode='decimal', disabled=disabled) }}
+    {{ ui.input('lon', 'Longitude', values.get('lon'), errors=errors, maxlength=12, inputmode='decimal', disabled=disabled) }}
+  </div>
+  {% if not disabled %}<p class="row"><button type="button" class="btn btn-secondary btn-small" data-geolocate>Use my current location</button>
+    <span id="geo-status" class="small muted" role="status"></span></p>{% endif %}
+  {{ ui.input('entry_note', 'Entry note', values.get('entry_note'), errors=errors, maxlength=120, help='For example "Gate 2, guard cabin on the left". Never door or gate codes: the note goes to your contacts and the Desk in an SOS.', disabled=disabled) }}
+</fieldset>
+<fieldset>
+  <legend>Nearest services (optional)</legend>
+  <p class="help">Helps whoever calls 112 or the station. SENTRIX never calls them itself.</p>
+  {% for kind, label in nearest_kinds %}
+  <div class="grid-2">
+    {{ ui.input(kind ~ '_name', label, values.get(kind ~ '_name'), errors=errors, maxlength=80, disabled=disabled) }}
+    {{ ui.input(kind ~ '_phone', 'Phone', values.get(kind ~ '_phone'), errors=errors, type='tel', maxlength=20, inputmode='tel', disabled=disabled) }}
+  </div>
+  {% endfor %}
+</fieldset>
