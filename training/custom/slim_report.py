@@ -258,8 +258,9 @@ def blocks(fitted: list[str]) -> dict[str, str]:
 def fill(text: str, generated: dict[str, str]) -> str:
     """Replace the body of each ``<!-- BEGIN name -->`` block."""
     for name, body in generated.items():
-        pattern = re.compile(rf"(<!-- BEGIN {name} -->\n).*?(\n<!-- END {name} -->)", re.S)
-        text, n = pattern.subn(lambda m: m.group(1) + body + m.group(2), text)
+        begin, end = f"<!-- BEGIN {name} -->", f"<!-- END {name} -->"
+        pattern = re.compile(rf"{re.escape(begin)}\n.*?{re.escape(end)}", re.S)
+        text, n = pattern.subn(lambda _: f"{begin}\n{body}\n{end}", text)
         if n == 0:
             print(f"note: REPORT.md has no '{name}' block", file=sys.stderr)
     return text

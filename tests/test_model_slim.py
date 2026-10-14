@@ -398,3 +398,109 @@ class TestSlimOnnx:
         assert record["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
         assert record["parity"]["max_abs_prob_diff"] < 1e-3
         assert record["parity"]["label_agreement"] == 1.0
+
+
+# ── export, latency and report tooling ────────────────────────────────────────
+@pytest.fixture()
+def tiny_scene_checkpoint(tmp_path):
+    """A full slim-format checkpoint with random weights, next to its metadata."""
+    net = seeded("timm:mobilenetv3_large_100", 32)
+    path = tmp_path / "scene_tiny.pt"
+    ckpt = {"model_state_dict": net.state_dict(), "storage": "full",
+            "architecture": "timm:mobilenetv3_large_100", "classes": list(SCENE_CLASSES),
+            "image_size": 32, "normalization": {"mean": tsc.MEAN, "std": tsc.STD},
+            "input_format": "RGB", "temperature": 1.7,
+            "thresholds": {"fire": 0.4, "weapon": 0.45, "assault": 0.85, "robbery": 0.6}}
+    torch.save(ckpt, path)
+    path.with_name("scene_tiny_metadata.json").write_text(
+        json.dumps({k: v for k, v in ckpt.items() if k != "model_state_dict"}))
+    return path
+
+
+class TestOnnxExport:
+    def test_export_reproduces_the_checkpoint_on_real_frames(self, tiny_scene_checkpoint):
+        pytest.importorskip("onnx")
+        pytest.importorskip("onnxruntime")
+        import export_scene_onnx as exporter
+        assert exporter.main([str(tiny_scene_checkpoint), "--frames", "6"]) == 0
+        onnx_path = tiny_scene_checkpoint.with_suffix(".onnx")
+        record = metadata_of(tiny_scene_checkpoint)["onnx"]
+        assert record["parity"]["frames"] == 6 and record["parity"]["split"] == "train"
+        assert record["parity"]["max_abs_prob_diff"] < 1e-4
+        assert record["sha256"] == hashlib.sha256(onnx_path.read_bytes()).hexdigest()
+
+    def test_preprocess_is_the_engine_transform(self, tiny_scene_checkpoint):
+        """The ONNX input must be what ``SceneEngine`` feeds PyTorch."""
+        import cv2
+        import export_scene_onnx as exporter
+        engine = SceneEngine(tiny_scene_checkpoint)
+        bgr = np.random.default_rng(3).integers(0, 255, (48, 64, 3), dtype=np.uint8)
+        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+        ckpt = torch.load(tiny_scene_checkpoint, weights_only=False)
+        ours = exporter.preprocess([rgb], ckpt, "pil")[0]
+        theirs = engine._transform(rgb).numpy()
+        assert np.abs(ours - theirs).max() < 1e-5
+
+
+class TestLatencyBench:
+    def test_summary_statistics(self):
+        import bench_scene_latency as bench
+        stats = bench.summarise([1.0, 2.0, 3.0, 4.0, 100.0])
+        assert stats["n"] == 5 and stats["median_ms"] == 3.0 and stats["min_ms"] == 1.0
+        assert 4.0 < stats["p95_ms"] <= 100.0
+
+    def test_rounds_interleave_the_models(self):
+        import bench_scene_latency as bench
+        order = []
+        timers = {"a": lambda: order.append("a"), "b": lambda: order.append("b")}
+        samples = bench.interleaved(timers, rounds=2, per_round=2, warmup=1)
+        assert order == ["a", "b"] + ["a", "a", "b", "b"] * 2
+        assert {k: len(v) for k, v in samples.items()} == {"a": 4, "b": 4}
+
+    def test_graph_and_flops_from_a_checkpoint(self, tiny_scene_checkpoint):
+        import bench_scene_latency as bench
+        net, info = bench.load_graph(tiny_scene_checkpoint)
+        assert info["image_size"] == 32 and info["storage"] == "full"
+        assert info["params_m"] > 0 and bench.gflops(net, 32) > 0
+
+
+class TestSlimReport:
+    def test_blocks_are_replaced_and_prose_kept(self):
+        import slim_report
+        text = ("intro\n<!-- BEGIN lovo -->\nold\n<!-- END lovo -->\nmiddle\n"
+                "<!-- BEGIN latency -->\n<!-- END latency -->\nend")
+        out = slim_report.fill(text, {"lovo": "| new |", "latency": "fast"})
+        assert out == ("intro\n<!-- BEGIN lovo -->\n| new |\n<!-- END lovo -->\nmiddle\n"
+                       "<!-- BEGIN latency -->\nfast\n<!-- END latency -->\nend")
+
+    def test_recipe_description(self):
+        import slim_report
+        assert slim_report.describe({"arch": "timm:efficientnet_b0", "epochs": 15}) == (
+            "EfficientNet-B0", "all", "CE, 15 ep")
+        kd = {"arch": "timm:mobilenetv3_large_100", "epochs": 40, "train_last_blocks": 3,
+              "teacher": "dino_b_last4", "kd_weight": 0.5, "kd_temperature": 2.0,
+              "mixup": 1.0}
+        assert slim_report.describe(kd) == (
+            "MobileNetV3-L", "last 3 stages + head",
+            "KD from dino_b_last4 (w 0.5, T 2.0), mixup 1.0, 40 ep")
+
+    def test_auroc_is_class_against_normal(self):
+        import slim_report
+        labels = ["normal", "weapon", "fire", "normal", "weapon"]
+        probs = np.zeros((5, 5))
+        probs[:, 2] = [0.1, 0.9, 0.95, 0.2, 0.8]          # p(weapon)
+        assert slim_report.auroc(labels, probs, "weapon") == pytest.approx(1.0)
+        assert slim_report.auroc(["normal", "normal"], probs[:2], "fire") is None
+
+    def test_served_thresholds_are_raised_to_the_floors(self):
+        import slim_report
+        from sentrix.config import settings
+        floors = settings.threat.scene_threshold_floor
+        served = slim_report.served_thresholds({"weapon": 0.30, "fire": 0.95})
+        assert served["weapon"] == floors["weapon"] and served["fire"] == 0.95
+
+    def test_the_shipped_reference_reproduces_docs6(self):
+        """The generated reference row is the number docs/6 publishes."""
+        import slim_report
+        table = slim_report.lovo_table(["dino_b_last4"])
+        assert "| `dino_b_last4` | DINOv2 ViT-B/14 |" in table and "**0.440**" in table
