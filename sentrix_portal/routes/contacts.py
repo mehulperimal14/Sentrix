@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session
 from sentrix.actor import Actor
 from sentrix.sos import states as S
 from sentrix_portal import security
-from sentrix_portal.db import get_db
+from sentrix_portal.db import DB
 from sentrix_portal.models import (AssistanceRequest, EmergencyContact, Household,
                                    SosSnapshot, User)
 from sentrix_portal.routes.sos import call_112
@@ -98,7 +98,7 @@ def _context(db: Session, request: Request, row: AssistanceRequest,
 
 
 @router.get("/c/{token}/snapshot.jpg")
-async def contact_snapshot(token: str, db: Session = Depends(get_db)) -> Response:
+async def contact_snapshot(token: str, db: Session = DB) -> Response:
     found, row, _contact = _page(db, token)
     if found is None:
         raise HTTPException(404, detail="not_found")
@@ -110,7 +110,7 @@ async def contact_snapshot(token: str, db: Session = Depends(get_db)) -> Respons
 
 
 @router.get("/c/{token}")
-async def contact_page(token: str, request: Request, db: Session = Depends(get_db)):
+async def contact_page(token: str, request: Request, db: Session = DB):
     found, row, contact = _page(db, token)
     if found is None:
         return _expired(request)
@@ -133,7 +133,7 @@ async def contact_page(token: str, request: Request, db: Session = Depends(get_d
 
 @router.post("/c/{token}")
 async def contact_action(token: str, request: Request, action: str = Form(...),
-                         csrf_token: str | None = Form(None), db: Session = Depends(get_db)):
+                         csrf_token: str | None = Form(None), db: Session = DB):
     from fastapi.responses import RedirectResponse
     if not security.verify_login_csrf(request, csrf_token):
         raise HTTPException(403, detail="csrf")

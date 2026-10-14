@@ -24,7 +24,7 @@ from starlette.concurrency import run_in_threadpool
 
 from sentrix.actor import Actor
 from sentrix_portal import security
-from sentrix_portal.db import get_db
+from sentrix_portal.db import DB
 from sentrix_portal.models import Camera, Device, TelegramLink
 from sentrix_portal.routes.auth import household_of, render, see_other, user_of
 from sentrix_portal.services import accounts
@@ -79,7 +79,7 @@ def _page(request, db, principal, household, *, errors=None, values=None, notice
 
 @router.get("/settings", response_class=HTMLResponse)
 def settings_page(request: Request, saved: str = "", stepup: str = "",
-                  db: Session = Depends(get_db), principal=Depends(VIEW)):
+                  db: Session = DB, principal=Depends(VIEW)):
     household = _household(db, principal)
     notice = SAVED.get(saved) or STEP_UP_NOTES.get(stepup)
     return _page(request, db, principal, household, notice=notice)
@@ -94,7 +94,7 @@ def _step_up_error(errors: accounts.FormErrors, principal, field: str) -> bool:
 
 
 @router.post("/settings", response_class=HTMLResponse)
-async def settings_submit(request: Request, db: Session = Depends(get_db),
+async def settings_submit(request: Request, db: Session = DB,
                           principal=Depends(OWNER)):
     household = _household(db, principal)
     user = user_of(db, principal)

@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-from fastapi import Request
+from fastapi import Depends, Request
 from sqlalchemy import create_engine, event, inspect
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -93,4 +93,13 @@ def get_db(request: Request) -> Iterator[Session]:
         yield db
 
 
-__all__ = ["Base", "Database", "make_engine", "get_db"]
+#: The request's database session, as every route and security dependency
+#: takes it. ``scope="function"``: the session commits when the route returns,
+#: **before** the response is sent. With FastAPI's default ("request") the
+#: commit ran after the response, so a browser following the 303 of a sign-in
+#: could arrive before its session row existed and land on /login again
+#: (found by the live smoke run, docs/7 §17).
+DB = Depends(get_db, scope="function")
+
+
+__all__ = ["Base", "Database", "make_engine", "get_db", "DB"]

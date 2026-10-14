@@ -149,8 +149,34 @@ def build_scene_model(architecture: str, num_classes: int, pretrained: bool = Fa
         kwargs = {"num_classes": num_classes, "drop_rate": 0.3}
         if image_size and name.startswith(("vit_", "eva", "deit")):
             kwargs["img_size"] = image_size
+        cached = _cached_timm_weights(name) if pretrained else None
+        if cached is not None:
+            kwargs["pretrained_cfg_overlay"] = {"file": cached}
         return timm.create_model(name, pretrained=pretrained, **kwargs)
     raise ValueError(f"unknown scene architecture {architecture!r}")
+
+
+def _cached_timm_weights(name: str) -> str | None:
+    """The public base weights' file in the Hugging Face cache, or None.
+
+    timm otherwise asks huggingface.co for the latest revision on every load,
+    so the device phoned home at each start (and waited on a dead uplink)
+    even with the weights cached (live smoke run, docs/7 §17). Only a
+    missing cache downloads; ``merge_delta`` still checks the fingerprint."""
+    try:
+        from huggingface_hub import try_to_load_from_cache
+        from timm.models import get_pretrained_cfg
+        cfg = get_pretrained_cfg(name)
+        hub_id = getattr(cfg, "hf_hub_id", None) if cfg is not None else None
+        if not hub_id:
+            return None
+        for filename in ("model.safetensors", "pytorch_model.bin"):
+            found = try_to_load_from_cache(hub_id, filename)
+            if isinstance(found, str) and os.path.isfile(found):
+                return found
+    except Exception:                                  # no cache API: let timm decide
+        return None
+    return None
 
 
 def _resolve() -> Path | None:

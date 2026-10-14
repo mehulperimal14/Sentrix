@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from sentrix_portal import security
-from sentrix_portal.db import get_db
+from sentrix_portal.db import DB
 from sentrix_portal.models import Device, IncidentMirror
 from sentrix_portal.routes.auth import (HOUSEHOLD_ROLES, household_of, landing_for, render,
                                         see_other)
@@ -27,7 +27,7 @@ router = APIRouter()
 
 
 @router.get("/")
-def root(request: Request, db: Session = Depends(get_db)):
+def root(request: Request, db: Session = DB):
     principal = security.principal_of(request, db)
     if principal is None:
         return see_other("/login")
@@ -64,7 +64,7 @@ def device_card(db: Session, device: Device, requests: list[dict]) -> dict[str, 
 
 
 @router.get("/home", response_class=HTMLResponse)
-def home(request: Request, db: Session = Depends(get_db),
+def home(request: Request, db: Session = DB,
          principal=Depends(security.require_role())):
     if principal.role not in HOUSEHOLD_ROLES:
         return see_other(landing_for(principal.role))

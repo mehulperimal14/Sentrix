@@ -24,7 +24,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from sentrix_portal import security
-from sentrix_portal.db import get_db
+from sentrix_portal.db import DB
 from sentrix_portal.routes.auth import message_page, render
 from sentrix_portal.services import accounts
 
@@ -46,7 +46,7 @@ def _context(db: Session, contact) -> dict:
 
 
 @router.get("/consent/{token}", response_class=HTMLResponse)
-def consent_page(request: Request, token: str, db: Session = Depends(get_db)):
+def consent_page(request: Request, token: str, db: Session = DB):
     found = accounts.consent_page_target(db, token)
     if found is None:
         return message_page(request, "Link not valid", NOT_VALID, status_code=404)
@@ -60,7 +60,7 @@ def consent_page(request: Request, token: str, db: Session = Depends(get_db)):
 
 
 @router.post("/consent/{token}", response_class=HTMLResponse)
-async def consent_submit(request: Request, token: str, db: Session = Depends(get_db)):
+async def consent_submit(request: Request, token: str, db: Session = DB):
     form = await request.form()
     if not security.verify_login_csrf(request, form.get("csrf_token")):
         return message_page(request, "Form expired", "Open the link again and answer.",

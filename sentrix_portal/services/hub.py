@@ -226,6 +226,10 @@ class LinkHub:
         self._background: set[asyncio.Task] = set()
         #: The event loop the device sockets run on (set by the first one).
         self.loop: asyncio.AbstractEventLoop | None = None
+        #: When this hub (i.e. the Portal process) started: a device's silence
+        #: is counted from here at the earliest, so the Portal's own downtime
+        #: is never read as the device's (docs/7 §17).
+        self.started_at = utcnow()
 
     @property
     def db(self):
@@ -1268,7 +1272,12 @@ class LinkHub:
                 if device.id in self.sessions and not self.sessions[device.id].closed:
                     continue
                 seen = _aware(device.last_seen_at)
-                if seen is not None and (now - seen).total_seconds() < limit:
+                # A device last heard before this Portal started gets the full
+                # limit from the start to reconnect: a Portal restart is not a
+                # lost heartbeat (no tamper signal, no cloud takeover, no
+                # contacts paged for an outage of the Portal itself).
+                silent_since = max(seen, self.started_at) if seen else self.started_at
+                if (now - silent_since).total_seconds() < limit:
                     continue
                 device.online = False
                 lost.append(device.id)

@@ -46,7 +46,7 @@ from sqlalchemy.orm import Session
 
 from sentrix.link.protocol import canonical_json
 from sentrix_portal import settings as portal_settings
-from sentrix_portal.db import get_db
+from sentrix_portal.db import DB
 from sentrix_portal.models import AuditLog, LoginAttempt, User, UserSession, utcnow
 
 _HASHER = PasswordHasher(time_cost=2, memory_cost=19456, parallelism=1,
@@ -506,7 +506,7 @@ def require_role(*roles: str, csrf: bool | str = True,
     """
     allowed = frozenset(roles)
 
-    async def dependency(request: Request, db: Session = Depends(get_db)) -> Principal:
+    async def dependency(request: Request, db: Session = DB) -> Principal:
         principal = _signed_in(request, db)
         if allowed and principal.role not in allowed:
             raise HTTPException(status.HTTP_403_FORBIDDEN, detail="forbidden_role")
@@ -545,7 +545,7 @@ def require_signed_in(*, csrf: bool | str = True) -> Callable[..., Any]:
     company_admin or operator must reach to pass it (``/account/2fa``) or to
     leave (``/logout``). CSRF as in :func:`require_role`."""
 
-    async def dependency(request: Request, db: Session = Depends(get_db)) -> Principal:
+    async def dependency(request: Request, db: Session = DB) -> Principal:
         principal = _signed_in(request, db)
         await _check_csrf(request, principal, csrf)
         request.state.principal = principal

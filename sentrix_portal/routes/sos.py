@@ -31,7 +31,7 @@ from sqlalchemy.orm import Session
 from sentrix.actor import Actor
 from sentrix.sos import states as S
 from sentrix_portal import security
-from sentrix_portal.db import get_db
+from sentrix_portal.db import DB
 from sentrix_portal.models import AssistanceRequest, SosSnapshot, User, utcnow
 from sentrix_portal.routes.device_proxy import actor_of
 from sentrix_portal.services import sos as sos_service
@@ -87,7 +87,7 @@ def _wants_json(request: Request) -> bool:
 
 # ── owner pages ───────────────────────────────────────────────────────────────
 @router.get("/sos")
-async def sos_index(request: Request, db: Session = Depends(get_db),
+async def sos_index(request: Request, db: Session = DB,
                     principal: security.Principal = Depends(_members)):
     rows = (db.query(AssistanceRequest)
             .filter(AssistanceRequest.household_id == principal.household_id)
@@ -101,7 +101,7 @@ async def sos_index(request: Request, db: Session = Depends(get_db),
 
 
 @router.get("/sos/api/open")
-async def sos_open(db: Session = Depends(get_db),
+async def sos_open(db: Session = DB,
                    principal: security.Principal = Depends(_members)) -> JSONResponse:
     if not principal.household_id:
         return JSONResponse({"requests": []})
@@ -110,7 +110,7 @@ async def sos_open(db: Session = Depends(get_db),
 
 
 @router.get("/sos/api/requests/{request_id}")
-async def sos_request_json(request_id: str, db: Session = Depends(get_db),
+async def sos_request_json(request_id: str, db: Session = DB,
                            principal: security.Principal = Depends(_members)) -> JSONResponse:
     row = _request_for(db, principal, request_id)
     return JSONResponse({"request": sos_service.request_view(row, "owner"),
@@ -119,7 +119,7 @@ async def sos_request_json(request_id: str, db: Session = Depends(get_db),
 
 
 @router.get("/sos/{request_id}/snapshot.jpg")
-async def sos_snapshot(request_id: str, db: Session = Depends(get_db),
+async def sos_snapshot(request_id: str, db: Session = DB,
                        principal: security.Principal = Depends(_members)) -> Response:
     row = _request_for(db, principal, request_id)
     snapshot = db.query(SosSnapshot).filter_by(request_id=row.id).first()
@@ -130,7 +130,7 @@ async def sos_snapshot(request_id: str, db: Session = Depends(get_db),
 
 
 @router.get("/sos/{request_id}")
-async def sos_request_page(request_id: str, request: Request, db: Session = Depends(get_db),
+async def sos_request_page(request_id: str, request: Request, db: Session = DB,
                            principal: security.Principal = Depends(_members)):
     row = _request_for(db, principal, request_id)
     await sos_service.mark_seen(db, row.id, actor_of(principal))
@@ -150,7 +150,7 @@ async def sos_request_page(request_id: str, request: Request, db: Session = Depe
 @router.post("/sos/{request_id}/{action}")
 async def sos_action(request_id: str, action: str, request: Request,
                      authority: str | None = Form(None), pin: str | None = Form(None),
-                     db: Session = Depends(get_db),
+                     db: Session = DB,
                      principal: security.Principal = Depends(_members)):
     if action not in PAGE_ACTIONS:
         raise HTTPException(404, detail="not_found")
@@ -177,7 +177,7 @@ def _link(db: Session, token: str):
 
 
 @router.get("/a/{token}")
-async def action_link_page(token: str, request: Request, db: Session = Depends(get_db)):
+async def action_link_page(token: str, request: Request, db: Session = DB):
     found, row, user = _link(db, token)
     templates = request.app.state.templates
     if found is None:
@@ -207,7 +207,7 @@ async def action_link_page(token: str, request: Request, db: Session = Depends(g
 async def action_link_post(token: str, request: Request, action: str = Form(...),
                            authority: str | None = Form(None),
                            csrf_token: str | None = Form(None),
-                           db: Session = Depends(get_db)):
+                           db: Session = DB):
     if not security.verify_login_csrf(request, csrf_token):
         raise HTTPException(403, detail="csrf")
     found, row, user = _link(db, token)

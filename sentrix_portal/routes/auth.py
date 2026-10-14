@@ -35,7 +35,7 @@ from starlette.concurrency import run_in_threadpool
 
 from sentrix.utils.redact import mask_phone
 from sentrix_portal import security
-from sentrix_portal.db import get_db
+from sentrix_portal.db import DB
 from sentrix_portal.models import AuditLog, Household, User, UserSession, utcnow
 from sentrix_portal.services import accounts
 
@@ -106,7 +106,7 @@ def _login_form(request: Request, *, status_code: int = 200, error: str | None =
 
 # ── sign-in ───────────────────────────────────────────────────────────────────
 @router.get("/login", response_class=HTMLResponse)
-def login_page(request: Request, next: str = "", db: Session = Depends(get_db)):
+def login_page(request: Request, next: str = "", db: Session = DB):
     principal = security.principal_of(request, db)
     if principal is not None:
         request.state.principal = principal
@@ -143,7 +143,7 @@ def _admin_then_new_ip(db: Session, user: User, previous_ip_hash: str | None,
 
 
 @router.post("/login", response_class=HTMLResponse)
-async def login_submit(request: Request, db: Session = Depends(get_db)):
+async def login_submit(request: Request, db: Session = DB):
     form = await request.form()
     username = security.attempt_key(form.get("username"))
     next_url = security.safe_next(form.get("next"), "")
@@ -193,7 +193,7 @@ async def login_submit(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/logout")
-async def logout(request: Request, db: Session = Depends(get_db)):
+async def logout(request: Request, db: Session = DB):
     """POST + CSRF. A stale session just goes back to the sign-in page."""
     principal = security.principal_of(request, db)
     response = see_other("/login")
@@ -230,7 +230,7 @@ def activate_page(request: Request, u: str = ""):
 
 
 @router.get("/activate/{code}", response_class=HTMLResponse)
-def activate_link_page(request: Request, code: str, db: Session = Depends(get_db)):
+def activate_link_page(request: Request, code: str, db: Session = DB):
     found = accounts.activation_for_link(db, code)
     if found is None:
         return message_page(request, "Link not valid",
@@ -295,12 +295,12 @@ async def _activate(request: Request, db: Session, code_in_path: str | None):
 
 
 @router.post("/activate", response_class=HTMLResponse)
-async def activate_submit(request: Request, db: Session = Depends(get_db)):
+async def activate_submit(request: Request, db: Session = DB):
     return await _activate(request, db, None)
 
 
 @router.post("/activate/{code}", response_class=HTMLResponse)
-async def activate_link_submit(request: Request, code: str, db: Session = Depends(get_db)):
+async def activate_link_submit(request: Request, code: str, db: Session = DB):
     return await _activate(request, db, code)
 
 
@@ -316,13 +316,13 @@ def _account_page(request: Request, db: Session, principal, *, errors=None,
 
 
 @router.get("/account", response_class=HTMLResponse)
-def account_page(request: Request, saved: str = "", db: Session = Depends(get_db),
+def account_page(request: Request, saved: str = "", db: Session = DB,
                  principal=Depends(security.require_role())):
     return _account_page(request, db, principal, saved=saved or None)
 
 
 @router.post("/account", response_class=HTMLResponse)
-async def account_update(request: Request, db: Session = Depends(get_db),
+async def account_update(request: Request, db: Session = DB,
                          principal=Depends(security.require_role())):
     """Display name and e-mail. A new e-mail (the recovery channel) needs a
     fresh password and is verified again."""
@@ -360,7 +360,7 @@ PHONE_SMS = ("SENTRIX code {code}: it confirms this number for SOS callbacks. Va
 
 
 @router.post("/account/phone")
-async def phone_verify(request: Request, db: Session = Depends(get_db),
+async def phone_verify(request: Request, db: Session = DB,
                        principal=Depends(security.require_role("owner"))):
     """Confirm the owner's mobile with a code sent by SMS from the household's
     own device (``sms.send``: the device only texts numbers in its profile,
@@ -411,7 +411,7 @@ async def phone_verify(request: Request, db: Session = Depends(get_db),
 
 
 @router.post("/account/verify-email", response_class=HTMLResponse)
-def account_resend_verification(request: Request, db: Session = Depends(get_db),
+def account_resend_verification(request: Request, db: Session = DB,
                                 principal=Depends(security.require_role())):
     user = user_of(db, principal)
     if user.email and not user.email_verified_at:
@@ -420,7 +420,7 @@ def account_resend_verification(request: Request, db: Session = Depends(get_db),
 
 
 @router.get("/account/verify-email/{token}", response_class=HTMLResponse)
-def verify_email_page(request: Request, token: str, db: Session = Depends(get_db)):
+def verify_email_page(request: Request, token: str, db: Session = DB):
     row = accounts.live_token(db, token, "email_verify")
     if row is None:
         return message_page(request, "Link not valid",
@@ -433,7 +433,7 @@ def verify_email_page(request: Request, token: str, db: Session = Depends(get_db
 
 
 @router.post("/account/verify-email/{token}", response_class=HTMLResponse)
-async def verify_email_submit(request: Request, token: str, db: Session = Depends(get_db)):
+async def verify_email_submit(request: Request, token: str, db: Session = DB):
     form = await request.form()
     if not security.verify_login_csrf(request, form.get("csrf_token")):
         return message_page(request, "Form expired", "Open the link again.", status_code=403)
@@ -460,7 +460,7 @@ def password_page(request: Request, principal=Depends(security.require_role())):
 
 
 @router.post("/account/password", response_class=HTMLResponse)
-async def password_submit(request: Request, db: Session = Depends(get_db),
+async def password_submit(request: Request, db: Session = DB,
                           principal=Depends(security.require_role())):
     form = await request.form()
     user = user_of(db, principal)
@@ -502,7 +502,7 @@ async def password_submit(request: Request, db: Session = Depends(get_db),
 
 
 @router.post("/account/step-up")
-async def step_up(request: Request, db: Session = Depends(get_db),
+async def step_up(request: Request, db: Session = DB,
                   principal=Depends(security.require_role())):
     """Re-enter the password: sensitive actions for ``step_up_seconds``."""
     form = await request.form()
@@ -547,14 +547,14 @@ def _twofa_page(request: Request, db: Session, principal, user: User, *,
 
 
 @router.get("/account/2fa", response_class=HTMLResponse)
-def twofa_page(request: Request, next: str = "", db: Session = Depends(get_db),
+def twofa_page(request: Request, next: str = "", db: Session = DB,
                principal=Depends(security.require_signed_in())):
     return _twofa_page(request, db, principal, user_of(db, principal),
                        next_url=security.safe_next(next, ""))
 
 
 @router.post("/account/2fa", response_class=HTMLResponse)
-async def twofa_submit(request: Request, db: Session = Depends(get_db),
+async def twofa_submit(request: Request, db: Session = DB,
                        principal=Depends(security.require_signed_in())):
     form = await request.form()
     user = user_of(db, principal)
@@ -617,7 +617,7 @@ async def twofa_submit(request: Request, db: Session = Depends(get_db),
 
 # ── sessions ──────────────────────────────────────────────────────────────────
 @router.get("/account/sessions", response_class=HTMLResponse)
-def sessions_page(request: Request, db: Session = Depends(get_db),
+def sessions_page(request: Request, db: Session = DB,
                   principal=Depends(security.require_role())):
     now = utcnow()
     rows = (db.query(UserSession).filter_by(user_id=principal.user_id, revoked_at=None)
@@ -629,7 +629,7 @@ def sessions_page(request: Request, db: Session = Depends(get_db),
 
 
 @router.post("/account/sessions")
-async def sessions_revoke(request: Request, db: Session = Depends(get_db),
+async def sessions_revoke(request: Request, db: Session = DB,
                           principal=Depends(security.require_role())):
     form = await request.form()
     target = form.get("session")

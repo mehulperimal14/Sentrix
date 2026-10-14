@@ -69,6 +69,8 @@ OUTBOX_POLL_SECONDS = 0.25
 ERROR_WINDOW_SECONDS = 10.0
 #: Prune acknowledged outbox rows this often (s).
 PRUNE_EVERY_SECONDS = 3600.0
+#: While offline, how often the outbox depth on the LC is refreshed.
+OFFLINE_DEPTH_SECONDS = 2.0
 #: Close code this module uses when it replaces its own connection.
 CLOSE_POLICY = 1008
 
@@ -638,7 +640,7 @@ class LinkService:
                                               self.cfg.reconnect_min_seconds * (2 ** attempt)))
                 attempt += 1
             self._set_state("offline", next_attempt_s=round(delay, 2), last_close_code=code)
-            await self._sleep(delay)
+            await self._offline_wait(delay)
 
     async def _after_close(self, code: int | None, auth: str,
                            session: _Session | None) -> float | None:
@@ -663,6 +665,30 @@ class LinkService:
         wipe_token(self.identity_dir)
         removed = profile.wipe()
         log.warning("link: %s: token and %d cached profile(s) wiped", why, removed)
+
+    async def _offline_wait(self, seconds: float) -> None:
+        """The back-off between dial attempts (a kick ends it early). The
+        outbox depth is refreshed every few seconds meanwhile: only a connected
+        session's heartbeat refreshed it before, so the LC showed 0 queued
+        events exactly while they were piling up (live smoke run, docs/7 §17)."""
+        from sentrix.storage import link_store
+        self._kick.clear()
+        deadline = time.monotonic() + max(0.0, seconds)
+        while True:
+            depth = await asyncio.to_thread(_safe, link_store.depth, self._depth)
+            if depth != self._depth:
+                self._depth = depth
+                self._status["outbox_depth"] = depth
+                self._push_status()
+            left = deadline - time.monotonic()
+            if left <= 0 or self._kick.is_set():
+                return
+            try:
+                await asyncio.wait_for(self._kick.wait(),
+                                       timeout=min(left, OFFLINE_DEPTH_SECONDS))
+                return
+            except asyncio.TimeoutError:
+                pass
 
     async def _sleep(self, seconds: float) -> None:
         self._kick.clear()

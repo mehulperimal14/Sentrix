@@ -1991,3 +1991,82 @@ Integration requests not applied (with the reason):
     pre-registered bar (LOVO macro-F1 0.229 vs DINOv2 0.440); `models/v5_slim`
     stays out of `SceneEngine._WEIGHTS` and DINOv2 stays the scene model.
 
+---
+
+## 17. Verification (live smoke run, 2026-10-15)
+
+The integrated product was run for real on the maintainer laptop (Windows 11,
+`.venv` Python 3.14, CPU torch), not only in-process: `python -m
+sentrix_portal` (workers on) and `python -m sentrix` as **two processes**,
+linked over a real WebSocket to `127.0.0.1:8100`, driven by an `httpx`
+script that behaves like a browser (cookies, the page's CSRF token, TOTP).
+Environment: `tools/demo_reset.py --dir <scratch>/demo --window 90`, both
+processes started with `demo_run.py`'s own `portal_env` / `device_env` (and
+once with `demo_run.py start` itself), test mode on, every live switch 0,
+no allowlist, `SENTRIX_AUDIO=0`, camera = the demo reel (vid07 idle, scenes
+`gun.mov` / `4.mov`; never wa02), device `var/` and Portal database in the
+scratch directory. `var/sentrix.db` and its WAL/SHM kept their sizes and
+timestamps. No webcam or microphone was opened; every message ended
+SUPPRESSED (or QUEUED, then SUPPRESSED) in the Portal's outbox.
+
+**What was run, and what happened** (times from the driver's clock):
+
+| Step | Result |
+|---|---|
+| Admin sign-in + TOTP, provision a device (label + identity), create a customer with it, welcome letter | 303/200, letter and label `Cache-Control: no-store`; < 0.5 s |
+| Activation with the letter's code, password chosen; the same code again | 303 to `/onboarding`; reuse 400 |
+| Wizard steps 1-4, contact added; the contact confirms through the consent link (read from the SUPPRESSED e-mail in the outbox) | all 303 to the next step; contact CONFIRMED |
+| Device started on the provisioned identity (bootstrap, unclaimed), then claim at step 5 | "is now yours"; token on the device and the tunnel answering in **0.7 s** |
+| Steps 5-7 (room, PINs, window, consents) | 303 to `/home?welcome=1`; review page carries "SENTRIX does not contact 112 itself." |
+| Console pages direct and through `/d/{id}/`: dashboard, live, events, alerts, evidence, dispatch, authorized, sos, node | all 200 both ways, 4-33 ms; same DOM ids except the LAN-only `logout-link` and the device-admin scripted-trigger box on `/sos`; tunnelled URLs under the prefix |
+| 14 GET APIs direct and tunnelled (`/api/health`, `config`, `incidents`, `level-history`, `metrics`, `node`, `sos`, `sos/requests`, `sos/preview`, `dispatch/latest`, `link`, `link/remote-audit`, `channels`, `authorized/preview.jpg`) | same status and size both ways (`/api/mode` is POST-only: 405 both) |
+| `/ws/threat` direct and `/d/{id}/ws/threat` | 4 state messages in 1.6 s / 1.3 s; cross-origin `Origin` refused |
+| MJPEG `/video` direct and `/d/{id}/video` | 30 frames at **29.9 fps** direct; **13.6 fps** tunnelled (cap 15), first frame 0.13 s |
+| Real detection: `demo_run.py scene gun` | PENDING weapon request **9.8 s** after the command (8.0 s and 9.3 s on two more runs); Portal mirror PENDING +0.9-1.1 s; owner e-mail `t0` SUPPRESSED; no `tel:112` on the page |
+| Owner approves on the Portal; Desk (TOTP) acknowledges and resolves | device DISPATCHED **0.01-0.28 s** after the POST; contact e-mail `contacts_t0`; ACKNOWLEDGED +0.05-0.5 s; CLOSED on both sides +0.3-0.5 s; incident verdict TRUE |
+| Disclosed scripted trigger (`demo_run.py trigger weapon`), "I'm checking", no answer | flagged `simulated`, text says SIMULATED DETECTION; EXPIRED at **91.6 s** (90 s window), owner page "Unanswered", lapse e-mail; "Request help now" opened a linked request, DISPATCHED in 0.3 s, parent stayed EXPIRED |
+| Real detection again, decline with a wrong PIN, then the right PIN | wrong: `pin_invalid`, still PENDING; right: DECLINED in 0.4 s, incident FALSE, no PIN in the device's remote audit |
+| `scene fire` (4.mov) | PENDING fire request 11.6-11.9 s after the command |
+| Portal killed (`taskkill /F`) with the fire request PENDING | device saw the link down at once and kept authority: the LC showed and answered the request (device-admin approve offline -> APPROVED), modem off so nothing was texted; outbox rows queued |
+| Portal restarted | link back in 1.5 s; outbox drained at once (5 rows); mirror DISPATCHED. Before fix 2 below the Portal first logged `device_offline` and paged the contacts; after it, a second restart after a 60 s outage logged no `device_offline` and the device's queued `checking` arrived |
+| `demo_run.py start`, then the device process killed | the banner printed, the tool noticed and stopped the Portal itself |
+
+**Bugs found and fixed** (regressions in `tests/test_live_smoke_regressions.py`
+and `tests/test_sos_engine.py`):
+
+1. *Portal: sign-in sometimes landed back on /login.* With FastAPI 0.141 a
+   `yield` dependency's exit (the session commit) runs **after** the response
+   is sent, so a client following the 303 at once arrived before its session
+   row existed; the in-process ASGI client hid it. `sentrix_portal.db.DB =
+   Depends(get_db, scope="function")` is now what every route and security
+   dependency takes: the work commits before the response leaves.
+2. *Portal restart read as a lost device heartbeat.* At start the watcher
+   compared the device's last-seen time (from before the Portal went down)
+   with now and declared the device offline 0.5 s before it reconnected:
+   tamper signal, cloud takeover and contacts paged for the Portal's own
+   outage. Silence is now counted from `max(last_seen, hub.started_at)`.
+3. *A confirmed fire never reached the contacts with the demo window.* The
+   fire safety default fires at T+2 min; the 90 s demo window expired first
+   and the rule was dropped. A safety-default alert still owed when the
+   window lapses now goes out first (contacts also get the lapse notice).
+   Production windows (30-60 min) were not affected.
+4. *LC showed "0 queued" while offline.* The link client refreshed the outbox
+   depth only in a connected session's heartbeat; while offline it now
+   refreshes every 2 s (a kick still ends the back-off at once).
+5. *The device phoned huggingface.co at every start* ("unauthenticated
+   requests to the HF Hub") although the DINOv2 base weights were cached: timm
+   asked for the latest revision. Cached base weights now load from the
+   cache file (`pretrained_cfg_overlay`); only a missing cache downloads, and
+   `merge_delta` still checks the fingerprint.
+
+**Not verified / still open.** Telegram (no bot token: owner Telegram was not
+linked, so only e-mail prompts were exercised live; the e-2-e suite covers the
+buttons with a fake). The modem path and SMS (modem off on the laptop). Real
+delivery to allowlisted team phones (needs both live switches; not done in
+this run by rule). Ctrl+C on `demo_run.py start` from a console (processes were
+stopped with `taskkill`). The 10 live pre-runs per clip: 3 of 3 `gun.mov`
+and 3 of 3 `4.mov` runs reached L3 in this session, not 10. Wording nit
+unchanged: "near opposite the SBI ATM" (the template prefixes "near" to a
+landmark that already has a preposition). The undelivered flag is raised on
+every prompt in test mode (deliveries are SUPPRESSED), as designed.
+

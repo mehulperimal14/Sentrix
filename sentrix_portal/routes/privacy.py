@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.orm import Session
 
 from sentrix_portal import security
-from sentrix_portal.db import get_db
+from sentrix_portal.db import DB
 from sentrix_portal.routes.auth import household_of, render, see_other, user_of
 from sentrix_portal.services import accounts
 
@@ -50,7 +50,7 @@ def _page(request, db, principal, household, *, notice=None, errors=None, status
 
 
 @router.get("/privacy", response_class=HTMLResponse)
-def privacy_page(request: Request, saved: str = "", db: Session = Depends(get_db),
+def privacy_page(request: Request, saved: str = "", db: Session = DB,
                  principal=Depends(VIEW)):
     return _page(request, db, principal, _household(db, principal), notice=SAVED.get(saved))
 
@@ -62,7 +62,7 @@ def notice_page(request: Request, principal=Depends(security.require_role())):
 
 
 @router.post("/privacy/consents", response_class=HTMLResponse)
-async def consents_submit(request: Request, db: Session = Depends(get_db),
+async def consents_submit(request: Request, db: Session = DB,
                           principal=Depends(OWNER)):
     household = _household(db, principal)
     user = user_of(db, principal)
@@ -86,7 +86,7 @@ async def consents_submit(request: Request, db: Session = Depends(get_db),
 
 
 @router.get("/privacy/export", response_class=HTMLResponse)
-def export_page(request: Request, stepup: str = "", db: Session = Depends(get_db),
+def export_page(request: Request, stepup: str = "", db: Session = DB,
                 principal=Depends(OWNER)):
     return render(request, "privacy/export.html",
                   {"stepped_up": principal.stepped_up(), "stepup": stepup},
@@ -94,7 +94,7 @@ def export_page(request: Request, stepup: str = "", db: Session = Depends(get_db
 
 
 @router.post("/privacy/export")
-def export_download(request: Request, db: Session = Depends(get_db),
+def export_download(request: Request, db: Session = DB,
                     principal=Depends(OWNER)):
     """Everything the Portal holds about the household, as JSON (right of
     access). Needs a fresh password: the file holds addresses and numbers."""
@@ -112,7 +112,7 @@ def export_download(request: Request, db: Session = Depends(get_db),
 
 
 @router.get("/privacy/erase", response_class=HTMLResponse)
-def erase_page(request: Request, db: Session = Depends(get_db), principal=Depends(OWNER)):
+def erase_page(request: Request, db: Session = DB, principal=Depends(OWNER)):
     household = _household(db, principal)
     return render(request, "privacy/erase.html", {
         "household": household, "stepped_up": principal.stepped_up(),
@@ -121,7 +121,7 @@ def erase_page(request: Request, db: Session = Depends(get_db), principal=Depend
 
 
 @router.post("/privacy/erase", response_class=HTMLResponse)
-async def erase_submit(request: Request, db: Session = Depends(get_db),
+async def erase_submit(request: Request, db: Session = DB,
                        principal=Depends(OWNER)):
     """``action=schedule`` (fresh password + typing ERASE) or ``cancel``."""
     household = _household(db, principal)

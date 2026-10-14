@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from sentrix.utils.redact import mask_phone
 from sentrix_portal import security
-from sentrix_portal.db import get_db
+from sentrix_portal.db import DB
 from sentrix_portal.models import EmergencyContact, HouseholdMember
 from sentrix_portal.routes.auth import household_of, render, see_other, user_of
 from sentrix_portal.routes.onboarding import contact_action
@@ -65,7 +65,7 @@ def _household_page(request, db, principal, household, *, values=None, errors=No
 
 
 @router.get("/household", response_class=HTMLResponse)
-def household_page(request: Request, saved: str = "", db: Session = Depends(get_db),
+def household_page(request: Request, saved: str = "", db: Session = DB,
                    principal=Depends(VIEW)):
     household = _household(db, principal)
     return _household_page(request, db, principal, household,
@@ -73,7 +73,7 @@ def household_page(request: Request, saved: str = "", db: Session = Depends(get_
 
 
 @router.post("/household", response_class=HTMLResponse)
-async def household_update(request: Request, db: Session = Depends(get_db),
+async def household_update(request: Request, db: Session = DB,
                            principal=Depends(OWNER)):
     household = _household(db, principal)
     user = user_of(db, principal)
@@ -105,12 +105,12 @@ def _members_page(request, db, principal, household, *, errors=None, notice=None
 
 
 @router.get("/household/members", response_class=HTMLResponse)
-def members_page(request: Request, db: Session = Depends(get_db), principal=Depends(VIEW)):
+def members_page(request: Request, db: Session = DB, principal=Depends(VIEW)):
     return _members_page(request, db, principal, _household(db, principal))
 
 
 @router.post("/household/members", response_class=HTMLResponse)
-async def members_submit(request: Request, db: Session = Depends(get_db),
+async def members_submit(request: Request, db: Session = DB,
                          principal=Depends(OWNER)):
     household = _household(db, principal)
     user = user_of(db, principal)
@@ -182,12 +182,12 @@ def _declined_days() -> int:
 
 
 @router.get("/household/contacts", response_class=HTMLResponse)
-def contacts_page(request: Request, db: Session = Depends(get_db), principal=Depends(VIEW)):
+def contacts_page(request: Request, db: Session = DB, principal=Depends(VIEW)):
     return _contacts_page(request, db, principal, _household(db, principal))
 
 
 @router.post("/household/contacts", response_class=HTMLResponse)
-async def contacts_submit(request: Request, db: Session = Depends(get_db),
+async def contacts_submit(request: Request, db: Session = DB,
                           principal=Depends(OWNER)):
     household = _household(db, principal)
     form = await request.form()
@@ -199,7 +199,7 @@ async def contacts_submit(request: Request, db: Session = Depends(get_db),
 
 # ── the household's audit trail ───────────────────────────────────────────────
 @router.get("/household/audit", response_class=HTMLResponse)
-def audit_page(request: Request, page: int = 1, db: Session = Depends(get_db),
+def audit_page(request: Request, page: int = 1, db: Session = DB,
                principal=Depends(VIEW)):
     household = _household(db, principal)
     page = max(1, min(page, 10_000))

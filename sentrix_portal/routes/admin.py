@@ -33,7 +33,7 @@ from sqlalchemy.orm import Session
 from sentrix.actor import Actor
 from sentrix.utils.redact import mask_email, mask_phone
 from sentrix_portal import security
-from sentrix_portal.db import get_db
+from sentrix_portal.db import DB
 from sentrix_portal.models import AuditLog, Device, Household, User
 from sentrix_portal.routes.auth import message_page, qr_svg, render, see_other
 from sentrix_portal.services import accounts
@@ -72,7 +72,7 @@ def _device(db: Session, device_id: str) -> Device:
 
 # ── overview ──────────────────────────────────────────────────────────────────
 @router.get("", response_class=HTMLResponse)
-def admin_index(request: Request, db: Session = Depends(get_db), principal=Depends(ADMIN)):
+def admin_index(request: Request, db: Session = DB, principal=Depends(ADMIN)):
     from sentrix_portal.services import hub
     states = dict(db.query(Device.state, func.count(Device.id)).group_by(Device.state).all())
     claimed = db.query(Device).filter_by(state="CLAIMED").all()
@@ -109,13 +109,13 @@ def _customers_page(request, db, *, q: str = "", errors=None, values=None,
 
 
 @router.get("/customers", response_class=HTMLResponse)
-def customers_page(request: Request, q: str = "", db: Session = Depends(get_db),
+def customers_page(request: Request, q: str = "", db: Session = DB,
                    principal=Depends(ADMIN)):
     return _customers_page(request, db, q=q)
 
 
 @router.post("/customers", response_class=HTMLResponse)
-async def customers_create(request: Request, db: Session = Depends(get_db),
+async def customers_create(request: Request, db: Session = DB,
                            principal=Depends(ADMIN)):
     form = await request.form()
     errors = accounts.FormErrors()
@@ -144,7 +144,7 @@ async def customers_create(request: Request, db: Session = Depends(get_db),
 
 @router.get("/customers/{household_id}", response_class=HTMLResponse)
 def customer_page(request: Request, household_id: str, done: str = "",
-                  db: Session = Depends(get_db), principal=Depends(ADMIN)):
+                  db: Session = DB, principal=Depends(ADMIN)):
     from sentrix_portal.services import hub
     household, owner = _customer(db, household_id)
     devices = accounts.household_devices(db, household.id)
@@ -165,7 +165,7 @@ def customer_page(request: Request, household_id: str, done: str = "",
 
 
 @router.post("/customers/{household_id}/resend")
-def customer_resend(request: Request, household_id: str, db: Session = Depends(get_db),
+def customer_resend(request: Request, household_id: str, db: Session = DB,
                     principal=Depends(ADMIN)):
     """"Reset": a new code by e-mail to the customer only (D14). For an
     account that was never activated it replaces the letter's code."""
@@ -186,7 +186,7 @@ def customer_resend(request: Request, household_id: str, db: Session = Depends(g
 
 
 @router.post("/customers/{household_id}/status")
-async def customer_status(request: Request, household_id: str, db: Session = Depends(get_db),
+async def customer_status(request: Request, household_id: str, db: Session = DB,
                           principal=Depends(ADMIN)):
     household, _ = _customer(db, household_id)
     form = await request.form()
@@ -201,7 +201,7 @@ async def customer_status(request: Request, household_id: str, db: Session = Dep
 
 
 @router.post("/customers/{household_id}/assign")
-async def customer_assign(request: Request, household_id: str, db: Session = Depends(get_db),
+async def customer_assign(request: Request, household_id: str, db: Session = DB,
                           principal=Depends(ADMIN)):
     household, _ = _customer(db, household_id)
     form = await request.form()
@@ -218,7 +218,7 @@ async def customer_assign(request: Request, household_id: str, db: Session = Dep
 
 
 @router.get("/customers/{household_id}/letter", response_class=HTMLResponse)
-def letter_confirm(request: Request, household_id: str, db: Session = Depends(get_db),
+def letter_confirm(request: Request, household_id: str, db: Session = DB,
                    principal=Depends(ADMIN)):
     household, owner = _customer(db, household_id)
     devices = [d for d in accounts.household_devices(db, household.id) if d.state == "ASSIGNED"]
@@ -229,7 +229,7 @@ def letter_confirm(request: Request, household_id: str, db: Session = Depends(ge
 
 
 @router.post("/customers/{household_id}/letter", response_class=HTMLResponse)
-async def letter_print(request: Request, household_id: str, db: Session = Depends(get_db),
+async def letter_print(request: Request, household_id: str, db: Session = DB,
                        principal=Depends(ADMIN)):
     """The printable welcome letter: Portal URL, username, a fresh single-use
     activation code with its QR, and the assigned devices' serials with a
@@ -294,7 +294,7 @@ def _devices_page(request, db, *, errors=None, values=None, status_code=200, not
 
 @router.get("/devices", response_class=HTMLResponse)
 def devices_page(request: Request, state: str = "", done: str = "",
-                 db: Session = Depends(get_db), principal=Depends(ADMIN)):
+                 db: Session = DB, principal=Depends(ADMIN)):
     return _devices_page(request, db, state=state, notice=NOTICES.get(done))
 
 
@@ -314,7 +314,7 @@ def _label(request, *, device: Device, claim_code: str | None,
 
 
 @router.post("/devices", response_class=HTMLResponse)
-async def devices_provision(request: Request, db: Session = Depends(get_db),
+async def devices_provision(request: Request, db: Session = DB,
                             principal=Depends(ADMIN)):
     form = await request.form()
     errors = accounts.FormErrors()
@@ -333,7 +333,7 @@ async def devices_provision(request: Request, db: Session = Depends(get_db),
 
 
 @router.get("/devices/{device_id}/label", response_class=HTMLResponse)
-def label_confirm(request: Request, device_id: str, db: Session = Depends(get_db),
+def label_confirm(request: Request, device_id: str, db: Session = DB,
                   principal=Depends(ADMIN)):
     device = _device(db, device_id)
     return render(request, "admin/label_confirm.html", {
@@ -342,7 +342,7 @@ def label_confirm(request: Request, device_id: str, db: Session = Depends(get_db
 
 
 @router.post("/devices/{device_id}/label", response_class=HTMLResponse)
-def label_reprint(request: Request, device_id: str, db: Session = Depends(get_db),
+def label_reprint(request: Request, device_id: str, db: Session = DB,
                   principal=Depends(ADMIN)):
     device = _device(db, device_id)
     try:
@@ -354,7 +354,7 @@ def label_reprint(request: Request, device_id: str, db: Session = Depends(get_db
 
 
 @router.post("/devices/{device_id}/assign")
-async def device_assign(request: Request, device_id: str, db: Session = Depends(get_db),
+async def device_assign(request: Request, device_id: str, db: Session = DB,
                         principal=Depends(ADMIN)):
     device = _device(db, device_id)
     form = await request.form()
@@ -383,7 +383,7 @@ async def _unpair_if_claimed(db: Session, device: Device, principal) -> None:
 
 
 @router.post("/devices/{device_id}/transfer", response_class=HTMLResponse)
-async def device_transfer(request: Request, device_id: str, db: Session = Depends(get_db),
+async def device_transfer(request: Request, device_id: str, db: Session = DB,
                           principal=Depends(ADMIN)):
     """Back to UNASSIGNED with a new claim code (a claimed device is unpaired
     first: it wipes its token and profile)."""
@@ -400,7 +400,7 @@ async def device_transfer(request: Request, device_id: str, db: Session = Depend
 
 
 @router.post("/devices/{device_id}/retire")
-async def device_retire(request: Request, device_id: str, db: Session = Depends(get_db),
+async def device_retire(request: Request, device_id: str, db: Session = DB,
                         principal=Depends(ADMIN)):
     device = _device(db, device_id)
     await _unpair_if_claimed(db, device, principal)
@@ -420,13 +420,13 @@ def _staff_page(request, db, principal, *, errors=None, values=None, status_code
 
 
 @router.get("/operators", response_class=HTMLResponse)
-def operators_page(request: Request, done: str = "", db: Session = Depends(get_db),
+def operators_page(request: Request, done: str = "", db: Session = DB,
                    principal=Depends(ADMIN)):
     return _staff_page(request, db, principal, notice=NOTICES.get(done))
 
 
 @router.post("/operators", response_class=HTMLResponse)
-async def operators_create(request: Request, db: Session = Depends(get_db),
+async def operators_create(request: Request, db: Session = DB,
                            principal=Depends(ADMIN)):
     """A Desk operator (or another admin). Company staff: the activation code
     is shown once to hand over in person, and e-mailed when an address is
@@ -458,7 +458,7 @@ async def operators_create(request: Request, db: Session = Depends(get_db),
 
 
 @router.post("/operators/{user_id}")
-async def operators_update(request: Request, user_id: str, db: Session = Depends(get_db),
+async def operators_update(request: Request, user_id: str, db: Session = DB,
                            principal=Depends(ADMIN)):
     user = db.get(User, user_id)
     if user is None or user.role not in accounts.STAFF_ROLES:
@@ -490,7 +490,7 @@ async def operators_update(request: Request, user_id: str, db: Session = Depends
 # ── audit ─────────────────────────────────────────────────────────────────────
 @router.get("/audit", response_class=HTMLResponse)
 def audit_page(request: Request, page: int = 1, event: str = "", household: str = "",
-               db: Session = Depends(get_db), principal=Depends(ADMIN)):
+               db: Session = DB, principal=Depends(ADMIN)):
     page = max(1, min(page, 100_000))
     query = db.query(AuditLog).order_by(AuditLog.id.desc())
     if event:

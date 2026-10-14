@@ -39,7 +39,7 @@ from starlette.concurrency import run_in_threadpool
 from sentrix.actor import Actor
 from sentrix.utils.redact import mask_phone
 from sentrix_portal import security
-from sentrix_portal.db import get_db
+from sentrix_portal.db import DB
 from sentrix_portal.models import Camera, Device, EmergencyContact, HouseholdMember, utcnow
 from sentrix_portal.routes.auth import household_of, render, see_other, user_of
 from sentrix_portal.services import accounts
@@ -175,7 +175,7 @@ def _after_save(household, step: int) -> str:
 
 
 @router.get("/onboarding")
-def onboarding_start(request: Request, db: Session = Depends(get_db),
+def onboarding_start(request: Request, db: Session = DB,
                      principal=Depends(security.require_role("owner", "member"))):
     if principal.role != "owner":
         return see_other("/home")
@@ -185,7 +185,7 @@ def onboarding_start(request: Request, db: Session = Depends(get_db),
 
 @router.get("/onboarding/{step}", response_class=HTMLResponse)
 def onboarding_page(request: Request, step: int, sn: str = "",
-                    db: Session = Depends(get_db), principal=Depends(OWNER)):
+                    db: Session = DB, principal=Depends(OWNER)):
     if step not in accounts.ONBOARDING_STEPS:
         raise HTTPException(404, "no such step")
     user, household = _load(db, principal)
@@ -196,7 +196,7 @@ def onboarding_page(request: Request, step: int, sn: str = "",
 
 
 @router.post("/onboarding/{step}", response_class=HTMLResponse)
-async def onboarding_submit(request: Request, step: int, db: Session = Depends(get_db),
+async def onboarding_submit(request: Request, step: int, db: Session = DB,
                             principal=Depends(OWNER)):
     if step not in accounts.ONBOARDING_STEPS:
         raise HTTPException(404, "no such step")
@@ -486,7 +486,7 @@ _HANDLERS = {1: _step1, 2: _step2, 3: _step3, 4: _step4, 5: _step5, 6: _step6, 7
 
 # ── /claim?sn=... (the label's QR) ────────────────────────────────────────────
 @router.get("/claim", response_class=HTMLResponse)
-def claim_page(request: Request, sn: str = "", db: Session = Depends(get_db),
+def claim_page(request: Request, sn: str = "", db: Session = DB,
                principal=Depends(OWNER)):
     _, household = _load(db, principal)
     serial = accounts.normalize_serial(sn)
@@ -497,7 +497,7 @@ def claim_page(request: Request, sn: str = "", db: Session = Depends(get_db),
 
 
 @router.post("/claim", response_class=HTMLResponse)
-async def claim_submit(request: Request, db: Session = Depends(get_db),
+async def claim_submit(request: Request, db: Session = DB,
                        principal=Depends(OWNER)):
     user, _ = _load(db, principal)
     form = await request.form()

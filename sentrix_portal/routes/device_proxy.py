@@ -38,7 +38,7 @@ from starlette.websockets import WebSocketDisconnect
 from sentrix.actor import Actor
 from sentrix.sos import states as S
 from sentrix_portal import security
-from sentrix_portal.db import get_db
+from sentrix_portal.db import DB
 from sentrix_portal.models import (AssistanceRequest, Device, DispatchMirror,
                                    IncidentMirror, utcnow)
 from sentrix_portal.services import sos as sos_service
@@ -118,7 +118,7 @@ async def device_root(device_id: str) -> RedirectResponse:
 
 
 @router.get("/d/{device_id}/video")
-async def video_relay(device_id: str, request: Request, db: Session = Depends(get_db),
+async def video_relay(device_id: str, request: Request, db: Session = DB,
                       principal: security.Principal = Depends(_view_role)):
     """MJPEG from the device's FRAME messages (adaptive 2-15 fps on the
     device; the console's ``<img src=.../video>`` works unchanged)."""
@@ -264,7 +264,7 @@ class TunnelRoute(APIRoute):
 
 
 async def tunnel(device_id: str, path: str, request: Request,
-                 db: Session = Depends(get_db),
+                 db: Session = DB,
                  principal: security.Principal = Depends(_tunnel_role)):
     """Every other console route, replayed by the device in-process."""
     device = authorize_device(db, principal, device_id)

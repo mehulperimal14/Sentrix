@@ -695,16 +695,24 @@ def due(snap: Snapshot, now: float, rules: Rules, reach: Reach) -> tuple:
         return ()
     steps: list[Step] = []
     if snap.state == S.PENDING:
-        if snap.expires_at is not None and now >= snap.expires_at:
-            return _finalise(snap, (expire_step(snap, reach),))
         rule = contacts_delay(snap.policy, incident_type=snap.incident_type,
                               peak_level=snap.peak_level, rules=rules)
-        if (rule is not None and not snap.flags.get("contacts_notified")
-                and now >= snap.created_at + rule[0]):
-            steps.append(Step(S.CONTACTS_NOTIFIED, flags={"contacts_notified": True},
-                              detail={"step": S.STEP_CONTACTS_T0, "reason": rule[1]},
-                              notices=(Notice("contacts", S.STEP_CONTACTS_T0, T_SMS,
-                                              urgency=snap.urgency),)))
+        owed = rule is not None and not snap.flags.get("contacts_notified")
+        contacts = Step(S.CONTACTS_NOTIFIED, flags={"contacts_notified": True},
+                        detail={"step": S.STEP_CONTACTS_T0,
+                                "reason": rule[1] if rule else None},
+                        notices=(Notice("contacts", S.STEP_CONTACTS_T0, T_SMS,
+                                        urgency=snap.urgency),))
+        if snap.expires_at is not None and now >= snap.expires_at:
+            # A safety-default alert still owed when the window lapses goes
+            # out first: a window shorter than the delay (the 90 s demo window
+            # vs the fire rule's 2 min) must not swallow it (live smoke run).
+            if owed:
+                told = replace(snap, flags={**snap.flags, "contacts_notified": True})
+                return _finalise(snap, (contacts, expire_step(told, reach)))
+            return _finalise(snap, (expire_step(snap, reach),))
+        if owed and now >= snap.created_at + rule[0]:
+            steps.append(contacts)
         steps.extend(_owner_timeline(snap, now, rules, reach))
     elif snap.state == S.APPROVED and snap.help_since is not None:
         attempt = snap.help_attempt

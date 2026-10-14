@@ -31,7 +31,7 @@ from sqlalchemy.orm import Session
 
 from sentrix.sos import states as S
 from sentrix_portal import security
-from sentrix_portal.db import get_db
+from sentrix_portal.db import DB
 from sentrix_portal.models import (AssistanceRequest, Camera, Device, Household,
                                    SosSnapshot, User, utcnow)
 from sentrix_portal.routes.device_proxy import actor_of
@@ -86,7 +86,7 @@ def _card(db: Session, row: AssistanceRequest) -> dict:
 
 
 @router.get("/desk")
-async def desk_index(request: Request, db: Session = Depends(get_db),
+async def desk_index(request: Request, db: Session = DB,
                      principal: security.Principal = Depends(_operator)):
     cards = [_card(db, r) for r in sos_service.desk_queue(db)]
     return request.app.state.templates.TemplateResponse(
@@ -95,7 +95,7 @@ async def desk_index(request: Request, db: Session = Depends(get_db),
 
 
 @router.get("/desk/api/queue")
-async def desk_queue_json(db: Session = Depends(get_db),
+async def desk_queue_json(db: Session = DB,
                           principal: security.Principal = Depends(_operator)) -> JSONResponse:
     cards = [_card(db, r) for r in sos_service.desk_queue(db)]
     return JSONResponse({"requests": cards,
@@ -104,7 +104,7 @@ async def desk_queue_json(db: Session = Depends(get_db),
 
 
 @router.get("/desk/requests/{request_id}/snapshot.jpg")
-async def desk_snapshot(request_id: str, db: Session = Depends(get_db),
+async def desk_snapshot(request_id: str, db: Session = DB,
                         principal: security.Principal = Depends(_operator)) -> Response:
     row = _row(db, request_id)
     snapshot = db.query(SosSnapshot).filter_by(request_id=row.id).first()
@@ -115,7 +115,7 @@ async def desk_snapshot(request_id: str, db: Session = Depends(get_db),
 
 
 @router.get("/desk/requests/{request_id}")
-async def desk_request(request_id: str, request: Request, db: Session = Depends(get_db),
+async def desk_request(request_id: str, request: Request, db: Session = DB,
                        principal: security.Principal = Depends(_operator)):
     row = _row(db, request_id)
     household = db.get(Household, row.household_id) if row.household_id else None
@@ -164,7 +164,7 @@ def _done(request: Request, row_id: str, outcome: dict):
 
 
 @router.post("/desk/requests/{request_id}/acknowledge")
-async def desk_acknowledge(request_id: str, request: Request, db: Session = Depends(get_db),
+async def desk_acknowledge(request_id: str, request: Request, db: Session = DB,
                            principal: security.Principal = Depends(_operator)):
     row = _row(db, request_id)
     outcome = await sos_service.respond(db, row.id, "acknowledge", actor=actor_of(principal),
@@ -174,7 +174,7 @@ async def desk_acknowledge(request_id: str, request: Request, db: Session = Depe
 
 
 @router.post("/desk/requests/{request_id}/called-112")
-async def desk_called_112(request_id: str, request: Request, db: Session = Depends(get_db),
+async def desk_called_112(request_id: str, request: Request, db: Session = DB,
                           principal: security.Principal = Depends(_operator)):
     row = _row(db, request_id)
     outcome = await sos_service.record_note(
@@ -186,7 +186,7 @@ async def desk_called_112(request_id: str, request: Request, db: Session = Depen
 
 @router.post("/desk/requests/{request_id}/resolve")
 async def desk_resolve(request_id: str, request: Request, outcome: str = Form(...),
-                       note: str | None = Form(None), db: Session = Depends(get_db),
+                       note: str | None = Form(None), db: Session = DB,
                        principal: security.Principal = Depends(_operator)):
     row = _row(db, request_id)
     if outcome not in OUTCOMES:

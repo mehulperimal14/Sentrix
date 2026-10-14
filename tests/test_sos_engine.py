@@ -382,6 +382,25 @@ class TestTimeline:
         advance(world, 80)
         assert requests.get_request(req["id"])["state"] == S.EXPIRED
 
+    def test_a_window_shorter_than_the_fire_delay_still_alerts_the_contacts(self, world):
+        # Live smoke run: with the 90 s demo window a confirmed fire expired
+        # before the T+2 min safety default, so the contacts were never told.
+        world.holder["reach"] = ONLINE
+        world.engine.settings = settings_with(demo_window_seconds=90)
+        fire_trigger(world, "fire")
+        req = the_request()
+        advance(world, 95)
+        assert requests.get_request(req["id"])["state"] == S.EXPIRED
+        events = requests.events(req["id"])
+        names = [e["event"] for e in events]
+        assert names.index("contacts_notified") < names.index("expire")
+        assert [e["detail"]["reason"] for e in events
+                if e["event"] == "contacts_notified"] == ["confirmed_fire"]
+        published = [p for kind, p, _ in world.published if kind == "sos.event"
+                     and p.get("event", {}).get("event") == "contacts_notified"]
+        assert published or any("contacts_notified" in repr(p) for _, p, _ in
+                                world.published), "the Portal is told to page them"
+
 
 # ── answers ───────────────────────────────────────────────────────────────────
 class TestAnswers:
