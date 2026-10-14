@@ -414,25 +414,34 @@ Same physical header as earlier Pis; GPIO is 3.3 V and **not** 5 V tolerant [56]
 | 2 / 4 | 5V | PIR VCC, relay *JD-VCC* (coil side) | coil power separate from logic, see below |
 | 3 / 5 | GPIO2 / GPIO3 (I2C1 SDA/SCL) | BME280 (temp/humidity/pressure) | preferred over DHT22 (§ below) |
 | 7 | GPIO4 | DHT22 DATA (if used) | kernel `dht11` overlay supports DHT22 [55] |
-| 11 | GPIO17 | relay IN → siren | existing default in `GpioSiren`; active-low |
+| 11 | GPIO17 | siren relay through an NPN transistor (1 kΩ base, 4.7 kΩ base pull-down, 1N4007 across the coil) | **active-high** (`SENTRIX_SIREN_ACTIVE_HIGH=1`); `gpio=17=op,dl` in config.txt holds it off from power-on. An active-low opto board: `SENTRIX_SIREN_ACTIVE_HIGH=0` and `op,dh` |
 | 16 | GPIO23 | PIR OUT | HC-SR501 output is 3.3 V [57] |
-| 18 | GPIO24 | door reed switch → GND | internal pull-up |
-| 29 / 31 / 33 | GPIO5 / 6 / 13 | status LEDs green / amber / red | 330 Ω each |
+| 18 | GPIO24 | door reed switch → GND | internal pull-up; contact closed = door closed |
+| 36 | GPIO16 | mains sense (PC817 output → GND) | internal pull-up; low while mains is present |
+| 29 / 32 / 33 | GPIO5 / 12 / 13 | status LEDs green / amber / red | 330 Ω each; amber kept off GPIO6 so a UPS HAT stays possible |
 | 37 | GPIO26 | active buzzer (via NPN transistor) | local chirp for L2/L3 |
+| any free | e.g. GPIO25 | siren arming key's second contact → GND (optional) | `SENTRIX_SIREN_ARM_PIN`; tests refused while the key is off |
 | 12 / 35 / 38 | GPIO18 / 19 / 20 | INMP441 BCLK / LRCL / DOUT (only if I2S mic) | unverified on Pi 5 [52]; USB mic preferred |
 | 6, 9, 14, 20, 25, 30, 34, 39 | GND | grounds | |
 | CAM/DISP 0 | — | Camera Module 3 | needs the **Standard-to-Mini** 22-pin cable [24] |
 | PCIe FFC | — | AI HAT+ (T2) | HAT passes the GPIO header through |
 
-**Relay and siren.** Use a relay module with a JD-VCC jumper: logic VCC from 3.3 V,
-coil JD-VCC from 5 V, so a 3.3 V HIGH really releases the relay [60]; or drive a
-bare relay through an NPN transistor with a flyback diode. The siren runs from its
-own **12 V supply** through the relay's NO contact; never from the Pi. `active_low`
-must match the board (CLAUDE.md docs/3 §5 warning still applies).
+**Relay and siren.** Settled (docs/7 §16 q3): the siren relay is driven through an
+NPN transistor with a flyback diode, which makes it **active-high**: GPIO17 HIGH =
+siren on, and the 4.7 kΩ base pull-down keeps it off whenever the pin floats. A
+relay module with a JD-VCC jumper (logic VCC from 3.3 V, coil JD-VCC from 5 V, so
+a 3.3 V level really switches it [60]) is usually active-low: then set
+`SENTRIX_SIREN_ACTIVE_HIGH=0` and `gpio=17=op,dh`. The siren runs from its own
+**12 V supply** through the relay's NO contact; never from the Pi. The code side
+(gpiozero, pin held off at claim, 90 s maximum on-time, release timer, pin forced
+off by the systemd unit after any exit) is `sentrix/io/actuators.py`; the
+bring-up procedure is `deploy/pi5/README.md`.
 
 **Safety during bring-up:** test the relay with an LED in place of the siren
-(110 dB at close range damages hearing); keep the 12 V wiring in the enclosure,
-fused; the UPS's lithium cells need a ventilated, non-flammable spot.
+(110 dB at close range damages hearing) through a cold start, a reboot,
+`systemctl stop`, `kill -9` and the mains-to-UPS switchover
+(`deploy/pi5/README.md`); keep the 12 V wiring in the enclosure, fused; the UPS's
+lithium cells need a ventilated, non-flammable spot.
 
 ---
 

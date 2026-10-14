@@ -1,0 +1,20 @@
+// /etc/polkit-1/rules.d/50-sentrix-networkmanager.rules
+//
+// Lets the service user run the nmcli calls of sentrix/io/network.py (scan,
+// save a Wi-Fi profile, bring it up) for /setup/wifi, without root. Nothing
+// else: no sleep/wake, no hostname, no other user's connections.
+polkit.addRule(function (action, subject) {
+    if (subject.user !== "@USER@") {
+        return polkit.Result.NOT_HANDLED;
+    }
+    var allowed = [
+        "org.freedesktop.NetworkManager.network-control",
+        "org.freedesktop.NetworkManager.settings.modify.system",
+        "org.freedesktop.NetworkManager.wifi.scan",
+        "org.freedesktop.NetworkManager.enable-disable-wifi"
+    ];
+    if (allowed.indexOf(action.id) >= 0) {
+        return polkit.Result.YES;
+    }
+    return polkit.Result.NOT_HANDLED;
+});

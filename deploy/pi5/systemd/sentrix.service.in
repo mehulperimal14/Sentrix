@@ -1,0 +1,65 @@
+# SENTRIX device process on a Raspberry Pi 5 (docs/7 §1.2: one process owns
+# the pipeline, the Local Console, SOS, channels and the link).
+#
+# Template: deploy/pi5/install_pi.sh renders @APP_DIR@, @USER@, @SIREN_PIN@
+# and @SIREN_OFF@ (dl for the NPN driver / active-high relay, dh for an
+# active-low opto board) into /etc/systemd/system/sentrix.service.
+#
+#   systemctl status sentrix        journalctl -u sentrix -f
+#
+# Restart policy: a security device never gives up. Restart=always with no
+# start limit; WatchdogSec restarts a hung process (the node service pings
+# only while the web event loop answers and the live loop runs); the board's
+# hardware watchdog (kernel_watchdog_timeout + RuntimeWatchdogSec) reboots a
+# hung kernel.
+
+[Unit]
+Description=SENTRIX edge threat detection (device process)
+Documentation=file://@APP_DIR@/deploy/pi5/README.md
+After=network-online.target time-sync.target NetworkManager.service
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=notify
+NotifyAccess=main
+User=@USER@
+Group=@USER@
+SupplementaryGroups=gpio video render i2c dialout audio
+WorkingDirectory=@APP_DIR@
+# The app reads @APP_DIR@/.env itself (python-dotenv): systemd's
+# EnvironmentFile would not strip the inline comments .env files carry.
+Environment=PYTHONUNBUFFERED=1
+
+# Relay rule: the siren pin is driven OFF before the process claims it and
+# after it exits however it exits (stop, crash, kill -9). config.txt's
+# gpio=@SIREN_PIN@=op,@SIREN_OFF@ covers power-on until this runs. "+" runs
+# pinctrl as root, "-" keeps a missing pinctrl from blocking the alarm.
+ExecStartPre=-+/usr/bin/pinctrl set @SIREN_PIN@ op @SIREN_OFF@
+ExecStart=@APP_DIR@/.venv/bin/python -m sentrix
+ExecStopPost=-+/usr/bin/pinctrl set @SIREN_PIN@ op @SIREN_OFF@
+
+Restart=always
+RestartSec=3
+# The first start downloads model weights and loads them on the CPU.
+TimeoutStartSec=600
+TimeoutStopSec=30
+WatchdogSec=30
+KillMode=mixed
+
+# Hardening. /usr, /boot and /etc are read-only to the process, except the
+# identity directory (token.json is written at pairing); var/ (evidence,
+# events, database) and the service user's home (model caches) are named
+# explicitly. ProtectSystem=strict would also freeze @APP_DIR@, but a first
+# start may download missing weights next to the code.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+ReadWritePaths=@APP_DIR@/var -/etc/sentrix -/var/lib/@USER@
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

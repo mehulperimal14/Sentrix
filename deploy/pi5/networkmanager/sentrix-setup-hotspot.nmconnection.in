@@ -1,0 +1,28 @@
+# Setup hotspot SENTRIX-SETUP-@SUFFIX@ for the physical setup mode: the phone
+# joins it and opens http://10.42.0.1:8000/setup/wifi (only while
+# SENTRIX_SETUP_MODE=1; the one-time code from the label is checked against
+# identity.json). Never autoconnects: the setup button brings it up with
+#   nmcli connection up id sentrix-setup
+# and it goes down again once Wi-Fi works.
+
+[connection]
+id=sentrix-setup
+type=wifi
+interface-name=wlan0
+autoconnect=false
+
+[wifi]
+mode=ap
+band=bg
+ssid=SENTRIX-SETUP-@SUFFIX@
+
+[wifi-security]
+key-mgmt=wpa-psk
+psk=@PSK@
+
+[ipv4]
+method=shared
+address1=10.42.0.1/24
+
+[ipv6]
+method=disabled

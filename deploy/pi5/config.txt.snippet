@@ -1,0 +1,39 @@
+# >>> SENTRIX >>>
+# Appended to /boot/firmware/config.txt by `install_pi.sh --boot-config`
+# (or by hand). Takes effect after a reboot. With the overlay root on
+# (raspi-config nonint do_overlayfs 0, which also makes /boot read-only),
+# turn it off first to edit this file.
+
+# Siren relay held OFF from power-on until SENTRIX claims the pin. "dl" = drive
+# low, right for the NPN driver (SENTRIX_SIREN_ACTIVE_HIGH=1, the default).
+# An active-low opto relay board needs "dh" instead, and
+# SENTRIX_SIREN_ACTIVE_HIGH=0 in .env.
+gpio=17=op,dl
+
+# Charge the RTC cell (rechargeable ML-2020 lithium-manganese only, never a
+# CR2032): evidence timestamps stay right through a power cut with no network.
+dtparam=rtc_bbat_vchg=3000000
+
+# Hardware watchdog armed from boot; systemd pets it once RuntimeWatchdogSec
+# is set (deploy/pi5/systemd/10-sentrix-watchdog.conf).
+kernel_watchdog_timeout=10
+
+# Camera Module 3 on CAM/DISP 0 (Standard-Mini 22-pin cable on a Pi 5).
+camera_auto_detect=1
+
+# I2C for a BME280 room sensor (pins 3/5). Uncomment the overlay to let the
+# kernel driver read it, then set SENTRIX_SENSOR_BME280=1.
+dtparam=i2c_arm=on
+#dtoverlay=i2c-sensor,bme280,addr=0x76
+
+# DHT22 on GPIO4 (pin 7) through the kernel's dht11 driver (it serves the
+# DHT22 too); then SENTRIX_SENSOR_DHT22=1.
+#dtoverlay=dht11,gpiopin=4
+
+# Power: a 5 V buck or any non-PD supply limits the USB ports to 600 mA, and
+# the 4G modem browns out. Set PSU_MAX_CURRENT=5000 in the bootloader EEPROM
+# (sudo rpi-eeprom-config --edit) for a supply that really delivers 5 A; the
+# config.txt alternative is usb_max_current_enable=1. Never feed 5 V into a
+# GPIO pin (3.3 V logic, not 5 V tolerant).
+#usb_max_current_enable=1
+# <<< SENTRIX <<<

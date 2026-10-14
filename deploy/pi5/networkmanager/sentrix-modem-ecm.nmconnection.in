@@ -1,0 +1,22 @@
+# USB 4G dongle in ECM/RNDIS mode (EC200U-class, SIM7600 PID 9011): it shows
+# up as an *Ethernet* device (usb0) whose default metric is 100, which beats
+# Wi-Fi's 600 and sends every byte over paid 4G. This profile pins it to 700
+# so it stays the backup. install_pi.sh --modem-ecm installs it.
+
+[connection]
+id=sentrix-modem-ecm
+type=ethernet
+interface-name=@IFNAME@
+autoconnect=true
+autoconnect-priority=5
+
+[ethernet]
+
+[ipv4]
+method=auto
+route-metric=700
+
+[ipv6]
+method=auto
+route-metric=700
+addr-gen-mode=stable-privacy
