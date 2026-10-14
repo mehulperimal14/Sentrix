@@ -1068,6 +1068,17 @@ class TestService:
         queued.stop()                        # shutdown: the queued trigger is still handled
         assert late in requests.open_request()["incident_ids"]
 
+    def test_memory_per_incident_is_bounded(self, world):
+        from sentrix.sos import service
+        for n in range(service.INCIDENT_MEMORY + 100):
+            service._remember(world.engine._triggered, f"i{n}", None)
+        assert len(world.engine._triggered) == service.INCIDENT_MEMORY
+        assert "i0" not in world.engine._triggered and f"i{n}" in world.engine._triggered
+        world.engine._link_incident("no-such-incident", "r1")
+        for _ in range(service.LINK_RETRIES):
+            world.engine._retry_links()
+        assert world.engine._unlinked == {}
+
     def test_never_raises_into_a_caller(self, world, monkeypatch):
         fire_trigger(world)
         req = the_request()

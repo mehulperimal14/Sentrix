@@ -47,7 +47,7 @@ import os
 import sys
 import time
 import uuid
-from collections import deque
+from collections import OrderedDict, deque
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -79,8 +79,22 @@ ENV_OWNER_TELEGRAM = "SENTRIX_OWNER_TELEGRAM"
 ENV_OWNER_EMAIL = "SENTRIX_OWNER_EMAIL"
 
 
+#: Incidents remembered per structure (triggered, levels, suppressed repeats).
+INCIDENT_MEMORY = 512
+#: Sweeps an incident -> request link is retried before it is given up.
+LINK_RETRIES = 40
+
+
 def _dt(epoch_seconds: float) -> datetime:
     return datetime.fromtimestamp(float(epoch_seconds), timezone.utc)
+
+
+def _remember(store: OrderedDict, key: Any, value: Any) -> None:
+    """Insert (as newest) and forget the oldest beyond ``INCIDENT_MEMORY``."""
+    store[key] = value
+    store.move_to_end(key)
+    while len(store) > INCIDENT_MEMORY:
+        store.popitem(last=False)
 
 
 @dataclass
@@ -135,11 +149,13 @@ class SosEngine:
         self._lock = REQUEST_LOCK
         self._inbox: deque[tuple[str, Any]] = deque()
         self._held: dict[str, _Hold] = {}
-        self._suppressed: dict[str, tuple[SosTrigger, M.TriggerFacts]] = {}
-        self._triggered: set[str] = set()
-        self._levels: dict[str, int] = {}
+        # Per incident, oldest first and capped (a device runs for months).
+        self._suppressed: OrderedDict[str, tuple[SosTrigger, M.TriggerFacts]] = OrderedDict()
+        self._triggered: OrderedDict[str, None] = OrderedDict()
+        self._levels: OrderedDict[str, int] = OrderedDict()
         self._level, self._level_incident = 1, None
-        self._unlinked: set[tuple[str, str]] = set()
+        #: (incident, request) links still to write -> attempts so far.
+        self._unlinked: dict[tuple[str, str], int] = {}
         self._published: dict[str, int] = {}
         self._snapshots_sent: set[str] = set()
         self._notified_failures: set[str] = set()
@@ -461,7 +477,7 @@ class SosEngine:
         """One incident handed over by the pipeline (idempotent per incident)."""
         if trigger.incident_id in self._triggered and not entry_delay_over:
             return None
-        self._triggered.add(trigger.incident_id)
+        _remember(self._triggered, trigger.incident_id, None)
         self.counters["triggers"] += 1
         facts = self._facts(trigger)
         open_snap = self._open_snapshot()
@@ -483,7 +499,7 @@ class SosEngine:
             return None
         if decision.action == "suppress":
             self.counters["suppressed"] += 1
-            self._suppressed[trigger.incident_id] = (trigger, facts)
+            _remember(self._suppressed, trigger.incident_id, (trigger, facts))
             self._audit("sos_suppressed", incident_id=trigger.incident_id,
                         incident_type=trigger.incident_type, reason=decision.reason)
             return None
@@ -506,8 +522,8 @@ class SosEngine:
     def _handle_level(self, change: LevelChange) -> None:
         self._level, self._level_incident = int(change.level), change.incident_id
         if change.incident_id:
-            self._levels[change.incident_id] = max(self._levels.get(change.incident_id, 0),
-                                                   int(change.level))
+            _remember(self._levels, change.incident_id,
+                      max(self._levels.get(change.incident_id, 0), int(change.level)))
         now = self._now()
         if (change.incident_type == "intrusion" and change.incident_id
                 and change.level >= self.rules.min_level):
@@ -526,7 +542,7 @@ class SosEngine:
             # Stronger evidence than what was declined always prompts.
             del self._suppressed[change.incident_id]
             trigger, _ = suppressed
-            self._triggered.discard(trigger.incident_id)
+            self._triggered.pop(trigger.incident_id, None)
             self._handle_trigger(replace(trigger, level=int(change.level),
                                          evidence_state=change.evidence_state))
 
@@ -723,13 +739,15 @@ class SosEngine:
             return
         if not database.link_incident_request(incident_id, request_id):
             # The incident row is written by the pipeline's FIFO worker; try again.
-            self._unlinked.add((incident_id, request_id))
+            self._unlinked.setdefault((incident_id, request_id), 0)
 
     def _retry_links(self) -> None:
         from sentrix.storage import database
-        for incident_id, request_id in list(self._unlinked):
-            if database.link_incident_request(incident_id, request_id):
-                self._unlinked.discard((incident_id, request_id))
+        for key, attempts in list(self._unlinked.items()):
+            if database.link_incident_request(*key) or attempts + 1 >= LINK_RETRIES:
+                self._unlinked.pop(key, None)
+            else:
+                self._unlinked[key] = attempts + 1
 
     # ── messages ──────────────────────────────────────────────────────────────
     def _recipients(self, request: dict, notice: M.Notice, reach: Reach) -> list:
@@ -1301,7 +1319,7 @@ class SosEngine:
                              evidence_bundle=getattr(live, "evidence_bundle", None),
                              evidence_hash=getattr(live, "evidence_hash", None))
         if incident_id:
-            self._triggered.add(incident_id)
+            _remember(self._triggered, incident_id, None)
         self._open(trigger, self._facts(trigger), {"silent": True}, actor=actor, channel="lc",
                    approve=M.LinkedRequest("", recommended_authority("duress"), duress=True))
 

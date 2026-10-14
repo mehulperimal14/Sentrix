@@ -19,7 +19,7 @@ shared file was edited.
 | Request store additions | `sentrix/storage/requests.py` | done (frozen names keep their parameters; see below) |
 | One profile-filled package per request | `sentrix/alerting/dispatch.py` | done |
 | LC JSON API | `sentrix/web/sos_routes.py` | done |
-| Tests | `tests/test_sos_{machine,engine,templates,pins,routes,replay}.py` | 201 new tests; full suite 540 passed, 1 skipped (the live-log replay without the private log) |
+| Tests | `tests/test_sos_{machine,engine,templates,pins,routes,replay}.py` | 202 new tests; full suite 541 passed, 1 skipped (the live-log replay without the private log) |
 
 Replay of the first live session (`c27258a25457`, 1300 ticks) through the
 current decision layer and the engine (`tests/test_sos_replay.py`, run with
