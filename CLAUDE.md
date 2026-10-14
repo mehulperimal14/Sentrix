@@ -128,7 +128,7 @@ The product did not work as a whole — see section 5.
 | `sentrix/finetuned-v3` | `66accb9` | baseline + scene integration + training tooling + fine-tuned v3 models |
 | `sentrix/custom-v4` | `3772acf` | baseline + scene integration + training tooling + new DINOv2/YOLO11n models (recommended) |
 | `sentrix/e2e-repair` | same as `main` | custom-v4 + this plan + M1–M5 + fresh-clone setup (commits below) |
-| `sentrix/portal` | (M10) | main + HARDWARE.md + Portal/SOS foundation; tracks branch from it (M10 below) |
+| `sentrix/portal` | `685df9b` (foundation) | main + HARDWARE.md + Portal/SOS foundation; tracks branch from it (M10 below) |
 
 Published to `github.com/mehulperimal14/Sentrix` on 2026-10-10. Before publishing,
 history was rewritten once: private runtime data that earlier commits had
@@ -356,7 +356,7 @@ is dropped from the promise or re-tested on a fresh S5 — never tuned on S4.
 **M10 — Customer Portal, onboarding and SOS (branch `sentrix/portal`)** —
 contract: `docs/7_PORTAL_AND_SOS.md` (ownership, config, schemas, link protocol
 v1, tunnel + auth bridge, SOS state machine, channels, roles, endpoints).
-- [x] **Foundation** (commit "feat(foundation): contracts, config, guard, schema, services, portal skeleton"): `SosConfig`/`LinkConfig`/`ChannelConfig`/`GpioConfig`/`ClipConfig`/`NodeConfig`/`WebConfig`; send guard `sentrix/alerting/guard.py` (legacy Twilio SMS/call now a no-op unless `SENTRIX_TWILIO_ENABLED=1` + `SENTRIX_LIVE_ALERTS=1` + allowlist in test mode); additive device tables (assistance_requests, request_events, link_outbox, profile_cache, notifications, remote_audit) and columns; `set_verdict` by request state; services registry + lifespan; pipeline SOS hook (`NullSosService` default, asserted by the eval harness and tools); state blocks (sos, link, node, channels, mode, remote_viewers, test_mode); runtime HOME/ARMED; link protocol + tunnel auth; channel interfaces; LC extension routers; camera-URL redaction; `/docs` off by default; `sentrix_portal` skeleton (all tables, Argon2id, sessions, CSRF, `require_role`, audit chain, `/healthz`). 266 tests pass.
+- [x] **Foundation** (`685df9b`, "feat(foundation): contracts, config, guard, schema, services, portal skeleton"): `SosConfig`/`LinkConfig`/`ChannelConfig`/`GpioConfig`/`ClipConfig`/`NodeConfig`/`WebConfig`; send guard `sentrix/alerting/guard.py` (legacy Twilio SMS/call now a no-op unless `SENTRIX_TWILIO_ENABLED=1` + `SENTRIX_LIVE_ALERTS=1` + allowlist in test mode); additive device tables (assistance_requests, request_events, link_outbox, profile_cache, notifications, remote_audit) and columns; `set_verdict` by request state; services registry + lifespan; pipeline SOS hook (`NullSosService` default, asserted by the eval harness and tools); state blocks (sos, link, node, channels, mode, remote_viewers, test_mode); runtime HOME/ARMED; link protocol + tunnel auth; channel interfaces; LC extension routers; camera-URL redaction; `/docs` off by default; `sentrix_portal` skeleton (all tables, Argon2id, sessions, CSRF, `require_role`, audit chain, `/healthz`). 266 tests pass.
 - [ ] Tracks (parallel, own worktrees): T-HW (Pi I/O, deploy), T-CLIP (clip engine), T-SOS (device SOS engine), T-CH (channels), T-WEB (LC hardening + SOS/Node pages), T-LINK (link client, Portal hub/tunnel/SOS/Desk/contacts), T-ACCT (accounts, admin, onboarding, household, settings, privacy), T-MODEL (slim scene model).
 - [ ] Integration: merge order T-HW, T-CLIP, T-CH, T-SOS, T-WEB, T-ACCT, T-LINK; end-to-end tests; demo tools; Docker/Caddy deploy; README; gates P1–P8.
 
