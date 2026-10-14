@@ -1,0 +1,6 @@
+# Exports written by tools/export_models.py (ONNX, NCNN, the exported scene
+# model and its metadata). They are rebuilt from the tracked weights in a
+# minute and the scene export alone is ~340 MB, so none of them is committed;
+# manifest.json in this folder records what was exported and its parity.
+*
+!.gitignore

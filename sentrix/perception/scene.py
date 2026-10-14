@@ -36,6 +36,16 @@ Every processed frame is scored once; probabilities are averaged over the last
 Checkpoints are self-describing (architecture, classes, preprocessing,
 temperature, thresholds), so promoting a new model is a file copy.
 
+Runtimes
+--------
+``SENTRIX_RUNTIME=onnx`` (or ``ncnn``; ``SENTRIX_SCENE_RUNTIME`` overrides it
+for this model alone) serves an exported twin of the checkpoint instead of
+PyTorch: ``<name>.onnx`` / ``<name>_ncnn_model`` next to the checkpoint (the
+slim models' format, docs/7 §2.4) or in ``models/exported/`` (written by
+``tools/export_models.py``), described by ``<name>_metadata.json``. Neither
+torch nor timm is imported then, which is what a Pi wants. A missing export or
+metadata falls back to PyTorch with a warning.
+
 A checkpoint may be a *delta*: when most of a backbone was frozen during
 training, only the tensors training changed are stored, together with a
 SHA-256 fingerprint of the frozen remainder. Loading rebuilds the public
@@ -162,6 +172,25 @@ def _pick_device():
     return torch.device("cpu")
 
 
+def scene_runtime(runtime: str | None = None) -> str:
+    """torch | onnx | ncnn for the scene model."""
+    from sentrix.runtime import resolve_backend
+    return resolve_backend(runtime or os.getenv("SENTRIX_SCENE_RUNTIME", "").strip() or None)
+
+
+def exported_scene(path: Path, runtime: str) -> tuple[Path | None, Path | None]:
+    """``(export, metadata)`` for a checkpoint on ``runtime``: the export next to
+    the checkpoint first (slim models ship one), then ``models/exported/``."""
+    from sentrix.runtime import EXPORT_DIR, exported_path
+    candidates = [exported_path(path, None, runtime, path.parent),
+                  exported_path(path, None, runtime, EXPORT_DIR)]
+    export = next((c for c in candidates if c.exists()), None)
+    meta_name = f"{path.stem}_metadata.json"
+    metas = [path.parent / meta_name] + ([export.parent / meta_name] if export else [])
+    metadata = next((m for m in metas if m.exists()), None)
+    return export, metadata
+
+
 @dataclass
 class SceneResult:
     """Window-averaged class probabilities and the thresholds that apply."""
@@ -226,11 +255,17 @@ def deployment_thresholds() -> dict[str, float]:
 class SceneEngine:
     """Per-tick scene classification with a short probability window."""
 
-    def __init__(self, weights: str | Path | None = None) -> None:
+    def __init__(self, weights: str | Path | None = None,
+                 runtime: str | None = None) -> None:
         self.cfg = settings.scene
         self._model = None
         self._device = None
         self._transform = None
+        #: An exported model (onnx/ncnn) serving instead of the torch network.
+        self._backend = None
+        self._size = 224
+        self._norm: dict = {}
+        self.runtime = "torch"
         self.weights_name: str | None = None
         self.classes: list[str] = list(SCENE_CLASSES)
         self.temperature = 1.0
@@ -239,13 +274,55 @@ class SceneEngine:
         self._buffer: deque[tuple[float, np.ndarray]] = deque(maxlen=64)
         self._last: SceneResult = SceneResult()
         if self.cfg.enabled:
-            self._load(Path(weights) if weights else _resolve())
+            self._load(Path(weights) if weights else _resolve(), runtime)
 
     # ── loading ───────────────────────────────────────────────────────────────
-    def _load(self, path: Path | None) -> None:
+    def _load(self, path: Path | None, runtime: str | None = None) -> None:
         if path is None or not path.exists():
             log.info("no scene classifier weights — scene engine disabled")
             return
+        backend = scene_runtime(runtime)
+        if backend != "torch" and self._load_exported(path, backend):
+            return
+        self._load_torch(path)
+
+    def _load_exported(self, path: Path, backend: str) -> bool:
+        """Serve the checkpoint's exported twin; False to fall back to torch."""
+        export, metadata = exported_scene(path, backend)
+        if export is None or metadata is None:
+            log.warning("scene runtime %s: no export or metadata for %s (run "
+                        "tools/export_models.py); using torch", backend, path.name)
+            return False
+        try:
+            from sentrix.runtime.classifier import NcnnClassifier, OnnxClassifier
+            meta = json.loads(metadata.read_text(encoding="utf-8"))
+            classes = [str(c) for c in meta.get("classes", SCENE_CLASSES)]
+            if set(PRIORITY) - set(classes):
+                raise ValueError(f"metadata classes {classes} lack {PRIORITY}")
+            threads = settings.clip.threads
+            model = (OnnxClassifier(export, threads) if backend == "onnx"
+                     else NcnnClassifier(export, threads))
+            self.classes = classes
+            self._size = int(meta.get("image_size", 224))
+            self._norm = meta.get("normalization") or {}
+            self.temperature = float(meta.get("temperature", 1.0) or 1.0)
+            self.thresholds.update({k: float(v) for k, v in
+                                    (meta.get("thresholds") or {}).items() if k in PRIORITY})
+            self._apply_threshold_policy()
+            self._backend = self._model = model
+            self._device = f"{backend}:cpu"
+            self.runtime = backend
+            self.weights_name = path.name
+            log.info("scene classifier on %s: %s (%dpx, T=%.2f, thr=%s)", backend,
+                     export.name, self._size, self.temperature,
+                     {k: round(v, 2) for k, v in self.thresholds.items()})
+            return True
+        except Exception as exc:
+            log.error("scene export %s failed to load (%s); using torch", export, exc)
+            self._backend = self._model = None
+            return False
+
+    def _load_torch(self, path: Path) -> None:
         try:
             import torch
             from torchvision import transforms
@@ -321,6 +398,14 @@ class SceneEngine:
     # ── inference ─────────────────────────────────────────────────────────────
     def score_frames(self, frames: list[np.ndarray]) -> np.ndarray:
         """Class probabilities for BGR frames, shape ``(N, len(classes))``."""
+        backend = getattr(self, "_backend", None)
+        if backend is not None:
+            from sentrix.runtime.classifier import (IMAGENET_MEAN, IMAGENET_STD, preprocess,
+                                                    softmax)
+            batch = preprocess(frames, self._size, self._norm.get("mean", IMAGENET_MEAN),
+                               self._norm.get("std", IMAGENET_STD))
+            return softmax(backend.logits(batch), self.temperature)
+
         import torch
 
         batch = [self._transform(cv2.cvtColor(f, cv2.COLOR_BGR2RGB)) for f in frames]
@@ -366,4 +451,4 @@ class SceneEngine:
 
 __all__ = ["SCENE_CLASSES", "PRIORITY", "SceneEngine", "SceneResult",
            "base_fingerprint", "build_scene_model", "decide_label",
-           "deployment_thresholds", "merge_delta"]
+           "deployment_thresholds", "exported_scene", "merge_delta", "scene_runtime"]

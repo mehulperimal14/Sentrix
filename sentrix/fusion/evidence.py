@@ -317,3 +317,143 @@ class EvidenceAccumulator:
 __all__ = ["CLASS_ORDER", "ClassEvidence", "ConfirmationWindow", "EvidenceAccumulator",
            "Vote", "combine", "corroborated_score", "source_score", "strength",
            "strongest"]
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Within-clip confirmation (HARDWARE.md T1; docs/7 §2.4 seam, track T-CLIP)
+# ──────────────────────────────────────────────────────────────────────────────
+@dataclass(frozen=True)
+class ClipObservation:
+    """One source's value for one class on one keyframe of a clip.
+
+    ``group`` says what the value belongs to: a person track
+    (``("track", 7)``) or an image region (``("region", 2)``) for a detector
+    box, None for a frame-level classifier (the scene model, the violence
+    window). ``person_recent`` is the weapon gate at that keyframe (None: the
+    person detector is unavailable, so the gate cannot apply).
+    """
+
+    source: str
+    cls: str
+    value: float
+    threshold: float
+    at: float
+    group: Any = None
+    person_recent: bool | None = True
+
+
+@dataclass
+class KeyframeVote(Vote):
+    """A :class:`Vote` counted in keyframes of one clip instead of ticks."""
+
+    #: Seconds from the first to the last crossing keyframe of ``group``.
+    span: float = 0.0
+    group: Any = None
+    unit: str = "keyframes"
+
+    def describe(self) -> str:
+        where = ""
+        if isinstance(self.group, tuple) and len(self.group) == 2:
+            where = f", {self.group[0]} {self.group[1]}"
+        text = (f"{self.source} {self.value:.2f}/{self.threshold:.2f} "
+                f"({self.hits}/{self.seen} {self.unit}{where})")
+        if self.gated:
+            text += f" [{self.gated}]"
+        return text
+
+    def to_dict(self) -> dict[str, Any]:
+        data = super().to_dict()
+        data.update(span_s=round(self.span, 3), unit=self.unit,
+                    group=list(self.group) if isinstance(self.group, tuple) else self.group)
+        return data
+
+
+class ClipConfirmation:
+    """Per-class evidence for one clip, confirmed inside the clip.
+
+    The tick loop confirms a source on ``confirm_k`` of its last
+    ``confirm_n`` ticks. A 4-second clip already holds time, so here a source
+    is confirmed for a class when it crosses that class's threshold on
+    ``confirm_keyframes`` distinct keyframes **of one group**: one person
+    track for a weapon box, one image region for a fire box, the frame for a
+    classifier. Two pistols glimpsed on two different people, or two flames in
+    two corners, do not confirm each other. The weapon gate applies per
+    keyframe (a crossing counts only with a person seen recently).
+
+    The result is the same ``{class: ClassEvidence}`` an
+    :class:`EvidenceAccumulator` produces, scored by the same rules - one
+    confirmed source in the L3 band, a classifier and a detector both
+    confirmed in L4/L5, experimental classes capped at L2 - so ``decide`` and
+    the TCI are unchanged. Overlapping clips are not independent; the only
+    cross-clip rule is the level policy's dwell.
+    """
+
+    def __init__(self, confirm_keyframes: int | None = None, cfg=None) -> None:
+        self.cfg = cfg or settings.threat
+        k = settings.clip.confirm_keyframes if confirm_keyframes is None else confirm_keyframes
+        self.k = max(1, int(k))
+        self._scorer = EvidenceAccumulator(self.cfg)
+
+    def update(self, observations) -> dict[str, ClassEvidence]:
+        by_source: dict[tuple[str, str], list[ClipObservation]] = {}
+        for obs in observations:
+            by_source.setdefault((obs.cls, obs.source), []).append(obs)
+        result: dict[str, ClassEvidence] = {}
+        for cls in CLASS_ORDER:
+            votes: list[Vote] = []
+            gate_off = False
+            for (c, source), items in sorted(by_source.items()):
+                if c != cls or not self._scorer._allowed(source, cls):
+                    continue
+                votes.append(self.vote(cls, source, items))
+                gate_off = gate_off or (cls == "weapon" and all(
+                    o.person_recent is None for o in items))
+            result[cls] = self._scorer._score(cls, votes)
+            if gate_off:
+                result[cls].reason += " [person gate off: person detector unavailable]"
+        return result
+
+    def vote(self, cls: str, source: str, items: list[ClipObservation]) -> KeyframeVote:
+        """One source's vote for one class over the clip's keyframes."""
+        valid = [o for o in items if math.isfinite(o.value) and math.isfinite(o.threshold)
+                 and 0.0 < o.threshold < 1.0]
+        if not valid:
+            first = items[0]
+            what = ("invalid value" if not math.isfinite(first.value)
+                    else "invalid threshold")
+            return KeyframeVote(source, first.value if math.isfinite(first.value) else 0.0,
+                                first.threshold if math.isfinite(first.threshold) else 0.0,
+                                gated=what, valid=False)
+        seen = len({o.at for o in valid})
+        crossings: dict[Any, dict[float, ClipObservation]] = {}
+        gated = None
+        for obs in valid:
+            if obs.value < obs.threshold:
+                continue
+            if cls == "weapon" and obs.person_recent is False:
+                gated = "no person in view"
+                continue
+            slots = crossings.setdefault(obs.group, {})
+            if obs.at not in slots or obs.value > slots[obs.at].value:
+                slots[obs.at] = obs
+        best_group, best_slots = None, {}
+        for group, slots in crossings.items():
+            key = (len(slots), max(o.value for o in slots.values()))
+            if not best_slots or key > (len(best_slots),
+                                        max(o.value for o in best_slots.values())):
+                best_group, best_slots = group, slots
+        hits = len(best_slots)
+        confirmed = hits >= self.k
+        if best_slots:
+            top = max(best_slots.values(), key=lambda o: o.value)
+            times = sorted(best_slots)
+            span = times[-1] - times[0]
+        else:
+            top = max(valid, key=lambda o: o.value)
+            span = 0.0
+        return KeyframeVote(source, top.value, top.threshold, hits=hits, seen=seen,
+                            confirmed=confirmed, gated=None if confirmed else gated,
+                            fresh=True, span=span, group=best_group)
+
+
+__all__ += ["ClipConfirmation", "ClipObservation", "KeyframeVote"]

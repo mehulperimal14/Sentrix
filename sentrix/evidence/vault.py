@@ -376,3 +376,86 @@ class EvidenceVault:
 vault = EvidenceVault()
 
 __all__ = ["EvidenceVault", "EvidenceRecord", "vault"]
+
+
+# ── clip bundles (docs/7 §2.4 seam, track T-CLIP) ─────────────────────────────
+#: How the frames of a clip bundle are packed: the JPEGs back to back. The
+#: sidecar lists each one's offset and length, so a reader splits exactly; a
+#: viewer that decodes the blob as one JPEG shows the first frame.
+CLIP_FORMAT = "jpeg-concat"
+
+
+def _save_clip(self: EvidenceVault, frames, *, level: int, status: str,
+               tci: float = 0.0, incident_type: str = "normal", reason: str = "",
+               features: dict[str, Any] | None = None, incident_id: str | None = None,
+               kind: str = "pre_roll", trigger_at: float | None = None,
+               camera_id: str = "CAM_0",
+               context: dict[str, Any] | None = None) -> EvidenceRecord | None:
+    """Seal several frames as one bundle in the same manifest chain.
+
+    The pre-roll the vault never had (CLAUDE.md M3 deferral): the clip
+    engine's ring buffer holds the seconds before a trigger, so the bundle
+    shows the approach, not only the frame that tripped the alarm; a second
+    bundle (``kind="post_roll"``) seals the seconds after it. ``frames`` is
+    ``[(captured_at, BGR array)]``, oldest first; times are stored relative to
+    ``trigger_at`` (default: the last frame). Emits the ``evidence`` listener
+    like :meth:`EvidenceVault.save`.
+    """
+    frames = [(float(at), image) for at, image in (frames or []) if image is not None]
+    if cv2 is None or not frames:
+        return None
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+        quality = [cv2.IMWRITE_JPEG_QUALITY, settings.evidence.jpeg_quality]
+        trigger = frames[-1][0] if trigger_at is None else float(trigger_at)
+        parts: list[bytes] = []
+        index: list[dict[str, Any]] = []
+        offset = 0
+        for at, image in frames:
+            ok, buffer = cv2.imencode(".jpg", image, quality)
+            if not ok:
+                raise ValueError("JPEG encode failed")
+            data = buffer.tobytes()
+            index.append({"offset": offset, "length": len(data),
+                          "t": round(at - trigger, 3)})
+            parts.append(data)
+            offset += len(data)
+        nonce = os.urandom(12)
+        blob = nonce + AESGCM(self._aes_key).encrypt(nonce, b"".join(parts), None)
+        digest = hashlib.sha256(blob).hexdigest()
+        trigger_index = min(range(len(index)), key=lambda i: abs(index[i]["t"]))
+        context = dict(context or {})
+
+        with self._lock:
+            base = f"{self._bundle_name(level)}_clip"
+            enc_path = self.dir / f"{base}.enc"
+            enc_path.write_bytes(blob)
+            record = EvidenceRecord(
+                file=enc_path.name, bundle_id=base,
+                timestamp=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                incident_id=incident_id, camera_id=camera_id, tci=round(float(tci), 4),
+                level=level, status=status, incident_type=incident_type, reason=reason,
+                features=dict(features or {}), detections=[], sha256=digest,
+                prev_sha256=self._tip,
+                extras={"session": context.pop("session", None) or self.session_id,
+                        "vault_session": self.session_id,
+                        "persistent_key": self.persistent,
+                        "clip": {"kind": kind, "format": CLIP_FORMAT, "frames": index,
+                                 "trigger_index": trigger_index,
+                                 "duration_s": round(frames[-1][0] - frames[0][0], 3)},
+                        **context})
+            self._tip = self._append_manifest(record)
+            (self.dir / f"{base}.json").write_text(
+                json.dumps(asdict(record), indent=2, default=str), encoding="utf-8")
+        log.info("evidence clip %s sealed (%s, %d frames, L%d, sha256=%s...)", base, kind,
+                 len(frames), level, digest[:12])
+        _announce(record)
+        return record
+    except Exception as exc:
+        log.error("evidence clip save failed: %s", exc)
+        return None
+
+
+EvidenceVault.save_clip = _save_clip
+__all__ += ["CLIP_FORMAT"]

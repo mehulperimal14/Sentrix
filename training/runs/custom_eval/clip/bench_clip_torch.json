@@ -1,0 +1,90 @@
+{
+  "video": "G:\\Sentrix\\.claude\\worktrees\\wf_59ce1511-338-2\\training\\datasets\\sentrix_custom\\videos\\7.mov",
+  "source_fps": 29.7,
+  "seconds": 60.0,
+  "threads": 4,
+  "cpu_affinity": [
+    0,
+    2,
+    4,
+    6
+  ],
+  "runtime": "torch",
+  "fast_lane": false,
+  "window_s": 4.0,
+  "hop_s": 2.0,
+  "preview_fps": 29.5,
+  "clips": 26,
+  "clips_claimed": 27,
+  "clips_dropped": 2,
+  "dropped_fraction": 0.069,
+  "compute_ms": {
+    "p50": 1623.8,
+    "p95": 3381.0,
+    "max": 5773.6
+  },
+  "budget_ms": 1600.0,
+  "within_budget": false,
+  "frame_age_ms": {
+    "p50": 1648.3,
+    "p95": 3403.8
+  },
+  "gate_open_fraction": 1.0,
+  "keyframes_per_clip": 6,
+  "persons_max": 4,
+  "stages": {
+    "S0_gate": {
+      "p50_ms": 0.1,
+      "p95_ms": 0.1,
+      "ran": 26,
+      "calls_per_clip": 0.0
+    },
+    "S1_objects": {
+      "p50_ms": 1089.1,
+      "p95_ms": 2071.8,
+      "ran": 26,
+      "calls_per_clip": 3.88
+    },
+    "S2_scene": {
+      "p50_ms": 608.1,
+      "p95_ms": 1303.7,
+      "ran": 26,
+      "calls_per_clip": 2.0
+    },
+    "S3_identity": {
+      "p50_ms": 0.1,
+      "p95_ms": 0.1,
+      "ran": 26,
+      "calls_per_clip": 1.0
+    },
+    "S4_action": {
+      "p50_ms": null,
+      "p95_ms": null,
+      "ran": 0,
+      "calls_per_clip": 0.0
+    },
+    "S5_audio": {
+      "p50_ms": 0.0,
+      "p95_ms": 0.0,
+      "ran": 26,
+      "calls_per_clip": 0.0
+    },
+    "S6_fusion": {
+      "p50_ms": 1.8,
+      "p95_ms": 4.3,
+      "ran": 26,
+      "calls_per_clip": 1.0
+    }
+  },
+  "fast_lane_ms": null,
+  "identity": {
+    "backend": "insightface",
+    "model": "buffalo_l",
+    "det_size": 640
+  },
+  "scene": {
+    "model": "scene_classifier_custom_v4.pt",
+    "runtime": "torch"
+  },
+  "detector": "torch (ultralytics)"
+}
