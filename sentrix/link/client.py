@@ -384,9 +384,17 @@ class LinkService:
                 except Exception:
                     future.cancel()
             if self._own_loop_thread is not None:
+                # The private loop is ours: end whatever still runs on it.
+                try:
+                    asyncio.run_coroutine_threadsafe(_cancel_others(), loop).result(5.0)
+                except Exception:
+                    pass
                 loop.call_soon_threadsafe(loop.stop)
                 self._own_loop_thread.join(timeout=5.0)
                 self._own_loop_thread = None
+                if not loop.is_running():
+                    loop.close()
+                self._loop = None                 # a later start() makes a new one
         self._flush_remote_audit()
         self._set_remote_viewers(0)
         self._set_state("stopped")
@@ -1198,6 +1206,15 @@ def _running_loop():
         return asyncio.get_running_loop()
     except RuntimeError:
         return None
+
+
+async def _cancel_others() -> None:
+    """Cancel every other task on the running loop and wait for them."""
+    me = asyncio.current_task()
+    tasks = [t for t in asyncio.all_tasks() if t is not me and not t.done()]
+    for task in tasks:
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
 
 
 def _profile_version() -> int:

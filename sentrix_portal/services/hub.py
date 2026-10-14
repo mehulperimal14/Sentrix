@@ -1329,11 +1329,15 @@ def _cloud_actor() -> dict:
     return Actor.cloud().to_dict()
 
 
+_CLOSED_NAMES = frozenset({"WebSocketDisconnect", "ConnectionClosed", "ConnectionClosedOK",
+                           "ConnectionClosedError", "LinkClosed", "ClosedResourceError"})
+
+
 def _is_closed(exc: BaseException) -> bool:
-    name = type(exc).__name__
-    return (name in ("WebSocketDisconnect", "ConnectionClosed", "ConnectionClosedOK",
-                     "ConnectionClosedError", "LinkClosed", "ClosedResourceError")
-            or isinstance(exc, (ConnectionError, RuntimeError)) and "close" in str(exc).lower())
+    """A normal end of a connection (not worth an error in the log)."""
+    if any(cls.__name__ in _CLOSED_NAMES for cls in type(exc).__mro__):
+        return True
+    return isinstance(exc, (ConnectionError, RuntimeError)) and "close" in str(exc).lower()
 
 
 async def send_command(device_id: str, name: str, args: dict, actor: dict, *,
