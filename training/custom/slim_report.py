@@ -218,6 +218,39 @@ def heldout_table(tags: list[str]) -> str:
     return "\n".join(lines)
 
 
+def replay_table() -> str:
+    """Held-out videos through the product pipeline (``tools/replay_custom_videos.py``),
+    copied to ``slim/replay/<tag>.json``: committed L3, the level that opens a
+    request and seals evidence."""
+    paths = sorted((SLIM / "replay").glob("*.json"))
+    if not paths:
+        return "_(no pipeline replay)_"
+    lines = ["| Scene model | Split | Ticks | Accuracy | Macro-F1 | Caught at L3: fire | "
+             "Caught at L3: weapon | Median weapon latency | False L3 onsets | "
+             "Normal minutes |", "|---|---|---|---|---|---|---|---|---|---|"]
+    for path in paths:
+        rep = json.loads(path.read_text(encoding="utf-8"))
+        for split in ("val", "test"):
+            m = rep["splits"].get(split)
+            if m is None:
+                continue
+            l3 = m["committed"]["L3"]
+            eps = l3["episodes"]
+
+            def caught(c):
+                return f"{eps[c]['caught']}/{eps[c]['episodes']}" if c in eps else "-"
+            latency = eps.get("weapon", {}).get("median_latency")
+            lines.append(f"| `{rep['models']['scene']}` | {split} | {m['frames']['n']} | "
+                         f"{_f(m['frames']['accuracy'])} | {_f(m['frames']['macro_f1'])} | "
+                         f"{caught('fire')} | {caught('weapon')} | "
+                         f"{'-' if latency is None else f'{latency:.1f} s'} | "
+                         f"{l3['false_onsets']} | {m['events']['normal_minutes']:.2f} |")
+    lines.append("")
+    commits = sorted({json.loads(p.read_text(encoding="utf-8"))["commit"] for p in paths})
+    lines.append(f"Replayed at commit(s) {', '.join(commits)}.")
+    return "\n".join(lines)
+
+
 def latency_table() -> str:
     if not LATENCY.exists():
         return "_(latency not measured yet)_"
@@ -254,7 +287,7 @@ def blocks(fitted: list[str]) -> dict[str, str]:
             "per_video": per_video_table([REFERENCE_TAGS[0], *SLIM_TAGS]),
             "teachers": teacher_table(list(SLIM_TAGS)),
             "heldout": heldout_table(["dino_b_last4", *fitted]),
-            "latency": latency_table()}
+            "replay": replay_table(), "latency": latency_table()}
 
 
 def fill(text: str, generated: dict[str, str]) -> str:
