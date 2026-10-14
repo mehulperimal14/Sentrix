@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}SENTRIX — Node{% endblock %}
+{% block description %}Device health: telemetry, Portal link, channels and modem, siren test and configuration{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Node</h1>
+  <div class="page-meta">
+    <span class="badge" id="node-profile">{{ profile_name }}</span>
+    <span class="badge" id="node-mode">{{ "ARMED" if mode.armed else "HOME" }}</span>
+  </div>
+</div>
+
+<div class="node-grid">
+  <div class="card">
+    <div class="card-label">Device telemetry</div>
+    <table class="kv-table" id="node-telemetry"><tbody><tr><td class="muted">Loading…</td></tr></tbody></table>
+    <p class="sos-note mt-1" id="node-telemetry-note"></p>
+  </div>
+
+  <div class="card">
+    <div class="card-label">Inputs and outputs</div>
+    <table class="kv-table" id="node-gpio"><tbody><tr><td class="muted">Loading…</td></tr></tbody></table>
+    {% if 'siren_test' in caps %}
+    <div class="mt-2" id="siren-test-block">
+      <label class="sos-note"><input type="checkbox" id="siren-test-confirm"> I am at the unit and expect a 1-second siren</label>
+      <div class="mt-1"><button type="button" class="btn btn-sm btn-danger-outline" id="siren-test-btn" disabled>Test siren (1 s)</button></div>
+      <div class="sos-message" id="siren-test-message" role="status" aria-live="polite"></div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-label">Home / armed</div>
+    <p class="mb-2">Mode: <strong id="mode-value">{{ "ARMED" if mode.armed else "HOME" }}</strong>
+      <span class="sos-note" id="mode-meta"></span></p>
+    {% if 'mode' in caps %}
+    <div class="row-gap">
+      <button type="button" class="btn btn-sm btn-outline" id="mode-arm">Arm</button>
+      <input type="password" inputmode="numeric" autocomplete="off" maxlength="12" class="text-input pin"
+             id="mode-pin" placeholder="SOS PIN" aria-label="SOS PIN to disarm">
+      <button type="button" class="btn btn-sm btn-cancel" id="mode-disarm">Disarm</button>
+    </div>
+    <p class="sos-note mt-1">Arming needs no PIN; disarming needs the SOS PIN.</p>
+    <div class="sos-message" id="mode-message" role="status" aria-live="polite"></div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-label">Portal link</div>
+    <table class="kv-table" id="node-link"><tbody><tr><td class="muted">Loading…</td></tr></tbody></table>
+  </div>
+
+  <div class="card">
+    <div class="card-label">Channels and modem</div>
+    <table class="kv-table" id="node-channels"><tbody><tr><td class="muted">Loading…</td></tr></tbody></table>
+  </div>
+
+  <div class="card">
+    <div class="card-label">System health</div>
+    <table class="kv-table" id="node-health"><tbody><tr><td class="muted">Loading…</td></tr></tbody></table>
+  </div>
+
+  <div class="card">
+    <div class="card-label">Latency (ms)</div>
+    <table class="kv-table" id="node-latency"><tbody><tr><td class="muted">Loading…</td></tr></tbody></table>
+  </div>
+</div>
+
+<div class="card">
+  <details id="node-config-details">
+    <summary>Live configuration (read-only)</summary>
+    <pre class="config-pre" id="node-config">Loading…</pre>
+  </details>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ static_url('js/node.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}

@@ -7,9 +7,24 @@
   <h1 class="page-title">Evidence Vault</h1>
   <div class="page-meta">
     <span class="badge badge-secure">🔒 AES-256-GCM Encrypted</span>
+    {% set problems = chain.problems or [] %}
+    {% if chain.ok %}
+    <span class="chain-badge ok" id="chain-badge" title="Every bundle re-hashed against the HMAC-signed manifest">Chain verified: {{ chain.entries or 0 }} entries, 0 problems</span>
+    {% else %}
+    <span class="chain-badge bad" id="chain-badge">Chain check failed: {{ chain.entries or 0 }} entries, {{ problems|length }} problem{{ "" if problems|length == 1 else "s" }}{% if chain.error %} ({{ chain.error }}){% endif %}</span>
+    {% endif %}
     <span class="page-count">{{ items|length }} packages</span>
   </div>
 </div>
+
+{% if not chain.ok and problems %}
+<div class="chain-problems" id="chain-problems">
+  {% for problem in problems[:5] %}
+  <div>line {{ problem.line }}{% if problem.bundle %} · {{ problem.bundle }}{% endif %}: {{ problem.error }}</div>
+  {% endfor %}
+  {% if problems|length > 5 %}<div>… and {{ problems|length - 5 }} more</div>{% endif %}
+</div>
+{% endif %}
 
 <div class="card evidence-card">
   <div class="table-wrapper">
@@ -23,33 +38,42 @@
           <th>Camera</th>
           <th>Objects Detected</th>
           <th>SHA-256 Hash</th>
+          <th>View</th>
         </tr>
       </thead>
       <tbody>
         {% for item in items %}
         <tr>
-          <td class="mono">{{ item.timestamp }}</td>
+          <td class="mono local-time" data-iso="{{ item.timestamp }}">{{ item.timestamp }}</td>
           <td>
             <span class="level-chip level-{{ item.level }}">L{{ item.level }}</span>
           </td>
-          <td class="mono">{{ "%.3f"|format(item.tci) }}</td>
+          <td class="mono">{{ "%.3f"|format(item.tci or 0) }}</td>
           <td>{{ item.incident_type }}</td>
-          <td class="mono small">{{ item.camera_id }}</td>
+          <td class="mono small" title="{{ item.camera_id }}">{{ rooms.get(item.camera_id|string, item.camera_id) }}</td>
           <td>
-            {% for obj in item.detected_objects[:3] %}
-            <span class="obj-tag">{{ obj }}</span>
+            {% set objects = item.detected_objects or [] %}
+            {% for obj in objects[:3] %}
+            <span class="obj-tag">{{ obj|detection }}</span>
             {% endfor %}
-            {% if item.detected_objects|length > 3 %}
-            <span class="muted text-small">+{{ item.detected_objects|length - 3 }}</span>
+            {% if objects|length > 3 %}
+            <span class="muted text-small">+{{ objects|length - 3 }}</span>
             {% endif %}
           </td>
           <td class="mono hash-cell text-small" title="{{ item.sha256 }}">
-            {{ item.sha256[:16] }}...
+            {{ (item.sha256 or "")[:16] }}...
+          </td>
+          <td>
+            {% if 'media' in caps %}
+            <a href="{{ item.view_url }}" target="_blank" rel="noopener" class="link-btn">View</a>
+            {% else %}
+            <span class="muted">—</span>
+            {% endif %}
           </td>
         </tr>
         {% else %}
         <tr>
-          <td colspan="7" class="empty-cell">No evidence packages. Encrypted evidence is saved at Level 3+.</td>
+          <td colspan="8" class="empty-cell">No evidence packages. Encrypted evidence is saved at Level 3+.</td>
         </tr>
         {% endfor %}
       </tbody>

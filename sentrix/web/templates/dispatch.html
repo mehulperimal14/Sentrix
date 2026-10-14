@@ -1,88 +1,109 @@
 {% extends "base.html" %}
-{% block title %}SENTRIX — Dispatch Packages{% endblock %}
-{% block description %}Emergency dispatch packages created at threat Level 4 and 5{% endblock %}
+{% block title %}SENTRIX — Dispatch &amp; SOS{% endblock %}
+{% block description %}Prepared emergency packages and the assistance requests they belong to{% endblock %}
 
 {% block content %}
 <div class="page-header">
-  <h1 class="page-title">Dispatch Packages</h1>
+  <h1 class="page-title">Dispatch &amp; SOS</h1>
   <div class="page-meta">
     <span class="page-count">{{ packages|length }} packages</span>
   </div>
 </div>
+
+<p class="sos-note mb-2">"Send now" sends the prepared package with the authority you choose as context.
+SENTRIX does not contact 112 itself{% if test_mode %}; in test mode nothing reaches anyone outside the test list{% endif %}.</p>
 
 <div class="card dispatch-table-card">
   <div class="table-wrapper">
     <table class="data-table" id="dispatch-table">
       <thead>
         <tr>
-          <th>Time</th>
+          <th>Time (local)</th>
           <th>Level</th>
           <th>TCI</th>
           <th>Incident</th>
           <th>Authority</th>
           <th>Location</th>
           <th>Status</th>
+          <th>Chosen</th>
+          <th>Sent at</th>
+          <th>Sent by</th>
+          <th>Sent to</th>
+          <th>Request</th>
           <th>Action</th>
         </tr>
       </thead>
       <tbody>
         {% for pkg in packages %}
-        <tr>
-          <td class="mono">{{ pkg.created_at }}</td>
+        {% set req = requests.get(pkg.request_id) if pkg.request_id else none %}
+        <tr data-package="{{ pkg.id }}">
+          <td class="mono local-time" data-iso="{{ pkg.created_iso or '' }}">{{ pkg.created_at }}</td>
           <td>
             <span class="level-chip level-{{ pkg.level }}">L{{ pkg.level }}</span>
           </td>
-          <td class="mono">{{ "%.3f"|format(pkg.tci) }}</td>
-          <td>{{ pkg.incident_type|upper }}</td>
+          <td class="mono">{{ "%.3f"|format(pkg.tci or 0) }}</td>
+          <td>{{ (pkg.incident_type or "")|upper }}</td>
           <td>
             {% if pkg.recommended_authority == 'FIRE' %}
             <span class="auth-tag fire">FIRE</span>
+            {% elif pkg.recommended_authority == 'MEDICAL' %}
+            <span class="auth-tag medical">MEDICAL</span>
             {% else %}
             <span class="auth-tag police">POLICE</span>
             {% endif %}
           </td>
-          <td class="text-small">{{ pkg.user_address|truncate(30) }}</td>
+          <td class="text-small" title="{{ pkg.user_address or '' }}">{{ (pkg.user_address or "")|truncate(30) }}</td>
           <td>
-            {% if pkg.status == 'PENDING' %}
-            <span class="status-tag pending">PENDING</span>
-            {% elif pkg.status == 'SENT' %}
-            <span class="status-tag sent">SENT</span>
-            {% else %}
-            <span class="status-tag">{{ pkg.status }}</span>
-            {% endif %}
+            {% set st = pkg.status or "" %}
+            <span class="status-tag {{ st|lower }}">{{ st }}</span>
+            {% if pkg.error and st not in ("SENT", "CANCELLED") %}<span class="dispatch-error">{{ pkg.error }}</span>{% endif %}
+          </td>
+          <td class="small">{{ pkg.chosen_authority or "—" }}</td>
+          <td class="small local-time" data-iso="{{ pkg.sent_at or '' }}">{{ pkg.sent_at or "—" }}</td>
+          <td class="small">{{ (pkg.sent_by|actor_label) or "—" }}</td>
+          <td class="small">{{ pkg.sent_to|recipient_list or "—" }}</td>
+          <td class="small">
+            {% if req %}
+            <a class="link-btn" href="{{ sos_url }}?request={{ pkg.request_id|urlencode }}">{{ req.short_id }}</a>
+            <span class="verdict-meta">{{ req.label }}</span>
+            {% else %}—{% endif %}
           </td>
           <td>
-            {% if pkg.status == 'PENDING' %}
-            <button class="btn btn-sm btn-outline" onclick="manualDispatch('{{ pkg.id }}', '{{ pkg.recommended_authority }}')">
-              Send Now
-            </button>
+            {% if st in sendable and 'dispatch' in caps %}
+            <div class="send-controls">
+              <select class="text-input" aria-label="Authority" data-send-authority>
+                {% for authority in authorities %}
+                <option value="{{ authority }}"{% if authority == pkg.recommended_authority %} selected{% endif %}>{{ authority }}</option>
+                {% endfor %}
+              </select>
+              <button type="button" class="btn btn-sm btn-outline" data-send-package="{{ pkg.id }}">Send now</button>
+            </div>
+            {% elif st == "SENT" %}
+            <span class="muted text-small">Sent</span>
+            {% elif st == "CANCELLED" %}
+            <span class="muted text-small">Cancelled</span>
+            {% elif st == "EXPIRED" %}
+            <span class="muted text-small">Expired (unanswered)</span>
             {% else %}
-            <span class="muted text-small">Dispatched</span>
+            <span class="muted text-small">{{ st|title }}</span>
+            {% endif %}
+            {% if req and req.state in ("EXPIRED", "DECLINED", "CANCELLED") and 'sos' in caps %}
+            <button type="button" class="btn btn-sm btn-approve mt-1" data-help-now="{{ pkg.request_id }}">Request help now</button>
             {% endif %}
           </td>
         </tr>
         {% else %}
         <tr>
-          <td colspan="8" class="empty-cell">No dispatch packages. Packages are auto-created at Level 4+.</td>
+          <td colspan="13" class="empty-cell">No dispatch packages. A package is prepared with each assistance request (Level 3+), or at Level 4+ while SOS is off.</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+  <div class="sos-message" id="dispatch-message" role="status" aria-live="polite"></div>
 </div>
+{% endblock %}
 
-<script>
-function manualDispatch(id, authority) {
-    if (!confirm(`Dispatch ${authority} for package ${id}?`)) return;
-    fetch(`/api/dispatch/${id}/send/${authority}`, { method: 'POST' })
-        .then(res => res.json())
-        .then(data => {
-            if (data.status === 'sent') {
-                window.location.reload();
-            } else {
-                alert('Dispatch failed: ' + (data.detail || 'Unknown error'));
-            }
-        });
-}
-</script>
+{% block scripts %}
+<script src="{{ static_url('js/dispatch.js') }}" nonce="{{ csp_nonce }}"></script>
 {% endblock %}

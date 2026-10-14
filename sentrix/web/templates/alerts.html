@@ -9,33 +9,27 @@
 </div>
 
 <div class="gallery-grid" id="gallery-grid">
-  {% for img_url in images %}
-  <div class="gallery-item" onclick="openLightbox('{{ img_url }}')">
-    <img src="{{ img_url }}" alt="Alert snapshot" class="gallery-img" loading="lazy">
+  {% for img in images %}
+  <button type="button" class="gallery-item" data-lightbox="{{ img.url }}" title="{{ img.name }}">
+    <img src="{{ img.url }}" alt="Alert snapshot {{ img.name }}" class="gallery-img" loading="lazy">
     <div class="gallery-overlay">
       <span class="gallery-icon">🔍</span>
     </div>
-  </div>
+  </button>
   {% else %}
   <div class="empty-gallery">
     <p>No alert snapshots yet.</p>
-    <p class="muted">Snapshots are saved automatically at Level 2+.</p>
+    <p class="muted">Snapshots are saved automatically at Level 3+.</p>
   </div>
   {% endfor %}
 </div>
 
 <!-- Lightbox -->
-<div id="lightbox" class="lightbox" onclick="closeLightbox()">
-  <img id="lightbox-img" src="" alt="Alert detail">
+<div id="lightbox" class="lightbox" role="dialog" aria-label="Snapshot">
+  <img id="lightbox-img" alt="Alert detail">
 </div>
+{% endblock %}
 
-<script>
-function openLightbox(url) {
-  document.getElementById("lightbox-img").src = url;
-  document.getElementById("lightbox").style.display = "flex";
-}
-function closeLightbox() {
-  document.getElementById("lightbox").style.display = "none";
-}
-</script>
+{% block scripts %}
+<script src="{{ static_url('js/alerts.js') }}" nonce="{{ csp_nonce }}"></script>
 {% endblock %}

@@ -5,37 +5,49 @@
 {% block content %}
 <div class="page-header">
   <h1 class="page-title">Access Control</h1>
-  <div class="page-meta" style="display: flex; gap: 1rem;">
-    <button class="btn btn-outline" onclick="toggleCapture()">
+  {% if 'gallery_write' in caps %}
+  <div class="page-meta page-actions">
+    <button type="button" class="btn btn-outline" id="capture-toggle">
       📷 Capture from camera
     </button>
-    <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">
+    <input type="text" class="text-input upload-name" id="upload-name" maxlength="60"
+           placeholder="Name for uploads (optional)" aria-label="Name for uploaded photos">
+    <button type="button" class="btn btn-primary" id="upload-btn">
       + Upload photos
     </button>
-    <input type="file" id="file-input" style="display:none" accept="image/jpeg, image/png"
-           multiple onchange="uploadFaces(this)">
+    <input type="file" id="file-input" class="hidden" accept="image/jpeg, image/png" multiple>
   </div>
+  {% endif %}
 </div>
 
-<div class="card auth-card" id="capture-section" style="display: none; margin-bottom: 1.5rem; border-color: var(--accent-blue);">
+{% if backend %}
+<div class="backend-status ok" id="identity-backend">Face recognition: {{ backend }}</div>
+{% else %}
+<div class="backend-status bad" id="identity-backend">Face recognition is not available, so identity fails closed: nobody is treated as authorised.</div>
+{% endif %}
+
+{% if 'gallery_write' in caps %}
+<div class="card auth-card capture-section hidden" id="capture-section">
   <div class="card-label">Enrol from the monitoring camera</div>
-  <p class="muted" style="margin: 0 0 0.75rem 0; font-size: 0.8rem;">
+  <p class="muted capture-help">
     The system's own camera frame is used, so enrolment matches what the
     monitor sees. One face, facing the camera, well lit. Capture 2–3 photos
     per person from slightly different angles.
   </p>
-  <div style="display: flex; gap: 1.5rem; align-items: stretch; flex-wrap: wrap;">
-    <img id="capture-preview" alt="Camera preview"
-         style="width: 100%; max-width: 400px; aspect-ratio: 4/3; border-radius: 8px; background: #000; object-fit: cover;">
-    <div style="display: flex; flex-direction: column; justify-content: center; gap: 1rem; flex: 1; min-width: 250px;">
-      <input type="text" id="capture-name" style="padding: 0.75rem; background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); color: #fff; border-radius: 6px; font-family: var(--font-sans);" placeholder="Name (e.g. alice)">
-      <button class="btn btn-primary" id="capture-btn" onclick="captureFace()">📸 Capture and enrol</button>
-      <button class="btn btn-cancel" onclick="toggleCapture()">Close</button>
+  <div class="capture-body">
+    <img id="capture-preview" class="capture-preview" alt="Camera preview">
+    <div class="capture-controls">
+      <input type="text" id="capture-name" class="text-input" maxlength="60" placeholder="Name (e.g. alice)" aria-label="Name">
+      <button type="button" class="btn btn-primary" id="capture-btn">📸 Capture and enrol</button>
+      <button type="button" class="btn btn-cancel" id="capture-close">Close</button>
     </div>
   </div>
 </div>
+{% else %}
+<p class="sos-note mb-2" id="gallery-view-only">View only: the household owner enrols and removes faces.</p>
+{% endif %}
 
-<div id="enrol-status" class="card" style="display: none; margin-bottom: 1rem; font-size: 0.85rem;"></div>
+<div id="enrol-status" class="card enrol-status hidden" role="status" aria-live="polite"></div>
 
 <div class="card auth-card">
   <div class="card-label">Authorized Faces</div>
@@ -45,11 +57,13 @@
       <img src="{{ face.url }}" alt="{{ face.filename }}" class="face-img">
       <span class="face-name" title="{{ face.filename }}">{{ face.person }}</span>
       {% if face.enrolled %}
-      <span class="small" style="color: #4ade80;">enrolled</span>
+      <span class="face-state ok">enrolled</span>
       {% else %}
-      <span class="small" style="color: #f97316;" title="No usable face in this image">not enrolled</span>
+      <span class="face-state bad" title="No usable face in this image">not enrolled</span>
       {% endif %}
-      <button class="btn btn-outline" style="padding: 2px 6px; font-size: 0.8rem; border-color: var(--accent-red); color: var(--accent-red);" onclick="deleteFace('{{ face.filename }}')">Delete</button>
+      {% if 'gallery_write' in caps %}
+      <button type="button" class="btn btn-danger-outline face-delete" data-delete-face="{{ face.filename }}">Delete</button>
+      {% endif %}
     </div>
     {% else %}
     <div class="empty-faces">
@@ -59,88 +73,8 @@
     {% endfor %}
   </div>
 </div>
+{% endblock %}
 
-<script>
-let previewTimer = null;
-
-function showStatus(lines) {
-  const box = document.getElementById('enrol-status');
-  box.style.display = 'block';
-  box.innerHTML = lines.map(l =>
-    `<div style="color:${l.ok ? '#4ade80' : '#f97316'}">${l.text}</div>`).join('');
-}
-
-function refreshPreview() {
-  document.getElementById('capture-preview').src = '/api/authorized/preview.jpg?t=' + Date.now();
-}
-
-function toggleCapture() {
-  const section = document.getElementById('capture-section');
-  if (section.style.display === 'none') {
-    section.style.display = 'block';
-    refreshPreview();
-    previewTimer = setInterval(refreshPreview, 500);
-  } else {
-    section.style.display = 'none';
-    clearInterval(previewTimer);
-    previewTimer = null;
-  }
-}
-
-async function captureFace() {
-  const person = document.getElementById('capture-name').value.trim();
-  if (!person) { alert("Enter a name first."); return; }
-  const btn = document.getElementById('capture-btn');
-  btn.disabled = true;
-  const body = new FormData();
-  body.append('person', person);
-  try {
-    const res = await fetch('/api/authorized/capture', {method: 'POST', body});
-    const data = await res.json();
-    if (res.ok && data.status === 'ok') {
-      showStatus([{ok: true, text: `Enrolled ${data.person} (${data.filename}). Capture another angle, or reload to see the gallery.`}]);
-    } else {
-      showStatus([{ok: false, text: `Not enrolled: ${data.detail || res.statusText}`}]);
-    }
-  } catch (err) {
-    showStatus([{ok: false, text: 'Capture error: ' + err}]);
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-async function uploadFaces(input) {
-  if (!input.files || input.files.length === 0) return;
-  const lines = [];
-  for (const file of input.files) {
-    const body = new FormData();
-    body.append('file', file);
-    try {
-      const res = await fetch('/authorized/upload', {method: 'POST', body});
-      const data = await res.json();
-      if (res.ok && data.status === 'ok') {
-        lines.push({ok: true, text: `${file.name}: enrolled as ${data.person}`});
-      } else {
-        lines.push({ok: false, text: `${file.name}: ${data.detail || res.statusText}`});
-      }
-    } catch (err) {
-      lines.push({ok: false, text: `${file.name}: ${err}`});
-    }
-    showStatus(lines);
-  }
-  input.value = '';
-  if (lines.some(l => l.ok)) setTimeout(() => window.location.reload(), 1500);
-}
-
-async function deleteFace(filename) {
-  if (!confirm(`Remove ${filename}?`)) return;
-  try {
-    const res = await fetch(`/api/authorized/${encodeURIComponent(filename)}`, {method: 'DELETE'});
-    if (res.ok) window.location.reload();
-    else alert("Delete failed.");
-  } catch (err) {
-    alert("Delete error: " + err);
-  }
-}
-</script>
+{% block scripts %}
+<script src="{{ static_url('js/authorized.js') }}" nonce="{{ csp_nonce }}"></script>
 {% endblock %}

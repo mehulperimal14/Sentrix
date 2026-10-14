@@ -8,8 +8,9 @@
   <div class="level-pill" id="live-level-pill">Level 1 – Normal</div>
 </div>
 
+<div class="remote-video-label hidden" id="remote-video-label"></div>
 <div class="card live-card">
-  <img src="/video" alt="Live camera feed" class="live-full-feed" id="live-full-feed">
+  <img src="{{ url('/video') }}" alt="Live camera feed" class="live-full-feed" id="live-full-feed">
 </div>
 
 <div class="live-stats-row">
@@ -19,7 +20,7 @@
   </div>
   <div class="live-stat">
     <span class="live-stat-label">Status</span>
-    <span class="live-stat-val" id="ls-status">NORMAL</span>
+    <span class="live-stat-val" id="ls-status">SECURE</span>
   </div>
   <div class="live-stat">
     <span class="live-stat-label">Incident</span>
@@ -34,24 +35,8 @@
     <span class="live-stat-val" id="ls-rates">—</span>
   </div>
 </div>
+{% endblock %}
 
-<script>
-  // Lightweight WS subscriber for the live page — dynamic protocol for HTTPS
-  const _wsProto2 = location.protocol === "https:" ? "wss:" : "ws:";
-  const ws2 = new WebSocket(_wsProto2 + "//" + location.host + "/ws/threat");
-  ws2.onmessage = (ev) => {
-    const d = JSON.parse(ev.data);
-    document.getElementById("ls-tci").textContent    = (d.tci * 100).toFixed(1) + "%";
-    document.getElementById("ls-status").textContent = d.status;
-    const alarm = d.alarm || {level: d.level, incident_type: d.incident_type};
-    document.getElementById("ls-incident").textContent =
-      alarm.level > 1 ? alarm.incident_type : d.incident_type;
-    document.getElementById("ls-audio").textContent  = d.audio_label || "—";
-    document.getElementById("ls-rates").textContent  =
-      `${(d.video_fps || 0).toFixed(0)} fps / ${(d.ai_hz || 0).toFixed(1)} Hz`;
-    const cfg = LEVEL_CONFIG[alarm.level || d.level] || LEVEL_CONFIG[1];
-    document.getElementById("live-level-pill").textContent = cfg.label;
-    document.getElementById("live-level-pill").style.color = cfg.color;
-  };
-</script>
+{% block scripts %}
+<script src="{{ static_url('js/live.js') }}" nonce="{{ csp_nonce }}"></script>
 {% endblock %}

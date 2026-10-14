@@ -5,8 +5,53 @@
 {% block content %}
 <div class="page-header">
   <h1 class="page-title">Event Log</h1>
-  <span class="page-count">{{ events|length }} incidents</span>
+  <span class="page-count">{{ total }} incidents{% if filters %} match{% endif %}</span>
 </div>
+
+<div class="stats-row" id="events-stats">
+  <div class="stat-tile"><div class="stat-label">Total</div><div class="stat-value">{{ stats.total or 0 }}</div></div>
+  <div class="stat-tile"><div class="stat-label">Confirmed real</div><div class="stat-value">{{ stats.confirmed or 0 }}</div></div>
+  <div class="stat-tile"><div class="stat-label">False alarms</div><div class="stat-value">{{ stats.false_alarms or 0 }}</div></div>
+  <div class="stat-tile"><div class="stat-label">Unreviewed</div><div class="stat-value">{{ stats.unreviewed or 0 }}</div></div>
+  <div class="stat-tile"><div class="stat-label">False-alarm rate</div>
+    <div class="stat-value">{% if stats.false_alarm_rate is not none %}{{ "%.0f"|format(stats.false_alarm_rate * 100) }}%{% else %}—{% endif %}</div>
+  </div>
+</div>
+
+<form class="filters-form" method="get" action="{{ url('/events') }}" id="events-filters">
+  <label class="filter-field">Type
+    <select name="incident_type" class="text-input">
+      <option value="">any</option>
+      {% for value in ("weapon", "fire", "intrusion", "assault", "robbery", "duress", "normal") %}
+      <option value="{{ value }}"{% if filters.type == value %} selected{% endif %}>{{ value }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="filter-field">Peak level at least
+    <select name="level" class="text-input">
+      <option value="">any</option>
+      {% for value in range(2, 6) %}
+      <option value="{{ value }}"{% if filters.level == value %} selected{% endif %}>L{{ value }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="filter-field">Verdict
+    <select name="verdict" class="text-input">
+      <option value="">any</option>
+      <option value="TRUE"{% if filters.verdict == "TRUE" %} selected{% endif %}>real</option>
+      <option value="FALSE"{% if filters.verdict == "FALSE" %} selected{% endif %}>false alarm</option>
+      <option value="NONE"{% if filters.verdict == "NONE" %} selected{% endif %}>unreviewed</option>
+    </select>
+  </label>
+  <label class="filter-field">From (device date)
+    <input type="date" name="since" class="text-input" value="{{ filters.since or '' }}">
+  </label>
+  <label class="filter-field">To
+    <input type="date" name="until" class="text-input" value="{{ filters.until or '' }}">
+  </label>
+  <button type="submit" class="btn btn-sm btn-primary">Filter</button>
+  {% if filters %}<a class="link-btn" href="{{ url('/events') }}">Clear filters</a>{% endif %}
+</form>
 
 <div class="card table-card">
   <div class="table-wrapper">
@@ -22,12 +67,13 @@
           <th>Identity</th>
           <th>Snapshot</th>
           <th>Evidence</th>
+          <th>SOS</th>
           <th>Verdict</th>
         </tr>
       </thead>
       <tbody>
         {% for ev in events %}
-        <tr class="level-row-{{ ev.level }}" data-incident="{{ ev.id }}">
+        <tr class="level-row-{{ ev.level }}" data-incident="{{ ev.id }}"{% if ev.request_id %} data-request="{{ ev.request_id }}"{% endif %}>
           <td class="mono local-time" data-iso="{{ ev.started_iso or '' }}">{{ ev.created_at }}</td>
           <td>
             <span class="level-chip level-{{ ev.level }}">L{{ ev.level }}</span>
@@ -40,63 +86,64 @@
           </td>
           <td class="small">{{ "authorised" if ev.authorized else "unknown" }}</td>
           <td>
-            {% if ev.snapshot_path %}
-            <a href="/media/snapshot/{{ ev.snapshot_path }}" target="_blank" class="link-btn">View</a>
+            {% if ev.snapshot_url %}
+            <a href="{{ ev.snapshot_url }}" target="_blank" rel="noopener" class="link-btn">View</a>
             {% else %}
             <span class="muted">—</span>
             {% endif %}
           </td>
           <td>
-            {% if ev.evidence_bundle %}
-            <a href="/media/evidence/{{ ev.evidence_bundle }}" target="_blank" class="link-btn">Open</a>
+            {% if ev.evidence_url %}
+            <a href="{{ ev.evidence_url }}" target="_blank" rel="noopener" class="link-btn">Open</a>
+            {% else %}
+            <span class="muted">—</span>
+            {% endif %}
+          </td>
+          <td class="small">
+            {% set req = requests.get(ev.request_id) if ev.request_id else none %}
+            {% if req %}
+            <a class="link-btn" href="{{ sos_url }}?request={{ ev.request_id|urlencode }}" title="Audit trail of this request">{{ req.short_id }}</a>
+            <span class="verdict-meta">{{ req.label }}</span>
             {% else %}
             <span class="muted">—</span>
             {% endif %}
           </td>
           <td class="verdict-cell">
-            <button class="link-btn verdict-btn{% if ev.verdict == 'TRUE' %} active{% endif %}"
+            {% if 'verdict' in caps %}
+            <button type="button" class="link-btn verdict-btn{% if ev.verdict == 'TRUE' %} active{% endif %}"
                     data-verdict="TRUE" title="A real threat">Real</button>
-            <button class="link-btn verdict-btn{% if ev.verdict == 'FALSE' %} active{% endif %}"
-                    data-verdict="FALSE" title="A false alarm (cancels a pending dispatch)">False alarm</button>
+            <button type="button" class="link-btn verdict-btn{% if ev.verdict == 'FALSE' %} active{% endif %}"
+                    data-verdict="FALSE" title="A false alarm (cancels a pending dispatch; with an open request the SOS PIN is needed)">False alarm</button>
+            <input type="text" class="text-input verdict-note" maxlength="500" placeholder="note (optional)"
+                   aria-label="Verdict note" value="{{ ev.verdict_note or '' }}" data-verdict-note>
+            <div class="verdict-pin-row hidden" data-verdict-pin-row>
+              <input type="password" inputmode="numeric" autocomplete="off" maxlength="12" class="text-input"
+                     placeholder="SOS PIN" aria-label="SOS PIN" data-verdict-pin>
+              <button type="button" class="link-btn" data-verdict-pin-confirm>Confirm</button>
+            </div>
+            {% endif %}
+            <span class="verdict-meta" data-verdict-meta>
+              {% if ev.verdict %}{{ "Real" if ev.verdict == "TRUE" else "False alarm" }}{% if ev.verdict_by %} · {{ ev.verdict_by|actor_label }}{% endif %}{% if ev.verdict_at %} · <time class="local-time" data-iso="{{ ev.verdict_at }}">{{ ev.verdict_at }}</time>{% endif %}{% else %}unreviewed{% endif %}
+            </span>
+            {% if ev.verdict_note and 'verdict' not in caps %}<span class="verdict-meta">{{ ev.verdict_note }}</span>{% endif %}
           </td>
         </tr>
         {% else %}
         <tr>
-          <td colspan="10" class="empty-cell">No incidents yet. An incident opens at Level 2 and above.</td>
+          <td colspan="11" class="empty-cell">{% if filters %}No incidents match these filters.{% else %}No incidents yet. An incident opens at Level 2 and above.{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+  <div class="pager">
+    {% if events %}<span class="muted">{{ offset + 1 }}–{{ offset + events|length }} of {{ total }}</span>{% endif %}
+    {% if pages.prev %}<a href="{{ pages.prev }}" id="events-prev">← Newer</a>{% endif %}
+    {% if pages.next %}<a href="{{ pages.next }}" id="events-next">Older →</a>{% endif %}
+  </div>
 </div>
+{% endblock %}
 
-<style>
-  .verdict-btn { margin-right: 0.25rem; opacity: 0.6; }
-  .verdict-btn.active { opacity: 1; outline: 1px solid currentColor; }
-</style>
-
-<script>
-  // Stored in UTC; shown in the browser's time zone.
-  document.querySelectorAll(".local-time").forEach(td => {
-    const iso = td.dataset.iso;
-    if (iso) td.textContent = new Date(iso).toLocaleString();
-  });
-
-  // Operator verdicts: every labelled incident is training data (CLAUDE.md M8).
-  document.querySelectorAll(".verdict-btn").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      const row = btn.closest("tr");
-      const body = new FormData();
-      body.append("verdict", btn.dataset.verdict);
-      const res = await fetch(`/api/incidents/${row.dataset.incident}/verdict`,
-                              {method: "POST", body});
-      if (res.ok) {
-        row.querySelectorAll(".verdict-btn").forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-      } else {
-        alert("Could not save the verdict.");
-      }
-    });
-  });
-</script>
+{% block scripts %}
+<script src="{{ static_url('js/events.js') }}" nonce="{{ csp_nonce }}"></script>
 {% endblock %}

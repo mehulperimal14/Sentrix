@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% import "_sos.html" as sosui with context %}
+{% block title %}SENTRIX — Assistance requests{% endblock %}
+{% block description %}Open assistance request, history, audit trail and the SOS preview{% endblock %}
+
+{% block content %}
+<div id="sos-page" data-selected="{{ selected }}" data-enabled="{{ '1' if sos_enabled else '0' }}">
+<div class="page-header">
+  <h1 class="page-title">Assistance requests (SOS)</h1>
+  <div class="page-meta">
+    <span class="badge" id="sos-state-badge">{{ "no open request" if not sos.active else (sos.label or sos.state) }}</span>
+  </div>
+</div>
+
+{% if not sos_enabled %}
+<p class="sos-note mb-2" id="sos-disabled">The SOS service is off on this unit (SENTRIX_SOS_ENABLED=0): no request opens and nobody is prompted. Earlier requests, if any, are listed below.</p>
+{% endif %}
+
+<div class="sos-layout">
+  <div class="card sos-current-card" id="sos-current" data-sos-root data-scope="page">
+    <div class="card-label">Open request</div>
+    <p class="muted" id="sos-current-empty">No open assistance request.</p>
+    <div class="hidden" id="sos-current-body">
+      <div class="sos-prompt-head">
+        <div>
+          <div class="sos-title" id="sos-current-title"></div>
+          <div class="sos-subtitle" id="sos-current-label"></div>
+        </div>
+        <div class="sos-countdown big" id="sos-current-countdown" data-sos-countdown>--:--</div>
+      </div>
+      <div class="sos-fields">
+        <div class="dispatch-field"><span class="dispatch-key">Incident</span><span class="dispatch-val" id="sos-f-incident">—</span></div>
+        <div class="dispatch-field"><span class="dispatch-key">Level</span><span class="dispatch-val" id="sos-f-level">—</span></div>
+        <div class="dispatch-field"><span class="dispatch-key">Evidence</span><span class="dispatch-val" id="sos-f-evidence">—</span></div>
+        <div class="dispatch-field"><span class="dispatch-key">Urgency</span><span class="dispatch-val" id="sos-f-urgency">—</span></div>
+        <div class="dispatch-field"><span class="dispatch-key">Opened</span><span class="dispatch-val" id="sos-f-created">—</span></div>
+        <div class="dispatch-field"><span class="dispatch-key">Authority</span><span class="dispatch-val" id="sos-f-authority">—</span></div>
+      </div>
+      <img class="sos-snapshot hidden" id="sos-current-snapshot" alt="Camera snapshot of the alarm">
+      <div class="sos-text hidden" id="sos-current-text"></div>
+      {{ sosui.sos_actions("page") }}
+    </div>
+  </div>
+
+  <div class="card" id="sos-preview-card">
+    <div class="card-label">SOS preview</div>
+    <p class="sos-note mb-2">What your confirmed contacts and the SENTRIX desk would receive, from the current household profile.</p>
+    <div class="sos-text" id="sos-preview">Loading…</div>
+    {% if test_mode and 'sos' in caps %}
+    <div class="mt-2">
+      <button type="button" class="btn btn-sm btn-outline" id="sos-demo-close">Close the current incident (demo)</button>
+      <p class="sos-note">Test mode only: the next scene then opens a new incident and a new request.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card table-card mb-2">
+  <div class="card-label">History</div>
+  <div class="table-wrapper">
+    <table class="data-table" id="sos-history">
+      <thead>
+        <tr>
+          <th>Opened (local)</th>
+          <th>Request</th>
+          <th>Type</th>
+          <th>Level</th>
+          <th>State</th>
+          <th>Answered</th>
+          <th>Authority</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="sos-history-body">
+        <tr><td colspan="8" class="empty-cell">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="pager">
+    <button type="button" class="link-btn hidden" id="sos-history-prev">← Newer</button>
+    <button type="button" class="link-btn hidden" id="sos-history-next">Older →</button>
+  </div>
+  <div class="sos-message" id="sos-history-message" role="status" aria-live="polite"></div>
+</div>
+
+<div class="card table-card hidden" id="sos-audit-card">
+  <div class="card-label">Audit trail <span id="sos-audit-id"></span></div>
+  <div class="row-gap mb-2">
+    <span class="chain-badge" id="sos-audit-chain"></span>
+    <span class="sos-subtitle" id="sos-audit-state"></span>
+  </div>
+  <div class="table-wrapper">
+    <table class="data-table" id="sos-audit">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Time (local)</th>
+          <th>Side</th>
+          <th>Event</th>
+          <th>State</th>
+          <th>By</th>
+          <th>Channel</th>
+          <th>Detail</th>
+        </tr>
+      </thead>
+      <tbody id="sos-audit-body"></tbody>
+    </table>
+  </div>
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ static_url('js/sos.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}

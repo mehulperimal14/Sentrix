@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}SENTRIX — Sign out{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Sign out</h1>
+</div>
+<div class="card login-card">
+  <p class="mb-2">Sign out of the SENTRIX console on this browser?</p>
+  <button type="button" class="btn btn-primary btn-block" id="logout-confirm">Sign out</button>
+  <div class="sos-message" id="logout-message" role="status"></div>
+</div>
+{% endblock %}
