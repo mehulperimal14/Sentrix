@@ -1,4 +1,5 @@
-"""Outbound notifications: snapshots, SMS, voice calls.
+"""Outbound notifications of the pre-portal path: snapshots, L4 SMS, L5 call,
+dispatch "Send now".
 
 Cooldowns are per-incident *and* per-channel. Previously the SMS path had a
 special case — ``if result.level == 5 and self.last_sms_level < 5`` — that
@@ -7,14 +8,30 @@ unbounded messages. Here every send is claimed against the incident (see
 ``IncidentManager.claim``), so a channel fires at most once per incident, with
 the time-based cooldown as a second, independent guard.
 
-**Nothing leaves the machine unless explicitly enabled** (decision D13). The
-Twilio client is built only when ``SENTRIX_TWILIO_ENABLED=1``, and every SMS and
-call then asks :mod:`sentrix.alerting.guard`, which also needs
-``SENTRIX_LIVE_ALERTS=1`` and, in test mode (the default), an allowlisted
-``ALERT_PHONE_NUMBER``. Otherwise the message is logged and the call returns
-False, exactly like the console fallback. ``.env`` may hold live keys: a test,
-replay or rehearsal must never text anyone by accident. (T-CH routes these two
-legacy paths through the channel router; the guard stays in front of both.)
+**Nothing leaves the machine unless explicitly enabled** (decision D13). Every
+SMS and call asks :mod:`sentrix.alerting.guard`: ``SENTRIX_LIVE_ALERTS=1``, the
+channel's own switch and, in test mode (the default), an allowlisted number.
+Otherwise the message is logged (or recorded SUPPRESSED) and nothing is sent.
+``.env`` may hold live keys: a test, replay or rehearsal must never text
+anyone by accident.
+
+Two routes (docs/7 §8.2, §8.3):
+
+* **Channel router** — when the ``channels`` service runs and has a phone
+  channel (``modem_sms`` / ``twilio_sms``, ``modem_call`` / ``twilio_call``),
+  the L4 SMS (``legacy.l4_sms``), the L5 call (``legacy.l5_call``) and the
+  dispatch text (``legacy.dispatch``) are queued there for the owner: the
+  profile's owner phone, else ``ALERT_PHONE_NUMBER``. The modem is preferred
+  when it can send, then Twilio. The router keeps the old per-channel
+  cooldowns (SMS 300 s, call 600 s), retries, and records every message; a
+  dispatch send waits for its one attempt so "Send now" reports the outcome.
+* **Direct Twilio** — otherwise, as before the portal: the Twilio client is
+  built only when ``SENTRIX_TWILIO_ENABLED=1`` and every send passes the
+  guard. With nothing enabled this is a logged no-op.
+
+Once the SOS service owns an incident the pipeline does not call the L4 SMS
+or the L5 call at all (``Pipeline._act``); the once-per-incident claims stay
+the pipeline's.
 """
 
 from __future__ import annotations
@@ -24,9 +41,10 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from xml.sax.saxutils import escape
 
 from sentrix.alerting import guard
+from sentrix.alerting.channels.base import DELIVERED, SENT, Message, Recipient
+from sentrix.alerting.channels.twilio import twiml_say
 from sentrix.config import settings
 from sentrix.paths import SNAPSHOT_DIR
 from sentrix.utils.logging import get_logger
@@ -61,8 +79,20 @@ class Credentials:
         return all((self.sid, self.token, self.from_number, self.to_number))
 
 
+def _router_service():
+    """The running ``channels`` service, or None (imported lazily: the router
+    module is not needed on the direct path)."""
+    try:
+        from sentrix.alerting.channels.router import current_service
+        return current_service()
+    except Exception as exc:                            # never block an alert path
+        log.error("channel router unavailable: %s", exc)
+        return None
+
+
 class Notifier:
-    """Twilio-backed alerts behind the send guard; degrade to structured logs."""
+    """Owner alerts through the channel router when it runs, else Twilio
+    directly; both behind the send guard; degrade to structured logs."""
 
     def __init__(self) -> None:
         self.cfg = settings.alert
@@ -90,8 +120,43 @@ class Notifier:
     @property
     def online(self) -> bool:
         """True only when a real SMS could leave right now."""
+        service = _router_service()
+        if service is not None and service.channels_for("sms"):
+            target = service.owner_target()
+            return target is not None and any(
+                service.ready(name) and bool(guard.may_send(name, target[1]))
+                for name in service.channels_for("sms"))
         return (self._client is not None
                 and bool(guard.may_send("twilio_sms", self.creds.to_number)))
+
+    def _route(self, kind: str, template: str, step: str, text: str, *,
+               wait: bool = False) -> bool | None:
+        """Hand the message to the channel router. None when no router runs
+        or it has no phone channel of ``kind`` ("sms" | "call"): the caller
+        takes the direct path. ``wait``: deliver now and report the outcome."""
+        service = _router_service()
+        if service is None:
+            return None
+        names = service.channels_for(kind)
+        if not names:
+            return None
+        target = service.owner_target()
+        if target is None:
+            log.warning("%s not sent: no owner number (profile or ALERT_PHONE_NUMBER)",
+                        template)
+            return False
+        name, phone = target
+        recipient = Recipient("owner", name, names[0], phone, "owner")
+        message = Message(template=template, step=f"{step}:{int(time.time() * 1000)}",
+                          text=text)
+        try:
+            if wait:
+                item = service.send_now(recipient, message)
+                return item is not None and item.status in (SENT, DELIVERED)
+            return service.enqueue(recipient, message) is not None
+        except Exception as exc:
+            log.error("%s via the channel router failed: %s", template, exc)
+            return False
 
     def _guarded(self, channel: str, body: str) -> tuple[bool, str]:
         """(may send, text to send). Logs the reason and a console copy if not."""
@@ -139,6 +204,11 @@ class Notifier:
                 f"audio={features.audio:.2f}")
 
     def send_sms(self, result, level: int, status: str) -> bool:
+        """L4 owner SMS. Routed: True once queued (the router owns the
+        cooldown and the retries); direct: True once Twilio accepted it."""
+        routed = self._route("sms", "legacy.l4_sms", "l4", self._format(result, level, status))
+        if routed is not None:
+            return routed
         if not self._cooldown_ok("sms", self.cfg.sms_cooldown_seconds):
             log.debug("SMS suppressed by cooldown")
             return False
@@ -155,17 +225,20 @@ class Notifier:
             return False
 
     def make_call(self, result, level: int, status: str) -> bool:
+        """L5 owner call (Twilio reads the text aloud; the modem only rings)."""
+        speech = (f"Sentrix critical alert. Level {level}. "
+                  f"{result.incident_type}. {result.reason}.")
+        routed = self._route("call", "legacy.l5_call", "l5", speech)
+        if routed is not None:
+            return routed
         if not self._cooldown_ok("call", self.cfg.call_cooldown_seconds):
             return False
-        ok, message = self._guarded("twilio_call",
-                                    f"Sentrix critical alert. Level {level}. "
-                                    f"{result.incident_type}. {result.reason}.")
+        ok, message = self._guarded("twilio_call", speech)
         if not ok:
             return False
         try:
-            # The reason is free text: escape it, or "<" / "&" break the TwiML.
-            twiml = f'<Response><Say voice="alice">{escape(message)}</Say></Response>'
-            self._client.calls.create(twiml=twiml, from_=self.creds.from_number,
+            # The reason is free text: escaped, or "<" / "&" break the TwiML.
+            self._client.calls.create(twiml=twiml_say(message), from_=self.creds.from_number,
                                       to=self.creds.to_number)
             log.info("voice call placed (level %d)", level)
             return True
@@ -174,6 +247,11 @@ class Notifier:
             return False
 
     def send_raw(self, body: str) -> bool:
+        """The dispatch package text, operator-confirmed: True only when it
+        left (routed: after its one immediate attempt)."""
+        routed = self._route("sms", "legacy.dispatch", "dispatch", body, wait=True)
+        if routed is not None:
+            return routed
         ok, body = self._guarded("twilio_sms", body)
         if not ok:
             return False
