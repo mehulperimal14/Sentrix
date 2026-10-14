@@ -1,17 +1,26 @@
+{% import "_sos.html" as sosui with context -%}
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token }}">
   <title>{% block title %}SENTRIX Security{% endblock %}</title>
   <meta name="description" content="{% block description %}SENTRIX — Intelligent Multimodal Home Security System{% endblock %}">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="{{ static_url('css/style.css') }}">
   {% block extra_head %}{% endblock %}
 </head>
-<body>
+{#- data-base: every script builds its URLs from it (docs/7 §9.5);
+    data-caps: what this role may use (the link enforces it for Portal users). -#}
+<body data-base="{{ base }}" data-page="{{ active_page }}" data-role="{{ role or '' }}"
+      data-caps="{{ caps|sort|join(' ') }}" data-tunnelled="{{ '1' if tunnelled else '0' }}"
+      data-test-mode="{{ '1' if test_mode else '0' }}">
+
+  {% if test_mode %}
+  <div class="test-mode-banner" id="test-mode-banner" role="note">
+    TEST MODE · SENTRIX DEMO, NOT A REAL EMERGENCY SERVICE. Messages reach only the test list; "Call 112 now" calls the SENTRIX Desk.
+  </div>
+  {% endif %}
 
   <nav class="nav">
     <div class="nav-brand">
@@ -19,27 +28,71 @@
       <span class="nav-title">SENTRIX</span>
     </div>
     <div class="nav-links">
-      <a href="/dashboard" class="nav-link {% if request.url.path == '/dashboard' %}active{% endif %}">Dashboard</a>
-      <a href="/live"      class="nav-link {% if request.url.path == '/live' %}active{% endif %}">Live Feed</a>
-      <a href="/events"    class="nav-link {% if request.url.path == '/events' %}active{% endif %}">Events</a>
-      <a href="/alerts"    class="nav-link {% if request.url.path == '/alerts' %}active{% endif %}">Alerts</a>
-      <a href="/evidence"  class="nav-link {% if request.url.path == '/evidence' %}active{% endif %}">Evidence</a>
-      <a href="/dispatch"  class="nav-link {% if request.url.path == '/dispatch' %}active{% endif %}">Dispatch</a>
-      <a href="/authorized" class="nav-link {% if request.url.path == '/authorized' %}active{% endif %}">Access</a>
+      {% for key, path, label, need in nav_items %}
+      {% if need is none or need in caps %}
+      <a href="{{ url(path) }}" class="nav-link{% if active_page == key %} active{% endif %}"{% if active_page == key %} aria-current="page"{% endif %}>{{ label }}</a>
+      {% endif %}
+      {% endfor %}
     </div>
     <div class="nav-status" id="nav-status">
+      <button type="button" class="sos-chip hidden" id="sos-chip" title="Open the assistance request">SOS</button>
+      <span class="nav-remote{% if not remote_viewers %} hidden{% endif %}" id="remote-view"
+            title="People watching this camera through the SENTRIX Portal">remote view: <span id="remote-view-count">{{ remote_viewers }}</span></span>
       <span class="status-dot" id="dot-ai"    title="AI engine"></span>
       <span class="status-dot" id="dot-cam"   title="Camera"></span>
       <span class="status-dot" id="dot-mic"   title="Microphone"></span>
-      <a href="/logout" class="nav-link" style="margin-left: 1rem; padding: 0.2rem 0.5rem; border: 1px solid var(--border-light); border-radius: 4px;">Logout</a>
+      <span class="status-dot idle" id="dot-link"  title="Portal link: disabled"></span>
+      <span class="status-dot idle" id="dot-modem" title="4G modem: not configured"></span>
+      {% if tunnelled %}
+      <span class="nav-link nav-action" title="Signed in on the SENTRIX Portal">{{ principal.user_name or role }} · {{ role }}</span>
+      {% else %}
+      <a href="{{ url('/logout') }}" class="nav-link nav-action" id="logout-link">Logout</a>
+      {% endif %}
     </div>
   </nav>
+
+  <div class="alert-banner{% if not channels_warn %} hidden{% endif %}" id="channels-banner" role="alert">
+    No outbound channel: SMS and calls will not be sent.
+  </div>
+  <div class="session-banner hidden" id="session-banner" role="alert">
+    {% if tunnelled %}
+    Your Portal session has ended. Reload this page to sign in again.
+    {% else %}
+    Your session has expired. <a href="{{ url('/login') }}">Sign in again</a>.
+    {% endif %}
+  </div>
+  <div class="sos-banner hidden" id="sos-banner" role="alert">
+    <strong>SOS</strong>
+    <span id="sos-banner-id"></span>
+    <span id="sos-banner-label"></span>
+    <span class="sos-countdown" id="sos-banner-countdown"></span>
+    <button type="button" class="btn btn-sm btn-approve" id="sos-banner-open">Open</button>
+  </div>
 
   <main class="main-content">
     {% block content %}{% endblock %}
   </main>
 
-  <script src="/static/js/app.js"></script>
-  {% block extra_js %}{% endblock %}
+  {#- The full-screen "Do you need assistance?" prompt, driven by state.sos.
+      Minimising keeps the banner and the countdown chip. -#}
+  <div class="sos-prompt hidden" id="sos-prompt" role="dialog" aria-modal="true" aria-labelledby="sos-prompt-title">
+    <div class="card sos-prompt-card" data-sos-root data-scope="prompt">
+      <div class="sos-prompt-head">
+        <div>
+          <div class="sos-title" id="sos-prompt-title">Do you need assistance?</div>
+          <div class="sos-subtitle" id="sos-prompt-sub"></div>
+          <div class="sos-subtitle" id="sos-prompt-label"></div>
+        </div>
+        <div class="sos-countdown big" id="sos-prompt-countdown">--:--</div>
+      </div>
+      <img class="sos-snapshot hidden" id="sos-prompt-snapshot" alt="Camera snapshot of the alarm">
+      <div class="sos-text hidden" id="sos-prompt-text"></div>
+      {{ sosui.sos_actions("prompt") }}
+      <button type="button" class="btn btn-cancel mt-2" id="sos-prompt-minimise">Minimise (the countdown stays in the banner)</button>
+    </div>
+  </div>
+
+  <script src="{{ static_url('js/app.js') }}" nonce="{{ csp_nonce }}"></script>
+  {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>SENTRIX — Wi-Fi setup</title>
+  <link rel="stylesheet" href="{{ static_url('css/style.css') }}">
+</head>
+{#- Physical setup mode only (SENTRIX_SETUP_MODE=1, the unit's setup button).
+    The one-time code on the device label unlocks scanning and joining. -#}
+<body class="standalone" data-base="{{ base }}">
+  {% if test_mode %}
+  <div class="test-mode-banner" role="note">TEST MODE · SENTRIX DEMO, NOT A REAL EMERGENCY SERVICE.</div>
+  {% endif %}
+
+  <div class="card setup-card">
+    <div class="login-title">SENTRIX · Wi-Fi setup</div>
+    {% if not network_available %}
+    <p class="error-msg" id="setup-unavailable">Wi-Fi control is not available on this build of SENTRIX. Connect the unit with a network cable, or set Wi-Fi up from the Raspberry Pi OS desktop.</p>
+    {% else %}
+    <div class="form-group">
+      <label for="setup-code">Setup code (printed on the device label)</label>
+      <input type="text" id="setup-code" class="text-input" autocomplete="off" maxlength="16" placeholder="XXXX-XXXX">
+    </div>
+    <button type="button" class="btn btn-outline mb-2" id="setup-scan">Find networks</button>
+    <ul class="setup-networks" id="setup-networks"></ul>
+    <div class="form-group">
+      <label for="setup-ssid">Network name</label>
+      <input type="text" id="setup-ssid" class="text-input" autocomplete="off" maxlength="32">
+    </div>
+    <div class="form-group">
+      <label for="setup-psk">Wi-Fi password</label>
+      <input type="password" id="setup-psk" class="text-input" autocomplete="off" maxlength="63">
+    </div>
+    <button type="button" class="btn btn-primary btn-block" id="setup-connect">Connect</button>
+    {% endif %}
+    <div class="sos-message mt-2" id="setup-message" role="status" aria-live="polite"></div>
+    <p class="sos-note mt-2" id="setup-status"></p>
+  </div>
+
+  {% if network_available %}
+  <script src="{{ static_url('js/setup.js') }}" nonce="{{ csp_nonce }}"></script>
+  {% endif %}
+</body>
+</html>

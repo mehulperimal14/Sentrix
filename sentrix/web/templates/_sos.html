@@ -1,0 +1,45 @@
+{#- The SOS answer buttons (docs/7 §7.10 wording), shared by the full-screen
+    prompt, the dashboard panel and the SOS page. Import "with context": it
+    reads ``caps`` and ``call``. Scripts (app.js) show only the buttons named
+    in ``state.sos.actions`` and send the answers; ``call.href`` is built on
+    the server, so in test mode no page or script holds tel:112. -#}
+{% macro sos_actions(scope, approve=True) %}
+<div class="sos-actions" data-sos-actions data-scope="{{ scope }}">
+  {% if 'sos' in caps %}
+  <div class="sos-call" data-sos-show="call_112">
+    {% if call.href %}
+    <a class="btn btn-call btn-block" href="{{ call.href }}" data-sos-call>Call 112 now</a>
+    {% else %}
+    <span class="btn btn-call btn-block" aria-disabled="true" data-sos-call>Call 112 now</span>
+    {% endif %}
+    {% if call.note %}<span class="sos-note">{{ call.note }}</span>{% endif %}
+  </div>
+  {% if approve %}
+  <div class="sos-approve-group" data-sos-show="approve">
+    <button type="button" class="btn btn-approve btn-block" data-sos-action="approve">Alert my contacts and the SENTRIX desk</button>
+    <div class="sos-authority" role="radiogroup" aria-label="What kind of help">
+      {% for value, label in (("POLICE", "Police"), ("FIRE", "Fire"), ("MEDICAL", "Medical")) %}
+      <label><input type="radio" name="sos-authority-{{ scope }}" value="{{ value }}" data-sos-authority{% if loop.first %} checked{% endif %}> {{ label }}</label>
+      {% endfor %}
+    </div>
+    <span class="sos-note">Your confirmed contacts and the SENTRIX desk get the prepared message. SENTRIX does not contact 112 itself.</span>
+  </div>
+  {% endif %}
+  <div class="sos-secondary">
+    <button type="button" class="btn btn-outline" data-sos-action="checking" data-sos-show="checking">I'm checking</button>
+    <button type="button" class="btn btn-danger-outline" data-sos-pin-for="decline" data-sos-show="decline">False alarm (PIN)</button>
+    <button type="button" class="btn btn-outline" data-sos-pin-for="safe" data-sos-show="safe">I'm safe now (PIN)</button>
+    <button type="button" class="btn btn-approve" data-sos-action="help_now" data-sos-show="help_now">Request help now</button>
+  </div>
+  <div class="sos-pin-row hidden" data-sos-pin-row>
+    <input type="password" inputmode="numeric" autocomplete="off" maxlength="12"
+           class="text-input pin" placeholder="SOS PIN" aria-label="SOS PIN" data-sos-pin>
+    <button type="button" class="btn btn-danger-outline" data-sos-action="decline" data-sos-pin-confirm>Confirm</button>
+    <button type="button" class="btn btn-cancel" data-sos-pin-cancel>Cancel</button>
+  </div>
+  {% else %}
+  <p class="sos-note">Only the household can answer this request.</p>
+  {% endif %}
+  <div class="sos-message" data-sos-message role="status" aria-live="polite"></div>
+</div>
+{% endmacro %}

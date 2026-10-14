@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import asyncio
-import os
 
-from fastapi import APIRouter, Cookie
+from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse, StreamingResponse
 
 from sentrix.config import settings
 from sentrix.pipeline.engine import get_pipeline
 from sentrix.utils.logging import get_logger
-from sentrix.web.security import verify_token
+from sentrix.web import auth
 
 log = get_logger("streaming")
 router = APIRouter()
@@ -49,9 +48,11 @@ async def _frames():
 
 
 @router.get("/video")
-async def video(session_token: str | None = Cookie(None)):
-    password = os.getenv("SENTRIX_PASSWORD", "").strip()
-    if not password or not verify_token(session_token, password):
+async def video(request: Request):
+    """The HUD stream for an LC session. Portal viewers never reach this
+    route (the hardening refuses tunnel identities here): the link relays
+    frames to them instead (docs/7 §5.7)."""
+    if auth.principal_of(request) is None:
         return RedirectResponse(url="/login")
     return StreamingResponse(
         _frames(), media_type="multipart/x-mixed-replace; boundary=frame")

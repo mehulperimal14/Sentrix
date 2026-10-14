@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_sos.html" as sosui with context %}
 {% block title %}SENTRIX — Command Dashboard{% endblock %}
 {% block description %}Live threat intelligence dashboard with TCI gauge and real-time score monitoring{% endblock %}
 
@@ -19,9 +20,10 @@
     <div class="card video-card">
       <div class="card-label">Live Feed</div>
       <div class="video-wrapper">
-        <img src="/video" id="live-feed" alt="Live Camera Feed" class="video-feed">
-        <div class="video-overlay" id="video-overlay"></div>
+        <img src="{{ url('/video') }}" id="live-feed" alt="Live Camera Feed" class="video-feed">
+        <div class="video-overlay" id="video-overlay" data-sos-countdown title="Time left to answer the assistance request"></div>
       </div>
+      <div class="remote-video-label hidden" id="remote-video-label"></div>
     </div>
 
     <div class="card gauge-card">
@@ -33,15 +35,13 @@
           <!-- Threat arc -->
           <path id="gauge-arc" d="M 20 110 A 90 90 0 0 1 200 110" fill="none"
                 stroke="#22c55e" stroke-width="18" stroke-linecap="round"
-                stroke-dasharray="283" stroke-dashoffset="283"
-                style="transition: stroke-dashoffset 0.6s ease, stroke 0.6s ease;"/>
+                stroke-dasharray="283" stroke-dashoffset="283"/>
           <!-- Centre value -->
-          <text id="gauge-value" x="110" y="95" text-anchor="middle"
-                font-family="JetBrains Mono, monospace" font-size="28" font-weight="600"
-                fill="#f0f4ff">0.0%</text>
+          <text id="gauge-value" class="gauge-value" x="110" y="95" text-anchor="middle"
+                font-size="28" font-weight="600" fill="#f0f4ff">0.0%</text>
           <!-- Labels -->
-          <text x="16"  y="127" font-size="10" fill="#5a6a8a" font-family="Inter, sans-serif">0</text>
-          <text x="198" y="127" font-size="10" fill="#5a6a8a" font-family="Inter, sans-serif">100</text>
+          <text class="gauge-scale" x="16"  y="127" font-size="10" fill="#5a6a8a">0</text>
+          <text class="gauge-scale" x="198" y="127" font-size="10" fill="#5a6a8a">100</text>
         </svg>
         <div class="level-badge" id="level-badge">Level 1 – Normal</div>
       </div>
@@ -55,12 +55,17 @@
     <div class="card scores-card">
       <div class="card-label">Engine Scores</div>
       <div class="scores-list">
-        {% for key in ["vision","audio","motion","behaviour","identity","weapon","fire","theft","harmful"] %}
+        {% for key in score_keys %}
         <div class="score-row">
-          <span class="score-label">{{ key }}</span>
+          <span class="score-label">{{ key.replace("_", " ") }}</span>
           <div class="score-track">
             <div class="score-bar" id="score-{{ key }}">0%</div>
           </div>
+          {% if key in ("theft", "harmful") %}
+          <span class="score-value na" id="score-{{ key }}-value" title="No model produces this score yet">n/a (no model)</span>
+          {% else %}
+          <span class="score-value" id="score-{{ key }}-value">0%</span>
+          {% endif %}
         </div>
         {% endfor %}
       </div>
@@ -80,7 +85,8 @@
         <span class="audio-icon">🎬</span>
         <span class="audio-label" id="scene-label">not installed</span>
       </div>
-      <div class="scores-list" id="scene-probs" style="margin-top:0.5rem;"></div>
+      <div class="scores-list scene-probs" id="scene-probs"></div>
+      <div class="scene-meta" id="scene-meta"></div>
     </div>
 
     <div class="card cloud-card">
@@ -89,26 +95,27 @@
         <div class="cloud-dot" id="ai-dot"></div>
         <span id="ai-status-text">starting</span>
       </div>
-      <div style="margin-top:0.3rem;font-size:0.7rem;color:var(--text-dim)">
+      <div class="card-line">
         Video <span id="rate-video">—</span> fps &nbsp;|&nbsp; AI <span id="rate-ai">—</span> Hz
         &nbsp;|&nbsp; frame age <span id="frame-age">—</span> ms
       </div>
+      <div class="link-state" id="link-state">Portal link: disabled</div>
     </div>
 
     <!-- Threat Analysis / Explainability card -->
-    <div class="card" style="margin-top:0.75rem;">
+    <div class="card analysis-card">
       <div class="card-label">Threat Analysis</div>
-      <div id="top-factors-list" style="margin-top:0.5rem;font-size:0.8rem;line-height:1.8;">
-        <span style="color:var(--text-dim)">—</span>
+      <div class="factors-list" id="top-factors-list">
+        <span class="muted">—</span>
       </div>
-      <div style="margin-top:0.6rem;display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;">
-        <span style="color:var(--text-dim)">Evidence:</span>
-        <span id="uncertainty-badge" style="font-weight:600;color:#22c55e">—</span>
+      <div class="evidence-line">
+        <span class="muted">Evidence:</span>
+        <span class="evidence-badge" id="uncertainty-badge">—</span>
       </div>
-      <div style="margin-top:0.3rem;font-size:0.7rem;color:var(--text-dim)">
+      <div class="card-line" title="A single estimate: a band needs a calibrated fusion model (CLAUDE.md M8)">
         TCI band: <span id="tci-band">—</span>
       </div>
-      <div style="margin-top:0.3rem;font-size:0.7rem;color:var(--text-dim)">
+      <div class="card-line">
         Latency avg: <span id="lat-avg">—</span>s &nbsp;|&nbsp; P95: <span id="lat-p95">—</span>s &nbsp;|&nbsp; Queue: <span id="queue-depth">0</span>
       </div>
     </div>
@@ -116,11 +123,17 @@
   </div>
 </div>
 
-<!-- Dispatch Panel (hidden until Level 4/5) -->
-<div id="dispatch-panel" class="card dispatch-card" style="display:none">
+<!-- SOS panel (the former Emergency Dispatch panel): shown for an open
+     assistance request (state.sos), or, with SOS off, for the current
+     incident's pending dispatch package (Level 4+). -->
+<div id="dispatch-panel" class="card dispatch-card hidden" data-sos-root data-scope="panel">
   <div class="dispatch-header">
     <span class="dispatch-icon">⚠</span>
-    <h2 class="dispatch-title">EMERGENCY DISPATCH READY</h2>
+    <h2 class="dispatch-title" id="dp-title">EMERGENCY DISPATCH READY</h2>
+    <span class="sos-countdown" id="dp-countdown" data-sos-countdown></span>
+  </div>
+  <div class="dispatch-meta">
+    <span class="sos-subtitle" id="dp-state"></span>
   </div>
   <div class="dispatch-grid">
     <div class="dispatch-field">
@@ -140,15 +153,24 @@
       <span class="dispatch-val" id="dp-authority">—</span>
     </div>
   </div>
+  <img class="sos-snapshot dispatch-panel-snapshot hidden" id="dp-snapshot" alt="Camera snapshot of the alarm">
   <input type="hidden" id="dp-id" value="">
   <div class="dispatch-actions">
-    <button class="btn btn-police" onclick="onDispatchClick('POLICE')">🚔 Dispatch POLICE</button>
-    <button class="btn btn-fire"   onclick="onDispatchClick('FIRE')">🚒 Dispatch FIRE</button>
-    <button class="btn btn-cancel" onclick="dismissDispatch()">Dismiss</button>
+    {% if 'dispatch' in caps %}
+    <button type="button" class="btn btn-police" data-dispatch-authority="POLICE">🚔 Dispatch POLICE</button>
+    <button type="button" class="btn btn-fire" data-dispatch-authority="FIRE">🚒 Dispatch FIRE</button>
+    <button type="button" class="btn btn-medical" data-dispatch-authority="MEDICAL">🚑 Dispatch MEDICAL</button>
+    {% endif %}
+    <button type="button" class="btn btn-cancel" id="dp-dismiss">Dismiss</button>
   </div>
+  <p class="sos-note mt-1" id="dp-note"></p>
+  <div class="hidden" id="dp-sos-actions">
+    {{ sosui.sos_actions("panel", approve=False) }}
+  </div>
+  <div class="sos-message" id="dp-message" role="status" aria-live="polite"></div>
 </div>
 
-<!-- Event Log -->
+<!-- Event Log: the last 50 committed level changes from the server, then live -->
 <div class="card log-card">
   <div class="card-label">Event Log</div>
   <div class="log-container" id="log-container">
@@ -158,5 +180,8 @@
     </div>
   </div>
 </div>
+{% endblock %}
 
+{% block scripts %}
+<script src="{{ static_url('js/dashboard.js') }}" nonce="{{ csp_nonce }}"></script>
 {% endblock %}

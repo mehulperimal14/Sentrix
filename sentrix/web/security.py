@@ -91,7 +91,10 @@ def validate_image(filename: str, content_type: str | None,
 
 
 class RateLimiter:
-    """Fixed-window limiter, used to stop password brute forcing.
+    """Sliding-window limiter (at most ``max_attempts`` in any ``window_seconds``),
+    used to stop password brute forcing and to cap captures and setup codes.
+    Keys are client addresses on the LAN and actors for tunnelled users
+    (``sentrix.web.auth.rate_key``).
 
     The previous login route had no limiter at all: with the default password
     of ``admin`` and a 12-hour session, an unauthenticated client could guess
