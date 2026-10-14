@@ -29,6 +29,7 @@ Every saved step bumps the profile version (pushed to claimed devices).
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -111,10 +112,12 @@ def _extra(db: Session, principal, user, household, step: int) -> dict[str, Any]
     if step == 4:
         contacts = (db.query(EmergencyContact).filter_by(household_id=household.id)
                     .order_by(EmergencyContact.priority).all())
+        active = [c for c in contacts if c.consent_status in ("PENDING", "CONFIRMED")]
         return {"contacts": contacts,
                 "phones": {c.id: mask_phone(accounts.contact_phone(c)) for c in contacts},
-                "unreachable": {c.id for c in contacts
+                "unreachable": {c.id for c in active
                                 if accounts.contact_unreachable_offline(db, c)},
+                "telegram": {c.id for c in active if accounts.contact_telegram_linked(db, c)},
                 "max_contacts": accounts.MAX_CONTACTS,
                 "can_add": len(accounts.active_contacts(db, household.id)) < accounts.MAX_CONTACTS,
                 "free_priorities": _free_priorities(db, household.id)}
@@ -485,10 +488,10 @@ _HANDLERS = {1: _step1, 2: _step2, 3: _step3, 4: _step4, 5: _step5, 6: _step6, 7
 @router.get("/claim", response_class=HTMLResponse)
 def claim_page(request: Request, sn: str = "", db: Session = Depends(get_db),
                principal=Depends(OWNER)):
-    user, household = _load(db, principal)
+    _, household = _load(db, principal)
     serial = accounts.normalize_serial(sn)
     if household.onboarding_completed_at is None:
-        return see_other(f"/onboarding/5?sn={serial}" if serial else "/onboarding/5")
+        return see_other(f"/onboarding/5?sn={quote(serial)}" if serial else "/onboarding/5")
     return render(request, "onboarding/claim.html",
                   {"values": {"serial": serial}, "errors": {}}, active_page="home")
 
@@ -496,7 +499,7 @@ def claim_page(request: Request, sn: str = "", db: Session = Depends(get_db),
 @router.post("/claim", response_class=HTMLResponse)
 async def claim_submit(request: Request, db: Session = Depends(get_db),
                        principal=Depends(OWNER)):
-    user, household = _load(db, principal)
+    user, _ = _load(db, principal)
     form = await request.form()
     outcome, status = await claim(request, db, principal, user, form)
     if not outcome.ok:

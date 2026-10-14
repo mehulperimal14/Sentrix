@@ -147,7 +147,7 @@ class TestBackoff:
 class TestActivation:
     def test_letter_code_activates_once(self, portal, outbox):
         admin = staff_browser(portal)
-        household_id, code = _pending_customer(portal, admin)
+        _, code = _pending_customer(portal, admin)
         customer = Browser(portal)
         customer.get("/login")
         assert customer.post("/login", {"username": "riya",
@@ -405,6 +405,52 @@ class TestAccount:
         assert verifier.get(f"/account/verify-email/{links[0]}").status_code == 200
         assert verifier.post(f"/account/verify-email/{links[0]}", {}).status_code == 200
         assert verifier.get(f"/account/verify-email/{links[0]}").status_code == 404, "once"
+
+    def test_mobile_confirmed_by_an_sms_from_the_device(self, portal, fake_hub):
+        home = add_household(portal, complete=True)
+        browser = owner_browser(portal)
+        browser.get("/account")
+        sent = browser.post("/account/phone", {"action": "send"})
+        assert sent.headers["location"] == "/account?saved=phone_sent"
+        device_id, name, args, actor = fake_hub.commands[-1]
+        assert (device_id, name) == (home["device_id"], "sms.send")
+        assert args["to"] == "+919812345610" and actor["type"] == "owner"
+        code = re.search(r"code (\d{6})", args["text"]).group(1)
+        wrong = "000000" if code != "000000" else "111111"
+        assert browser.post("/account/phone", {"action": "confirm", "code": wrong}
+                            ).headers["location"].endswith("phone_bad")
+        assert browser.post("/account/phone", {"action": "confirm", "code": code}
+                            ).headers["location"].endswith("phone_ok")
+        assert query(portal, User, id=home["owner_id"])[0].phone_verified_at is not None
+        assert fake_hub.profiles[-1]["owner"]["phone_verified"] is True
+        assert browser.post("/account/phone", {"action": "confirm", "code": code}
+                            ).headers["location"].endswith("phone_bad"), "single use"
+
+    def test_mobile_codes_are_limited_and_need_a_device(self, portal, fake_hub, monkeypatch):
+        from sentrix_portal.services import hub
+        add_household(portal, complete=True)
+        browser = owner_browser(portal)
+        browser.get("/account")
+        for _ in range(3):
+            browser.post("/account/phone", {"action": "send"})
+        assert browser.post("/account/phone", {"action": "send"}).headers["location"] \
+            .endswith("phone_wait")
+        add_household(portal, code="SX-0002", owner="nodev", email="n@example.com",
+                      phone="+919800000002")
+        other = owner_browser(portal, "nodev")
+        other.get("/account")
+        assert other.post("/account/phone", {"action": "send"}).headers["location"] \
+            .endswith("phone_no_device")
+
+        async def offline(*args, **kwargs):
+            return {"ok": False, "code": "device_offline", "status": 503}
+        monkeypatch.setattr(hub, "send_command", offline)
+        add_household(portal, code="SX-0003", owner="third", complete=True,
+                      email="t@example.com", phone="+919800000003")
+        failing = owner_browser(portal, "third")
+        failing.get("/account")
+        assert failing.post("/account/phone", {"action": "send"}).headers["location"] \
+            .endswith("phone_failed")
 
     def test_admin_action_then_new_address_raises_an_alert(self, portal, outbox):
         home = add_household(portal, complete=True)

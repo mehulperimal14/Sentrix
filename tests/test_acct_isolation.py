@@ -93,7 +93,7 @@ def _ids_of_b(b) -> list[str]:
 
 
 def test_no_page_shows_another_household(portal, two_homes):
-    a, b = two_homes
+    _, b = two_homes
     owner = owner_browser(portal)
     for path in ("/home", "/account", "/account/sessions", "/onboarding/1", "/onboarding/2",
                  "/onboarding/3", "/onboarding/4", "/onboarding/5", "/onboarding/6",

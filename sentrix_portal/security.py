@@ -166,6 +166,7 @@ ADDRESS_FREE_FAILURES = 20
 ACTIVATE_KEY = "activate:"
 STEP_UP_KEY = "stepup:"
 TOTP_KEY = "totp:"
+PHONE_KEY = "phone:"
 
 
 def _wait_for(failures: int, free: int) -> int:
@@ -666,6 +667,7 @@ __all__ = ["hash_password", "verify_password", "needs_rehash", "hash_pin",
            "mark_step_up", "mark_totp_verified", "TOTP_ROLES", "STATE_CHANGING",
            "audit", "verify_audit_chain", "prune_audit_before", "AUDIT_PRUNED_EVENT",
            "CODE_ALPHABET", "backoff_remaining", "record_attempt", "attempt_key",
-           "ACTIVATE_KEY", "STEP_UP_KEY", "TOTP_KEY", "new_totp_secret", "totp_uri",
+           "ACTIVATE_KEY", "STEP_UP_KEY", "TOTP_KEY", "PHONE_KEY", "new_totp_secret",
+           "totp_uri",
            "verify_totp", "new_recovery_codes", "consume_recovery_code",
            "RECOVERY_CODE_COUNT"]

@@ -41,6 +41,7 @@ import hashlib
 import hmac
 import logging
 import re
+import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -83,6 +84,9 @@ CONSENT_TOKEN_SECONDS = 14 * 86400
 OPT_OUT_TOKEN_SECONDS = 365 * 86400
 EMAIL_VERIFY_SECONDS = 72 * 3600
 TELEGRAM_LINK_SECONDS = 24 * 3600
+#: Mobile verification by an SMS from the device's own SIM.
+PHONE_CODE_SECONDS = 600
+PHONE_CODES_PER_HOUR = 3
 #: An erasure request can be cancelled for this long; then the retention
 #: worker erases the household (design §4.4: within 30 days of closure).
 ERASURE_GRACE_DAYS = 7
@@ -605,6 +609,50 @@ def send_email_verification(db: Session, user: User) -> str | None:
                       text=(f"Confirm that this is your e-mail address for SENTRIX alerts "
                             f"and account recovery: {url}\nThe link expires in "
                             f"{EMAIL_VERIFY_SECONDS // 3600} hours."))
+
+
+def phone_code_wait(db: Session, user: User) -> int:
+    """Seconds until another verification SMS may be sent (at most
+    ``PHONE_CODES_PER_HOUR`` per account: each one costs the household's SIM)."""
+    now = utcnow()
+    recent = sorted(as_utc(row.created_at) for row in db.query(ActionToken).filter_by(
+        purpose="phone_verify", subject_type="user", subject_id=user.id)
+        if as_utc(row.created_at) > now - timedelta(hours=1))
+    if len(recent) < PHONE_CODES_PER_HOUR:
+        return 0
+    return int((recent[-PHONE_CODES_PER_HOUR] + timedelta(hours=1) - now).total_seconds()) + 1
+
+
+def _phone_code_digest(user: User, code: str) -> str:
+    # Bound to the user and the number: a 6-digit code alone is not unique.
+    return security.token_digest(f"phone:{user.id}:{user_phone(user)}:{code}")
+
+
+def mint_phone_code(db: Session, user: User) -> tuple[str, ActionToken]:
+    """A 6-digit code for the owner's mobile, sent by the device's own SIM
+    (no DLT registration needed; design §4.1). Earlier codes stop working."""
+    revoke_tokens(db, purpose="phone_verify", subject_type="user", subject_id=user.id)
+    code = f"{secrets.randbelow(10 ** 6):06d}"
+    row = ActionToken(token_hash=_phone_code_digest(user, code), purpose="phone_verify",
+                      household_id=user.household_id, subject_type="user",
+                      subject_id=user.id, created_at=utcnow(),
+                      expires_at=utcnow() + timedelta(seconds=PHONE_CODE_SECONDS))
+    db.add(row)
+    db.flush()
+    return code, row
+
+
+def confirm_phone_code(db: Session, user: User, code: str | None) -> bool:
+    digits = "".join(c for c in (code or "") if c.isdigit())
+    if len(digits) != 6 or not user.phone_enc:
+        return False
+    row = db.query(ActionToken).filter_by(token_hash=_phone_code_digest(user, digits)).first()
+    if (row is None or row.purpose != "phone_verify" or row.used_at or row.revoked_at
+            or as_utc(row.expires_at) <= utcnow() or row.subject_id != user.id):
+        return False
+    row.used_at = user.phone_verified_at = utcnow()
+    db.flush()
+    return True
 
 
 def revoke_tokens(db: Session, *, purpose: str, subject_type: str, subject_id: str) -> int:

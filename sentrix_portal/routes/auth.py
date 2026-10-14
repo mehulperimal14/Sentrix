@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -152,8 +153,7 @@ async def login_submit(request: Request, db: Session = Depends(get_db)):
     ip = security.client_ip(request)
     wait = security.backoff_remaining(db, username, ip)
     if wait:
-        security.audit(db, "auth.login_failed", ip=ip, detail={"reason": "backoff",
-                                                               "wait_s": wait})
+        # Not checked, not recorded, not audited: a blocked flood writes nothing.
         return _login_form(request, status_code=429, username=username, next_url=next_url,
                            error=f"Too many attempts. Wait {wait} s and try again.")
     user = db.query(User).filter_by(username=username).first() if username else None
@@ -184,7 +184,7 @@ async def login_submit(request: Request, db: Session = Depends(get_db)):
     _admin_then_new_ip(db, user, previous_ip_hash, ip)
     household = db.get(Household, user.household_id) if user.household_id else None
     if user.role in security.TOTP_ROLES:
-        target = "/account/2fa" + (f"?next={next_url}" if next_url else "")
+        target = "/account/2fa" + (f"?next={quote(next_url, safe='/')}" if next_url else "")
     else:
         target = next_url or landing_for(user.role, household)
     response = see_other(target)
@@ -353,6 +353,61 @@ async def account_update(request: Request, db: Session = Depends(get_db),
         db.commit()
         await accounts.push_profile(db, user.household_id)
     return see_other("/account?saved=1")
+
+
+PHONE_SMS = ("SENTRIX code {code}: it confirms this number for SOS callbacks. Valid 10 "
+             "minutes. SENTRIX staff never ask for it.")
+
+
+@router.post("/account/phone")
+async def phone_verify(request: Request, db: Session = Depends(get_db),
+                       principal=Depends(security.require_role("owner"))):
+    """Confirm the owner's mobile with a code sent by SMS from the household's
+    own device (``sms.send``: the device only texts numbers in its profile,
+    through its send guard). ``action=send`` or ``action=confirm``."""
+    from sentrix.actor import Actor
+    from sentrix_portal.services import hub
+    form = await request.form()
+    user = user_of(db, principal)
+    ip = security.client_ip(request)
+    phone = accounts.user_phone(user)
+    if not phone:
+        return see_other("/account?saved=phone_missing")
+    if form.get("action") == "send":
+        devices = accounts.claimed_devices(db, user.household_id)
+        if not devices:
+            return see_other("/account?saved=phone_no_device")
+        if accounts.phone_code_wait(db, user):
+            return see_other("/account?saved=phone_wait")
+        code, _ = accounts.mint_phone_code(db, user)
+        db.commit()
+        stepped = principal.step_up_at.timestamp() if principal.step_up_at else None
+        actor = Actor("owner", id=user.id, name=principal.display_name, step_up_at=stepped)
+        result = await hub.send_command(devices[0].id, "sms.send",
+                                        {"to": phone, "text": PHONE_SMS.format(code=code),
+                                         "request_id": None},
+                                        actor.to_dict(), queue_if_offline=False)
+        security.audit(db, "account.phone_code_sent", actor_type="user", actor_id=user.id,
+                       household_id=user.household_id, target_type="device",
+                       target_id=devices[0].id, ip=ip,
+                       detail={"ok": bool(result.get("ok")), "code": result.get("code")})
+        return see_other("/account?saved=" + ("phone_sent" if result.get("ok")
+                                              else "phone_failed"))
+    key = security.PHONE_KEY + user.id
+    if security.backoff_remaining(db, key, ip):
+        return see_other("/account?saved=phone_wait")
+    if not accounts.confirm_phone_code(db, user, form.get("code")):
+        security.record_attempt(db, key, ip, False)
+        return see_other("/account?saved=phone_bad")
+    security.record_attempt(db, key, ip, True)
+    security.audit(db, "account.phone_verified", actor_type="user", actor_id=user.id,
+                   household_id=user.household_id, target_type="user", target_id=user.id,
+                   ip=ip)
+    accounts.profile_changed(db, user.household_id, actor_id=user.id, what="owner_phone",
+                             ip=ip)
+    db.commit()
+    await accounts.push_profile(db, user.household_id)
+    return see_other("/account?saved=phone_ok")
 
 
 @router.post("/account/verify-email", response_class=HTMLResponse)

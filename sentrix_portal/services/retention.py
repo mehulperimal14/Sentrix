@@ -62,9 +62,14 @@ def _delete(counts: dict[str, int], name: str, query) -> None:
 
 
 def due_erasures(db, now: datetime | None = None) -> list[Household]:
+    """Households whose erasure grace period has ended."""
     now = now or utcnow()
-    return [h for h in db.query(Household).filter_by(status="erasing")
-            if (accounts.erasure_due_at(h) or now) <= now]
+    due = []
+    for household in db.query(Household).filter_by(status="erasing"):
+        at = accounts.erasure_due_at(household)
+        if at is not None and at <= now:
+            due.append(household)
+    return due
 
 
 def prune(db, now=None) -> dict[str, Any]:
