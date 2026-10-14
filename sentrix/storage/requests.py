@@ -24,7 +24,11 @@ device sequence numbers. :func:`verify_chain` checks every chain.
 
 Frozen (other modules import them): ``REQUEST_LOCK``, ``append_event``,
 ``create_request``, ``transition``, ``request_dict``, ``event_dict``,
-``canonical``.
+``canonical``. Their existing parameters stay as they were; the SOS engine's
+additions are optional keyword-only arguments (``at``: the engine's clock, so
+time-travel tests and the stored times agree; the row's evidence paths) and
+new functions (:func:`force_transition` for the reconnect merge,
+:func:`open_requests`, :func:`requests_for_incident`).
 """
 
 from __future__ import annotations
@@ -192,7 +196,7 @@ def request_dict(row: AssistanceRequestRecord) -> dict[str, Any]:
         "test_mode": bool(row.test_mode), "version": row.version,
         "authority_side": row.authority_side, "cloud_synced": bool(row.cloud_synced),
         "parent_request_id": row.parent_request_id, "outcome": row.outcome,
-        "session_id": row.session_id,
+        "session_id": row.session_id, "repage_count": row.repage_count or 0,
     }
 
 
@@ -210,7 +214,12 @@ def create_request(request_id: str, *, incident_id: str | None, incident_type: s
                    actor_type: str = "system", actor_id: str | None = None,
                    channel: str | None = "system", detail: dict | None = None,
                    origin: str = "device",
-                   authority_side: str | None = None) -> dict[str, Any] | None:
+                   authority_side: str | None = None,
+                   at: datetime | None = None,
+                   snapshot_path: str | None = None, evidence_bundle: str | None = None,
+                   evidence_hash: str | None = None, urgency: str = "NORMAL",
+                   peak_level: int | None = None,
+                   restricted: bool = False) -> dict[str, Any] | None:
     """Insert a DRAFTED request. Idempotent: an existing id is returned
     unchanged.
 
@@ -221,6 +230,11 @@ def create_request(request_id: str, *, incident_id: str | None, incident_type: s
     ``authority_side="cloud"`` and no device event; the cloud's own
     ``created`` event (and the rest of its chain) arrives in the sync and is
     stored with :func:`import_event`.
+
+    ``at`` is the creation time (default now); ``snapshot_path``,
+    ``evidence_bundle``, ``evidence_hash``, ``urgency`` and ``peak_level``
+    (default ``level``) are stored with the row; ``restricted`` marks the
+    ``created`` event (a silent duress request owners never see).
     """
     if origin not in ORIGINS:
         raise ValueError(f"unknown origin {origin!r}")
@@ -228,26 +242,29 @@ def create_request(request_id: str, *, incident_id: str | None, incident_type: s
         existing = session.get(AssistanceRequestRecord, request_id)
         if existing is not None:
             return request_dict(existing)
-        now = _utc()
+        now = _utc(at)
         row = AssistanceRequestRecord(
             id=request_id, incident_id=incident_id,
             incident_ids_json=json.dumps([incident_id] if incident_id else []),
-            state=S.DRAFTED, urgency="NORMAL",
+            state=S.DRAFTED, urgency=urgency or "NORMAL",
             flags_json=json.dumps(flags or {}, sort_keys=True),
-            trigger_level=level, peak_level=level, incident_type=incident_type,
+            trigger_level=level, peak_level=max(level, peak_level or level),
+            incident_type=incident_type,
             evidence_state=evidence_state, created_at=now, updated_at=now,
             expires_at=_utc(expires_at) if expires_at else None,
             policy_json=json.dumps(policy, sort_keys=True, default=str),
             camera_id=camera_id, test_mode=test_mode, version=1,
             authority_side=authority_side or ("device" if origin == "device" else "cloud"),
             cloud_synced=origin == "cloud",
-            parent_request_id=parent_request_id, session_id=session_id)
+            parent_request_id=parent_request_id, session_id=session_id,
+            snapshot_path=snapshot_path, evidence_bundle=evidence_bundle,
+            evidence_hash=evidence_hash, reminder_step=0, repage_count=0)
         session.add(row)
         if origin == "device":
             append_event(session, request_id, event=S.CREATED, from_state=None,
                          to_state=S.DRAFTED, actor_type=actor_type, actor_id=actor_id,
-                         channel=channel,
-                         detail=detail or {"incident_id": incident_id})
+                         channel=channel, detail=detail or {"incident_id": incident_id},
+                         restricted=restricted, at=now)
         session.flush()
         return request_dict(row)
 
@@ -271,13 +288,14 @@ def try_transition(request_id: str, event: str, *, expected_version: int | None 
                    actor_type: str = "system", actor_id: str | None = None,
                    channel: str | None = None, detail: dict | None = None,
                    restricted: bool = False, origin: str = "device",
-                   **fields: Any) -> TransitionResult:
+                   at: datetime | None = None, **fields: Any) -> TransitionResult:
     """Apply one event through ``states.next_state`` under :data:`REQUEST_LOCK`.
 
     ``expected_version``: refuse (``conflict``) unless the request is still at
     that version, so a decision made on a stale read is never written.
     ``fields`` are column values set in the same transaction (e.g.
-    ``authority="POLICE"``). Self-events (from = to) are recorded too.
+    ``authority="POLICE"``). Self-events (from = to) are recorded too. ``at``
+    is the event time (default now).
     """
     with REQUEST_LOCK, database.session_scope() as session:
         row = session.get(AssistanceRequestRecord, request_id)
@@ -294,11 +312,45 @@ def try_transition(request_id: str, event: str, *, expected_version: int | None 
         for key, value in fields.items():
             setattr(row, key, value)
         row.state, row.version = to_state, (row.version or 0) + 1
-        row.updated_at = _utc()
+        row.updated_at = _utc(at)
         audit = append_event(session, request_id, event=event, from_state=from_state,
                              to_state=to_state, actor_type=actor_type, actor_id=actor_id,
                              channel=channel, detail=detail, restricted=restricted,
-                             origin=origin)
+                             origin=origin, at=row.updated_at)
+        return TransitionResult(request_dict(row), "ok", event=event_dict(audit))
+
+
+def force_transition(request_id: str, to_state: str, *, event: str = S.CONFLICT,
+                     expected_version: int | None = None, actor_type: str = "system",
+                     actor_id: str | None = None, channel: str | None = None,
+                     detail: dict | None = None, restricted: bool = False,
+                     at: datetime | None = None, **fields: Any) -> TransitionResult:
+    """Move a request to ``to_state`` outside the transition table, recording
+    ``event`` (``conflict``) with the real from/to states in the device chain.
+
+    Only for the reconnect merge (``states.reconcile``), which may jump, e.g.
+    PENDING -> EXPIRED (the cloud lapsed it while the device was off) or
+    EXPIRED -> APPROVED (an answer reached the cloud in time). Everything
+    else goes through :func:`try_transition`.
+    """
+    if to_state not in S.STATES:
+        return TransitionResult(None, "conflict", f"unknown state {to_state!r}")
+    with REQUEST_LOCK, database.session_scope() as session:
+        row = session.get(AssistanceRequestRecord, request_id)
+        if row is None:
+            return TransitionResult(None, "not_found", "unknown request")
+        if expected_version is not None and row.version != expected_version:
+            return TransitionResult(request_dict(row), "conflict",
+                                    f"stale version {expected_version} (now {row.version})")
+        from_state = row.state
+        for key, value in fields.items():
+            setattr(row, key, value)
+        row.state, row.version = to_state, (row.version or 0) + 1
+        row.updated_at = _utc(at)
+        audit = append_event(session, request_id, event=event, from_state=from_state,
+                             to_state=to_state, actor_type=actor_type, actor_id=actor_id,
+                             channel=channel, detail=detail, restricted=restricted,
+                             origin="device", at=row.updated_at)
         return TransitionResult(request_dict(row), "ok", event=event_dict(audit))
 
 
@@ -306,13 +358,13 @@ def transition(request_id: str, event: str, *, actor_type: str = "system",
                actor_id: str | None = None, channel: str | None = None,
                detail: dict | None = None, restricted: bool = False,
                origin: str = "device", expected_version: int | None = None,
-               **fields: Any) -> dict[str, Any] | None:
+               at: datetime | None = None, **fields: Any) -> dict[str, Any] | None:
     """:func:`try_transition` returning the new request dict, or None when
     the request is unknown, the event is not allowed in its current state or
     ``expected_version`` is stale (nothing is written then)."""
     result = try_transition(request_id, event, expected_version=expected_version,
                             actor_type=actor_type, actor_id=actor_id, channel=channel,
-                            detail=detail, restricted=restricted, origin=origin,
+                            detail=detail, restricted=restricted, origin=origin, at=at,
                             **fields)
     return result.request if result.ok else None
 
@@ -345,6 +397,32 @@ def open_request() -> dict[str, Any] | None:
                .filter(AssistanceRequestRecord.state.in_(sorted(S.OPEN_STATES)))
                .order_by(AssistanceRequestRecord.created_at.desc()).first())
         return request_dict(row) if row else None
+
+
+def open_requests() -> list[dict[str, Any]]:
+    """Every request not in a terminal state, newest first (normally one; a
+    request the cloud opened while the device was offline can make two until
+    the merge links them)."""
+    with database.session_scope() as session:
+        rows = (session.query(AssistanceRequestRecord)
+                .filter(AssistanceRequestRecord.state.in_(sorted(S.OPEN_STATES)))
+                .order_by(AssistanceRequestRecord.created_at.desc()).all())
+        return [request_dict(r) for r in rows]
+
+
+def requests_for_incident(incident_id: str) -> list[dict[str, Any]]:
+    """Requests this incident opened or joined, newest first."""
+    if not incident_id:
+        return []
+    pattern = f'%"{incident_id}"%'
+    with database.session_scope() as session:
+        rows = (session.query(AssistanceRequestRecord)
+                .filter((AssistanceRequestRecord.incident_id == incident_id)
+                        | AssistanceRequestRecord.incident_ids_json.like(pattern))
+                .order_by(AssistanceRequestRecord.created_at.desc()).all())
+        return [request_dict(r) for r in rows
+                if r.incident_id == incident_id
+                or incident_id in json.loads(r.incident_ids_json or "[]")]
 
 
 def list_requests(limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
@@ -406,6 +484,7 @@ def verify_chain(request_id: str) -> dict[str, Any]:
 
 
 __all__ = ["REQUEST_LOCK", "ORIGINS", "append_event", "import_event", "create_request",
-           "TransitionResult", "try_transition", "transition", "set_fields",
-           "get_request", "open_request", "list_requests", "events", "last_seq",
+           "TransitionResult", "try_transition", "transition", "force_transition",
+           "set_fields", "get_request", "open_request", "open_requests",
+           "requests_for_incident", "list_requests", "events", "last_seq",
            "verify_chain", "request_dict", "event_dict", "canonical"]
