@@ -207,7 +207,7 @@ to the room. Decisions D15 and D16, D2/D8 amended; milestone M11 (section 6).
 | `sentrix/finetuned-v3` | `66accb9` | baseline + scene integration + training tooling + fine-tuned v3 models |
 | `sentrix/custom-v4` | `3772acf` | baseline + scene integration + training tooling + new DINOv2/YOLO11n models |
 | `sentrix/e2e-repair` | `eb82ff5` | custom-v4 + M1–M5 + fresh-clone setup + docs/8 (Pi plan); the state before M10 |
-| `sentrix/portal` | `594d91b` (= `main`) + M11 (`30074ab` and the results/docs commits after it; `git log -1 sentrix/portal`); M11 **not pushed** | main + Portal/SOS foundation + the eight tracks + integration, demo tools, e2e tests, live smoke fixes, review fixes, clean-up (M10), multimodal fusion and the talk-down speaker (M11; commits below) |
+| `sentrix/portal` | `594d91b` (= `main`) + M11 (`30074ab`, `6f15ae3`, `fd1bc88` and this hash note; `git log -1 sentrix/portal`); M11 **not pushed** | main + Portal/SOS foundation + the eight tracks + integration, demo tools, e2e tests, live smoke fixes, review fixes, clean-up (M10), multimodal fusion and the talk-down speaker (M11; commits below) |
 | `wip/hw`, `wip/clip`, `wip/ch`, `wip/sos`, `wip/web`, `wip/acct`, `wip/link`, `wip/model` | `4418de3`, `cc53443`, `f19e056`, `0b703b6`, `c340f29`, `e9d251c`, `24b897e`, `3bfb441` | the track branches, all merged into `sentrix/portal`; local only, not pushed |
 
 Published to `github.com/mehulperimal14/Sentrix` on 2026-10-10. Before publishing,
@@ -233,9 +233,10 @@ ec2e936 fix(fusion): M1 containment - confirmed per-class evidence replaces sing
 Commits on `sentrix/portal` after `main` (`594d91b`), not pushed:
 
 ```
+fd1bc88 docs(m11): multimodal fusion and talk-down speaker - decisions, results, hardware
+6f15ae3 fix(fusion): name the unknown-person rule in state and event log; contributions layout fits the card
 30074ab feat(fusion): multimodal time-aligned fusion, AudioSet sound model, talk-down speaker (D15, D16)
 ```
-(then the M11 evaluation results and docs commit, `git log sentrix/portal`)
 
 Commits on `sentrix/portal` up to `main` (first parent, newest first; each
 merge brings in its track's commits from the `wip/*` branch):
