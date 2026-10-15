@@ -172,7 +172,8 @@ responder console) + confirmed emergency contacts → Desk resolves.
   with a video file or the demo reel as the camera; Portal = `python -m
   sentrix_portal` on `http://portal.localhost:8100`; LC on
   `http://127.0.0.1:8000`. `tools/demo_run.py start` starts both (§15 item 3).
-  Pi 5 T1 (planned): the same device process on the Pi. Pi T3 (hub, planned):
+  Pi 5 T1 (software built, not yet run on a Pi): the same device process on
+  the Pi. Pi T3 (hub, plan only, no code):
   the hub is the "device" to the Portal; the Pi node exposes modem and siren as
   node commands (docs/8 T3).
 

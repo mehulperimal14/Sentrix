@@ -65,7 +65,8 @@ All tunables: `sentrix/config.py` (seconds, never frames; `SosConfig`,
 `WebConfig`, `RetentionConfig`). Runtime output: `var/` (gitignored, never
 web-mounted; `SENTRIX_VAR_DIR` moves the whole tree). Contract for the Portal,
 link, tunnel and SOS: `docs/7_PORTAL_AND_SOS.md`; Pi plan:
-`docs/8_RASPBERRY_PI5_INTEGRATION.md`.
+`docs/8_RASPBERRY_PI5_INTEGRATION.md`; remaining work in order and the
+custom-data training guide: `ROADMAP.md`; doc index: `docs/README.md`.
 
 ### Environments
 
@@ -189,13 +190,13 @@ fresh-clone setup.
 
 | Branch | Head | Contents |
 |---|---|---|
-| `main` | `eb82ff5` (= `sentrix/e2e-repair`, = `origin/main`) | the published state: custom-v4 models + M1–M5 + fresh-clone setup + docs/8 (Pi plan) (pre-session head was `0f75a0e`) |
+| `main` | = `sentrix/portal` (pushed 2026-10-15) | the published state: the integrated product (device + Portal + SOS + Pi I/O + clip engine), docs and ROADMAP.md (previous head `eb82ff5`) |
 | `sentrix/baseline-v3` | `d8629eb` | staged rewrite committed (`9e0037a`) + evaluation harness (`05a04fe`) + doc fixes |
 | `sentrix/finetuned-v3` | `66accb9` | baseline + scene integration + training tooling + fine-tuned v3 models |
 | `sentrix/custom-v4` | `3772acf` | baseline + scene integration + training tooling + new DINOv2/YOLO11n models |
-| `sentrix/e2e-repair` | `eb82ff5` (same as `main`) | custom-v4 + this plan + M1–M5 + fresh-clone setup (commits below) |
-| `sentrix/portal` | `e7ca89e` + the docs commits after it (`git log -1 sentrix/portal`); **not pushed** | main + Portal/SOS foundation + the eight tracks + integration, demo tools, e2e tests, live smoke fixes, review fixes, clean-up (M10; commits below) |
-| `wip/hw`, `wip/clip`, `wip/ch`, `wip/sos`, `wip/web`, `wip/acct`, `wip/link`, `wip/model` | `4418de3`, `cc53443`, `f19e056`, `0b703b6`, `c340f29`, `e9d251c`, `24b897e`, `3bfb441` | the track branches, all merged into `sentrix/portal`; kept for reference |
+| `sentrix/e2e-repair` | `eb82ff5` | custom-v4 + M1–M5 + fresh-clone setup + docs/8 (Pi plan); the state before M10 |
+| `sentrix/portal` | `e7ca89e` + the docs commits after it (`72953fe`, `1ff8026`, `8f53087`, `dbc83cd` and the consistency pass; `git log -1 sentrix/portal`); pushed, = `main` | main + Portal/SOS foundation + the eight tracks + integration, demo tools, e2e tests, live smoke fixes, review fixes, clean-up (M10; commits below) |
+| `wip/hw`, `wip/clip`, `wip/ch`, `wip/sos`, `wip/web`, `wip/acct`, `wip/link`, `wip/model` | `4418de3`, `cc53443`, `f19e056`, `0b703b6`, `c340f29`, `e9d251c`, `24b897e`, `3bfb441` | the track branches, all merged into `sentrix/portal`; local only, not pushed |
 
 Published to `github.com/mehulperimal14/Sentrix` on 2026-10-10. Before publishing,
 history was rewritten once: private runtime data that earlier commits had
@@ -221,6 +222,10 @@ Commits on `sentrix/portal` since `main` (first parent, newest first; each
 merge brings in its track's commits from the `wip/*` branch):
 
 ```
+dbc83cd docs: refresh the docs folder for the integrated product
+8f53087 docs: hardware and deployment guides for the integrated product
+1ff8026 docs: README, CLAUDE.md and env template for the integrated product
+72953fe docs: ROADMAP.md - remaining work and model-training guide
 e7ca89e chore(repo): remove unused files and restructure
 58f62c9 fix(review): adversarial review findings
 640e713 fix(integration): live smoke findings
@@ -372,7 +377,7 @@ video/session is never used for tuning.
 
 | # | Decision | Why |
 |---|---|---|
-| D1 | Alarm classes for the demo: **handgun (replica), knife, visible flame**. Assault, robbery, stick, smoke and audio are *experimental*: logged and shown, never above L2. | They exist in 1–3 clips; unvalidatable classes only add false alarms. |
+| D1 | Alarm classes for the demo: **handgun (replica), knife, visible flame**. Assault, robbery, stick, smoke and audio are *experimental*: logged and shown, never above L2. *Knife is not covered yet: the custom weapon head knows `pistol` and `stick` only and the custom dataset has no knife footage (ROADMAP.md §2.4).* | They exist in 1–3 clips; unvalidatable classes only add false alarms. |
 | D2 | **Home mode** (default): an unknown person is logged, never escalates. **Armed mode** (`SENTRIX_ARMED=1`): a *confirmed-unknown* track sustained ≥ 3 s opens an intrusion incident at L3. | Team members and guests are "unknown" by default. |
 | D3 | A scene-classifier verdict alone is capped at **L3** (snapshot + evidence, no SMS/siren). L4+ needs corroboration (detector box of that class, or a second modality). *Amended by D8: a confirmed L3 of an alarm class also opens an SOS prompt.* | The classifier is the least reliable input and out of domain. |
 | D4 | Snapshots move from L2 to **L3**; L2 is UI/log only. *Amended by D8: L3 also prompts the owner (no siren at L3).* | Privacy of residents; L2 becomes "unconfirmed". |
@@ -487,8 +492,8 @@ v1, tunnel + auth bridge, SOS state machine, channels, roles, endpoints).
 - [x] **Live smoke run** (`640e713`, docs/7 §17): Portal and device as two real processes on the laptop, linked over a real WebSocket, driven over HTTP like a browser (test mode, demo reel, no audio, scratch dirs; `var/sentrix.db` untouched). Every LC page and 14 GET APIs gave the same status direct and tunnelled; numbers in §4.3. Five bugs fixed: Portal sign-in could land on /login (session committed after the 303 — routes now take `DB = Depends(get_db, scope="function")`); a Portal restart read as a lost device heartbeat (silence now counted from the hub's start at the earliest); a fire safety-default alert owed at T+2 min was dropped by the 90 s demo window (sent before the expiry now); LC showed 0 queued while offline; the scene model asked huggingface.co for a revision at every start (cached weights load from the cache file). Not verified live: Telegram (no bot), modem/SMS, delivery to allowlisted phones, 10 live pre-runs per clip (3/3 gun, 3/3 fire done).
 - [x] **Adversarial review** (`58f62c9`): test mode fails closed on unrecognised values; conftest blocks webcam indexes and the microphone; the Portal call button never dials an emergency number and SOS texts never say "call 112" in test mode; siren stops after the requested duration; PIR edges reach the clip buffer; doctor opens no camera unless `--probe-camera`; SOS machine/service, onboarding step 5 and Portal SOS service fixes with tests (`tests/test_review_guards.py` and the track test files).
 - [x] **Repository clean-up** (`e7ca89e`): unreachable v1 weapon/fire weights, the unwired Vosk model, the duplicate `yolov8n.pt`, v1/v2 run dumps, duplicate v3 checkpoints, old UCF-DVS probe files and the university templates removed; capstone submissions → `docs/capstone/`, `HARDWARE.md` → `docs/8_RASPBERRY_PI5_INTEGRATION.md`, diagrams → `docs/assets/`. Voice SOS (Vosk) is no longer planned in this repository.
-- [x] **Docs for the integrated product**: README (product, quickstart, flow, configuration, structure, status), this file, `.env.example` comments, `THIRD_PARTY.md`; docs 1–8 by their own writers. Full suite at `e7ca89e`: **1647 passed** in 6 min 30 s (laptop; the device and socket guards blocked 4 camera/mic and 2 network attempts by tests that check those guards).
-- [ ] **Still to do:** Alembic baseline (and the `bootstrap_revoked_at` column it unblocks); a live Postgres run (`tools/portal_pg_check.py` only compiles the DDL; psycopg not installed); `deploy/portal/` on a real VM (Docker not run); hardware bench checks (LED relay test, PIR, door, mains, Camera Module 3, 4G modem); real Telegram bot, e-mail account and modem SMS to allowlisted team phones (both switches); `tools/bench_link.py` (named in docs/7 §15.3, not written); Portal SOS texts from the device template module, bundled fonts, NCNN and `buffalo_s` (docs/7 §16 q7–q11); 10 live pre-runs per demo clip; **gates P1–P8** measured once on the final build (P1, P2, P3, P7 have partial evidence in the test suite; P4, P5, P8 need hardware or recordings).
+- [x] **Docs for the integrated product** (`72953fe` `ROADMAP.md`; `1ff8026` README, this file, `.env.example` comments, `THIRD_PARTY.md`; `8f53087` docs/8 and the `deploy/pi5`, `deploy/portal` READMEs; `dbc83cd` docs 1–7 and the `docs/README.md` index; then a consistency pass across all of them). Full suite: **1647 passed** at `e7ca89e` (6 min 30 s) and again at `dbc83cd` (390.6 s) (laptop; the device and socket guards blocked 4 camera/mic and 2 network attempts by tests that check those guards).
+- [ ] **Still to do:** Alembic baseline (and the `bootstrap_revoked_at` column it unblocks); a live Postgres run (`tools/portal_pg_check.py` only compiles the DDL; psycopg not installed); `deploy/portal/` on a real VM (Docker not run); hardware bench checks (LED relay test, PIR, door, mains, Camera Module 3, 4G modem); real Telegram bot, e-mail account and modem SMS to allowlisted team phones (both switches); `tools/bench_link.py` (named in docs/7 §15 item 3, not written); Portal SOS texts from the device template module, bundled fonts, NCNN and `buffalo_s` (docs/7 §16 q7–q11); 10 live pre-runs per demo clip; **gates P1–P8** measured once on the final build (P1, P2, P3, P7 have partial evidence in the test suite; P4, P5, P8 need hardware or recordings).
 
 ### Owners (from the README team table)
 

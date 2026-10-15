@@ -5,7 +5,9 @@ built but unverified, and what is left, in priority order. The milestone
 plan with its status boxes is `CLAUDE.md` §6 (M1–M10); the reviewed plan for
 the product and the Pi is the team's "SENTRIX Prototype Roadmap v2" (October
 2026). This document summarises both and keeps the model-research notes that
-are still valid. It replaces the August 2026 roadmap, whose cloud-GPU
+are still valid. The step-by-step plan to a working prototype (orders, cloud
+setup, Pi bring-up, Gate A, rehearsals, gates, demo script) is
+[`ROADMAP.md`](../ROADMAP.md). It replaces the August 2026 roadmap, whose cloud-GPU
 deployment section no longer applies: detection stays on the device
 (decisions D10–D12).
 
@@ -45,7 +47,7 @@ deployment section no longer applies: detection stays on the device
 | Fitted fusion model | M8; needs real labelled sessions |
 | Re-identification beyond the histogram fallback | install `torchreid`, evaluate on Market-1501 (§3.4) |
 | UCF-Crime anomaly model | not wired; polarity bug (doc 2 §6) |
-| Voice SOS | not wired; the Vosk model is not shipped |
+| Voice SOS | not planned in this repository; the unwired Vosk model was removed in `e7ca89e` |
 | Tier 2 product items | inbound SMS parsing, web push / PWA, owner TOTP, Hindi templates, automated export and erasure jobs, WebRTC video, multi-process Pi layout |
 
 ---
@@ -186,7 +188,6 @@ fix is one line (doc 2 §6). Only then consider wiring it.
 | Multi-process Pi layout | deferred by the single-process decision; revisit if Gate A fails with the link running |
 | Liveness for the face disarm | a photograph of a resident could clear the entry delay (doc 7 §16 q6) |
 | End-to-end encryption of remote viewing | video passes through the Portal in memory over TLS, not end-to-end encrypted |
-| Voice SOS | download the Vosk model; wire behind a `VoiceEngine` |
 | Thermal input to fusion | telemetry exists; a fusion feature needs a contract version and data |
 
 ---
@@ -204,5 +205,5 @@ fix is one line (doc 2 §6). Only then consider wiring it.
 * **Data protection (DPDP Act 2023, Rules 2025).** Consent per purpose, data
   stored in India, hard retention caps, no minors' faces in the capstone
   (doc 7 §12, decision D12).
-* **Regional SOS keywords** (Hindi *bachao*, *chor*, *aag*) depend on Voice
-  SOS being wired first.
+* **Regional SOS keywords** (Hindi *bachao*, *chor*, *aag*) would need a voice
+  SOS engine, which is not planned in this repository.

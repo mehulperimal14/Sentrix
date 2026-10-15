@@ -54,7 +54,7 @@ real person unless two switches are on, and even then only to an allowlist (see
 | 3. Install the device; activate the account with the code and choose a password | customer | Portal `/activate` |
 | 4. Onboarding wizard, 7 steps: profile, address, household, emergency contacts (each confirms by link), claim the device, alerts + SOS PIN + window, consent and SOS preview | customer | Portal `/onboarding` |
 | 5. Daily use: the device's dashboard, live view, events, evidence, access (faces), SOS, node | customer | LC on the LAN, or the Portal through `/d/{device_id}/...` |
-| 6. A **confirmed L3** of an alarm class (weapon, fire) or an armed-mode intrusion opens an **assistance request**, pre-filled from the profile | device | SOS engine |
+| 6. A **confirmed L3** of an alarm class (weapon, fire), or an armed-mode intrusion that outlasts the 30 s entry delay, opens an **assistance request**, pre-filled from the profile | device | SOS engine |
 | 7. "Do you need assistance?" on the Portal, the LC, Telegram and e-mail (SMS only when offline or unseen for 10 min); window 30/45/60 min | owner | |
 | 8. Approve → the Desk and the confirmed contacts get the dispatch. False alarm → PIN. No answer → **EXPIRED** ("unanswered", never "safe"); "Request help now" opens a linked request | owner | |
 | 9. The Desk acknowledges and resolves; the incident verdict is recorded | Desk operator | Portal `/desk` |
@@ -344,11 +344,13 @@ Never tune or select on the test video `wa02`.
 | Document | Contents |
 |---|---|
 | [`CLAUDE.md`](CLAUDE.md) | Project memory: facts, git history, model scores, the live diagnosis, decisions D1–D14 and milestone status |
+| [`ROADMAP.md`](ROADMAP.md) | Everything left before a working prototype, in order (cloud, Pi bring-up, Gate A, rehearsals, gates, demo), and the guide for training on more custom data |
+| [`docs/README.md`](docs/README.md) | Index of the numbered docs: which are current and which sections are historical |
 | [`docs/1_SYSTEM_ARCHITECTURE.md`](docs/1_SYSTEM_ARCHITECTURE.md) | Device architecture and data flow |
 | [`docs/2_MODEL_BENCHMARKS_AND_KPIS.md`](docs/2_MODEL_BENCHMARKS_AND_KPIS.md) | Model training results |
 | [`docs/3_HARDWARE_SPECIFICATION_AND_BOM.md`](docs/3_HARDWARE_SPECIFICATION_AND_BOM.md) | Hardware and bill of materials |
 | [`docs/4_DEPLOYMENT_AND_RUNBOOK.md`](docs/4_DEPLOYMENT_AND_RUNBOOK.md) | Deployment and operations |
-| [`docs/5_FUTURE_ADVANCEMENTS_AND_CLOUD_DEPLOYMENT.md`](docs/5_FUTURE_ADVANCEMENTS_AND_CLOUD_DEPLOYMENT.md) | Remaining work |
+| [`docs/5_FUTURE_ADVANCEMENTS_AND_CLOUD_DEPLOYMENT.md`](docs/5_FUTURE_ADVANCEMENTS_AND_CLOUD_DEPLOYMENT.md) | Remaining work in short, and model research notes (the step-by-step plan is `ROADMAP.md`) |
 | [`docs/6_CUSTOM_DATASET_EVALUATION.md`](docs/6_CUSTOM_DATASET_EVALUATION.md) | Custom-dataset protocol and results |
 | [`docs/7_PORTAL_AND_SOS.md`](docs/7_PORTAL_AND_SOS.md) | Portal, onboarding, link, tunnel and SOS contract; §17 the live smoke run |
 | [`docs/8_RASPBERRY_PI5_INTEGRATION.md`](docs/8_RASPBERRY_PI5_INTEGRATION.md) | Raspberry Pi 5 plan, clip engine, pin table |

@@ -187,8 +187,7 @@ buffer for hardware and data.
 
 ### Owners and effort at a glance
 
-Owners follow the v2 plan and `docs/8` §11. Change them here if the team
-agrees otherwise.
+Owners follow the v2 plan. Change them here if the team agrees otherwise.
 
 | Phase | Lead | Helpers | Effort (est.) | Depends on |
 |---|---|---|---|---|

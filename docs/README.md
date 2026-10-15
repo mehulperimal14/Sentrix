@@ -15,7 +15,7 @@ sections describe what.
 | understand how the device works | [1 — System architecture](1_SYSTEM_ARCHITECTURE.md) |
 | understand the Portal and the SOS flow | [7 — Portal, onboarding and SOS](7_PORTAL_AND_SOS.md), Part 0 |
 | know what the models score, and on what | [2 — Model benchmarks](2_MODEL_BENCHMARKS_AND_KPIS.md), [6 — Custom dataset evaluation](6_CUSTOM_DATASET_EVALUATION.md) |
-| know what is left | [5 — Roadmap & remaining work](5_FUTURE_ADVANCEMENTS_AND_CLOUD_DEPLOYMENT.md) |
+| know what is left | [`ROADMAP.md`](../ROADMAP.md) (the step-by-step plan to a working prototype); [5 — Roadmap & remaining work](5_FUTURE_ADVANCEMENTS_AND_CLOUD_DEPLOYMENT.md) (summary and research notes) |
 | build the Raspberry Pi unit | [8 — Raspberry Pi 5 integration](8_RASPBERRY_PI5_INTEGRATION.md), `deploy/pi5/README.md` |
 
 ## The numbered set
@@ -62,8 +62,9 @@ contaminated splits, the synthetic fusion model, "tamper-evident" rather than
 |---|---|
 | `README.md` | project overview, quickstart, configuration rationale, evaluation workflow |
 | `CLAUDE.md` | project memory: decisions D1–D14, milestones M1–M10 with status, the live diagnosis |
+| `ROADMAP.md` | remaining work in order (W0–W8), owners, Gate A and P1–P8, the demo script, and the guide for training on more custom data |
 | `deploy/portal/README.md` | Portal deployment on Oracle Always Free (India), or Render + Supabase |
 | `deploy/pi5/README.md` | Pi bring-up order, files, the LED test |
 | `training/runs/` | committed run reports; every measured number in these docs cites one |
 | `training/runs/custom/slim/REPORT.md` | the slim scene model report (protocol in `PROTOCOL.md`) |
-| `THIRD_PARTY.md` | third-party models and datasets |
+| `THIRD_PARTY.md` | third-party models, datasets, packages and services |
