@@ -46,6 +46,7 @@ for a replayed video's own soundtrack (no microphone).
 from __future__ import annotations
 
 import math
+import queue
 import threading
 import time
 from dataclasses import dataclass, field, replace
@@ -53,6 +54,7 @@ from dataclasses import dataclass, field, replace
 import numpy as np
 
 from sentrix.config import settings
+from sentrix.io import self_output
 from sentrix.paths import model_path
 from sentrix.utils.logging import get_logger, timed
 
@@ -98,8 +100,13 @@ CNN_CUES: dict[str, str] = {
     "explosion_like": "weapon_sound",
     "fire": "fire_sound", "alarm_siren": "fire_sound",
     "siren": "siren", "siren_like": "siren",
-    "speech_normal": "benign_social",
+    "speech_normal": "calm_talk",
 }
+#: Every cue, zero (a quiet window: heard, nothing there).
+CUE_NAMES = ("aggression", "weapon_sound", "fire_sound", "benign_social", "calm_talk",
+             "background", "siren")
+#: ``AudioResult.model`` values that are not a classification of the room.
+UNUSABLE_MODELS = {"none": "unclassified", "error": "unclassified", "self": "self_output"}
 #: The cue each class reads as source ``audio``. A weapon also reads
 #: aggression, as source ``audio_aggression``: it corroborates a visible gun
 #: but never stands alone (``evidence.CORROBORATE_ONLY``).
@@ -139,19 +146,39 @@ def audio_votes(result: AudioResult, fresh: bool = True) -> dict[str, dict[str, 
     """An aligned result's votes for the evidence layer (D15):
     ``{"audio": {class: (cue, threshold, fresh)}, "audio_benign": {"assault": ...}}``.
 
-    ``audio_aggression`` (weapon) corroborates a visible weapon only. A quiet
+    ``audio_aggression`` (weapon) corroborates a visible weapon only. The
+    banter vote is laughter, or very calm talk at its strict bar
+    (``calm_talk_is_benign``), whichever is further over its bar. A quiet
     window votes 0 for every class (heard: nothing there), which is different
-    from no vote at all (audio unavailable).
+    from no vote at all (audio unavailable). A window dominated by TV, music
+    or radio (:func:`neutral_reason`) votes nothing.
     """
+    if neutral_reason(result) is not None:
+        return {}
     thresholds = settings.audio.cue_thresholds
     cues = getattr(result, "cues", None) or {}
 
     def vote(cue: str) -> tuple:
         return (float(cues.get(cue, 0.0)), float(thresholds.get(cue, 0.3)), bool(fresh))
 
+    benign = vote("benign_social")
+    if settings.audio.calm_talk_is_benign:
+        calm = vote("calm_talk")
+        if calm[0] / calm[1] > benign[0] / benign[1]:
+            benign = calm
     return {"audio": {cls: vote(cue) for cls, cue in CLASS_CUES.items()},
             "audio_aggression": {"weapon": vote("aggression")},
-            "audio_benign": {"assault": vote("benign_social")}}
+            "audio_benign": {"assault": benign}}
+
+
+def neutral_reason(result: AudioResult | None) -> str | None:
+    """Why an aligned window must not vote, or None: TV, music or radio
+    dominate it (a film's screams or gunfire say nothing about the room)."""
+    cues = getattr(result, "cues", None) or {}
+    bar = float(settings.audio.cue_thresholds.get("background", 0.4))
+    if float(cues.get("background", 0.0)) >= bar:
+        return "background (TV/music/radio)"
+    return None
 
 
 def alignment(result: AudioResult | None, at: float, tolerance: float | None = None) -> dict:
@@ -161,6 +188,11 @@ def alignment(result: AudioResult | None, at: float, tolerance: float | None = N
     tolerance = settings.audio.align_tolerance_seconds if tolerance is None else tolerance
     if result is None:
         return {"status": "none", "lag_s": None, "tolerance_s": tolerance}
+    unusable = UNUSABLE_MODELS.get(getattr(result, "model", ""))
+    if unusable is not None:
+        # Nothing classified (no model, inference failed) or the device's own
+        # speaker/siren/buzzer: never "heard, nothing there".
+        return {"status": unusable, "lag_s": None, "tolerance_s": tolerance}
     if result.end is None:
         return {"status": "untimed", "lag_s": None, "tolerance_s": tolerance}
     start = result.start if result.start is not None else result.end
@@ -247,6 +279,8 @@ class AudioEngine:
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        self._stream = None
+        self._blocks: queue.Queue = queue.Queue(maxsize=32)
 
         self._model = None
         self._device = None
@@ -335,6 +369,9 @@ class AudioEngine:
 
     # ── capture ───────────────────────────────────────────────────────────────
     def _start_capture(self) -> None:
+        """One persistent ``InputStream`` (no gaps between hops, unlike a
+        fresh ``sd.rec`` per hop); its callback only queues the block with its
+        capture time, and a worker thread classifies."""
         if not _SD:
             log.warning("sounddevice not installed — microphone disabled")
             return
@@ -344,41 +381,62 @@ class AudioEngine:
         except Exception as exc:
             log.warning("no input device (%s) — microphone disabled", exc)
             return
+        sr = self.cfg.audio_sample_rate
+        try:
+            self._stream = sd.InputStream(samplerate=sr, channels=1, dtype="float32",
+                                          blocksize=int(sr * self.cfg.audio_hop_seconds),
+                                          callback=self._on_block)
+            self._stream.start()
+        except Exception as exc:
+            log.warning("microphone stream failed (%s) — microphone disabled", exc)
+            self._stream = None
+            return
         self.available = True
         self._thread = threading.Thread(target=self._loop, daemon=True,
                                         name="sentrix-audio")
         self._thread.start()
 
-    def _loop(self) -> None:
-        sr = self.cfg.audio_sample_rate
-        hop = self.cfg.audio_hop_seconds
-        window = self.cfg.audio_window_seconds
-        window_samples = int(sr * window)
-        hop_samples = int(sr * hop)
+    def _on_block(self, indata, frames, time_info, status) -> None:
+        """PortAudio callback: copy, stamp, hand over. Never blocks."""
+        end_at = block_end_monotonic(time_info, frames, self.cfg.audio_sample_rate)
+        item = (np.array(indata[:, 0] if getattr(indata, "ndim", 1) > 1 else indata,
+                         dtype=np.float32, copy=True), end_at, time.time())
+        try:
+            self._blocks.put_nowait(item)
+        except queue.Full:                    # the worker fell behind: drop the oldest
+            try:
+                self._blocks.get_nowait()
+                self._blocks.put_nowait(item)
+            except (queue.Empty, queue.Full):
+                pass
 
+    def _loop(self) -> None:
         while not self._stop.is_set():
             try:
-                chunk = sd.rec(hop_samples, samplerate=sr, channels=1,
-                               dtype="float32")
-                sd.wait()
-                # The last sample was captured now (blocking read): the window
-                # is stamped on the pipeline's monotonic clock, so fusion can
-                # tell which frames it describes (D15).
-                end_at, wall = time.monotonic(), time.time()
-                if self._stop.is_set():
-                    break
-                samples = np.nan_to_num(chunk.flatten().astype(np.float32))
-                self._notify_samples(samples, end_at)
-
-                # Ring buffer holds exactly one analysis window.
-                self._ring = np.concatenate([self._ring, samples])[-window_samples:]
-                if len(self._ring) < window_samples:
-                    continue
-                self._publish(self.classify_window(self._ring, start=end_at - window,
-                                                   end=end_at, wall_end=wall))
+                samples, end_at, wall = self._blocks.get(timeout=0.5)
+            except queue.Empty:
+                continue
+            try:
+                self.process_block(samples, end_at, wall)
             except Exception as exc:
-                log.debug("audio loop error: %s", exc)
-                time.sleep(0.5)
+                log.debug("audio block failed: %s", exc)
+
+    def process_block(self, samples: np.ndarray, end_at: float,
+                      wall: float | None = None) -> AudioResult | None:
+        """One captured hop: listeners (the clip buffer), the ring buffer and,
+        once a full window is held, a classification stamped with that
+        window (D15). Public so it can be driven without a microphone."""
+        window = self.cfg.audio_window_seconds
+        window_samples = int(self.cfg.audio_sample_rate * window)
+        samples = np.nan_to_num(np.asarray(samples, dtype=np.float32).reshape(-1))
+        self._notify_samples(samples, end_at)
+        self._ring = np.concatenate([self._ring, samples])[-window_samples:]
+        if len(self._ring) < window_samples:
+            return None
+        result = self.classify_window(self._ring, start=end_at - window, end=end_at,
+                                      wall_end=wall if wall is not None else time.time())
+        self._publish(result)
+        return result
 
     def _publish(self, result: AudioResult) -> None:
         with self._lock:
@@ -458,8 +516,6 @@ class AudioEngine:
                 cue = CNN_CUES.get(name)
                 if cue is not None:
                     cues[cue] = max(cues[cue], float(prob))
-            if not settings.audio.calm_talk_is_benign:
-                cues["benign_social"] = 0.0
 
             if label in _QUIET:
                 return AudioResult(0.0, label, confidence, cues=cues, rms=rms, model="cnn")
@@ -471,7 +527,7 @@ class AudioEngine:
                                model="cnn")
         except Exception as exc:
             log.debug("audio inference failed: %s", exc)
-            return AudioResult(0.0, "normal_ambient", 0.0, rms=rms)
+            return AudioResult(0.0, "normal_ambient", 0.0, rms=rms, model="error")
 
     def _tag(self, samples: np.ndarray, rms: float) -> AudioResult:
         try:
@@ -481,7 +537,7 @@ class AudioEngine:
                     calm_talk=settings.audio.calm_talk_is_benign)
         except Exception as exc:
             log.debug("sound tagger failed: %s", exc)
-            return AudioResult(0.0, "normal_ambient", 0.0, rms=rms)
+            return AudioResult(0.0, "normal_ambient", 0.0, rms=rms, model="error")
         # The legacy scalar (``FeatureVector.audio``): the strongest threat cue,
         # weighted like the CNN classes it replaces.
         weights = {"weapon_sound": THREAT_WEIGHTS["gunshot"],
@@ -510,7 +566,12 @@ class AudioEngine:
         samples = np.nan_to_num(np.asarray(samples, dtype=np.float32).reshape(-1))
         if rms is None:
             rms = float(np.sqrt(np.mean(samples ** 2))) if len(samples) else 0.0
-        if rms < self.cfg.audio_rms_floor:
+        own = (self_output.overlapping(start, end)
+               if start is not None and end is not None else None)
+        if own is not None:
+            # The device's own speaker, siren or buzzer: not the room.
+            result = AudioResult(0.0, f"own {own}", 0.0, rms=rms, model="self")
+        elif rms < self.cfg.audio_rms_floor:
             # Energy gate. Skipping inference on a quiet room is both a large
             # compute saving and the single most effective acoustic
             # false-alarm suppressor available.
@@ -552,13 +613,36 @@ class AudioEngine:
 
     def stop(self) -> None:
         self._stop.set()
+        stream = getattr(self, "_stream", None)
+        if stream is not None:
+            try:
+                stream.stop()
+                stream.close()
+            except Exception as exc:
+                log.debug("microphone stream close failed: %s", exc)
         if self._thread is not None:
             self._thread.join(timeout=2.0)
 
 
+def block_end_monotonic(time_info, frames: int, rate: int, now: float | None = None) -> float:
+    """The monotonic time of a block's last sample. PortAudio stamps the first
+    sample's ADC time (``inputBufferAdcTime``) on its own clock, with that
+    clock's "now" (``currentTime``); the difference is how long ago it was
+    captured. Backends that report zeros fall back to the callback time."""
+    now = time.monotonic() if now is None else now
+    try:
+        adc = float(getattr(time_info, "inputBufferAdcTime", 0.0) or 0.0)
+        current = float(getattr(time_info, "currentTime", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return now
+    age = current - adc
+    if adc <= 0.0 or current <= 0.0 or not (0.0 <= age <= 5.0):
+        return now
+    return now - age + frames / float(rate)
+
+
 def _empty_cues() -> dict[str, float]:
-    return {cue: 0.0 for cue in ("aggression", "weapon_sound", "fire_sound",
-                                 "benign_social", "siren")}
+    return {cue: 0.0 for cue in CUE_NAMES}
 
 
 class FileAudio:
@@ -653,5 +737,6 @@ def decode_audio_file(path, rate: int | None = None) -> np.ndarray | None:
     return np.frombuffer(proc.stdout, dtype=np.float32).copy()
 
 
-__all__ = ["AudioEngine", "AudioResult", "CLASS_CUES", "CNN_CUES", "FileAudio",
-           "THREAT_WEIGHTS", "alignment", "audio_votes", "decode_audio_file"]
+__all__ = ["AudioEngine", "AudioResult", "CLASS_CUES", "CNN_CUES", "CUE_NAMES",
+           "FileAudio", "THREAT_WEIGHTS", "alignment", "audio_votes", "block_end_monotonic",
+           "decode_audio_file", "neutral_reason"]

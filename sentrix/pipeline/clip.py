@@ -78,7 +78,8 @@ from sentrix.fusion.evidence import (AUDIO_SOURCES, CLASSIFIER_SOURCES, DETECTOR
                                      ClassEvidence,
                                      ClipConfirmation, ClipObservation, strongest)
 from sentrix.fusion.features import FeatureVector
-from sentrix.perception.audio import AudioResult, alignment, audio_votes
+from sentrix.perception.audio import (CUE_NAMES, AudioResult, alignment, audio_votes,
+                                      neutral_reason)
 from sentrix.fusion.policy import LevelPolicy, LevelState, _per_threshold
 from sentrix.perception.detector import Detection, DetectionResult
 from sentrix.perception.identity import FaceCheck, IdentityResult
@@ -848,70 +849,94 @@ class ClipEngine:
         return observations, best
 
     # ── S5 ────────────────────────────────────────────────────────────────────
-    def _audio(self, clip: Clip, stages: _Stages) -> tuple[dict, AudioResult | None]:
-        """S5: the sound over the clip's own window (aligned by construction),
-        else the audio engine's newest window *if* it describes the clip end
-        (D15), else unavailable. Returns the record and the aligned result."""
+    def _audio(self, clip: Clip, stages: _Stages
+               ) -> tuple[dict, AudioResult | None, list[AudioResult]]:
+        """S5: the sound over the clip's own buffered audio (aligned by
+        construction), classified as two non-overlapping halves - a source
+        confirms only when both halves agree, so one impulse cannot (review
+        F4) - else the audio engine's newest window *if* it describes the clip
+        end (D15; one window: it can lower or show, never confirm), else
+        unavailable. Returns the record, the combined result shown, and the
+        parts that vote."""
         token = stages.start("S5_audio")
         engine = getattr(self.pipeline, "audio", None)
         rms = clip.audio_rms
         result: AudioResult | None = None
+        parts: list[AudioResult] = []
+        source = None
         if rms is not None:
-            if rms < settings.windows.audio_rms_floor:
-                result = AudioResult(0.0, "normal_ambient", 1.0, cues={
-                    c: 0.0 for c in ("aggression", "weapon_sound", "fire_sound",
-                                     "benign_social", "siren")}, rms=rms, model="quiet")
-                source = "clip (quiet)"
-            else:
-                classify = (getattr(engine, "classify_window", None)
-                            or getattr(engine, "_classify", None))
-                if classify is not None:
-                    raw = classify(clip.audio, rms)
-                    result = raw if isinstance(raw, AudioResult) else AudioResult(
-                        float(getattr(raw, "score", 0.0)), str(getattr(raw, "label", "")),
-                        float(getattr(raw, "confidence", 0.0)),
-                        cues=dict(getattr(raw, "cues", None) or {}), rms=rms,
-                        model=str(getattr(raw, "model", "cnn")))
-                source = "clip"
-            if result is not None:
-                result.start, result.end = clip.start, clip.end
+            source = "clip"
+            samples = np.asarray(clip.audio, dtype=np.float32).reshape(-1)
+            half = len(samples) // 2
+            mid = clip.start + (clip.end - clip.start) / 2.0
+            spans = ((samples[:half], clip.start, mid), (samples[half:], mid, clip.end))
+            classified = [self._audio_part(engine, chunk, lo, hi) for chunk, lo, hi in spans]
+            parts = [r for r in classified
+                     if r is not None and alignment(r, r.end)["status"] == "aligned"]
+            result = _combine_parts(parts, clip, rms)
             align = alignment(result, clip.end) if result is not None else {
-                "status": "unclassified", "lag_s": None}
+                "status": next((alignment(r, clip.end)["status"] for r in classified
+                                if r is not None), "unclassified"), "lag_s": None}
         elif engine is not None and hasattr(engine, "result_for"):
             # The audio engine owns the microphone and classifies its own 4 s
             # window every second: usable only if it describes this clip.
             result, align = engine.result_for(clip.end)
             source = "audio engine"
+            parts = [result] if result is not None else []
         else:
             align = {"status": "disabled" if engine is None else "untimed", "lag_s": None}
-            source = None
         if result is not None and align.get("status") == "aligned":
             out = {"score": float(result.score), "label": result.label,
                    "rms": None if rms is None else round(rms, 5), "source": source,
                    "model": result.model,
                    "cues": {k: round(float(v), 4) for k, v in (result.cues or {}).items()},
-                   "start": result.start, "end": result.end}
+                   "start": result.start, "end": result.end, "parts": len(parts),
+                   "neutral": neutral_reason(result)}
         else:
-            result = None
+            result, parts = None, []
             out = {"score": 0.0, "label": "disabled" if engine is None else "audio unavailable",
                    "rms": None if rms is None else round(rms, 5), "source": source}
         out["alignment"] = align
         out["status"] = align.get("status")
-        stages.done(token, 1 if source == "clip" else 0)
-        return out, result
+        stages.done(token, 2 if source == "clip" else 0)
+        return out, result, parts
 
-    def _audio_observations(self, result: AudioResult | None, clip: Clip,
+    @staticmethod
+    def _audio_part(engine, samples: np.ndarray, start: float, end: float
+                    ) -> AudioResult | None:
+        """One non-overlapping part of the clip's audio, stamped with its span."""
+        rms = float(np.sqrt(np.mean(np.square(samples, dtype=np.float64)))) if samples.size else 0.0
+        if rms < settings.windows.audio_rms_floor:
+            return AudioResult(0.0, "normal_ambient", 1.0, cues={c: 0.0 for c in CUE_NAMES},
+                               rms=rms, model="quiet", start=start, end=end)
+        classify = (getattr(engine, "classify_window", None)
+                    or getattr(engine, "_classify", None))
+        if classify is None:
+            return None
+        try:
+            raw = classify(samples, rms, start=start, end=end)
+        except TypeError:                       # a classifier without the stamp
+            raw = classify(samples, rms)
+        result = raw if isinstance(raw, AudioResult) else AudioResult(
+            float(getattr(raw, "score", 0.0)), str(getattr(raw, "label", "")),
+            float(getattr(raw, "confidence", 0.0)),
+            cues=dict(getattr(raw, "cues", None) or {}), rms=rms,
+            model=str(getattr(raw, "model", "cnn")))
+        result.start, result.end = start, end
+        return result
+
+    def _audio_observations(self, parts: list[AudioResult], clip: Clip,
                             person_recent) -> list[ClipObservation]:
-        """One observation per class for the clip's aligned audio window; the
-        group holds the window length (the vote's span)."""
-        if result is None:
-            return []
-        span = max(0.0, float((result.end or clip.end) - (result.start or clip.start)))
+        """One observation per class per non-overlapping audio part; the group
+        holds the part's length (the vote's span)."""
         out = []
-        for source, per_class in audio_votes(result).items():
-            for cls, (value, threshold, _fresh) in per_class.items():
-                out.append(ClipObservation(source, cls, float(value), float(threshold),
-                                           clip.end, span, person_recent(clip.end)))
+        for part in parts:
+            span = max(0.0, float((part.end or clip.end) - (part.start or clip.start)))
+            at = part.end if part.end is not None else clip.end
+            for source, per_class in audio_votes(part).items():
+                for cls, (value, threshold, _fresh) in per_class.items():
+                    out.append(ClipObservation(source, cls, float(value), float(threshold),
+                                               at, span, person_recent(at)))
         return out
 
     # ── votes ─────────────────────────────────────────────────────────────────
@@ -1005,11 +1030,11 @@ class ClipEngine:
             violence_obs, violence_score = self._action(clip, keyframes, person_recent, stages)
         else:
             stages.skip("S4_action", "gate closed")
-        audio, audio_result = self._audio(clip, stages)
+        audio, _audio_result, audio_parts = self._audio(clip, stages)
 
         token = stages.start("S6_fusion")
         observations = (self._observations(keyframes, person_recent) + violence_obs
-                        + self._audio_observations(audio_result, clip, person_recent))
+                        + self._audio_observations(audio_parts, clip, person_recent))
         analysed_now = [k for k in keyframes if k.analysis is not None]
         known = bool(analysed_now) and all(k.analysis.detections.person_ok for k in analysed_now)
         context = {"persons": (max((len(k.analysis.persons) for k in analysed_now), default=0)
@@ -1120,6 +1145,22 @@ class ClipEngine:
         horizon = start + float(self.cfg.hop_seconds)
         for seq in [s for s, a in self._cache.items() if a.at <= horizon]:
             del self._cache[seq]
+
+
+def _combine_parts(parts: list[AudioResult], clip: Clip, rms: float) -> AudioResult | None:
+    """What the clip's audio sounded like overall (shown and logged): each
+    cue's highest value over the usable parts, the loudest part's label."""
+    if not parts:
+        return None
+    cues: dict[str, float] = {}
+    for part in parts:
+        for name, value in (part.cues or {}).items():
+            cues[name] = max(cues.get(name, 0.0), float(value))
+    top = max(parts, key=lambda r: (r.score, r.confidence))
+    models = {r.model for r in parts}
+    model = top.model if len(models) == 1 else "+".join(sorted(models))
+    return AudioResult(max(r.score for r in parts), top.label, top.confidence, cues=cues,
+                       start=clip.start, end=clip.end, rms=rms, model=model)
 
 
 # ── level policy ──────────────────────────────────────────────────────────────

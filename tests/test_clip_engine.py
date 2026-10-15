@@ -533,7 +533,9 @@ class TestActionStage:
 
 
 class TestAudioStage:
-    def test_buffered_audio_is_classified_over_the_window(self, tmp_path):
+    def test_buffered_audio_is_classified_as_two_non_overlapping_halves(self, tmp_path):
+        """Review F4: the clip's 4 s of audio as two 2 s halves, so one
+        impulse cannot confirm a source on its own."""
         seen = []
 
         class Engine:
@@ -548,8 +550,9 @@ class TestAudioStage:
             if i % 15 == 0:
                 runner.buffer.add_audio(np.full(16000, 0.3, np.float32), end_at=t)
             runner.feed(frame_at(t), t)
-        assert seen and max(seen) == 4 * 16000
+        assert seen and max(seen) == 2 * 16000
         assert runner.last_scores.audio["label"] == "scream"
+        assert runner.last_scores.audio["parts"] == 2
         assert runner.last_scores.features.audio == pytest.approx(0.4)
 
     def test_quiet_audio_is_not_classified(self, tmp_path):
@@ -571,7 +574,7 @@ class TestAudioStage:
         class Engine:
             def result_for(self, at, tolerance=None):
                 result = AudioResult(0.2, "siren", 0.9, cues={"siren": 0.9},
-                                     start=at - 4.0, end=at - 0.2)
+                                     start=at - 4.0, end=at - 0.2, model="panns_cnn10")
                 return result, alignment(result, at)
 
         runner = ClipRunner(make_pipeline(tmp_path, audio=Engine()), fast_lane=False)
@@ -586,7 +589,7 @@ class TestAudioStage:
         class Engine:
             def result_for(self, at, tolerance=None):
                 result = AudioResult(0.0, "Laughter", 0.9, cues={"benign_social": 0.9},
-                                     start=at - 14.0, end=at - 10.0)
+                                     start=at - 14.0, end=at - 10.0, model="panns_cnn10")
                 align = alignment(result, at)
                 return (result if align["status"] == "aligned" else None), align
 

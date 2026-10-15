@@ -316,10 +316,16 @@ def _finalise(snap: Snapshot, steps: Sequence[Step]) -> tuple:
 
 
 # ── eligibility ───────────────────────────────────────────────────────────────
-def wants(incident_type: str, level: int, rules: Rules) -> bool:
-    """The pipeline hook's O(1) question. Only the alarm classes are claimed;
-    an armed intrusion arrives as a level change and is held for the entry
-    delay, so a weapon appearing later in the same incident still triggers."""
+def wants(incident_type: str, level: int, rules: Rules,
+          evidence_state: str | None = None) -> bool:
+    """The pipeline hook's O(1) question. Only the alarm classes are claimed,
+    and a fight only when corroborated (video and aligned audio, D15): an
+    unclaimed incident keeps the legacy L4 SMS / dispatch / L5 call paths,
+    which ``Pipeline._act`` skips once "sos" is claimed. An armed intrusion
+    arrives as a level change and is held for the entry delay, so a weapon
+    appearing later in the same incident still triggers."""
+    if incident_type == "assault" and evidence_state != "corroborated":
+        return False
     return incident_type in rules.alarm_classes and int(level) >= rules.min_level
 
 

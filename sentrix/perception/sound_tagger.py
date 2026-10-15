@@ -22,6 +22,14 @@ no ``torchlibrosa`` or ``librosa`` is needed either. Weights:
 ``models/audio/panns_cnn10_audioset.pth`` (``tools/fetch_models.py`` downloads
 and checks them if missing).
 
+**Threads.** The tagger runs on its own onnxruntime session
+(``models/audio/panns_cnn10_audioset.onnx``, exported from the same weights by
+``tools/fetch_models.py --export``; intra-op ``settings.audio.threads``,
+spinning off), so it never touches torch's process-wide thread pool - an
+earlier version called ``torch.set_num_threads(2)`` and halved DINOv2's speed.
+Without onnxruntime or the ONNX file it falls back to torch, still without
+changing the thread count.
+
 Cues
 ----
 :data:`CUE_LABELS` maps AudioSet display names to five SENTRIX cues; a cue's
@@ -30,9 +38,12 @@ value is the highest sigmoid score among its labels:
 * ``aggression`` - screaming, shouting, yelling, crying, slaps, breaking glass;
 * ``weapon_sound`` - gunshots, machine guns, explosions;
 * ``fire_sound`` - smoke and fire alarms, the crackle of fire;
-* ``benign_social`` - laughter, music, television, radio, and calm talk
-  (``Speech``/``Conversation`` scaled by ``1 - aggression``, so a shouted
-  argument is not "calm talk");
+* ``benign_social`` - laughter (giggles, chuckles);
+* ``calm_talk`` - ``Speech``/``Conversation`` scaled by ``1 - aggression`` (a
+  shouted argument is not calm talk); banter only at a strict bar;
+* ``background`` - music, television, radio: a window dominated by them is
+  *neutral* (no audio vote), since a film's screams or gunfire say nothing
+  about the room;
 * ``siren`` - emergency vehicles.
 
 The mapping is a published rule, not a fitted model; its thresholds
@@ -59,7 +70,8 @@ LABELS_NAME = "audioset_labels.csv"
 WEIGHTS_SHA256 = "5240bdc47444e331bbeb54fd741d2b3f933a4526e84b0c17bf3593df94b13962"
 WEIGHTS_URL = "https://zenodo.org/records/3987831/files/Cnn10_mAP=0.380.pth?download=1"
 
-CUES = ("aggression", "weapon_sound", "fire_sound", "benign_social", "siren")
+CUES = ("aggression", "weapon_sound", "fire_sound", "benign_social", "calm_talk",
+        "background", "siren")
 
 #: AudioSet display names behind each cue (exact names from the label file).
 CUE_LABELS: dict[str, tuple[str, ...]] = {
@@ -70,12 +82,15 @@ CUE_LABELS: dict[str, tuple[str, ...]] = {
                      "Cap gun", "Explosion", "Boom"),
     "fire_sound": ("Smoke detector, smoke alarm", "Fire alarm", "Fire", "Crackle"),
     "benign_social": ("Laughter", "Baby laughter", "Giggle", "Snicker", "Belly laugh",
-                      "Chuckle, chortle", "Music", "Television", "Radio"),
+                      "Chuckle, chortle"),
+    "background": ("Music", "Television", "Radio", "Background music", "Soundtrack music",
+                   "Theme music", "Video game music"),
     "siren": ("Siren", "Civil defense siren", "Emergency vehicle", "Police car (siren)",
               "Ambulance (siren)", "Fire engine, fire truck (siren)"),
 }
-#: Talk counts as benign only in proportion to how un-aggressive it sounds.
+#: Talk counts as calm only in proportion to how un-aggressive it sounds.
 CALM_TALK_LABELS = ("Speech", "Conversation", "Narration, monologue")
+ONNX_NAME = "panns_cnn10_audioset.onnx"
 
 
 def load_labels(path: Path) -> list[str]:
@@ -173,52 +188,106 @@ def cues_from_scores(scores: np.ndarray, labels: list[str], *,
     for cue, names in CUE_LABELS.items():
         ids = [index[n] for n in names if n in index]
         out[cue] = float(max((scores[i] for i in ids), default=0.0))
-    if calm_talk:
-        talk = max((float(scores[index[n]]) for n in CALM_TALK_LABELS if n in index),
-                   default=0.0)
-        out["benign_social"] = max(out["benign_social"], talk * (1.0 - out["aggression"]))
+    talk = max((float(scores[index[n]]) for n in CALM_TALK_LABELS if n in index), default=0.0)
+    out["calm_talk"] = talk * (1.0 - out["aggression"]) if calm_talk else 0.0
     return out
 
 
+def load_torch_cnn10(weights: Path):
+    """The torch module with the checkpoint loaded (never touches threads)."""
+    import torch
+    checkpoint = torch.load(str(weights), map_location="cpu", weights_only=True)
+    state = checkpoint.get("model", checkpoint)
+    net = _build_cnn10(int(state["fc_audioset.weight"].shape[0]))
+    net.load_state_dict(state)
+    return net.eval()
+
+
+def export_onnx(weights: Path, target: Path) -> float:
+    """Export the CNN10 to ONNX (dynamic batch and length); returns the largest
+    absolute difference to torch on a random window (parity check)."""
+    import torch
+    net = load_torch_cnn10(weights)
+    dummy = torch.zeros(1, SAMPLE_RATE * 4)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    torch.onnx.export(net, (dummy,), str(target), input_names=["wave"],
+                      output_names=["scores"], opset_version=17, dynamo=False,
+                      dynamic_axes={"wave": {0: "batch", 1: "samples"},
+                                    "scores": {0: "batch"}})
+    import onnxruntime as ort
+    session = ort.InferenceSession(str(target), providers=["CPUExecutionProvider"])
+    wave = np.random.default_rng(0).normal(0, 0.1, (1, SAMPLE_RATE * 4)).astype(np.float32)
+    got = session.run(None, {"wave": wave})[0]
+    with torch.no_grad():
+        want = net(torch.from_numpy(wave)).numpy()
+    return float(np.abs(got - want).max())
+
+
 class SoundTagger:
-    """PANNs CNN10 on CPU (or CUDA if torch has it). ``available`` is False
-    when the weights or labels are missing; nothing is ever downloaded here."""
+    """PANNs CNN10 on its own onnxruntime session (torch fallback). ``available``
+    is False when the weights or labels are missing; nothing is downloaded
+    here, and the process-wide torch thread count is never changed."""
 
     name = "panns_cnn10"
 
-    def __init__(self, weights: Path, labels: Path, *, threads: int | None = None) -> None:
+    def __init__(self, weights: Path, labels: Path, *, threads: int | None = None,
+                 onnx: Path | None = None) -> None:
         self.available = False
+        self.backend = "none"
         self.labels: list[str] = []
         self._model = None
         self._torch = None
+        self._session = None
         if not weights.exists() or not labels.exists():
             log.info("sound tagger weights not found (%s); run tools/fetch_models.py",
                      weights)
             return
         try:
-            import torch
-            if threads:
-                torch.set_num_threads(max(1, int(threads)))
-            checkpoint = torch.load(str(weights), map_location="cpu", weights_only=True)
-            state = checkpoint.get("model", checkpoint)
-            net = _build_cnn10(int(state["fc_audioset.weight"].shape[0]))
-            net.load_state_dict(state)
-            net.eval()
             self.labels = load_labels(labels)
-            if len(self.labels) != int(state["fc_audioset.weight"].shape[0]):
-                log.error("sound tagger: %d labels for %d outputs", len(self.labels),
-                          int(state["fc_audioset.weight"].shape[0]))
+            onnx = onnx if onnx is not None else weights.with_name(ONNX_NAME)
+            if onnx.exists() and self._load_onnx(onnx, threads):
+                self.backend = "onnx"
+            else:
+                import torch
+                self._model, self._torch = load_torch_cnn10(weights), torch
+                self.backend = "torch"
+            outputs = len(self.scores(np.zeros(SAMPLE_RATE, np.float32), SAMPLE_RATE))
+            if len(self.labels) != outputs:
+                log.error("sound tagger: %d labels for %d outputs", len(self.labels), outputs)
                 return
-            self._model, self._torch = net, torch
             self.available = True
-            log.info("sound tagger loaded: PANNs CNN10 (%d AudioSet classes)", len(self.labels))
+            log.info("sound tagger loaded: PANNs CNN10 (%d AudioSet classes, %s)",
+                     len(self.labels), self.backend)
         except Exception as exc:
             log.error("sound tagger failed to load: %s", exc)
 
+    def _load_onnx(self, path: Path, threads: int | None) -> bool:
+        try:
+            import onnxruntime as ort
+        except ImportError:
+            return False
+        try:
+            options = ort.SessionOptions()
+            options.intra_op_num_threads = max(1, int(threads or 2))
+            options.inter_op_num_threads = 1
+            # Like the face models (CLAUDE.md M2): a spinning pool steals cores.
+            options.add_session_config_entry("session.intra_op.allow_spinning", "0")
+            self._session = ort.InferenceSession(str(path), options,
+                                                 providers=["CPUExecutionProvider"])
+            return True
+        except Exception as exc:
+            log.warning("sound tagger ONNX %s unusable (%s); using torch", path.name, exc)
+            self._session = None
+            return False
+
     def scores(self, samples: np.ndarray, rate: int) -> np.ndarray:
         """527 sigmoid scores for one window of mono samples."""
-        torch = self._torch
         wave = resample(np.asarray(samples, dtype=np.float32).reshape(-1), rate)
+        if wave.size < 1024:
+            wave = np.pad(wave, (0, 1024 - wave.size))
+        if self._session is not None:
+            return self._session.run(None, {"wave": wave[None, :]})[0][0]
+        torch = self._torch
         with torch.no_grad():
             out = self._model(torch.from_numpy(wave)[None, :])
         return out[0].numpy()
@@ -233,5 +302,5 @@ class SoundTagger:
 
 
 __all__ = ["CALM_TALK_LABELS", "CUES", "CUE_LABELS", "SAMPLE_RATE", "SoundTagger",
-           "WEIGHTS_NAME", "WEIGHTS_SHA256", "WEIGHTS_URL", "LABELS_NAME",
-           "cues_from_scores", "load_labels", "resample"]
+           "WEIGHTS_NAME", "WEIGHTS_SHA256", "WEIGHTS_URL", "LABELS_NAME", "ONNX_NAME",
+           "cues_from_scores", "export_onnx", "load_labels", "load_torch_cnn10", "resample"]

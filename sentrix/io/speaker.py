@@ -40,6 +40,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from sentrix.config import settings
+from sentrix.io import self_output
 from sentrix.utils.logging import get_logger
 
 log = get_logger("speaker")
@@ -55,13 +56,18 @@ PRESETS: dict[str, str] = {
 }
 
 _CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+#: SAPI5 (pyttsx3 on Windows) parses its input as XML: no markup gets through.
+_MARKUP = re.compile(r"[<>]")
+#: A message longer than this is a stuck backend, not speech.
+PLAY_TIMEOUT_SECONDS = 30.0
 _SPACES = re.compile(r"\s+")
 
 
 def clean_text(text: Any, limit: int | None = None) -> str:
-    """Printable, single-line, trimmed; control characters removed."""
+    """Printable, single-line, trimmed; control characters and ``<``/``>``
+    (SAPI5 XML markup) removed."""
     limit = settings.speaker.max_chars if limit is None else limit
-    value = _SPACES.sub(" ", _CONTROL.sub(" ", str(text or ""))).strip()
+    value = _SPACES.sub(" ", _MARKUP.sub(" ", _CONTROL.sub(" ", str(text or "")))).strip()
     return value[: max(0, int(limit)) + 1]          # one over: lets say() refuse
 
 
@@ -188,6 +194,7 @@ class Speaker:
         self._sent: deque[float] = deque()
         self._speaking = False
         self._last: dict[str, Any] | None = None
+        self.play_timeout = PLAY_TIMEOUT_SECONDS
 
     # ── status ────────────────────────────────────────────────────────────────
     def status(self) -> dict[str, Any]:
@@ -258,15 +265,32 @@ class Speaker:
                          "no text-to-speech backend: logged only", text=phrase, preset=preset)
 
     def _speak(self, phrase: str) -> None:
+        """Play with a watchdog: a backend that never returns (a stuck SAPI5
+        loop, a hung aplay) cannot leave the speaker "talking" for ever. The
+        playback interval is marked as the device's own sound, so the
+        microphone's windows over it never vote (D15)."""
+        own = self_output.begin("speaker")
         try:
             for _ in range(max(1, int(self.cfg.repeat))):
-                self.player.play(phrase)
-        except Exception as exc:
-            log.error("speaker failed: %s", exc)
+                worker = threading.Thread(target=self._play_once, args=(phrase,), daemon=True,
+                                          name="sentrix-speaker-play")
+                worker.start()
+                worker.join(self.play_timeout)
+                if worker.is_alive():
+                    log.error("speaker backend %s did not finish within %.0f s; released",
+                              self.player.name, self.play_timeout)
+                    break
         finally:
+            self_output.end(own)
             with self._lock:
                 self._speaking = False
             _publish_state(self)
+
+    def _play_once(self, phrase: str) -> None:
+        try:
+            self.player.play(phrase)
+        except Exception as exc:
+            log.error("speaker failed: %s", exc)
 
 
 def _default_audit(event: str, **detail: Any) -> None:
@@ -308,5 +332,6 @@ def _reset_speaker(speaker: Speaker | None = None) -> None:
         _speaker = speaker
 
 
-__all__ = ["ConsolePlayer", "EspeakPlayer", "PRESETS", "Player", "Pyttsx3Player",
+__all__ = ["ConsolePlayer", "EspeakPlayer", "PLAY_TIMEOUT_SECONDS", "PRESETS", "Player",
+           "Pyttsx3Player",
            "SayResult", "Speaker", "build_player", "clean_text", "get_speaker"]

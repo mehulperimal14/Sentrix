@@ -42,9 +42,19 @@ For a fight (``assault``, experimental, D1): capped at L2 (``experimental_cap``)
 unless the video fight **and** aligned aggression audio are both confirmed,
 with ``fight_min_persons`` people and motion over ``fight_motion_floor``: then
 the L3 band (state ``corroborated``: two modalities). L4 needs, on top, a
-second visual source (``fight_max_level`` >= 4). Aligned laughter or calm talk
-(``benign_social``) with no aggression is banter: the fight is held under the
-L2 band (``banter_cap``). Robbery stays experimental (L2).
+second visual *modality* (a detector vote; scene + violence are one), and
+``fight_max_level`` is a hard cap (the score stays under the next band).
+Aligned laughter or very calm talk (``audio_benign``) with no aggression is
+banter: the fight stays at L2 - logged and shown, labelled banter, never lower.
+Aggression and banter in the same audio are conflicting: L2. TV, music or
+radio in the window make the audio neutral (no audio vote at all,
+``perception/audio.audio_votes``). Robbery stays experimental (L2).
+
+An audio window is a new observation only if it does not overlap the last
+one counted (the pipeline's ``fresh`` flag): with 4 s windows every 1 s, one
+impulse would otherwise be "confirmed" by three overlapping windows. Audio
+confirmation windows tolerate the longer gap between non-overlapping windows
+(``audio_confirm_max_gap_seconds``).
 
 Identity never relaxes threat evidence: frame-level identity cannot tell a
 resident from a stranger beside them (M4 is per-track, but no rule uses it to
@@ -263,9 +273,20 @@ def corroborated_score(confirmed: list[Vote], cfg=None) -> float | None:
         return None
     ranked = sorted(modalities.values(), reverse=True)
     score = cfg.corroborated_floor + (cfg.corroborated_cap - cfg.corroborated_floor) * ranked[1]
-    if len(modalities) >= 3:
+    if len(modalities) >= 3 and three_modality_ok(modalities, cfg):
         score = max(score, cfg.three_modality_floor)
     return min(score, cfg.corroborated_cap)
+
+
+def three_modality_ok(modalities: dict[str, float], cfg=None) -> bool:
+    """The L5 floor for three modalities needs the audio among them to be
+    more than a whisper over its bar (``three_modality_audio_min_strength``):
+    replica-gun handling scores "Cap gun" 0.2-0.8, and one such sound must not
+    turn a corroborated L4 into a siren."""
+    cfg = cfg or settings.threat
+    audio = modalities.get(AUDIO)
+    return audio is None or audio >= float(getattr(cfg, "three_modality_audio_min_strength",
+                                                   0.3))
 
 
 def combine(scores: list[float]) -> float:
@@ -302,8 +323,12 @@ class EvidenceAccumulator:
     def _window(self, cls: str, source: str) -> ConfirmationWindow:
         key = (cls, source)
         if key not in self._windows:
+            gap = self.cfg.confirm_max_gap_seconds
+            if source in AUDIO_SOURCES:
+                # Counted audio windows do not overlap: 4 s apart at best.
+                gap = max(gap, float(getattr(self.cfg, "audio_confirm_max_gap_seconds", 6.0)))
             self._windows[key] = ConfirmationWindow(
-                self.cfg.confirm_k, self.cfg.confirm_n, self.cfg.confirm_max_gap_seconds)
+                self.cfg.confirm_k, self.cfg.confirm_n, gap)
         return self._windows[key]
 
     def _allowed(self, source: str, cls: str) -> bool:
@@ -430,8 +455,18 @@ class EvidenceAccumulator:
                              reason, state, modalities, rule)
 
     def _fight(self, support, against, modalities, visual, base, context, notes):
-        """The fight rule (D15): video and aligned audio must agree to leave L2;
-        banter (laughter, calm talk) holds it under L2."""
+        """The fight rule (D15): video and aligned aggression audio must agree
+        to leave L2; banter (laughter, very calm talk) keeps it at L2."""
+        score, state, rule = self._fight_rule(support, against, modalities, visual, base,
+                                              context, notes)
+        # fight_max_level is a cap: the score stays under the next band.
+        max_level = int(getattr(self.cfg, "fight_max_level", 3))
+        thresholds = settings.policy.thresholds
+        if 2 <= max_level <= len(thresholds):
+            score = min(score, thresholds[max_level - 1] - 0.01)
+        return score, state, rule
+
+    def _fight_rule(self, support, against, modalities, visual, base, context, notes):
         cfg = self.cfg
         benign = any(v.confirmed and v.valid for v in against)
         aggression = AUDIO in modalities
@@ -442,26 +477,30 @@ class EvidenceAccumulator:
         motion_ok = motion is not None and motion >= float(getattr(cfg, "fight_motion_floor", 0.0))
         max_level = int(getattr(cfg, "fight_max_level", 3))
 
-        if benign and not aggression:
-            notes.append("banter: aligned laughter/calm talk, no aggression")
-            return min(base, getattr(cfg, "banter_cap", cfg.unconfirmed_ceiling)), \
-                "unconfirmed", "banter"
+        if benign and visual:
+            # Banter, or banter mixed with aggression: never above L2, never
+            # below it either (a fight with laughter is still shown).
+            notes.append("mixed audio: aggression and laughter/calm talk: held at L2"
+                         if aggression else
+                         "banter: aligned laughter/calm talk, no aggression: held at L2")
+            return min(base, cfg.experimental_cap), "confirmed", (
+                "mixed audio" if aggression else "banter")
         if visual and aggression and max_level >= 3:
             if not people_ok or not motion_ok:
                 why = (f"needs {need}+ people" if not people_ok else "needs motion")
                 notes.append(f"video + aggression audio, but {why}: capped at L2")
                 return min(base, cfg.experimental_cap), "confirmed", "experimental"
             weaker = min(max(visual.values()), modalities[AUDIO])
-            visual_sources = {v.source for v in support
-                              if v.confirmed and v.modality in VISUAL_MODALITIES}
-            if max_level >= 4 and len(visual_sources) >= 2:
-                notes.append("fight: two visual sources and aggression audio")
+            if max_level >= 4 and len(visual) >= 2:
+                notes.append("fight: two visual modalities and aggression audio")
                 return (cfg.corroborated_floor
                         + (cfg.corroborated_cap - cfg.corroborated_floor) * weaker,
                         "corroborated", "fight corroborated L4")
             notes.append("fight: video and aligned aggression audio agree (L3; unvalidated)")
             return (cfg.confirmed_floor + (cfg.single_source_cap - cfg.confirmed_floor) * weaker,
                     "corroborated", "fight corroborated")
+        if benign:
+            notes.append("banter heard (laughter/calm talk)")
         if modalities:
             notes.append("experimental: capped at L2 (no aligned aggression audio)"
                          if visual else "audio alone: capped at L2")
@@ -475,6 +514,7 @@ class EvidenceAccumulator:
 __all__ = ["AUDIO", "AUDIO_SOURCES", "CLASS_ORDER", "ClassEvidence", "ConfirmationWindow",
            "EvidenceAccumulator", "MODALITY_NAMES", "VIDEO_CLASSIFIER", "VIDEO_DETECTOR",
            "Vote", "combine", "confirmed_modalities", "corroborated_score", "modality_of",
+           "three_modality_ok",
            "source_score", "strength", "strongest"]
 
 
@@ -551,13 +591,15 @@ class ClipConfirmation:
         self.cfg = cfg or settings.threat
         k = settings.clip.confirm_keyframes if confirm_keyframes is None else confirm_keyframes
         self.k = max(1, int(k))
+        #: Non-overlapping audio parts a source must cross on (the clip's halves).
+        self.audio_k = 2
         self._scorer = EvidenceAccumulator(self.cfg)
 
     def update(self, observations, context: dict | None = None) -> dict[str, ClassEvidence]:
         """``context``: as for :meth:`EvidenceAccumulator.update` (people and
-        motion over the clip). Audio observations (one per clip: the sound
-        model over the clip's own window, so aligned by construction) confirm
-        on one crossing - the 4 s window is itself the temporal evidence."""
+        motion over the clip). Audio observations (the sound model over the
+        clip's two non-overlapping halves, so aligned by construction) confirm
+        when both halves cross."""
         by_source: dict[tuple[str, str], list[ClipObservation]] = {}
         for obs in observations:
             by_source.setdefault((obs.cls, obs.source), []).append(obs)
@@ -606,15 +648,19 @@ class ClipConfirmation:
                                         max(o.value for o in best_slots.values())):
                 best_group, best_slots = group, slots
         hits = len(best_slots)
-        confirmed = hits >= (1 if source in AUDIO_SOURCES else self.k)
+        # Audio parts never overlap (two halves of the clip): a source needs
+        # both, so one impulse cannot confirm itself (review F4); banter
+        # (an "against" source) lowers on one, as in the tick loop.
+        need = (1 if source in AGAINST_SOURCES
+                else self.audio_k if source in AUDIO_SOURCES else self.k)
+        confirmed = hits >= need
         if best_slots:
             top = max(best_slots.values(), key=lambda o: o.value)
             times = sorted(best_slots)
             span = times[-1] - times[0]
             if source in AUDIO_SOURCES:
-                # One audio window covers the whole clip (ClipObservation.group
-                # holds its length in seconds).
-                span = float(top.group) if isinstance(top.group, (int, float)) else 0.0
+                # ClipObservation.group holds each audio part's length.
+                span += float(top.group) if isinstance(top.group, (int, float)) else 0.0
         else:
             top = max(valid, key=lambda o: o.value)
             span = 0.0

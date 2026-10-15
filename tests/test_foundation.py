@@ -500,7 +500,7 @@ class RecordingSos:
     def __init__(self, kinds=("weapon", "fire")):
         self.kinds, self.triggers, self.levels = kinds, [], []
 
-    def wants(self, incident_type, level):
+    def wants(self, incident_type, level, evidence_state=None):
         return incident_type in self.kinds and level >= 3
 
     def trigger(self, trigger):

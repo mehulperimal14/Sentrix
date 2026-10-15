@@ -1,0 +1,9 @@
+{
+  "source": "panns_cnn10_audioset.pth",
+  "source_sha256": "5240bdc47444e331bbeb54fd741d2b3f933a4526e84b0c17bf3593df94b13962",
+  "onnx_sha256": "8aaeeb137ce70f74d31d6e4b2d1114bdf4889f235a59d07bc5142342c99bca9b",
+  "max_abs_diff_vs_torch": 4.76837158203125e-07,
+  "opset": 17,
+  "input": "wave [batch, samples] float32 at 32 kHz",
+  "output": "scores [batch, 527] (AudioSet sigmoid)"
+}

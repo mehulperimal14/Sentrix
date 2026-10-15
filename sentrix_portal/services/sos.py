@@ -12,8 +12,10 @@ What this module owns on the Portal:
   :func:`on_device_offline`): the request switches to ``authority_side =
   "cloud"`` and the cloud runs its timers (:func:`run_timers`: reminders, the
   lapse warning, expiry, re-pages, the 24 h stale close) and answers
-  (:func:`respond`). A lost heartbeat during an open L2+ incident without a
-  request opens one in the cloud (flag ``device_offline``): the tamper signal.
+  (:func:`respond`). A lost heartbeat during an open L3+ alarm-class
+  incident without a request opens one in the cloud (flag
+  ``device_offline``): the tamper signal. An L2 (unrecognised person, audio
+  only, experimental) is audited and told to the owner only.
   Cloud events form their own chain (origin cloud) and go to the device in
   ``sos.sync`` after the next welcome (:func:`sync_messages`); the mirror
   merges the two sides with ``states.reconcile``.
@@ -70,7 +72,8 @@ _REQUEST_KINDS = ("sos.created", "sos.transition", "sos.event")
 FOOTER = "SENTRIX does not contact 112 itself."
 DURESS_BANNER = "Do not go to the home. Call 112."
 WHAT = {"weapon": "a possible weapon (handgun or knife)", "fire": "visible fire",
-        "intrusion": "an intruder while the home was armed",
+        "assault": "a fight (seen and heard)",
+        "intrusion": "an unrecognised person in the home",
         "duress": "an alert", "unknown": "an alert"}
 OUTCOME_LABELS = {"help_arrived": "help arrived", "real_threat": "real threat",
                   "false_alarm_confirmed": "false alarm confirmed",
@@ -550,8 +553,8 @@ def create_cloud_request(db, device: Device | None, household_id: str, *,
                          incident_type: str, level: int, incident_ids: list[str],
                          flags: dict | None = None, parent: AssistanceRequest | None = None,
                          text: str | None = None) -> AssistanceRequest:
-    """A request the cloud opens itself (heartbeat lost during an open L2+
-    incident, or "Request help now" while the device is offline): own UUID,
+    """A request the cloud opens itself (heartbeat lost during an open L3+
+    alarm, or "Request help now" while the device is offline): own UUID,
     ``authority_side="cloud"``, the cloud's chain starting at ``created``."""
     household = db.get(Household, household_id)
     policy = _policy_for(db, household)
@@ -611,29 +614,48 @@ def open_request_for(db, device_id: str) -> AssistanceRequest | None:
             .order_by(AssistanceRequest.created_at.desc()).first())
 
 
+def offline_opens_request(incident_type: str, level: int) -> bool:
+    """Whether a lost heartbeat during an open incident (with no request yet)
+    opens a cloud request: only what would have opened one on the device - an
+    alarm class (weapon, fire, a fight; a fight reaches L3 only corroborated
+    by video and aligned audio) at ``sos.min_level``+. An unrecognised person,
+    an audio-only or an experimental L2 never does (D8 as amended by D15)."""
+    sos = _cfg().sos
+    return int(level) >= int(sos.min_level) and incident_type in tuple(sos.alarm_classes)
+
+
 def on_device_offline(db, device: Device, now: datetime | None = None) -> AssistanceRequest | None:
     """The heartbeat was lost for 45 s. An open request becomes the cloud's
     (flag ``device_offline``; confirmed contacts at once under safety
-    defaults); with no request but an open L2+ incident in the last heartbeat
-    the cloud opens one (the tamper signal)."""
+    defaults). With no request but an open incident in the last heartbeat:
+    an alarm class at L3+ opens one in the cloud (the tamper signal); any other
+    L2+ incident (an unrecognised person, audio only, experimental) is a
+    ``device.tamper`` audit and an owner notice only - no request, no contacts."""
     from sentrix_portal import security
+    from sentrix_portal.services.hub import _incident_type
     heartbeat = device.last_heartbeat or {}
     alarm = heartbeat.get("alarm") if isinstance(heartbeat.get("alarm"), dict) else {}
     level = int(alarm.get("level") or 1) if str(alarm.get("level") or "1").isdigit() else 1
+    incident_type = _incident_type(alarm.get("incident_type"))
     row = open_request_for(db, device.id)
     if row is None and level < 2:
         return None
+    opens = row is None and offline_opens_request(incident_type, level)
     security.audit(db, "device.tamper", actor_type="system", household_id=device.household_id,
                    target_type="device", target_id=device.id,
                    detail={"level": level, "incident_id": alarm.get("incident_id"),
-                           "request_id": row.id if row else None})
+                           "incident_type": incident_type,
+                           "request_id": row.id if row else None,
+                           "opens_request": bool(row is not None or opens)})
     if row is None:
         if not device.household_id:
             return None
-        from sentrix_portal.services.hub import _incident_type
+        if not opens:
+            _notify_owner_offline(db, device, incident_type, level, alarm.get("incident_id"))
+            return None
         row = create_cloud_request(
             db, device, device.household_id,
-            incident_type=_incident_type(alarm.get("incident_type")), level=level,
+            incident_type=incident_type, level=level,
             incident_ids=[alarm.get("incident_id")] if alarm.get("incident_id") else [],
             flags={"device_offline": True})
         _cloud_event(db, row, S.PROMPTED, detail={"via": "cloud"})
@@ -646,6 +668,23 @@ def on_device_offline(db, device: Device, now: datetime | None = None) -> Assist
         _cloud_event(db, row, S.CONTACTS_NOTIFIED, flags={"contacts_notified": True},
                      detail={"why": "device_offline"})
     return row
+
+
+def _notify_owner_offline(db, device: Device, incident_type: str, level: int,
+                          incident_id: str | None) -> None:
+    """The owner, and nobody else, hears that the device went silent during an
+    open L2 (no request: D8 as amended by D15)."""
+    from sentrix.alerting.channels.base import Message
+    owner, recipients = _owner_recipients_for(db, device.household_id)
+    if owner is None:
+        return
+    text = (f"SENTRIX: the device stopped reporting during an open level-{level} alert "
+            f"({WHAT.get(incident_type, 'an alert')}). No assistance request was opened "
+            f"and nobody else was alerted. Check the home or the device.\n{FOOTER}")
+    step = f"offline_l2:{incident_id or device.id}"
+    for recipient in recipients:
+        _enqueue(db, recipient, Message(template="device.offline", step=step, text=text,
+                                        subject="SENTRIX: device offline during an alert"))
 
 
 def sync_messages(db, device_id: str) -> list[dict]:
@@ -1165,9 +1204,13 @@ def _close_tokens(db, row: AssistanceRequest, *, revoke_contacts: bool) -> None:
 
 
 def _owner_recipients(db, row: AssistanceRequest):
+    return _owner_recipients_for(db, row.household_id)
+
+
+def _owner_recipients_for(db, household_id: str | None):
     from sentrix.alerting.channels.base import Recipient
-    owner = _owner(db, row.household_id)
-    household = db.get(Household, row.household_id) if row.household_id else None
+    owner = _owner(db, household_id)
+    household = db.get(Household, household_id) if household_id else None
     if owner is None:
         return None, []
     channels = dict((household.channels if household else None) or {})

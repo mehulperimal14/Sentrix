@@ -50,7 +50,7 @@ from sentrix.web import auth
 router = APIRouter()
 
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9-]{1,64}$")
-_PREVIEW_TYPES = ("weapon", "fire", "intrusion", "duress")
+_PREVIEW_TYPES = ("weapon", "fire", "assault", "intrusion", "duress")
 
 
 def _principal(request: Request) -> auth.LcPrincipal:

@@ -65,7 +65,7 @@ EVENT_KINDS = (
     "incident.upsert", "dispatch.upsert", "verdict.set",
     "sos.created", "sos.transition", "sos.event", "sos.snapshot",
     "evidence.meta", "snapshot.meta", "gallery.audit", "mode.changed",
-    "remote.audit", "notification.status", "node.alert",
+    "remote.audit", "notification.status", "node.alert", "speaker.audit",
 )
 SOS_EVENT_KINDS = frozenset(k for k in EVENT_KINDS if k.startswith("sos."))
 

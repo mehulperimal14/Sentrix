@@ -254,6 +254,8 @@ def _sentrix_isolation(tmp_path, monkeypatch):
         sys.modules["sentrix.io.gpio"]._reset_shared_pin_factory()
     if "sentrix.io.speaker" in sys.modules:
         sys.modules["sentrix.io.speaker"]._reset_speaker()
+    if "sentrix.io.self_output" in sys.modules:
+        sys.modules["sentrix.io.self_output"].clear()
 
 
 # ── shared fixtures ───────────────────────────────────────────────────────────

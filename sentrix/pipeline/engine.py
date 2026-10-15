@@ -59,7 +59,7 @@ from sentrix.fusion.policy import LevelPolicy
 from sentrix.fusion.tci import TCIEngine, TCIResult
 from sentrix.io.actuators import build_siren
 from sentrix.io.sources import FrameSource, _placeholder, build_source
-from sentrix.perception.audio import AudioEngine, AudioResult, audio_votes
+from sentrix.perception.audio import AudioEngine, AudioResult, audio_votes, neutral_reason
 from sentrix.perception.behaviour import BehaviourEngine
 from sentrix.perception.detector import Detector
 from sentrix.perception.identity import (FaceCheck, IdentityEngine, IdentityWorker,
@@ -260,10 +260,14 @@ class Pipeline:
         self._close_requested: str | None = None
         #: (time, people in view) for the fight rule's "2+ people recently".
         self._persons_seen: deque[tuple[float, int]] = deque(maxlen=64)
-        #: End of the last audio window that voted (a window votes once).
+        #: End of the last audio window seen, and of the last one *counted* as
+        #: a new observation (counted windows never overlap: D15, review F4).
         self._audio_last_end: float | None = None
-        #: Last PIR trigger / door change on the pipeline clock (gpio).
+        self._audio_counted_end: float | None = None
+        #: Last PIR trigger / door change on the pipeline clock (gpio thread
+        #: writes, the inference thread reads: guarded).
         self._sensor_at: dict[str, float] = {}
+        self._sensor_lock = threading.Lock()
 
     # ── background side effects ───────────────────────────────────────────────
     def _task_loop(self) -> None:
@@ -317,12 +321,14 @@ class Pipeline:
     def note_sensor(self, kind: str, at: float | None = None, **detail: Any) -> None:
         """A PIR trigger or door change (``sentrix.io.gpio``), on the
         monotonic clock. Presence context only: never a threat alone (D15)."""
-        self._sensor_at[str(kind)] = time.monotonic() if at is None else float(at)
+        with self._sensor_lock:
+            self._sensor_at[str(kind)] = time.monotonic() if at is None else float(at)
 
     def sensor_context(self, now: float) -> dict:
         """Seconds since the last PIR trigger / door change."""
-        return {kind: round(now - at, 3) for kind, at in self._sensor_at.items()
-                if now >= at - 1.0}
+        with self._sensor_lock:
+            items = list(self._sensor_at.items())
+        return {kind: round(now - at, 3) for kind, at in items if now >= at - 1.0}
 
     def _persons_recent(self, now: float, count: int, known: bool) -> int | None:
         """Most people in view over the last ``person_memory_seconds``."""
@@ -332,6 +338,19 @@ class Pipeline:
         memory = self.cfg.threat.person_memory_seconds
         return max((n for t, n in self._persons_seen if 0.0 <= now - t <= memory),
                    default=count)
+
+    def _audio_is_new(self, audio: AudioResult) -> bool:
+        """A window is a new observation only if it was not seen before and
+        does not overlap the last one counted: with 4 s windows every 1 s, one
+        impulse would otherwise confirm itself on three overlapping windows."""
+        if audio.end == self._audio_last_end:
+            return False
+        self._audio_last_end = audio.end
+        start = audio.start if audio.start is not None else audio.end
+        if self._audio_counted_end is not None and start < self._audio_counted_end - 1e-6:
+            return False
+        self._audio_counted_end = audio.end
+        return True
 
     def audio_for(self, now: float) -> tuple[AudioResult | None, dict]:
         """The audio result describing ``now`` and its alignment record; None
@@ -392,8 +411,8 @@ class Pipeline:
         # window is a fresh observation, the same window again is not.
         audio, audio_align = self.audio_for(now)
         if audio is not None:
-            fresh = audio.end != self._audio_last_end
-            self._audio_last_end = audio.end
+            fresh = self._audio_is_new(audio)
+            audio_align = dict(audio_align, counted=fresh)
             sources.update(audio_votes(audio, fresh))
         context = {"persons": persons_recent, "motion": motion}
         evidence = self.evidence.update(now, sources, person_recent=person_recent,
@@ -522,8 +541,10 @@ class Pipeline:
             self._submit(self._capture_evidence, incident, frame.copy(), result,
                          level, status, detections, self._evidence_context(result))
 
+        evidence_state = ((result.features.extras or {}).get("evidence") or {}).get(
+            result.incident_type, {}).get("state")
         if (plan.sos and "sos" not in incident.actions
-                and self.sos.wants(result.incident_type, level)):
+                and self.sos.wants(result.incident_type, level, evidence_state)):
             # Claimed only once the service wants this incident type, so an
             # incident that becomes a weapon after an experimental L2 still
             # opens a request. Queued after the snapshot and evidence above,
@@ -912,7 +933,9 @@ class Pipeline:
         self._last_person_at = None
         self._persons_seen.clear()
         self._audio_last_end = None
-        self._sensor_at.clear()
+        self._audio_counted_end = None
+        with self._sensor_lock:
+            self._sensor_at.clear()
         if self.violence is not None:
             self.violence.reset()
         self.behaviour.reset()
@@ -1069,6 +1092,8 @@ def audio_block(result: AudioResult | None, align: dict, engine: Any = None) -> 
              "model": getattr(engine, "model_name", None) if engine is not None else None}
     if result is not None:
         block.update(result.to_dict())
+        block["counted"] = align.get("counted")
+        block["neutral"] = neutral_reason(result)
     return block
 
 

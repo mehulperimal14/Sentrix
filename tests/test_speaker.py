@@ -82,6 +82,34 @@ class TestSpeaker:
         assert sp.say(preset_id="nope").code == "invalid_args"
         assert clean_text("a\x00b") == "a b"
 
+    def test_markup_never_reaches_sapi(self):
+        """Review F9: SAPI5 (pyttsx3 on Windows) parses its input as XML."""
+        sp, _ = make()
+        result = sp.say('<volume level="100"/>Leave <pitch absmiddle="10">now</pitch>')
+        assert result.ok and "<" not in result.text and ">" not in result.text
+        assert "<" not in clean_text("a<b>c")
+
+    def test_a_stuck_backend_cannot_keep_the_speaker_busy(self):
+        """Review F9: a playback that never returns is released by the watchdog."""
+        never = threading.Event()
+
+        class Stuck(Player):
+            name, real = "stuck", True
+
+            def play(self, text):
+                never.wait(30)
+
+        sp, _ = make(player=Stuck(), background=True)
+        sp.play_timeout = 0.2
+        assert sp.say("first").ok
+        for _ in range(200):
+            if not sp.status()["speaking"]:
+                break
+            time.sleep(0.01)
+        assert not sp.status()["speaking"]
+        assert sp.say("second").ok
+        never.set()
+
     def test_three_a_minute_then_rate_limited(self):
         clock = Clock()
         sp, _ = make(clock=clock)

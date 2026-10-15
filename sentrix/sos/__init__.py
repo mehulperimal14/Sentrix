@@ -122,7 +122,8 @@ class SosService(Protocol):
     name: str
 
     # ── pipeline hook ─────────────────────────────────────────────────────────
-    def wants(self, incident_type: str, level: int) -> bool: ...
+    def wants(self, incident_type: str, level: int,
+              evidence_state: str | None = None) -> bool: ...
 
     def trigger(self, trigger: SosTrigger) -> None: ...
 
@@ -211,7 +212,8 @@ class NullSosService:
     enabled = False
 
     # ── pipeline hook ─────────────────────────────────────────────────────────
-    def wants(self, incident_type: str, level: int) -> bool:
+    def wants(self, incident_type: str, level: int,
+              evidence_state: str | None = None) -> bool:
         return False
 
     def trigger(self, trigger: SosTrigger) -> None:

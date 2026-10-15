@@ -115,14 +115,42 @@ class TestPipelineHook:
         finally:
             engine.stop()
 
-    def test_experimental_classes_are_never_claimed(self, temp_db):
+    @pytest.mark.parametrize("kind", ["assault", "robbery"])
+    def test_experimental_classes_are_never_claimed(self, temp_db, kind):
+        """An uncorroborated fight is experimental: never claimed (review F6:
+        wants() claimed every assault, then classify refused it)."""
         engine = make_engine(Clock())
         try:
             fake = hook_pipeline(engine)
-            incident, _ = fake.incidents.update(3, 0.5, "robbery", now=0.0)
+            incident, _ = fake.incidents.update(3, 0.5, kind, now=0.0)
             fake._act(incident, plan_for(3), np.zeros((4, 4, 3), np.uint8),
-                      result_of("robbery", 3), 3, "ELEVATED", 0.0)
+                      result_of(kind, 3), 3, "ELEVATED", 0.0)
             assert "sos" not in incident.actions and fake._tasks.empty()
+        finally:
+            engine.stop()
+
+    def test_an_unclaimed_fight_keeps_the_legacy_l4_paths(self, temp_db):
+        """Review F6: claiming "sos" for an assault the service then refused
+        skipped the legacy L4 SMS and dispatch package."""
+        engine = make_engine(Clock())
+        try:
+            fake = hook_pipeline(engine)
+            incident, _ = fake.incidents.update(4, 0.7, "assault", now=0.0)
+            fake._act(incident, plan_for(4), np.zeros((4, 4, 3), np.uint8),
+                      result_of("assault", 4), 4, "HIGH", 0.0)
+            assert "sos" not in incident.actions
+            assert "send_sms" in fake.submitted and "_create_dispatch" in fake.submitted
+        finally:
+            engine.stop()
+
+    def test_a_corroborated_fight_is_claimed(self, temp_db):
+        engine = make_engine(Clock())
+        try:
+            fake = hook_pipeline(engine)
+            incident, _ = fake.incidents.update(3, 0.5, "assault", now=0.0)
+            fake._act(incident, plan_for(3), np.zeros((4, 4, 3), np.uint8),
+                      result_of("assault", 3, "corroborated"), 3, "ELEVATED", 0.0)
+            assert "sos" in incident.actions
         finally:
             engine.stop()
 

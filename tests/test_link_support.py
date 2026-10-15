@@ -365,7 +365,7 @@ class FakeSosService:
         from sentrix.pipeline.state import SOS_IDLE
         return dict(SOS_IDLE)
 
-    def wants(self, incident_type, level):
+    def wants(self, incident_type, level, evidence_state=None):
         return False
 
     def trigger(self, trigger):

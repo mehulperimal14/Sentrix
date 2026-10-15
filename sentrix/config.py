@@ -237,9 +237,10 @@ class ThreatConfig:
     * **Fight vs banter** (D15). A fight (``assault``) stays experimental
       (L2) unless the video fight *and* aligned aggression audio are both
       confirmed with ``fight_min_persons`` people and motion over
-      ``fight_motion_floor``: then L3 (``fight_max_level``). Aligned laughter
-      or calm talk (``benign_social``) with no aggression caps it at
-      ``banter_cap`` (L1). Unvalidated until room recordings exist (M6).
+      ``fight_motion_floor``: then L3 (``fight_max_level``, a hard cap). Aligned
+      laughter or very calm talk with no aggression keeps it at L2, labelled
+      banter; TV/music/radio make the audio neutral. Unvalidated until room
+      recordings exist (M6).
 
     Scene thresholds are the checkpoint's, raised to at least
     ``scene_threshold_floor`` (the checkpoint's were tuned for macro-F1 at 41 %
@@ -299,15 +300,21 @@ class ThreatConfig:
     audio_votes: bool = _env_bool("SENTRIX_AUDIO_VOTES", True)
     #: Audio confirmed with no visual source of that class: L2 at most.
     audio_only_cap: float = 0.35
-    #: Three independent modalities confirmed for one class: at least L5.
+    #: Three independent modalities confirmed for one class: at least L5 -
+    #: only if the audio among them is at least this strong (0 at its bar).
     three_modality_floor: float = 0.86
+    three_modality_audio_min_strength: float = 0.3
+    #: Counted audio windows never overlap (4 s windows): the confirmation
+    #: window allows this gap between them.
+    audio_confirm_max_gap_seconds: float = 6.0
     #: Highest level a fight may reach: 2 = always experimental, 3 = with
     #: aligned aggression audio, 4 = also with a second visual source.
     fight_max_level: int = _env_int("SENTRIX_FIGHT_MAX_LEVEL", 3)
     fight_min_persons: int = 2
     #: Motion (``MotionEngine.score``, 0..1) a fight needs to leave L2.
     fight_motion_floor: float = _env_float("SENTRIX_FIGHT_MOTION_FLOOR", 0.02)
-    #: Aligned laughter / calm talk with no aggression: the fight stays here.
+    #: Kept for configuration compatibility; banter now holds a fight AT L2
+    #: (``experimental_cap``), never below it.
     banter_cap: float = 0.19
 
 
@@ -336,9 +343,9 @@ class AudioConfig:
     threads: int = _env_int("SENTRIX_AUDIO_THREADS", 2)
     cue_thresholds: dict = field(default_factory=lambda: {
         "aggression": 0.30, "weapon_sound": 0.30, "fire_sound": 0.30,
-        "benign_social": 0.40, "siren": 0.30,
+        "benign_social": 0.40, "calm_talk": 0.85, "background": 0.40, "siren": 0.30,
     })
-    #: Calm talk (speech with no aggression) counts as benign_social.
+    #: Very calm talk (``calm_talk`` over its strict bar) also counts as banter.
     calm_talk_is_benign: bool = _env_bool("SENTRIX_AUDIO_CALM_TALK_BENIGN", True)
 
 
@@ -641,7 +648,8 @@ class SosConfig:
     household's window (30/45/60 min) bounds the *outside-help question*; the
     safety defaults alert confirmed contacts without waiting for it when the
     evidence is strong (corroborated L4/L5), the class is fire, the intrusion
-    is armed, or the device drops off the link during an open L2+ incident.
+    is armed, or the device drops off the link during an open L3+ alarm
+    (an L2 - unrecognised person, audio only - gives the owner a notice only).
     No answer ends in EXPIRED ("unanswered"), never "safe". The policy is
     frozen on each request when it opens.
     """

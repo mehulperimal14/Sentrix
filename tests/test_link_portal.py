@@ -482,14 +482,14 @@ class TestCloudAuthority:
                             if r.ref.startswith("contact:") and r.channel == "email")
         assert "/c/" in contact_mail.text
 
-    def test_heartbeat_lost_during_an_open_l2_incident_opens_a_cloud_request(self, rig):
+    def test_heartbeat_lost_during_an_open_l3_alarm_opens_a_cloud_request(self, rig):
         from sentrix_portal.models import AssistanceRequest
         from sentrix_portal.services import sos as portal_sos
         connect(rig)
         incident = str(uuid.uuid4())
-        rig.state.update(alarm={"level": 2, "incident_id": incident, "incident_type": "weapon"})
+        rig.state.update(alarm={"level": 3, "incident_id": incident, "incident_type": "weapon"})
         wait_for(lambda: (row_hb := device_heartbeat(rig)) and row_hb.get("alarm", {})
-                 .get("level") == 2, what="L2 heartbeat")
+                 .get("level") == 3, what="L3 heartbeat")
         self._offline(rig)
         with rig.app.state.db.session() as db:
             row = db.query(AssistanceRequest).filter_by(device_id=rig.seeded.device_id).one()
@@ -499,6 +499,28 @@ class TestCloudAuthority:
             names = [e["event"] for e in portal_sos.events_view(db, row.id, "desk")]
             assert names == ["created", "prompted", "contacts_notified"]
             assert "went offline" in row.sos_text_full
+
+    @pytest.mark.parametrize("kind", ["intrusion", "weapon"])
+    def test_heartbeat_lost_during_an_l2_opens_nothing_and_alerts_no_contact(self, rig, kind):
+        """D8 as amended by D15: an unrecognised person (or any L2: audio
+        only, experimental) never opens an SOS, not even through the cloud's
+        offline rule. The owner alone gets a notice; the tamper is audited."""
+        from sentrix_portal.models import AssistanceRequest, AuditLog
+        connect(rig)
+        incident = str(uuid.uuid4())
+        rig.state.update(alarm={"level": 2, "incident_id": incident, "incident_type": kind})
+        wait_for(lambda: (row_hb := device_heartbeat(rig)) and row_hb.get("alarm", {})
+                 .get("level") == 2, what="L2 heartbeat")
+        self._offline(rig)
+        with rig.app.state.db.session() as db:
+            assert db.query(AssistanceRequest).filter_by(
+                device_id=rig.seeded.device_id).count() == 0
+            tamper = [a for a in db.query(AuditLog) if a.event == "device.tamper"]
+            assert tamper and tamper[-1].detail["opens_request"] is False
+            assert not any(a.event == "sos.contacts_notified" for a in db.query(AuditLog))
+        steps = rig.outbox.steps()
+        assert not any(ref.startswith("contact:") for ref, _, _ in steps)
+        assert ("owner", "email", f"offline_l2:{incident}") in steps
 
     def test_cloud_timers_remind_warn_and_expire_unanswered(self, rig):
         from sentrix_portal.models import AssistanceRequest, utcnow

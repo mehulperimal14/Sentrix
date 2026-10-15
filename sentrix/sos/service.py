@@ -261,8 +261,9 @@ class SosEngine:
         return found
 
     # ── pipeline hook (inference thread / FIFO worker: enqueue only) ─────────
-    def wants(self, incident_type: str, level: int) -> bool:
-        return M.wants(incident_type, level, self.rules)
+    def wants(self, incident_type: str, level: int,
+              evidence_state: str | None = None) -> bool:
+        return M.wants(incident_type, level, self.rules, evidence_state)
 
     def trigger(self, trigger: SosTrigger) -> None:
         self._enqueue("trigger", trigger)

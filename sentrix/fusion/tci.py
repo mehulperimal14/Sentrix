@@ -117,7 +117,8 @@ def _vote_effect(vote: dict) -> str:
         return "gated"
     if not vote.get("confirmed"):
         return "below confirmation"
-    return "lowers" if vote.get("role") == "against" else "raises"
+    # Banter never lowers a fight below L2 (review F3): it holds it there.
+    return "holds at L2" if vote.get("role") == "against" else "raises"
 
 
 def contributions(features: FeatureVector, cls: str | None,
@@ -149,30 +150,37 @@ def contributions(features: FeatureVector, cls: str | None,
         status = audio.get("status") or "disabled"
         lag = audio.get("lag_s")
         detail = status if lag is None else f"{status} (window ended {lag:.1f} s before the frame)"
+        if status == "aligned" and audio.get("neutral"):
+            detail = f"aligned, neutral: {audio['neutral']}"
         rows.append({"input": "audio", "value": None, "detail": detail,
                      "effect": "unavailable" if status != "aligned" else "context"})
     threat = settings.threat
     context = extras.get("fusion_context") or {}
-    persons = context.get("persons_recent")
-    persons = features.person_count if persons is None else persons
+    # The decision used fusion_context's people count; None there means the
+    # person detector could not say (the gate did not apply) - show that, not
+    # this tick's count (review F12). Hand-built vectors have no context.
+    persons = (context.get("persons_recent") if "persons_recent" in context
+               else features.person_count)
+    shown = "unknown" if persons is None else persons
     motion = float(context.get("motion", features.motion) or 0.0)
     if cls == "weapon":
         gate = extras.get("person_recent")
         rows.append({"input": "people", "value": persons,
-                     "detail": f"{persons} in view (a weapon needs a person)",
+                     "detail": f"{shown} in view (a weapon needs a person)",
                      "effect": "context" if gate is None else ("gate ok" if gate else "gate failed")})
         rows.append({"input": "motion", "value": round(motion, 3), "detail": "context",
                      "effect": "context"})
     elif cls == "assault":
         need = threat.fight_min_persons
         rows.append({"input": "people", "value": persons,
-                     "detail": f"{persons} in view (a fight needs {need}+)",
-                     "effect": "gate ok" if persons >= need else "gate failed"})
+                     "detail": f"{shown} in view (a fight needs {need}+)",
+                     "effect": ("context (count unknown: gate not applied)" if persons is None
+                                else "gate ok" if persons >= need else "gate failed")})
         rows.append({"input": "motion", "value": round(motion, 3),
                      "detail": f"floor {threat.fight_motion_floor:.2f} to leave L2",
                      "effect": "gate ok" if motion >= threat.fight_motion_floor else "gate failed"})
     else:
-        rows.append({"input": "people", "value": persons, "detail": f"{persons} in view",
+        rows.append({"input": "people", "value": persons, "detail": f"{shown} in view",
                      "effect": "context"})
         rows.append({"input": "motion", "value": round(motion, 3), "detail": "context",
                      "effect": "context"})

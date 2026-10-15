@@ -224,7 +224,8 @@ class TestSosOwnsItsIncidents:
         fake = Pipeline.__new__(Pipeline)
         fake.cfg = __import__("sentrix.config", fromlist=["settings"]).settings
         fake.incidents = IncidentManager()
-        fake.sos = SimpleNamespace(wants=lambda kind, level: wants, trigger=lambda t: None)
+        fake.sos = SimpleNamespace(wants=lambda kind, level, state=None: wants,
+                                   trigger=lambda t: None)
         fake.session_id = "s1"
         fake._tasks = queue.Queue(maxsize=64)
         fake.submitted = []

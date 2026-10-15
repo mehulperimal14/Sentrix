@@ -111,7 +111,9 @@ class TestReads:
         body = world.client.get("/api/sos/preview?incident_type=fire").json()
         assert "FIRE" in body["full"] and body["window_seconds"] == 1800
         assert body["buttons"]["approve"] == "Alert my contacts and the SENTRIX desk"
-        assert world.client.get("/api/sos/preview?incident_type=assault").status_code == 400
+        # A corroborated fight opens a request since D15, so it has a preview.
+        assert "FIGHT" in world.client.get("/api/sos/preview?incident_type=assault").json()["full"]
+        assert world.client.get("/api/sos/preview?incident_type=robbery").status_code == 400
         assert world.client.get("/api/sos/preview?level=2").status_code == 422
 
 

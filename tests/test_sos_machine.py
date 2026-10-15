@@ -199,7 +199,10 @@ class TestEligibility:
     def test_only_alarm_classes_at_l3_are_wanted(self):
         """D8 as amended by D15: weapon, fire and a corroborated fight."""
         assert M.wants("weapon", 3, RULES) and M.wants("fire", 5, RULES)
-        assert M.wants("assault", 3, RULES)
+        # Review F6: a fight is wanted only corroborated (video + aligned audio).
+        assert M.wants("assault", 3, RULES, "corroborated")
+        assert not M.wants("assault", 3, RULES, "confirmed")
+        assert not M.wants("assault", 4, RULES)
         for kind in ("robbery", "stick", "smoke", "intrusion", "normal"):
             assert not M.wants(kind, 3, RULES), kind
         assert not M.wants("weapon", 2, RULES)

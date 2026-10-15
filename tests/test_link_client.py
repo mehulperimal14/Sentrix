@@ -250,6 +250,9 @@ class TestSession:
         listeners.emit("audit", {"event": "gallery_enrolled", "person": "Riya",
                                  "file": "riya.jpg", "via": "camera", "by": "lc:device_admin"})
         listeners.emit("audit", {"event": "login", "who": "ignored"})
+        # Review F8: the talk-down speaker is mirrored (no free text).
+        listeners.emit("audit", {"event": "speaker_say", "by": "portal:u1", "preset": None,
+                                 "chars": 14, "text": "private words", "backend": "espeak-ng"})
         listeners.emit("snapshot", {"name": "a.jpg", "incident_id": None,
                                     "created_at": "2026-10-14T09:00:00+00:00"})
         listeners.emit("snapshot", {"name": "a.jpg", "incident_id": None,
@@ -260,9 +263,16 @@ class TestSession:
             kinds = sorted(e.kind for e in db.query(DeviceEvent))
             assert kinds.count("snapshot.meta") == 1, "deduplicated on the device"
             assert "gallery.audit" in kinds and "mode.changed" in kinds
+            assert "speaker.audit" in kinds
             assert db.query(SnapshotMirror).count() == 1
             events = {a.event for a in db.query(AuditLog)}
-            assert {"gallery.audit", "mode.set", "device.online"} <= events
+            assert {"gallery.audit", "mode.set", "device.online",
+                    "device.speaker_say"} <= events
+            said = next(a for a in db.query(AuditLog) if a.event == "device.speaker_say")
+            assert said.detail["by"] == "portal:u1" and said.detail["chars"] == 14
+            assert "private words" not in json.dumps(said.detail)
+            raw = [e.payload for e in db.query(DeviceEvent) if e.kind == "speaker.audit"]
+            assert raw and "private words" not in json.dumps(raw)
 
     def test_commands_round_trip_and_queue_while_offline(self, rig):
         from sentrix_portal.models import DeviceCommand

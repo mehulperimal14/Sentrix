@@ -608,6 +608,8 @@ class GpioService:
         if self.buzzer is None or not self.buzzer_enabled:
             return
         try:
+            from sentrix.io import self_output
+            self_output.mark("buzzer", (on + off) * max(1, int(count)))
             self.buzzer.beep(on_time=on, off_time=off, n=count, background=True)
         except Exception as exc:
             self.errors["buzzer"] = str(exc)

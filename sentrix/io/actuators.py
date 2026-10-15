@@ -166,6 +166,9 @@ class SoundSiren(Actuator):
 
     def activate(self, duration: float | None = None) -> None:
         duration = duration or settings.alert.siren_duration_seconds
+        # The microphone must not hear its own siren as the room (D15).
+        from sentrix.io import self_output
+        self_output.mark("siren", float(duration))
         threading.Thread(target=self._play, args=(duration,), daemon=True).start()
 
     def _play(self, duration: float) -> None:
@@ -286,6 +289,8 @@ class GpioSiren(Actuator):
                 self._off()
                 return
             self._device.on()
+            from sentrix.io import self_output
+            self_output.mark("siren", release_at - now)
             self.last_on_at = time.time()
             self.activations += 1
             self._release_at = release_at
