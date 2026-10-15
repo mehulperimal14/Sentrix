@@ -162,6 +162,21 @@ siren. `run.sh` detects a Pi and installs `requirements-pi.txt`.
 
 ## Project layout
 
+### Repository structure
+
+| Folder | What it holds |
+|---|---|
+| `sentrix/` | The app package: perception, fusion, pipeline, alerting, evidence, web dashboard (`python -m sentrix`) |
+| `sentrix_portal/` | The Portal and SOS service (`python -m sentrix_portal`) |
+| `models/` | Model weights the runtime loads (`v4_custom/` default, `v3_real/`, `v5_slim/`, `yolov8n.pt`), plus retained provenance checkpoints |
+| `training/` | `custom/` trainers for the shipped models, `datasets/sentrix_custom/` (765 frames, 10 videos), `notebooks/00`–`01`, `scripts/` (legacy trainers), `runs/` (reports the docs cite) |
+| `notebooks/` | TCI analysis notebooks (feature contract, calibration, thresholds) |
+| `tools/` | doctor, setup, benchmarks, replay and evaluation, gate report, auditors |
+| `tests/` | The test suite (`tests/e2e/` for product flows, `test_fresh_clone.py` for a clean checkout) |
+| `deploy/` | `pi5/` Raspberry Pi 5 install, `portal/` Portal deployment |
+| `docs/` | Numbered specifications `1_`–`8_`, `capstone/` (proposal, mid-semester report, poster), `assets/` (diagrams) |
+| `var/` | Runtime output (gitignored, never web-served) |
+
 ```
 Sentrix/
 ├── sentrix/                    importable package — all runtime code
@@ -205,12 +220,11 @@ Sentrix/
 │   ├── custom/                 ★ custom-dataset box annotation, training, screening
 │   ├── scripts/                training as .py
 │   ├── notebooks/              training as .ipynb
-│   └── runs/                   run outputs (v1_legacy … v3_real, custom, custom_eval)
+│   └── runs/                   run outputs (v3_real, ucf_crime_dvs, custom, custom_eval)
 ├── tools/                      doctor, setup_env, bench_live, replay tools, evaluation,
 │                               gate_report, auditors
 ├── tests/                      215 regression tests
-├── docs/                       specifications
-├── Capstone Docs/              submissions
+├── docs/                       specifications (1_…8_), capstone/ submissions, assets/ figures
 └── var/                        runtime output — gitignored, never web-served
 ```
 
@@ -641,7 +655,7 @@ rate per hour of an empty room.
 | [`docs/5_FUTURE_ADVANCEMENTS_AND_CLOUD_DEPLOYMENT.md`](docs/5_FUTURE_ADVANCEMENTS_AND_CLOUD_DEPLOYMENT.md) | Roadmap |
 | [`docs/6_CUSTOM_DATASET_EVALUATION.md`](docs/6_CUSTOM_DATASET_EVALUATION.md) | Custom-dataset protocol and results |
 | [`docs/7_PORTAL_AND_SOS.md`](docs/7_PORTAL_AND_SOS.md) | Portal, onboarding and SOS: developer contract |
-| [`HARDWARE.md`](HARDWARE.md), [`deploy/pi5/README.md`](deploy/pi5/README.md) | Raspberry Pi 5 plan, pin table, Pi deployment |
+| [`docs/8_RASPBERRY_PI5_INTEGRATION.md`](docs/8_RASPBERRY_PI5_INTEGRATION.md), [`deploy/pi5/README.md`](deploy/pi5/README.md) | Raspberry Pi 5 plan, pin table, Pi deployment |
 
 All six were rewritten for v3. Each carries explicit **"Corrected from v2.1"**
 callouts where the previous version stated something that was not true of the

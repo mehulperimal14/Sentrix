@@ -1,6 +1,6 @@
 # Slim scene classifiers for the Raspberry Pi — report
 
-Track T-MODEL (HARDWARE.md §2 and §5 T1, "replace DINOv2-B with an
+Track T-MODEL (docs/8_RASPBERRY_PI5_INTEGRATION.md §2 and §5 T1, "replace DINOv2-B with an
 EfficientNet-B0 or MobileNetV3 scene head"). The protocol, candidates,
 selection rule and acceptance bar were committed **before any run** in
 [`PROTOCOL.md`](PROTOCOL.md) (commit `5f8b589`). Every table between
@@ -173,7 +173,7 @@ Measured 2026-10-15T02:33:43 on Intel(R) Core(TM) i7-14650HX (on mains power), *
 Preprocessing (BGR 640x480 frame -> normalised 224x224 tensor, as `SceneEngine` does it): 1.43 ms median, 1.56 ms p95.
 <!-- END latency -->
 
-Scaled to the Pi 5 with HARDWARE.md §2 (published Pi 5 NCNN: EfficientNet-B0
+Scaled to the Pi 5 with docs/8_RASPBERRY_PI5_INTEGRATION.md §2 (published Pi 5 NCNN: EfficientNet-B0
 12.3 ms, MobileNetV3-L 7.4 ms; DINOv2-B ≈ 0.6–1.05 s est.): a slim head costs
 ≈ 10 ms per keyframe on the Pi, DINOv2-B roughly 100x more. ONNX Runtime halves
 the slim models' PyTorch time on the laptop and does not help the ViT.
@@ -186,11 +186,11 @@ runtime backend must reproduce the PIL resize (recorded in the metadata).
 
 ## 5. What to do instead (for the T1 clip engine)
 
-1. Keep **DINOv2** as the scene model and run it **rarely**: HARDWARE.md T1
+1. Keep **DINOv2** as the scene model and run it **rarely**: docs/8_RASPBERRY_PI5_INTEGRATION.md T1
    already runs the scene stage only when S1 saw a person or a fire candidate;
    at ≈ 0.6–1 s per keyframe on the Pi CPU one keyframe per clip fits the
    1.6 s budget, two do not.
-2. HARDWARE.md's named fallback, **DINOv2 ViT-S/14** (11 GFLOPs), scored well
+2. docs/8_RASPBERRY_PI5_INTEGRATION.md's named fallback, **DINOv2 ViT-S/14** (11 GFLOPs), scored well
    below ViT-B in the frozen-feature screen (LOVO macro-F1 0.276 vs 0.378). It
    needs its own LOVO run under this protocol before anyone relies on it — not
    done here (outside this track's pre-registered candidates).

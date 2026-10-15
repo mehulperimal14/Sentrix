@@ -127,10 +127,10 @@ class DetectionResult:
 _PERSON_WEIGHTS = ("yolov8n.pt",)
 _WEAPON_WEIGHTS = ("v4_custom/weapon_detector_custom_v4.pt",
                    "v4_finetuned/weapon_detector_ft_v4.pt",
-                   "v3_real/weapon_detector_real_v3.pt", "weapon_detector.pt")
+                   "v3_real/weapon_detector_real_v3.pt")
 _FIRE_WEIGHTS = ("v4_custom/fire_detector_custom_v4.pt",
                  "v4_finetuned/fire_smoke_detector_ft_v4.pt",
-                 "v3_real/fire_smoke_detector_real_v3.pt", "fire_smoke_detector.pt")
+                 "v3_real/fire_smoke_detector_real_v3.pt")
 
 
 def _resolve(candidates: tuple[str, ...]):

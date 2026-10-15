@@ -1,4 +1,4 @@
-"""The fast lane: a small YOLO pass between clips (HARDWARE.md T1).
+"""The fast lane: a small YOLO pass between clips (docs/8_RASPBERRY_PI5_INTEGRATION.md T1).
 
 A clip decision comes every hop (2 s) and needs two positive keyframes, so a
 pistol drawn just after a clip boundary reaches L3 only 2.5-4.5 s later. The

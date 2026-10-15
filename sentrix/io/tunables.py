@@ -15,10 +15,10 @@ Defaults and why:
   second contact to a GPIO (closed to GND = armed). Without it,
   ``siren_armed`` (default on) states the switch position for the software.
 * ``tamper_pin`` none — an enclosure lid switch (closed to GND = lid shut).
-* ``buzzer_enabled`` on — the local chirps for L2/L3 (HARDWARE.md §6).
+* ``buzzer_enabled`` on — the local chirps for L2/L3 (docs/8_RASPBERRY_PI5_INTEGRATION.md §6).
 * ``bme280`` / ``dht22`` off — room sensors through the kernel IIO drivers.
 * ``picamera_main`` 1280x720, ``picamera_lores`` 640x480 — the Picamera2
-  streams (HARDWARE.md §4: evidence/preview and analysis).
+  streams (docs/8_RASPBERRY_PI5_INTEGRATION.md §4: evidence/preview and analysis).
 """
 
 from __future__ import annotations

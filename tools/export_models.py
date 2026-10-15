@@ -1,7 +1,7 @@
 """Export the shipped models for the Pi runtimes, and check they still agree.
 
 On a Raspberry Pi 5 the same YOLO is about 5x faster in NCNN than in PyTorch
-(HARDWARE.md §2), so the clip engine and the fast lane run exported heads
+(docs/8_RASPBERRY_PI5_INTEGRATION.md §2), so the clip engine and the fast lane run exported heads
 (``SENTRIX_RUNTIME=onnx`` / ``ncnn``). This tool writes them to
 ``models/exported/`` (never committed) under the names ``sentrix.runtime``
 looks for, and checks each one against PyTorch on real frames:

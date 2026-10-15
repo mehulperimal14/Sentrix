@@ -1,4 +1,4 @@
-"""Benchmark clip mode under the Pi 5's CPU budget (HARDWARE.md T1, Gate A).
+"""Benchmark clip mode under the Pi 5's CPU budget (docs/8_RASPBERRY_PI5_INTEGRATION.md T1, Gate A).
 
 Drives the real live loop - ``Pipeline.run_live`` with the clip strategy:
 capture thread, preview, the identity worker, the clip engine on the

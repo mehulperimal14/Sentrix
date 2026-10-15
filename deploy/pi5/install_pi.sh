@@ -93,7 +93,7 @@ case "$MODEL" in
 esac
 case "$MODEL" in
     *"Raspberry Pi 5"*) ;;
-    *) warn "$MODEL: SENTRIX's Pi plan targets the Pi 5 (HARDWARE.md); continuing" ;;
+    *) warn "$MODEL: SENTRIX's Pi plan targets the Pi 5 (docs/8_RASPBERRY_PI5_INTEGRATION.md); continuing" ;;
 esac
 if [ "$DRY" = 0 ] && [ "$(id -u)" -ne 0 ]; then
     echo "run as root: sudo $0 $*" >&2

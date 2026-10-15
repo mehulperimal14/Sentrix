@@ -737,7 +737,7 @@ class Pipeline:
 
     def _build_strategy(self) -> InferenceStrategy:
         if self.cfg.clip.mode == "clip":
-            # The 4-second clip engine (HARDWARE.md T1, track T-CLIP).
+            # The 4-second clip engine (docs/8_RASPBERRY_PI5_INTEGRATION.md T1, track T-CLIP).
             try:
                 from sentrix.pipeline.clip import build_strategy
             except ImportError as exc:

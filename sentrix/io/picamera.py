@@ -1,4 +1,4 @@
-"""Raspberry Pi CSI camera through Picamera2 (HARDWARE.md §3, §4).
+"""Raspberry Pi CSI camera through Picamera2 (docs/8_RASPBERRY_PI5_INTEGRATION.md §3, §4).
 
 **OpenCV cannot open the CSI camera on a Pi 5** — libcamera owns it — so the
 Camera Module 3 needs its own :class:`FrameSource`. USB webcams keep working

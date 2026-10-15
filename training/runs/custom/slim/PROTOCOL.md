@@ -6,7 +6,7 @@ cannot follow the results. The results are in [`REPORT.md`](REPORT.md).
 ## Question
 
 Can an EfficientNet-B0 or MobileNetV3-Large scene head (0.4 GFLOPs / 4 M
-parameters; HARDWARE.md §2: 7–12 ms on a Pi 5 CPU) replace the shipped DINOv2
+parameters; docs/8_RASPBERRY_PI5_INTEGRATION.md §2: 7–12 ms on a Pi 5 CPU) replace the shipped DINOv2
 ViT-B/14 scene classifier (44 GFLOPs / 86 M; ≈ 0.6–1 s on a Pi 5 CPU) without
 losing what made it the recommended model (docs/6 §6.6)?
 

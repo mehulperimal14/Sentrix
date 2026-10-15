@@ -347,7 +347,7 @@ def build_source(spec: str | None = None) -> FrameSource:
             from sentrix.io.demo_reel import build as build_reel
             sources.append(build_reel(part))
         elif part.lower().split("?", 1)[0].split(":", 1)[0] in ("picamera", "picam"):
-            # OpenCV cannot open the CSI camera on a Pi 5 (HARDWARE.md §3).
+            # OpenCV cannot open the CSI camera on a Pi 5 (docs/8_RASPBERRY_PI5_INTEGRATION.md §3).
             from sentrix.io.picamera import PiCameraSource
             sources.append(PiCameraSource.from_spec(part))
         elif part.isdigit():

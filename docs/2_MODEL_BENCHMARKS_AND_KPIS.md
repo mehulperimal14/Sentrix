@@ -244,7 +244,8 @@ behaviour. See doc 1 §5.
 
 Retained but **not loaded by anything**: `violence_classifier.pt` and
 `audio_classifier.pt` (V2 fallbacks), `anomaly_classifier.pt`,
-`v2_real/ucf_crime_dvs/ucf_crime_dvs_anomaly_v1.pt`, `vosk-model/`.
+`v2_real/ucf_crime_dvs/ucf_crime_dvs_anomaly_v1.pt`. (The Vosk model and the v1 flat
+`weapon_detector.pt` / `fire_smoke_detector.pt` were removed from the tree; see git history.)
 
 > **Corrected from v2.1.** The previous deployed-weights table claimed
 > `violence_classifier.pt` and `audio_classifier.pt` came from `runs_v3_real`.

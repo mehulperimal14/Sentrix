@@ -345,7 +345,7 @@ class IdentityConfig:
     unknown_person_score: float = 0.60
 
     #: InsightFace model pack. ``buffalo_s`` (SCRFD-500M + MobileFaceNet) is
-    #: the Pi 5 option (HARDWARE.md T1, S3); embeddings of the two packs are
+    #: the Pi 5 option (docs/8_RASPBERRY_PI5_INTEGRATION.md T1, S3); embeddings of the two packs are
     #: not comparable, so switching re-embeds the gallery.
     face_model: str = _env_str("SENTRIX_FACE_MODEL", "buffalo_l")
 
@@ -711,13 +711,13 @@ class GpioConfig:
     siren_armed: bool = _env_bool("SENTRIX_SIREN_ARMED", True)
     #: Enclosure lid switch (closed to GND = shut); None = not fitted.
     tamper_pin: int | None = _env_pin("SENTRIX_TAMPER_PIN")
-    #: Local buzzer chirps on level rises (HARDWARE.md §6).
+    #: Local buzzer chirps on level rises (docs/8_RASPBERRY_PI5_INTEGRATION.md §6).
     buzzer_enabled: bool = _env_bool("SENTRIX_BUZZER_ENABLED", True)
 
 
 @dataclass(frozen=True)
 class ClipConfig:
-    """The 4-second clip engine (HARDWARE.md T1). ``mode=tick`` is today's loop."""
+    """The 4-second clip engine (docs/8_RASPBERRY_PI5_INTEGRATION.md T1). ``mode=tick`` is today's loop."""
 
     mode: str = _env_str("SENTRIX_PIPELINE_MODE", "tick")
     window_seconds: float = 4.0
@@ -762,7 +762,7 @@ class ClipConfig:
     flame_fraction: float = 0.0005
     #: Frames per second sealed into an evidence clip bundle.
     evidence_fps: float = 5.0
-    #: Seconds sealed after an evidence capture (HARDWARE.md T1: 4-8 s).
+    #: Seconds sealed after an evidence capture (docs/8_RASPBERRY_PI5_INTEGRATION.md T1: 4-8 s).
     post_roll_seconds: float = 8.0
 
 
@@ -771,7 +771,7 @@ class NodeConfig:
     """Device telemetry (Node page, heartbeat)."""
 
     enabled: bool = _env_bool("SENTRIX_NODE_ENABLED", False)
-    #: laptop | pi5-clip | pi5-hailo | pi5-node | hub (HARDWARE.md §9).
+    #: laptop | pi5-clip | pi5-hailo | pi5-node | hub (docs/8_RASPBERRY_PI5_INTEGRATION.md §9).
     profile: str = _env_str("SENTRIX_PROFILE", "laptop")
     interval_seconds: float = 5.0
     temp_warn_c: float = 80.0

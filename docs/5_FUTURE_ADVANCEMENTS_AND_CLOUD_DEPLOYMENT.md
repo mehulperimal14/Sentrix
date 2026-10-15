@@ -34,7 +34,7 @@ in substance by `python tools/doctor.py`; run it rather than trusting any table.
 | **TCI fusion trained on real data** | Synthetic labels | The central scientific claim of the project |
 | **Re-identification** | Histogram fallback | `torchreid` not installed; approved objective is rank-1 ≥ 85% |
 | **UCF-Crime anomaly** | Not wired; polarity bug | Doc 2 §6 |
-| **Voice SOS** | Not wired | Vosk model retained in `models/vosk-model/` |
+| **Voice SOS** | Not wired | Vosk model not shipped; download from alphacephei.com when voice SOS is wired |
 | **Thermal telemetry** | No sensor | Deliberately absent from the feature contract |
 | **GPIO siren** | Interface only | No hardware attached |
 | **Pose estimation** | `PoseEstimator` written, not wired | Needs evaluation first |
@@ -243,7 +243,7 @@ exactly where transformer detectors are weakest.
 
 | Item | Effort | Notes |
 |---|---|---|
-| Voice SOS | Small | Vosk model retained; wire behind a `VoiceEngine` |
+| Voice SOS | Small | Download the Vosk model; wire behind a `VoiceEngine` |
 | Mobile companion | Small | A Telegram bot gives push, images and inline confirm/dismiss in ~2 days and satisfies the mobile objective |
 | Thermal telemetry | Medium | Needs the sensor first, then a contract version bump |
 | Multi-node ESP-NOW mesh | Large | Hardware scope |

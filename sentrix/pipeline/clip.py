@@ -1,10 +1,10 @@
-"""The 4-second clip engine (HARDWARE.md T1; docs/7 §2.4, track T-CLIP).
+"""The 4-second clip engine (docs/8_RASPBERRY_PI5_INTEGRATION.md T1; docs/7 §2.4, track T-CLIP).
 
 Why clips
 ---------
 SENTRIX's per-frame stack - three YOLO passes, a DINOv2 scene classifier,
 face recognition - runs at 5.6 Hz on the laptop CPU and would run at about
-0.5-0.7 Hz on a Raspberry Pi 5 (HARDWARE.md §2), the rate at which the first
+0.5-0.7 Hz on a Raspberry Pi 5 (docs/8_RASPBERRY_PI5_INTEGRATION.md §2), the rate at which the first
 live test failed. The clip engine keeps the last 4 s of everything in a ring
 buffer and, every hop of 2 s, analyses the window ``[t - 4 s, t]`` as one
 unit: a handful of well-chosen keyframes for vision, the whole window for
@@ -119,7 +119,7 @@ DEFAULTS: dict[str, float] = {
     "flame_fraction": 0.0005,
     #: Frames per second sealed into an evidence clip bundle.
     "evidence_fps": 5.0,
-    #: Seconds sealed after an evidence capture (HARDWARE.md T1: 4-8 s).
+    #: Seconds sealed after an evidence capture (docs/8_RASPBERRY_PI5_INTEGRATION.md T1: 4-8 s).
     "post_roll_seconds": 8.0,
 }
 
@@ -446,7 +446,7 @@ class ClipScheduler:
     meanwhile are not queued: the next clip is the newest window, and every
     skipped one is counted in ``dropped`` - the "newest frame wins" rule of
     the live loop, applied to clips. Compute time is kept against the budget
-    (``budget_fraction`` of the hop at p95, HARDWARE.md T1).
+    (``budget_fraction`` of the hop at p95, docs/8_RASPBERRY_PI5_INTEGRATION.md T1).
     """
 
     def __init__(self, cfg=None, *, hop_seconds: float | None = None,

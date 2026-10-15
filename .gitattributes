@@ -26,4 +26,3 @@
 *.mdl   binary
 *.ie    binary
 *.dubm  binary
-models/vosk-model/** -text

@@ -1,6 +1,6 @@
 """CPU latency of scene classifiers at a Raspberry Pi 5's thread budget.
 
-HARDWARE.md §2 measured the laptop "limited to 4 threads to mimic the Pi 5's
+docs/8_RASPBERRY_PI5_INTEGRATION.md §2 measured the laptop "limited to 4 threads to mimic the Pi 5's
 4 cores". This does the same for scene checkpoints, in both runtimes the Pi
 can use from Python:
 

@@ -320,7 +320,7 @@ __all__ = ["CLASS_ORDER", "ClassEvidence", "ConfirmationWindow", "EvidenceAccumu
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Within-clip confirmation (HARDWARE.md T1; docs/7 §2.4 seam, track T-CLIP)
+# Within-clip confirmation (docs/8_RASPBERRY_PI5_INTEGRATION.md T1; docs/7 §2.4 seam, track T-CLIP)
 # ──────────────────────────────────────────────────────────────────────────────
 @dataclass(frozen=True)
 class ClipObservation:

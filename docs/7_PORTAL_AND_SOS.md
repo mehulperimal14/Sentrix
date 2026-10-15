@@ -71,7 +71,7 @@ responder console) + confirmed emergency contacts → Desk resolves.
   as the camera; Portal = `python -m sentrix_portal` on
   `http://portal.localhost:8100`; LC on `http://127.0.0.1:8000`. Pi 5 T1: the
   same device process on the Pi. Pi T3 (hub): the hub is the "device" to the
-  Portal; the Pi node exposes modem and siren as node commands (HARDWARE.md T3).
+  Portal; the Pi node exposes modem and siren as node commands (docs/8_RASPBERRY_PI5_INTEGRATION.md T3).
 
 ### 1.3 What lives where
 
@@ -312,7 +312,7 @@ Secrets (env names only, read at use time): `TELEGRAM_BOT_TOKEN`,
 | `gpio.enabled` | `SENTRIX_GPIO_ENABLED` | False | GPIO service (LEDs, buzzer, inputs) |
 | `gpio.pin_factory` | `SENTRIX_GPIO_PIN_FACTORY` | "" | "" auto (lgpio on a Pi, mock elsewhere) / lgpio / mock |
 | `gpio.siren_pin` / `siren_active_high` | — / `SENTRIX_SIREN_ACTIVE_HIGH` | 17 / True | NPN driver, `gpio=17=op,dl` keeps it off at boot |
-| `gpio.led_green_pin` / `led_amber_pin` / `led_red_pin` | — | 5 / 12 / 13 | Amber kept off GPIO6 (UPS HAT); HARDWARE.md §6 still says 6 — T-HW updates it |
+| `gpio.led_green_pin` / `led_amber_pin` / `led_red_pin` | — | 5 / 12 / 13 | Amber kept off GPIO6 (UPS HAT); docs/8_RASPBERRY_PI5_INTEGRATION.md §6 still says 6 — T-HW updates it |
 | `gpio.buzzer_pin` | — | 26 | |
 | `gpio.pir_pin` / `door_pin` / `door_pull_up` | — | 23 / 24 / True | |
 | `gpio.mains_sense_pin` / `mains_present_low` | — | 16 / True | PC817 output low while mains present |
@@ -1683,7 +1683,7 @@ Portal `audit_log` events: `auth.login`, `auth.login_failed`, `auth.logout`,
    network only, Caddy as the only published service on 80/443), Alembic
    baseline, backups + tested restore; `deploy/pi5/` (systemd, watchdog,
    NetworkManager failover, ufw LAN-only).
-5. **Docs**: README (new switches; the Twilio breaking change), HARDWARE.md
+5. **Docs**: README (new switches; the Twilio breaking change), docs/8_RASPBERRY_PI5_INTEGRATION.md
    (pin table, connectivity phase, modem in the BOM), `CLAUDE.md` M10 status
    (from the tracks' hand-off notes).
 6. **Retention**: the device prune with the §3.8 caps and signed vault
@@ -1960,7 +1960,7 @@ Still open:
 
 3. Siren relay polarity — **settled by T-HW** as active-high (NPN driver,
    `gpio=17=op,dl`; `SENTRIX_SIREN_ACTIVE_HIGH=0` with `gpio=17=op,dh` for
-   opto boards); HARDWARE.md §6 updated. Still to verify on the bench with an
+   opto boards); docs/8_RASPBERRY_PI5_INTEGRATION.md §6 updated. Still to verify on the bench with an
    LED in place of the siren (`deploy/pi5/README.md`).
 4. Whether owners may ever log in to the LC directly (currently: no — LC keeps
    `SENTRIX_PASSWORD` only; owners use the Portal or the LC via the tunnel).

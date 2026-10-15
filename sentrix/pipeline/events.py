@@ -203,7 +203,7 @@ __all__ = ["EventLog", "read_events", "load_dataset", "SCHEMA_VERSION"]
 
 
 # ── clip rows (docs/7 §2.4 seam, track T-CLIP) ────────────────────────────────
-#: One row per analysed clip (HARDWARE.md T1): the gate, every stage's timing,
+#: One row per analysed clip (docs/8_RASPBERRY_PI5_INTEGRATION.md T1): the gate, every stage's timing,
 #: the keyframes and their votes, the per-class evidence and the decision it
 #: led to. Tick rows stay schema 3. A clip row carries ``"kind": "clip"`` and
 #: no ``features`` key, so ``load_dataset`` and the replay tools skip it.

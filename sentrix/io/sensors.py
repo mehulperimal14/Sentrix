@@ -1,11 +1,11 @@
-"""Board telemetry and optional room sensors (HARDWARE.md §3, §9; docs/7 §3.4).
+"""Board telemetry and optional room sensors (docs/8_RASPBERRY_PI5_INTEGRATION.md §3, §9; docs/7 §3.4).
 
 What the Node page, the link heartbeat and ``tools/doctor.py`` report about
 the unit itself:
 
 * **CPU temperature** from ``/sys/class/thermal/thermal_zone0/temp`` (any
   Linux), else ``vcgencmd measure_temp``. Uncooled, a Pi 5 sits above 85 °C
-  and throttles continuously under four-core load (HARDWARE.md §2).
+  and throttles continuously under four-core load (docs/8_RASPBERRY_PI5_INTEGRATION.md §2).
 * **Throttling** from ``vcgencmd get_throttled``: a bit field whose low bits
   are "now" and bits 16–19 "has happened since boot". Under-voltage *now* is
   the one that corrupts SD cards and browns out the modem.

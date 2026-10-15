@@ -96,7 +96,7 @@ The `buffalo_l` model pack (~280 MB) downloads once on first use.
 
 ```bash
 pip install torchreid     # appearance re-id; histogram fallback without it
-pip install vosk          # voice SOS — not currently wired into the pipeline
+pip install vosk          # voice SOS — not wired; the model is not shipped (alphacephei.com)
 pip install jupyterlab matplotlib   # notebooks
 ```
 
@@ -194,8 +194,8 @@ order and loads the first file present:
 | Engine | Preference order |
 |---|---|
 | Scene | `v4_custom/scene_classifier_custom_v4.pt` → `v4_finetuned/scene_classifier_ft_v4.pt` |
-| Weapon | `v4_custom/weapon_detector_custom_v4.pt` → `v4_finetuned/…` → `v3_real/weapon_detector_real_v3.pt` → `weapon_detector.pt` |
-| Fire | `v4_custom/fire_detector_custom_v4.pt` → `v4_finetuned/…` → `v3_real/fire_smoke_detector_real_v3.pt` → `fire_smoke_detector.pt` |
+| Weapon | `v4_custom/weapon_detector_custom_v4.pt` → `v4_finetuned/…` → `v3_real/weapon_detector_real_v3.pt` |
+| Fire | `v4_custom/fire_detector_custom_v4.pt` → `v4_finetuned/…` → `v3_real/fire_smoke_detector_real_v3.pt` |
 | Violence | `v3_real/violence_classifier_real_v3.pt` → `violence_classifier.pt` |
 | Audio | `v3_real/audio_classifier_real_v3.pt` → `audio_classifier.pt` |
 

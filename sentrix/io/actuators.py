@@ -15,7 +15,7 @@ documented one.
 
 The relay is driven through gpiozero (lgpio on the Pi 5). The first GPIO
 siren imported ``RPi.GPIO``, which does not work on a Pi 5: it would have
-fallen back to a console stub with only a debug log line (HARDWARE.md §3).
+fallen back to a console stub with only a debug log line (docs/8_RASPBERRY_PI5_INTEGRATION.md §3).
 
 Wiring (roadmap v2; ``settings.gpio``):
 

@@ -67,7 +67,7 @@ except ImportError:
 _IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
 
 #: InsightFace model packs the identity engine runs (``SENTRIX_FACE_MODEL``).
-#: ``buffalo_s`` is the Pi 5 pack (HARDWARE.md T1, S3): about 20x less face
+#: ``buffalo_s`` is the Pi 5 pack (docs/8_RASPBERRY_PI5_INTEGRATION.md T1, S3): about 20x less face
 #: detection compute and a much smaller recogniser. The packs' embeddings are
 #: not comparable; the gallery is embedded from its images at start-up with
 #: the configured pack, so switching packs re-embeds it. A pack missing from

@@ -3,7 +3,7 @@
 The same device process as on the laptop (`python -m sentrix`: pipeline, Local
 Console, SOS, channels, link), on a Pi 5 with the Camera Module 3, the siren
 relay, status LEDs, buzzer, PIR, door contact and mains sensing. Plan and
-reasoning: `HARDWARE.md`; pins and polarity: §6 there and `sentrix/io/gpio.py`.
+reasoning: `docs/8_RASPBERRY_PI5_INTEGRATION.md`; pins and polarity: §6 there and `sentrix/io/gpio.py`.
 
 | File | Goes to | What it does |
 |---|---|---|

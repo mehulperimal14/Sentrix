@@ -2,7 +2,7 @@
 
 ``sentrix.perception.detector.Detector`` runs the three YOLO heads in
 PyTorch through ultralytics (``model.track`` for people). On a Pi that is the
-slowest way to run them (HARDWARE.md §2), so the clip engine builds this
+slowest way to run them (docs/8_RASPBERRY_PI5_INTEGRATION.md §2), so the clip engine builds this
 class instead when ``SENTRIX_RUNTIME`` is ``onnx`` or ``ncnn``: the same
 weights (resolved in the same order), the same confidence floors and box
 plausibility rules, the same :class:`~sentrix.perception.detector.DetectionResult`,

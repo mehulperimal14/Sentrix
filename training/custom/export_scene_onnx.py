@@ -1,7 +1,7 @@
 """Export a scene-classifier checkpoint to ONNX, and prove the export is the model.
 
 The Raspberry Pi runs its models in ONNX Runtime or NCNN, not PyTorch
-(HARDWARE.md §2: the same network is several times faster there). This writes
+(docs/8_RASPBERRY_PI5_INTEGRATION.md §2: the same network is several times faster there). This writes
 ``<checkpoint stem>.onnx`` next to the checkpoint:
 
 * input ``input``: float32 ``(N, 3, S, S)``, RGB, normalised with the

@@ -3,7 +3,7 @@
 Why a runtime layer
 -------------------
 On a Raspberry Pi 5 the same YOLO11n is about five times faster in NCNN than
-in PyTorch (HARDWARE.md §2), so PyTorch is for development only there. The
+in PyTorch (docs/8_RASPBERRY_PI5_INTEGRATION.md §2), so PyTorch is for development only there. The
 heads below take a BGR frame and return boxes in frame pixels whatever runs
 the network:
 

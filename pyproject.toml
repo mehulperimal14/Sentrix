@@ -77,7 +77,7 @@ filterwarnings = ["ignore::DeprecationWarning", "ignore::UserWarning"]
 [tool.ruff]
 line-length = 88
 target-version = "py310"
-exclude = [".venv", "training/runs", "Capstone Docs", "var"]
+exclude = [".venv", "training/runs", "docs/capstone", "var"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM"]

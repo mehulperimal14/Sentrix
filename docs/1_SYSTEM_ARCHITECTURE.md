@@ -33,7 +33,7 @@ All inference is local. There is no cloud dependency and no subscription.
 | Acoustic classification over a 4 s window | Working (model under-trained — see doc 2) |
 | Face authorisation | Working with `insightface`; **fails closed** without it |
 | Cross-camera re-identification | Degraded — histogram fallback unless `torchreid` installed |
-| Voice SOS | **Not wired.** Vosk model retained under `models/vosk-model/` |
+| Voice SOS | **Not wired.** The Vosk model is not shipped (download it from alphacephei.com when voice SOS is wired) |
 | GPIO siren relay | **Interface only** — no hardware attached |
 | UCF-Crime anomaly model | **Not wired.** See doc 2 §6 for why |
 
@@ -81,10 +81,10 @@ Sentrix/
 ├── training/
 │   ├── scripts/                training as .py
 │   ├── notebooks/              training as .ipynb
-│   └── runs/                   v1_legacy, v2_real, v3_real, ucf_crime_dvs
+│   └── runs/                   v3_real, ucf_crime_dvs, custom, custom_eval
 ├── tools/                      doctor, replay, baseline, evaluate, auditors
 ├── tests/                      46 regression tests
-├── docs/                       this folder
+├── docs/                       this folder (capstone/ submissions, assets/ figures)
 └── var/                        runtime output — gitignored, never web-served
 ```
 

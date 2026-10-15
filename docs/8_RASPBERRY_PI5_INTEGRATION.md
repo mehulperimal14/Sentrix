@@ -1,4 +1,4 @@
-# HARDWARE.md — Integrating SENTRIX with a Raspberry Pi 5
+# Integrating SENTRIX with a Raspberry Pi 5
 
 **Status: planning.** No hardware has been bought yet. This file is the working plan
 for moving SENTRIX from a laptop onto a camera module + Raspberry Pi 5 edge unit.

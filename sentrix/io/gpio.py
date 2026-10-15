@@ -1,7 +1,7 @@
 """Pi 5 header I/O on gpiozero: status LEDs, buzzer and the sensor inputs.
 
 **RPi.GPIO does not work on a Raspberry Pi 5** (the header sits behind the
-RP1 south bridge); gpiozero drives it through lgpio (HARDWARE.md §3). Off a Pi
+RP1 south bridge); gpiozero drives it through lgpio (docs/8_RASPBERRY_PI5_INTEGRATION.md §3). Off a Pi
 every device runs on gpiozero's ``MockFactory`` pretending to be a Pi 5, so
 the same code runs on a laptop and in the tests, and reports itself as not
 real.

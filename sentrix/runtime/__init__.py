@@ -1,4 +1,4 @@
-"""Model runtime backends: torch (development), onnxruntime, ncnn (HARDWARE.md §9).
+"""Model runtime backends: torch (development), onnxruntime, ncnn (docs/8_RASPBERRY_PI5_INTEGRATION.md §9).
 
 ``settings.clip.runtime`` (``SENTRIX_RUNTIME``) picks the backend for every
 exported model; ``settings.clip.threads`` (``SENTRIX_CLIP_THREADS``) is the

@@ -9,7 +9,7 @@
     "python tools/replay_custom_videos.py --videos all --mode clip --fast-lane --tag clip --threads 4 --compare training/runs/custom_eval/m5/replay_all.json",
     "python tools/bench_clip.py --seconds 60 --runtime torch|onnx [--fast-lane] --json training/runs/custom_eval/clip/bench_clip_<runtime>[_fastlane].json"
   ],
-  "protocol": "evaluation only: every clip parameter is the HARDWARE.md T1 / ClipConfig default, fixed before the run; nothing was selected or tuned on any video, wa02 included. Replay decisions are stamped at the clip end (compute not added); rows are sampled on the M5 6 Hz grid.",
+  "protocol": "evaluation only: every clip parameter is the docs/8_RASPBERRY_PI5_INTEGRATION.md T1 / ClipConfig default, fixed before the run; nothing was selected or tuned on any video, wa02 included. Replay decisions are stamped at the clip end (compute not added); rows are sampled on the M5 6 Hz grid.",
   "files": {
     "replay_all.json/.csv": "clip mode, no fast lane",
     "replay_all_fastlane.json/.csv": "clip mode with the fast lane (YOLO @320 every 4th frame)",

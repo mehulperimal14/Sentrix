@@ -23,7 +23,7 @@ intervals. ``--hz`` replays at another inference rate; ``--negatives DIR``
 replays every video in a folder of normal-only footage (no labels needed) to
 measure false alarms per hour, which gate G3 asks for over >= 3 hours.
 
-``--mode clip`` replays through the 4-second clip engine (HARDWARE.md T1,
+``--mode clip`` replays through the 4-second clip engine (docs/8_RASPBERRY_PI5_INTEGRATION.md T1,
 ``build_eval_pipeline(mode="clip")``): every frame into the clip buffer, one
 decision per 2 s clip (plus fast-lane raises with ``--fast-lane``), rows on
 the same tick grid as the per-frame replay showing the committed state at each

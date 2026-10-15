@@ -1,4 +1,4 @@
-"""The clip engine's ring buffer, keyframe selection and scheduler (HARDWARE.md T1).
+"""The clip engine's ring buffer, keyframe selection and scheduler (docs/8_RASPBERRY_PI5_INTEGRATION.md T1).
 
 Synthetic frames and audio only: nothing here loads a model or opens a device.
 """
