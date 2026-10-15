@@ -682,7 +682,7 @@ object is visible. Classes:
 | knife | yes | kitchen knife held, raised, half hidden |
 | visible flame | yes | lighter flame, small controlled flame in a tray |
 | assault (staged fight) | L3 only with aligned aggression audio (D15) | **with sound**: shouting, screaming, a slap on a cushion; actors agree a script and a stop word |
-| play-fighting / banter | must stay ≤ L1 (D15 banter rule) | the same moves as the staged fight, with laughter and calm talk; as many clips as the fight |
+| play-fighting / banter | must stay ≤ L2, labelled banter (D15 banter rule) | the same moves as the staged fight, with laughter and calm talk; as many clips as the fight |
 | robbery, stick, smoke | no, experimental (≤ L2) | record a few for later work only |
 
 **Audio with every clip (D15).** The microphone you will deploy (USB, or the
@@ -869,7 +869,7 @@ to screen backbones in seconds before fine-tuning any of them.
 
 **d) Audio (Prashant, not gating).** Since D15 the sound model is the
 pretrained PANNs CNN10 AudioSet tagger (`sentrix/perception/sound_tagger.py`,
-`models/audio/`), mapped to five cues by a published rule; audio alone stays at
+`models/audio/`, run on its own onnxruntime threads), mapped to seven cues by a published rule; audio alone stays at
 most L2, and it corroborates a visual source only when its window is aligned
 with the frame. Nothing is fine-tuned yet. With the §15.1 audio sessions:
 measure each cue's AUROC per room (laughter/calm vs shouting/screaming;

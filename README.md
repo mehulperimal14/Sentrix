@@ -60,9 +60,10 @@ real person unless two switches are on, and even then only to an allowlist (see
 | 9. The Desk acknowledges and resolves; the incident verdict is recorded | Desk operator | Portal `/desk` |
 
 Safety defaults (on unless the household turns them off): a corroborated L4/L5,
-a confirmed fire (at T+2 min), or the device going offline
-during an open L2+ incident alerts the confirmed contacts while the owner is
-still being asked. A single-source weapon L3 goes to the owner only. A duress
+a confirmed fire (at T+2 min), or the device going offline during an open L3+
+alarm (weapon, fire, a corroborated fight) alerts the confirmed contacts while
+the owner is still being asked. An unrecognised person never opens an SOS, not
+even when the device goes offline: the owner alone gets a notice. A single-source weapon L3 goes to the owner only. A duress
 PIN "declines" on screen but alerts the contacts. The full rules are decisions
 D8–D14 in [`CLAUDE.md`](CLAUDE.md) §6 and the state machine in
 [`docs/7_PORTAL_AND_SOS.md`](docs/7_PORTAL_AND_SOS.md) §7.
@@ -121,7 +122,7 @@ a model score and the alarm:
 | One visual modality confirmed | L3 (snapshot and evidence; SOS prompt) |
 | Two modalities confirmed for one class (detector + scene, or video + aligned audio, e.g. a pistol box and a gunshot) | L4; L5 when the weaker is well above threshold, or when all three agree |
 | Audio alone (gunshot, smoke alarm) | at most L2; a scream alone is never a weapon |
-| Fight (assault) | L2 (experimental) unless the video fight **and** aligned aggression audio (shouting, screaming) agree with 2+ people and motion: then L3. Aligned laughter or calm talk (banter) holds it under L2. Unvalidated until room recordings exist |
+| Fight (assault) | L2 (experimental) unless the video fight **and** aligned aggression audio (shouting, screaming) agree with 2+ people and motion: then L3. Aligned laughter or very calm talk (banter) keeps it at L2 - shown, never hidden; TV, music or radio make the audio neutral; the device's own speaker, siren and buzzer are never heard as the room. Unvalidated until room recordings exist |
 | Robbery, stick, smoke | experimental: logged and shown, never above L2 |
 | Unknown person, PIR, door | presence context: an unrecognised person (3 s armed, 10 s at home), or armed-mode sensor activity with nobody recognised, is an **L2 only** in both modes |
 
@@ -409,7 +410,7 @@ Limits that matter for any claim:
   evidence until real session logs exist (M8).
 * **Darkness and faces closer than 1 m** are out of scope for an RGB webcam.
 * **The sound model is general, not room-tested.** PANNs CNN10 (AudioSet,
-  25 MB, ≈ 50 ms per 4 s window on the laptop CPU) maps its labels to five cues
+  25 MB, ≈ 40 ms per 4 s window on the laptop CPU, its own onnxruntime threads) maps its labels to seven cues
   by a published rule; the cue thresholds are a priori, and the custom videos'
   soundtracks are phone recordings of staged scenes: the staged assault (vid05)
   sounds like calm talk (benign 0.91, aggression < 0.01), so no fight in the

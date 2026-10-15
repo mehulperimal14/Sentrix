@@ -1,0 +1,78 @@
+{
+  "log": "var\\events\\events_20260930_232502_c27258a25457.jsonl",
+  "ticks": 1300,
+  "minutes": 18.28,
+  "armed": false,
+  "as_logged": {
+    "L2+": {
+      "onsets": 30,
+      "seconds": 502.3
+    },
+    "L3+": {
+      "onsets": 9,
+      "seconds": 155.6
+    },
+    "L4+": {
+      "onsets": 6,
+      "seconds": 112.8
+    },
+    "L5+": {
+      "onsets": 0,
+      "seconds": 0.0
+    }
+  },
+  "current_logic": {
+    "L2+": {
+      "onsets": 5,
+      "seconds": 53.4
+    },
+    "L3+": {
+      "onsets": 0,
+      "seconds": 0.0
+    },
+    "L4+": {
+      "onsets": 0,
+      "seconds": 0.0
+    },
+    "L5+": {
+      "onsets": 0,
+      "seconds": 0.0
+    }
+  },
+  "typed_ticks": {
+    "intrusion": 18
+  },
+  "max_raw_tci": 0.3,
+  "incidents": [
+    {
+      "type": "intrusion",
+      "peak_level": 2,
+      "peak_tci": 0.3,
+      "reason": "Unrecognised person present for 12 s (home mode; L2 only)"
+    },
+    {
+      "type": "intrusion",
+      "peak_level": 2,
+      "peak_tci": 0.3,
+      "reason": "Unrecognised person present for 11 s (home mode; L2 only)"
+    },
+    {
+      "type": "intrusion",
+      "peak_level": 2,
+      "peak_tci": 0.3,
+      "reason": "Unrecognised person present for 11 s (home mode; L2 only)"
+    },
+    {
+      "type": "intrusion",
+      "peak_level": 2,
+      "peak_tci": 0.3,
+      "reason": "Unrecognised person present for 11 s (home mode; L2 only)"
+    },
+    {
+      "type": "intrusion",
+      "peak_level": 2,
+      "peak_tci": 0.3,
+      "reason": "Unrecognised person present for 12 s (home mode; L2 only)"
+    }
+  ]
+}

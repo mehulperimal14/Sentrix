@@ -242,8 +242,9 @@ alarm path). DINOv2 ViT-S/14 is the untested fallback and needs its own LOVO run
   window (aligned by construction); without buffered samples it uses the
   audio engine's newest window only when it overlaps the clip end within
   `SENTRIX_AUDIO_ALIGN_TOLERANCE` (1.5 s), else audio is *unavailable* (D15).
-- The general sound model (PANNs CNN10, 25 MB) costs ≈ 50 ms per 4 s window on
-  the laptop CPU at 2 threads; on the Pi it is still unmeasured
+- The general sound model (PANNs CNN10, 25 MB, onnxruntime with its own 2
+  threads, never torch's) costs ≈ 40 ms per 4 s window (clip mode: two 2 s
+  halves) on the laptop CPU; on the Pi it is still unmeasured
   (`tools/bench_clip.py` with audio).
 
 ### T2 — Pi 5 + AI HAT+ (Hailo NPU) (Priority 3, plan)

@@ -813,6 +813,7 @@ a connection that has been silent for `offline_after_seconds` (30 s).
 | `evidence.meta` | bundle_id, incident_id, created_at, level, tci, sha256, camera_id, incident_type, detections [{label, conf}] (no image) | T-LINK on `evidence` (`vault.save`) |
 | `snapshot.meta` | name, incident_id, created_at (no image) | T-LINK on `snapshot` (the pipeline's snapshot capture) |
 | `gallery.audit` | event (gallery_enrolled/removed/rejected), person, file, via, by (no image) | T-LINK on `audit`, gallery events only |
+| `speaker.audit` | event (`speaker_say`), by, preset, chars, backend - never the free text | T-LINK on `audit` (D16); the Portal audits `device.speaker_say` |
 | `mode.changed` | armed, by, at | T-LINK on `mode` (`mode.set_armed`) |
 | `remote.audit` | rows of `remote_audit` (batched) | T-LINK |
 | `notification.status` | id, request_id, channel, recipient_ref, recipient_masked, step, status, error, attempts, sent_at | T-LINK on the channels service's listener |
@@ -1225,9 +1226,9 @@ four more blocks, each with a safe idle value:
 
 | Key | Content |
 |---|---|
-| `contributions` | For the leading class: one row per input - `video detector`, `scene model` / `violence model`, `audio` (or `audio (banter)`, `audio (aggression)`), `people`, `motion`, `identity`, `sensors` - with `value`, `detail` and `effect` (`raises`, `lowers`, `gated`, `below confirmation`, `gate ok`/`gate failed`, `context`, `unavailable`) |
-| `audio` | The audio window heard for this tick: `status` (`aligned`, `stale`, `future`, `untimed`, `disabled`), `lag_s` (frame time minus window end), `tolerance_s`, `model` (`panns_cnn10`, `cnn`, `quiet`), `cues` (aggression, weapon_sound, fire_sound, benign_social, siren), `start`/`end` (monotonic), `wall_end` |
-| `fusion` | `class`, `state`, `rule` (`single`, `corroborated`, `three modalities`, `audio only`, `fight corroborated`, `banter`, `experimental`...), `modalities`, `context` (`persons_recent`, `motion`), `sensors` (seconds since the last PIR/door event) |
+| `contributions` | For the leading class: one row per input - `video detector`, `scene model` / `violence model`, `audio` (or `audio (banter)`, `audio (aggression)`), `people`, `motion`, `identity`, `sensors` - with `value`, `detail` and `effect` (`raises`, `holds at L2` - banter -, `gated`, `below confirmation`, `gate ok`/`gate failed`, `context`, `unavailable`); an unknown people count is shown as unknown |
+| `audio` | The audio window heard for this tick: `status` (`aligned`, `stale`, `future`, `untimed`, `unclassified` - no model or failed inference -, `self_output` - the device's own speaker, siren or buzzer -, `disabled`), `lag_s` (frame time minus window end), `tolerance_s`, `model` (`panns_cnn10`, `cnn`, `quiet`), `cues` (aggression, weapon_sound, fire_sound, benign_social = laughter, calm_talk, background = TV/music/radio, siren), `start`/`end` (monotonic), `wall_end`, `counted` (a new, non-overlapping observation), `neutral` (why an aligned window did not vote, e.g. background) |
+| `fusion` | `class`, `state`, `rule` (`single`, `corroborated`, `three modalities`, `audio only`, `corroboration only`, `fight corroborated`, `banter`, `mixed audio`, `experimental`, `unrecognised person (L2 only)`...), `modalities`, `context` (`persons_recent`, `motion`), `sensors` (seconds since the last PIR/door event) |
 | `speaker` | D16: `enabled`, `backend`, `ready`, `speaking`, `last` |
 
 Event-log tick rows are schema 5: the same `audio` and `fusion` records, the
@@ -1365,7 +1366,7 @@ legacy L4 owner SMS folds into `rise4`, the L5 call into `rise5`.
 
 Safety defaults (ON by default, D9) alert CONFIRMED contacts while the owner is
 still asked: corroborated L4/L5 at once; confirmed fire at T+2 min; armed
-intrusion at once (only with `intrusion_requests`); device offline / heartbeat lost during an open L2+ incident
+intrusion at once (only with `intrusion_requests`); device offline / heartbeat lost during an open L3+ incident of an alarm class (weapon, fire, a corroborated fight); an L2 (unrecognised person, audio only, experimental) gives a `device.tamper` audit and an owner notice only - no request, no contacts (review F1)
 at once (cloud side). Single-source weapon L3: owner only until gate P8
 (`contacts_for_single_source_l3`, T+5 min when on). The duress PIN exists
 whenever contacts exist and differs from the SOS PIN in ≥ 2 digits. Repeats:
@@ -1399,14 +1400,20 @@ checked; a gap is buffered), the Portal stores the device's (`request_events`
 unique on (request_id, seq, origin)). Neither side ever re-sends the other's
 events.
 
-**Requests the cloud opens.** When the heartbeat is lost during an open L2+
-incident (D9 safety default), the cloud may have no request yet: it creates
+**Requests the cloud opens.** When the heartbeat is lost during an open
+incident of an alarm class at L3+ (D9 safety default, `services.sos.
+offline_opens_request`), the cloud may have no request yet: it creates
 one with its own UUID, `authority_side="cloud"`, flag `device_offline`, origin
 cloud, and alerts CONFIRMED contacts (Telegram / e-mail only — the Portal
 cannot send SMS; T-ACCT warns when a contact has neither). On `sos.sync` for an
 unknown id the device runs `create_request(..., origin="cloud")`, imports the
 cloud's chain, attaches the incident, and links any request it opened itself
-for the same incident with a `detail.merged_into` event.
+for the same incident with a `detail.merged_into` event. Any other open
+incident (an L2: an unrecognised person, an audio-only or experimental class)
+never opens a request this way, since an unrecognised person never opens an
+SOS (D8 as amended by D15): the Portal audits `device.tamper`
+(`opens_request: false`) and sends the owner alone a `device.offline` notice
+(step `offline_l2:<incident>`).
 
 ### 7.7 Verdict semantics by request state *(`database.set_verdict`)*
 
