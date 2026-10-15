@@ -637,3 +637,62 @@ class TestSnapshot:
         assert s.last_checking_at == M.epoch("2026-10-14T09:03:00+00:00")
         assert s.owner_reached and s.flags == {"repeat": True}
         assert M.epoch(None) is None and M.epoch("nonsense") is None
+
+
+# ── adversarial review regressions ────────────────────────────────────────────
+class TestReviewRegressions:
+    def test_a_failed_request_can_close(self):
+        assert S.next_state(S.FAILED, S.RESOLVE) == S.CLOSED
+        assert S.next_state(S.FAILED, S.STALE_CLOSE) == S.CLOSED
+        failed = snap(S.FAILED)
+        steps = M.due(failed, failed.help_since + RULES.stale_close + 1, RULES, OFFLINE)
+        assert [s.event for s in steps] == [S.STALE_CLOSE]
+
+    def test_a_failed_request_marked_safe_closes_on_a_standalone_device(self):
+        failed = snap(S.FAILED, flags={"resident_safe": True})
+        standalone = Reach(online=False, standalone=True, remote_prompt=False)
+        early = M.due(failed, failed.help_since + 60, RULES, standalone)
+        assert S.STALE_CLOSE not in [s.event for s in early]
+        late = M.due(failed, failed.help_since + RULES.repeat_window + 1, RULES, standalone)
+        assert [s.event for s in late] == [S.STALE_CLOSE]
+
+    def test_an_alarm_attached_to_a_failed_request_reaches_the_owner(self):
+        facts = M.TriggerFacts(incident_id="i2", incident_type="fire", level=3,
+                               evidence_state="confirmed", at=T0 + 600)
+        decision = M.on_trigger(facts, open_request=snap(S.FAILED), history=[], rules=RULES)
+        assert decision.action == "attach"
+        owner = [n for s in decision.steps for n in s.notices if n.audience == "owner"]
+        assert owner and owner[0].sms
+
+    def test_reconnect_merge_sets_the_verdicts(self):
+        declined = M.reconcile(snap(S.PENDING), S.DECLINED)
+        assert declined.verdict == "FALSE"
+        closed = M.reconcile(snap(S.DISPATCHED), S.CLOSED, cloud_outcome="real_threat")
+        assert closed.verdict == "TRUE" and closed.fields["outcome"] == "real_threat"
+        duress = M.reconcile(snap(S.PENDING, flags={"duress": True}), S.DISPATCHED)
+        assert duress.restricted and duress.verdict == "FALSE"
+
+    def test_standalone_with_a_remote_prompt_sends_no_reminder_sms(self):
+        remote = Reach(online=False, standalone=True, remote_prompt=True)
+        pending = snap(S.PENDING)
+        steps = M.due(pending, T0 + 125, RULES, remote)
+        reminders = [n for s in steps if s.event == S.REMINDER for n in s.notices]
+        assert reminders and not reminders[0].sms
+        assert not M.expire_step(pending, remote).notices[0].sms
+        assert M.expire_step(pending, OFFLINE).notices[0].sms
+
+    def test_a_false_verdict_while_prompting_throttles_like_a_decline(self):
+        cancelled = snap(S.CANCELLED, responded_at=T0 + 30)
+        facts = M.TriggerFacts(incident_id="i2", incident_type="weapon", level=3,
+                               evidence_state="confirmed", at=T0 + 120)
+        assert M.on_trigger(facts, open_request=None, history=[cancelled],
+                            rules=RULES).flags.get("repeat")
+        reset = snap(S.CANCELLED)                    # a test reset: no answer recorded
+        assert not M.on_trigger(facts, open_request=None, history=[reset],
+                                rules=RULES).flags.get("repeat")
+
+    def test_expiry_sends_an_owed_contacts_alert_first(self):
+        fire = snap(S.PENDING, incident_type="fire")
+        steps = M.expiry_steps(fire, RULES, OFFLINE, "expired while the device was off")
+        assert [s.event for s in steps] == [S.CONTACTS_NOTIFIED, S.EXPIRE]
+        assert steps[1].detail["reason"] == "expired while the device was off"

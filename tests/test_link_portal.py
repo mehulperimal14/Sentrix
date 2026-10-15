@@ -613,7 +613,9 @@ class TestCloudAuthority:
         assert "device_online" in names
         assert sync["codes"] == ["ok"] * len(names), sync["codes"]
         assert requests.verify_chain(request["id"])["origins"]["cloud"] == len(names)
-        assert requests.get_request(request["id"])["state"] == "DISPATCHED", "help path wins"
+        # The fake records the codes before it writes the merged state.
+        wait_for(lambda: requests.get_request(request["id"])["state"] == "DISPATCHED",
+                 what="help path wins")
         assert mirror(rig.app, request["id"]).authority_side == "device"
 
 
@@ -670,3 +672,140 @@ class TestNoEventLost:
         assert set(published) <= stored, sorted(set(published) - stored)[:10]
         assert mirrored == len(published), "every event applied exactly once"
         assert drops == 100 and len(rig.network.pipes) >= 101
+
+
+# ── adversarial review regressions ────────────────────────────────────────────
+class TestReviewCloudAuthority:
+    _offline = TestCloudAuthority._offline
+
+    def _answer(self, rig, request_id, action, **kw):
+        from sentrix_portal.services import sos as portal_sos
+        owner = Actor("owner", id=rig.seeded.owner_id, name="Riya").to_dict()
+
+        async def go():
+            with rig.app.state.db.session() as db:
+                return await portal_sos.respond(db, request_id, action, actor=owner,
+                                                channel="portal", **kw)
+        return asyncio.run(go())
+
+    def _pending_offline(self, rig, **kw):
+        connect(rig)
+        request = rig.sos.open(**kw)
+        wait_for(lambda: (r := mirror(rig.app, request["id"])) and r.state == "PENDING",
+                 what="PENDING")
+        self._offline(rig)
+        return request
+
+    def test_the_duress_pin_works_while_the_pin_is_locked(self, rig):
+        request = self._pending_offline(rig)
+        for _ in range(5):
+            assert self._answer(rig, request["id"], "decline", pin="111111")["code"] \
+                == "pin_invalid"
+        assert self._answer(rig, request["id"], "decline", pin=PIN)["code"] == "pin_locked"
+        coerced = self._answer(rig, request["id"], "decline", pin=DURESS_PIN)
+        assert coerced["ok"] and coerced["request"]["state"] == "DECLINED"
+        row = mirror(rig.app, request["id"])
+        assert row.state == "DISPATCHED" and row.flags["duress"]
+
+    def test_duress_on_the_help_path_and_help_now_on_a_duress_request(self, rig):
+        request = self._pending_offline(rig)
+        assert self._answer(rig, request["id"], "approve")["ok"]
+        coerced = self._answer(rig, request["id"], "safe", pin=DURESS_PIN)
+        assert coerced["ok"]
+        row = mirror(rig.app, request["id"])
+        assert row.flags["duress"] and row.flags["contacts_notified"]
+        assert any(s == "duress" for _r, _c, s in rig.outbox.steps("contact:"))
+        again = self._answer(rig, request["id"], "help_now")
+        assert again["ok"] and again["message"] == "Help requested"
+
+    def test_duress_on_a_closed_request_opens_a_silent_linked_one(self, rig):
+        from sentrix_portal.models import AssistanceRequest
+        request = self._pending_offline(rig)
+        assert self._answer(rig, request["id"], "decline", pin=PIN)["ok"]
+        assert self._answer(rig, request["id"], "decline", pin=DURESS_PIN)["ok"]
+        with rig.app.state.db.session() as db:
+            linked = db.query(AssistanceRequest).filter_by(
+                parent_request_id=request["id"]).one()
+            assert linked.flags["duress"] and linked.state == "DISPATCHED"
+
+    def test_a_reconnect_blip_does_not_hand_the_request_to_the_cloud(self, rig):
+        from sentrix_portal.services import hub
+        connect(rig)
+        request = rig.sos.open()
+        wait_for(lambda: (r := mirror(rig.app, request["id"])) and r.state == "PENDING",
+                 what="PENDING")
+        rig.service.stop()
+        wait_for(lambda: not hub.is_online(rig.seeded.device_id), what="gone")
+        answer = self._answer(rig, request["id"], "help_now")
+        assert answer["code"] == "timeout"
+        row = mirror(rig.app, request["id"])
+        assert row.authority_side in (None, "device") and row.state == "PENDING"
+
+    def test_a_takeover_that_wrote_nothing_is_not_kept(self, rig):
+        request = self._pending_offline(rig)
+        from sentrix_portal.models import AssistanceRequest
+        from sentrix_portal.services import sos as portal_sos
+        with rig.app.state.db.session() as db:
+            db.get(AssistanceRequest, request["id"]).authority_side = "device"
+        assert self._answer(rig, request["id"], "help_now")["code"] == "conflict"
+        assert mirror(rig.app, request["id"]).authority_side == "device"
+        with rig.app.state.db.session() as db:
+            db.get(AssistanceRequest, request["id"]).authority_side = "cloud"
+            synced = portal_sos.sync_messages(db, rig.seeded.device_id)
+        assert request["id"] in {m["request_id"] for m in synced}
+
+    def test_checking_snoozes_the_cloud_reminders(self, rig):
+        from sentrix_portal.models import AssistanceRequest
+        from sentrix_portal.services import sos as portal_sos
+        request = self._pending_offline(rig, window=1800)
+        assert self._answer(rig, request["id"], "checking")["ok"]
+        with rig.app.state.db.session() as db:
+            base = portal_sos._aware(db.get(AssistanceRequest, request["id"]).created_at)
+            portal_sos.run_timers(db, now=base + timedelta(seconds=130))
+        assert "r120" not in [s for _r, _c, s in rig.outbox.steps("owner")]
+
+    def test_a_late_takeover_repages_once_not_in_a_burst(self, rig):
+        from sentrix_portal.models import AssistanceRequest, RequestEvent
+        from sentrix_portal.services import sos as portal_sos
+        request = self._pending_offline(rig)
+        assert self._answer(rig, request["id"], "approve")["ok"]
+        with rig.app.state.db.session() as db:
+            row = db.get(AssistanceRequest, request["id"])
+            started = portal_sos._aware(row.responded_at)
+            portal_sos.run_timers(db, now=started + timedelta(hours=3))
+            repages = db.query(RequestEvent).filter_by(request_id=row.id,
+                                                       event="repage").count()
+            assert repages == 1 and row.repage_count > 1
+
+    def test_device_flags_can_clear_and_repage_count_merges(self, rig):
+        from sentrix_portal.services import sos as portal_sos
+        request = self._pending_offline(rig)
+        with rig.app.state.db.session() as db:
+            from sentrix_portal.models import AssistanceRequest
+            row = db.get(AssistanceRequest, request["id"])
+            assert row.flags["device_offline"]
+            portal_sos._merge_request(db, row, {"flags": {"device_offline": False,
+                                                          "duress": False},
+                                                "repage_count": 4}, cloud_acted=True)
+            assert row.flags["device_offline"] is False
+            assert row.flags["contacts_notified"], "a cloud-set flag stays"
+            assert row.repage_count == 4
+
+    def test_cloud_requests_use_the_portal_test_mode_and_carry_their_facts(self, rig):
+        from sentrix_portal import settings as portal_settings
+        from sentrix_portal.models import AssistanceRequest, RequestEvent
+        connect(rig)
+        incident = str(uuid.uuid4())
+        rig.state.update(alarm={"level": 3, "incident_id": incident, "incident_type": "fire"})
+        wait_for(lambda: device_heartbeat(rig).get("alarm", {}).get("level") == 3,
+                 what="L3 heartbeat")
+        assert portal_settings.current().test_mode
+        self._offline(rig)
+        with rig.app.state.db.session() as db:
+            row = db.query(AssistanceRequest).filter_by(device_id=rig.seeded.device_id).one()
+            assert row.test_mode is True
+            created = db.query(RequestEvent).filter_by(request_id=row.id,
+                                                       event="created").one()
+            assert created.detail["incident_type"] == "fire"
+            assert created.detail["incident_id"] == incident and created.detail["level"] == 3
+            assert created.detail["policy"]["window_seconds"]

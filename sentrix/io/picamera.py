@@ -208,7 +208,8 @@ class PiCameraSource(FrameSource):
             metadata = dict(request.get_metadata() or {})
         finally:
             request.release()
-        lores = self._lores_bgr(lores)
+        # The raw lores array is kept; it is converted (YUV420 -> BGR on a Pi 4)
+        # only when ``latest_lores`` asks for it, not on every capture.
         arrived = time.monotonic()
         stamp = self._capture_time(metadata, arrived)
         with self._lock:
@@ -252,7 +253,9 @@ class PiCameraSource(FrameSource):
         with self._lock:
             if self._lores is None or self._seq == after_seq:
                 return None, self._seq, self._stamp
-            return self._lores.copy(), self._seq, self._stamp
+            raw, seq, stamp = self._lores, self._seq, self._stamp
+        converted = self._lores_bgr(raw)
+        return (converted.copy() if converted is raw else converted), seq, stamp
 
     @property
     def online(self) -> bool:

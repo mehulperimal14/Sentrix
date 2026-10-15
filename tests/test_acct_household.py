@@ -304,7 +304,7 @@ class TestMembers:
         owner.post("/household/members", {"action": "remove_member", "member_id": member.id})
         assert not query(portal, HouseholdMember, id=member.id)
         assert query(portal, User, id=dev.id)[0].status == "closed"
-        assert member_browser.get("/household").headers["location"] == "/login"
+        assert member_browser.get("/household").headers["location"].split("?")[0] == "/login"
 
     def test_members_view_but_never_edit(self, portal):
         home = add_household(portal, complete=True)
@@ -511,7 +511,7 @@ class TestPrivacy:
         assert query(portal, AuditLog, event="privacy.erased")
         with portal.state.db.session() as db:
             assert security.verify_audit_chain(db)["ok"]
-        assert browser.get("/home").headers["location"] == "/login"
+        assert browser.get("/home").headers["location"].split("?")[0] == "/login"
 
 
 # ── the household's audit trail ───────────────────────────────────────────────

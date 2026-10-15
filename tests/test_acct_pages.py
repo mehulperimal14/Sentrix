@@ -78,7 +78,7 @@ def test_public_pages(portal, world):
     browser = Browser(portal)
     for path in ("/login", "/activate"):
         _check_page(browser.get(path), path)
-    assert browser.get("/").headers["location"] == "/login"
+    assert browser.get("/").headers["location"].split("?")[0] == "/login"
 
 
 def test_static_files_are_cacheable_and_served(portal):

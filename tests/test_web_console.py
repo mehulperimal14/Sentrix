@@ -221,6 +221,10 @@ def inspect_html(text: str) -> _Collector:
     return collector
 
 
+#: Absolute Portal pages the tunnelled console links to on purpose.
+PORTAL_LINKS = frozenset({"/home", "/desk", "/account"})
+
+
 def assert_prefixed(text: str, base: str) -> None:
     """Every URL the page holds starts with the base (or is a tel: link)."""
     found = inspect_html(text)
@@ -228,6 +232,8 @@ def assert_prefixed(text: str, base: str) -> None:
     for tag, attr, value in found.urls:
         if value.startswith("tel:"):
             continue
+        if base and value in PORTAL_LINKS:
+            continue                    # the tunnelled nav's way back to the Portal
         assert value.startswith(base + "/") and not value.startswith("//"), \
             f"<{tag} {attr}={value!r}> is not under {base or '/'}"
         assert "://" not in value, f"external URL {value!r}"
@@ -406,7 +412,8 @@ class TestRoles:
         page = tunnel_client(console, "operator").get("/dashboard")
         assert page.status_code == 200
         nav = re.findall(r'<a href="([^"]+)" class="nav-link', page.text)
-        assert nav == [f"{BASE}/dashboard", f"{BASE}/live"]
+        assert [n for n in nav if n not in PORTAL_LINKS] == [f"{BASE}/dashboard", f"{BASE}/live"]
+        assert "/desk" in nav, "the operator's way back to the Desk"
         assert 'data-caps=""' in page.text
         assert "data-dispatch-authority" not in page.text
         assert 'data-sos-action="approve"' not in page.text
@@ -590,6 +597,54 @@ class TestPageParityFixes:
         add_package("p-exp", status="EXPIRED", request_id="req-exp")
         text = lc_client(console)[0].get("/dispatch").text
         assert 'data-help-now="req-exp"' in text and "Unanswered" in text
+
+    def test_dispatch_hides_a_duress_package_and_drops_a_silent_one(self, console):
+        import json as _json
+        from sentrix.storage import database, requests
+        from sentrix.storage.models import DispatchRecord
+        add_incident(request_id="req-dur")
+        requests.create_request("req-dur", incident_id="inc-1", incident_type="weapon",
+                                level=3, evidence_state="confirmed", policy={},
+                                expires_at=None, test_mode=True, flags={"duress": True})
+        requests.create_request("req-sil", incident_id=None, incident_type="duress",
+                                level=3, evidence_state="confirmed", policy={},
+                                expires_at=None, test_mode=True,
+                                flags={"duress": True, "silent": True})
+        add_package("p-dur", status="SENT", request_id="req-dur")
+        add_package("p-sil", status="PENDING", request_id="req-sil", incident_type="duress",
+                    incident_id=None)
+        with database.session_scope() as session:
+            row = session.get(DispatchRecord, "p-dur")
+            row.chosen_authority, row.sent_by = "POLICE", "lc:admin"
+            row.sent_to_json = _json.dumps(["SENTRIX Desk", "Aman 98xxxxx611"])
+        client = lc_client(console)[0]
+        text = client.get("/dispatch").text
+        assert 'class="status-tag sent">SENT<' not in text
+        assert "Aman 98" not in text and "DURESS" not in text and "p-sil" not in text
+        assert 'class="status-tag cancelled">CANCELLED<' in text
+        latest = client.get("/api/dispatch/latest").json()
+        assert latest == {}, "a silent request's PENDING package is never shown"
+        mine = client.get("/api/dispatch/latest?request_id=req-dur").json()
+        assert mine["status"] == "CANCELLED" and mine["sent_to"] == []
+
+    def test_the_tunnelled_console_links_back_to_the_portal(self, console):
+        owner = tunnel_client(console).get("/dashboard").text
+        assert 'href="/home"' in owner and 'href="/account"' in owner
+        desk = tunnel_client(console, role="operator").get("/live")
+        assert desk.status_code != 200 or 'href="/desk"' in desk.text
+        assert 'href="/home"' not in lc_client(console)[0].get("/dashboard").text
+
+    def test_the_sos_panel_gets_its_package_in_any_status(self, console):
+        from sentrix.storage import requests
+        add_incident(request_id="req-ok")
+        requests.create_request("req-ok", incident_id="inc-1", incident_type="weapon",
+                                level=3, evidence_state="confirmed", policy={},
+                                expires_at=None, test_mode=True)
+        add_package("p-ok", status="SENT", request_id="req-ok")
+        client = lc_client(console)[0]
+        assert client.get("/api/dispatch/latest").json() == {}
+        package = client.get("/api/dispatch/latest?request_id=req-ok").json()
+        assert package["id"] == "p-ok" and package["user_address"] == "12 Model Town"
 
     def test_access_page_shows_the_identity_backend(self, console):
         client, _ = lc_client(console)

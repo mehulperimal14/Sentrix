@@ -20,6 +20,15 @@
         return String(value);
     }
 
+    // The siren block is a status dict: shown as one short line.
+    function sirenText(siren) {
+        if (!siren || typeof siren !== "object") return siren;
+        const parts = [String(siren.backend || "siren") + (siren.real === false ? " (mock)" : "")];
+        if (siren.armed !== undefined && siren.armed !== null) parts.push(siren.armed ? "armed" : "disarmed");
+        if (siren.on !== undefined) parts.push(siren.on ? "ON" : "off");
+        return parts.join(" · ");
+    }
+
     function fillTable(id, rows) {
         const table = document.getElementById(id);
         if (!table) return;
@@ -44,7 +53,7 @@
         const gpio = node.gpio || {};
         const leds = gpio.leds || {};
         fillTable("node-gpio", [
-            ["Siren", gpio.siren !== undefined ? gpio.siren : node.siren_armed],
+            ["Siren", gpio.siren !== undefined ? sirenText(gpio.siren) : node.siren_armed],
             ["LED green / amber / red", gpio.leds ? `${fmt(leds.green)} / ${fmt(leds.amber)} / ${fmt(leds.red)}` : null],
             ["Buzzer", gpio.buzzer],
             ["Motion (PIR)", gpio.pir !== undefined ? gpio.pir : node.pir],

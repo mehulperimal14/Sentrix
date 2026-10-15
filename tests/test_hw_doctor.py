@@ -48,3 +48,42 @@ class TestCameraCheck:
         report = doctor.Report()
         doctor.check_camera(report)
         assert report.rows[-1][0] == doctor.OK and "Picamera2" in report.rows[-1][2]
+
+    @pytest.mark.parametrize("spec", [None, "0", "1"])
+    def test_an_index_camera_is_not_opened_by_default(self, monkeypatch, spec):
+        import cv2
+        monkeypatch.setattr(cv2, "VideoCapture",
+                            lambda *a, **k: pytest.fail("the doctor opened a webcam"))
+        if spec is None:
+            monkeypatch.delenv("CAMERA_SOURCES", raising=False)
+        else:
+            monkeypatch.setenv("CAMERA_SOURCES", spec)
+        report = doctor.Report()
+        doctor.check_camera(report)
+        assert "not opened" in report.rows[-1][2]
+
+    def test_probe_opens_only_the_configured_index(self, monkeypatch):
+        import cv2
+        opened = []
+
+        class FakeCap:
+            def __init__(self, index, *args):
+                opened.append(index)
+
+            def isOpened(self):
+                return False
+
+            def release(self):
+                pass
+
+        monkeypatch.setattr(cv2, "VideoCapture", FakeCap)
+        monkeypatch.setenv("CAMERA_SOURCES", "1")
+        doctor.check_camera(doctor.Report(), probe=True)
+        assert opened == [1]
+
+    def test_start_scripts_never_probe_a_device(self):
+        from pathlib import Path
+        root = Path(doctor.__file__).resolve().parents[1]
+        for script in ("run.sh", "run.bat"):
+            text = (root / script).read_text(encoding="utf-8", errors="replace")
+            assert "--probe-camera" not in text

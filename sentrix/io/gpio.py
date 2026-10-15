@@ -212,6 +212,26 @@ class InputSpec:
     value: Callable[[bool], Any]
 
 
+def forward_sensor_event(kind: str, **detail: Any) -> bool:
+    """A PIR trigger or a door change opens the clip engine's S0 gate
+    (``ClipBuffer.add_event``, on the frames' monotonic clock). Only an
+    already-running pipeline is used: this never builds one (which would
+    open the camera). Returns whether an event was delivered."""
+    engine = sys.modules.get("sentrix.pipeline.engine")
+    pipeline = getattr(engine, "_pipeline", None) if engine is not None else None
+    strategy = getattr(pipeline, "_strategy", None)
+    buffer = getattr(getattr(strategy, "runner", None), "buffer", None)
+    if buffer is None or not hasattr(buffer, "add_event"):
+        return False
+    try:
+        buffer.add_event(kind, time.monotonic(),
+                         **{k: v for k, v in detail.items() if v is not None})
+        return True
+    except Exception as exc:                        # the GPIO thread must not die
+        log.debug("sensor event %s not delivered: %s", kind, exc)
+        return False
+
+
 def input_specs(cfg: Any) -> list[InputSpec]:
     """Every configured input. ``cfg`` is ``settings.gpio``."""
     specs = [
@@ -525,6 +545,8 @@ class GpioService:
             self._log_motion(value)
         else:
             self._audit("node_input", input=name, value=value)
+        if (name == "pir" and value) or name == "door":
+            forward_sensor_event(name, door=value if name == "door" else None)
         if name == "mains":
             self._alert("mains_restored" if value else "mains_lost", {})
             if not value:

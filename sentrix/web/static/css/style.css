@@ -68,6 +68,8 @@ body {
   margin-right: 3rem;
 }
 
+a.nav-brand { text-decoration: none; }
+
 .nav-icon {
   color: var(--accent-blue);
 }

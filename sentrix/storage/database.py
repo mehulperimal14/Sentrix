@@ -412,6 +412,11 @@ def _false_verdict_effect(session, incident: IncidentRecord, by: str | None,
         request.state = S.CANCELLED
         request.version = (request.version or 0) + 1
         request.updated_at = datetime.now(timezone.utc)
+        # A FALSE verdict is the household's answer: recorded like a decline
+        # so the re-prompt throttle (D9, once per 10 min) applies to it too.
+        request.responded_at = request.updated_at
+        request.responded_by = by
+        request.response_channel = channel
         (session.query(DispatchRecord)
          .filter_by(request_id=request.id, status="PENDING")
          .update({"status": "CANCELLED"}))
@@ -524,6 +529,18 @@ def latest_pending_dispatch() -> dict[str, Any] | None:
             return _dispatch_dict(row) if row else None
     except Exception as exc:
         log.error("latest_pending_dispatch failed: %s", exc)
+        return None
+
+
+def dispatch_for_request(request_id: str) -> dict[str, Any] | None:
+    """The newest package of an assistance request, whatever its status."""
+    try:
+        with session_scope() as session:
+            row = (session.query(DispatchRecord).filter_by(request_id=request_id)
+                   .order_by(DispatchRecord.created_at.desc()).first())
+            return _dispatch_dict(row) if row else None
+    except Exception as exc:
+        log.error("dispatch_for_request failed: %s", exc)
         return None
 
 

@@ -234,7 +234,9 @@ def check_engines(report: Report) -> None:
                    f"{len(chain.get('problems', []))} problem(s)")
 
 
-def check_camera(report: Report) -> None:
+def check_camera(report: Report, probe: bool = False) -> None:
+    """Report the configured camera. No device is opened unless ``probe`` is
+    set (``--probe-camera``), and then only the configured indices."""
     import os
 
     report.section("camera")
@@ -245,41 +247,44 @@ def check_camera(report: Report) -> None:
         # it: the hardware section enumerated it through libcamera instead.
         report.add(OK, "camera source", f"{spec} (Picamera2; see the hardware section)")
         return
-    parts = [part.strip() for part in spec.split(",") if part.strip()]
-    if parts and not any(part.isdigit() for part in parts):
-        # Files and stream URLs: nothing to probe, and no webcam is opened.
-        from pathlib import Path
+    parts = [part.strip() for part in spec.split(",") if part.strip()] or ["0"]
+    from pathlib import Path
 
-        from sentrix.utils.redact import redact_url
-        for part in parts:
-            if "://" in part:
-                report.add(OK, "camera source", f"{redact_url(part)} (stream; not opened)")
-            else:
-                exists = Path(part).expanduser().is_file()
-                report.add(OK if exists else FAIL, "camera source",
-                           f"{part} ({'video file' if exists else 'file not found'})")
+    from sentrix.utils.redact import redact_url
+    indices = []
+    for part in parts:
+        if part.isdigit():
+            indices.append(int(part))
+        elif "://" in part:
+            report.add(OK, "camera source", f"{redact_url(part)} (stream; not opened)")
+        else:
+            exists = Path(part).expanduser().is_file()
+            report.add(OK if exists else FAIL, "camera source",
+                       f"{part} ({'video file' if exists else 'file not found'})")
+    if not indices:
+        return
+    if not probe:
+        for index in indices:
+            report.add(OK, f"camera index {index}",
+                       "configured; not opened (tools/doctor.py --probe-camera to test it)")
         return
     try:
         import cv2
     except ImportError:
         report.add(FAIL, "opencv", "not installed")
         return
-
-    found = []
-    for index in range(3):
+    for index in indices:
         cap = (cv2.VideoCapture(index, cv2.CAP_DSHOW) if sys.platform == "win32"
                else cv2.VideoCapture(index))
-        if cap.isOpened():
-            ok, frame = cap.read()
-            if ok and frame is not None:
-                found.append((index, frame.shape[1], frame.shape[0]))
-        cap.release()
-
-    if found:
-        for index, width, height in found:
-            report.add(OK, f"camera index {index}", f"{width}x{height}")
-    else:
-        report.add(WARN, "camera", "none detected — set CAMERA_SOURCES or use a file")
+        try:
+            ok, frame = cap.read() if cap.isOpened() else (False, None)
+        finally:
+            cap.release()
+        if ok and frame is not None:
+            report.add(OK, f"camera index {index}", f"{frame.shape[1]}x{frame.shape[0]}")
+        else:
+            report.add(WARN, f"camera index {index}",
+                       "not readable — set CAMERA_SOURCES or use a file")
 
 
 def check_services(report: Report) -> None:
@@ -371,7 +376,10 @@ def main(argv: list[str] | None = None) -> int:
     from sentrix.paths import ROOT_DIR
     parser = argparse.ArgumentParser(description="SENTRIX installation checks")
     parser.add_argument("--no-camera", action="store_true",
-                        help="do not probe camera indices (no device is opened)")
+                        help="skip the camera section entirely")
+    parser.add_argument("--probe-camera", action="store_true",
+                        help="open the configured camera index and read one frame "
+                             "(off by default: the doctor never opens a device)")
     args = parser.parse_args(argv)
     load_dotenv(ROOT_DIR / ".env")
 
@@ -381,7 +389,10 @@ def main(argv: list[str] | None = None) -> int:
     checks = [check_dependencies, check_models, check_config, check_services,
               check_hardware, check_exports, check_engines]
     if not args.no_camera:
-        checks.append(check_camera)
+        def camera(report: Report) -> None:
+            check_camera(report, probe=args.probe_camera)
+        camera.__name__ = "check_camera"
+        checks.append(camera)
     for check in checks:
         try:
             check(report)

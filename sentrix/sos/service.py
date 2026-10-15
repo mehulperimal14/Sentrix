@@ -89,6 +89,17 @@ def _dt(epoch_seconds: float) -> datetime:
     return datetime.fromtimestamp(float(epoch_seconds), timezone.utc)
 
 
+def _cloud_outcome(cloud_events: list[dict]) -> str | None:
+    """The outcome of the cloud's last RESOLVE event, if any."""
+    outcome = None
+    for event in cloud_events:
+        if event.get("event") == S.RESOLVE:
+            detail = event.get("detail") or {}
+            if isinstance(detail, dict) and detail.get("outcome") in S.OUTCOMES:
+                outcome = detail["outcome"]
+    return outcome
+
+
 def _remember(store: OrderedDict, key: Any, value: Any) -> None:
     """Insert (as newest) and forget the oldest beyond ``INCIDENT_MEMORY``."""
     store[key] = value
@@ -484,6 +495,9 @@ class SosEngine:
         decision = M.on_trigger(facts, open_request=open_snap, history=self._history(),
                                 rules=self.rules, entry_delay_over=entry_delay_over)
         if decision.action == "open":
+            # A weapon or fire in an incident held for the entry delay opens at
+            # once; the hold is dropped so it cannot open a second time.
+            self._held.pop(trigger.incident_id, None)
             return self._open(trigger, facts, decision.flags, actor=actor)
         if decision.action == "attach" and open_snap is not None:
             self.counters["attached"] += 1
@@ -494,6 +508,9 @@ class SosEngine:
         if decision.action == "hold":
             self.counters["held"] += 1
             self._held[trigger.incident_id] = _Hold(trigger, facts, decision.hold_until)
+            # Not "triggered": a weapon or fire later in the same incident must
+            # still open a request, even if this hold is dropped (disarm, face).
+            self._triggered.pop(trigger.incident_id, None)
             self._audit("sos_entry_delay", incident_id=trigger.incident_id,
                         seconds=self.rules.intrusion_entry_delay)
             return None
@@ -1131,8 +1148,10 @@ class SosEngine:
                     gaps.append(event)
             if gaps:
                 self._buffered[request_id] = gaps
+            self._merge_cloud_flags(request_id, cloud_events)
             snap = self._snapshot(request_id)
-            step = M.reconcile(snap, cloud_state, cloud_version=cloud_version)
+            step = M.reconcile(snap, cloud_state, cloud_version=cloud_version,
+                               cloud_outcome=_cloud_outcome(cloud_events))
             if step is not None:
                 self._apply(snap, step, now=now, actor=Actor.cloud())
             requests.set_fields(request_id, authority_side="device", cloud_synced=True)
@@ -1143,15 +1162,48 @@ class SosEngine:
         message = ", ".join(f"{n} {code}" for code, n in codes.items() if n)
         return sos_result("ok", message, requests.get_request(request_id))
 
+    def _merge_cloud_flags(self, request_id: str, cloud_events: list[dict]) -> None:
+        """Flags the cloud's answers set (duress, contacts notified, resident
+        safe), derived from its imported events, merged into the row before the
+        reconnect merge: a duress approval made in the cloud must stay hidden
+        from the owner on the LC too."""
+        from sentrix.storage import requests
+        found: dict[str, bool] = {}
+        for event in cloud_events:
+            name, detail = event.get("event"), event.get("detail") or {}
+            if not isinstance(detail, dict):
+                detail = {}
+            if detail.get("duress") or (name == S.APPROVE and event.get("restricted")):
+                found["duress"] = True
+            if name == S.CONTACTS_NOTIFIED:
+                found["contacts_notified"] = True
+            if name == S.RESIDENT_SAFE:
+                found["resident_safe"] = True
+        if not found:
+            return
+        request = requests.get_request(request_id)
+        if request is None:
+            return
+        flags = dict(request.get("flags") or {})
+        if all(flags.get(k) for k in found):
+            return
+        flags.update(found)
+        requests.set_fields(request_id, flags_json=json.dumps(flags, sort_keys=True))
+
     def _create_from_cloud(self, request_id: str, cloud_events: list[dict], now: float) -> None:
         """A request the cloud opened while this device was offline (D9:
-        heartbeat lost during an open L2+ incident)."""
+        heartbeat lost during an open L2+ incident, or "Request help now").
+        The cloud's CREATED detail carries the incident(s), type, level and
+        the policy it froze (window, safety defaults, contacts)."""
         from sentrix.link import profile as profile_module
         from sentrix.storage import requests
         first = next((e for e in cloud_events if e.get("event") == S.CREATED), {}) or {}
         detail = first.get("detail") or {}
         profile = self._profile()
-        incident_id = detail.get("incident_id")
+        incident_ids = [str(i) for i in (detail.get("incident_ids") or []) if i]
+        incident_id = detail.get("incident_id") or (incident_ids[0] if incident_ids else None)
+        if incident_id and incident_id not in incident_ids:
+            incident_ids.insert(0, incident_id)
         incident_type = str(detail.get("incident_type") or "intrusion")[:32]
         try:
             level = int(detail.get("level") or 3)
@@ -1161,27 +1213,53 @@ class SosEngine:
         created_at = M.epoch(first.get("at")) or now
         policy = freeze(profile, self.settings, test_mode=test_mode, now=_dt(created_at),
                         desk_phone=profile_module.desk_number(profile))
+        cloud_policy = detail.get("policy") if isinstance(detail.get("policy"), dict) else {}
+        if cloud_policy:
+            # The policy is frozen when the request opens (D9): the cloud's.
+            try:
+                policy["window_seconds"] = int(cloud_policy.get("window_seconds")
+                                               or policy["window_seconds"])
+            except (TypeError, ValueError):
+                pass
+            if "safety_defaults" in cloud_policy:
+                policy["safety_defaults"] = bool(cloud_policy["safety_defaults"])
+            listed = cloud_policy.get("contacts")
+            if isinstance(listed, list):
+                ids = {str(c.get("id")) for c in listed if isinstance(c, dict)}
+                policy["contacts"] = [c for c in policy.get("contacts") or []
+                                      if str(c.get("id")) in ids]
+        expires_at = M.epoch(detail.get("expires_at")) or (created_at + policy["window_seconds"])
         requests.create_request(
             request_id, incident_id=incident_id, incident_type=incident_type, level=level,
             evidence_state=str(detail.get("evidence_state") or "unconfirmed")[:16],
-            policy=policy, expires_at=_dt(created_at + policy["window_seconds"]),
+            policy=policy, expires_at=_dt(expires_at),
             test_mode=test_mode, flags={"device_offline": True}, origin="cloud",
             authority_side="cloud", at=_dt(created_at))
+        if len(incident_ids) > 1:
+            requests.set_fields(request_id, incident_ids_json=json.dumps(incident_ids))
         self.counters["opened"] += 1
         self._render_texts(requests.get_request(request_id))
-        if incident_id:
-            self._link_incident(incident_id, request_id)
+        for linked in incident_ids:
+            self._link_incident(linked, request_id)
         self._audit("sos_created", request_id=request_id, incident_id=incident_id,
                     incident_type=incident_type, origin="cloud")
 
     def _merge_own_requests(self, cloud_request_id: str, now: float) -> None:
-        """The device's own request for the same incident becomes part of the
-        cloud's (``detail.merged_into``)."""
+        """The device's own request for any incident of the cloud's becomes
+        part of the cloud's (``detail.merged_into``)."""
         from sentrix.storage import requests
         cloud = requests.get_request(cloud_request_id)
-        if not cloud or not cloud.get("incident_id"):
+        if not cloud:
             return
-        for other in requests.requests_for_incident(cloud["incident_id"]):
+        incident_ids = list(cloud.get("incident_ids") or [])
+        if cloud.get("incident_id") and cloud["incident_id"] not in incident_ids:
+            incident_ids.append(cloud["incident_id"])
+        seen: set[str] = set()
+        others = [o for i in incident_ids for o in requests.requests_for_incident(i)]
+        for other in others:
+            if other["id"] in seen:
+                continue
+            seen.add(other["id"])
             if other["id"] == cloud_request_id or other["state"] in S.TERMINAL_STATES:
                 continue
             snap = self._snapshot(other["id"])
@@ -1597,9 +1675,12 @@ class SosEngine:
                     continue
                 snap = self._snapshot(request["id"])
                 if snap.prompting and snap.expires_at is not None and now >= snap.expires_at:
-                    if self._apply(snap, M.expire_step(snap, reach,
-                                                       "expired while the device was off"),
-                                   now=now):
+                    # Through the same rule as the sweeper: a safety-default
+                    # contacts alert still owed goes out before the expiry.
+                    steps = M.expiry_steps(snap, self.rules, reach,
+                                           "expired while the device was off")
+                    self._apply_all(snap, steps, now=now)
+                    if (requests.get_request(snap.id) or {}).get("state") == S.EXPIRED:
                         counts["expired"] += 1
                 elif snap.state == S.DRAFTED:
                     if self._apply(snap, M.prompt(snap, now, self.rules, reach), now=now):

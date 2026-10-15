@@ -457,6 +457,33 @@ def query_incidents(filters: dict[str, Any], limit: int = EVENTS_PAGE_SIZE,
     return database.recent_incidents(limit, offset, **where), database.count_incidents(**where)
 
 
+def owner_packages(packages: list[dict]) -> list[dict]:
+    """Dispatch packages as the household may see them (docs/7 §7.8): a
+    duress request's package looks like a decline's (``dispatch.owner_view``),
+    and a silent request's package (duress at a disarm or on a closed request)
+    is not shown at all, as in the SOS history."""
+    from sentrix.alerting.dispatch import owner_view
+    from sentrix.storage import requests
+    shown = []
+    cache: dict[str, dict | None] = {}
+    for package in packages:
+        request_id = package.get("request_id")
+        request = None
+        if request_id:
+            if request_id not in cache:
+                try:
+                    cache[request_id] = requests.get_request(request_id)
+                except Exception as exc:
+                    log.error("request lookup failed: %s", exc)
+                    cache[request_id] = None
+            request = cache[request_id]
+        flags = (request or {}).get("flags") or {}
+        if flags.get("silent"):
+            continue
+        shown.append(owner_view(package, request) if request else package)
+    return shown
+
+
 def request_views(request_ids: list[str | None]) -> dict[str, dict[str, Any]]:
     """Owner view (duress hidden) of the assistance requests these rows link
     to: ``{id: {short_id, state, label}}``."""
@@ -554,7 +581,7 @@ async def evidence(request: Request) -> HTMLResponse:
             dependencies=[Depends(require_auth)])
 async def dispatch_page(request: Request) -> HTMLResponse:
     from sentrix.alerting.dispatch import AUTHORITIES, SENDABLE_STATUSES
-    packages = database.all_dispatches()
+    packages = owner_packages(database.all_dispatches())
     return render(request, "dispatch.html", "dispatch", packages=packages,
                   requests=request_views([p.get("request_id") for p in packages]),
                   authorities=AUTHORITIES, sendable=SENDABLE_STATUSES,
@@ -714,8 +741,14 @@ async def api_verify_chain() -> JSONResponse:
 
 
 @router.get("/api/dispatch/latest", dependencies=[Depends(auth.require_lc())])
-async def api_dispatch_latest() -> JSONResponse:
-    return JSONResponse(redacted(database.latest_pending_dispatch() or {}))
+async def api_dispatch_latest(request_id: str | None = None) -> JSONResponse:
+    """The newest PENDING package, or with ``request_id`` that request's
+    package in any status (the SOS panel keeps its address after approval).
+    Owner view: a duress package looks declined, a silent one is absent."""
+    package = (database.dispatch_for_request(request_id[:64]) if request_id
+               else database.latest_pending_dispatch())
+    shown = owner_packages([package] if package else [])
+    return JSONResponse(redacted(shown[0] if shown else {}))
 
 
 @router.post("/api/dispatch/{package_id}/send/{authority}",

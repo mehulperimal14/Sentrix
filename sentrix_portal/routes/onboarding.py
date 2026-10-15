@@ -40,7 +40,8 @@ from sentrix.actor import Actor
 from sentrix.utils.redact import mask_phone
 from sentrix_portal import security
 from sentrix_portal.db import DB
-from sentrix_portal.models import Camera, Device, EmergencyContact, HouseholdMember, utcnow
+from sentrix_portal.models import (Camera, Device, EmergencyContact, Household,
+                                   HouseholdMember, utcnow)
 from sentrix_portal.routes.auth import household_of, render, see_other, user_of
 from sentrix_portal.services import accounts
 
@@ -183,6 +184,10 @@ def onboarding_start(request: Request, db: Session = DB,
     return see_other(f"/onboarding/{min(int(household.onboarding_step or 1), accounts.LAST_STEP)}")
 
 
+#: The serial of a label QR scanned before step 5 was reachable.
+CLAIM_SN_COOKIE = "portal_claim_sn"
+
+
 @router.get("/onboarding/{step}", response_class=HTMLResponse)
 def onboarding_page(request: Request, step: int, sn: str = "",
                     db: Session = DB, principal=Depends(OWNER)):
@@ -190,9 +195,21 @@ def onboarding_page(request: Request, step: int, sn: str = "",
         raise HTTPException(404, "no such step")
     user, household = _load(db, principal)
     if not _step_context(db, principal, user, household, step)["reachable"]:
-        return see_other(f"/onboarding/{int(household.onboarding_step or 1)}")
+        response = see_other(f"/onboarding/{int(household.onboarding_step or 1)}")
+        serial = accounts.normalize_serial(sn)[:40] if sn else ""
+        if serial:
+            # A label QR scanned before step 5: keep the serial for step 5.
+            response.set_cookie(CLAIM_SN_COOKIE, serial, max_age=3600, httponly=True,
+                                samesite="lax", path="/onboarding")
+        return response
+    remembered = request.cookies.get(CLAIM_SN_COOKIE, "") if step == 5 else ""
+    if not sn and remembered:
+        sn = remembered
     values = _values(db, user, household, step, sn)
-    return _page(request, db, principal, user, household, step, values=values)
+    page = _page(request, db, principal, user, household, step, values=values)
+    if remembered:
+        page.delete_cookie(CLAIM_SN_COOKIE, path="/onboarding")
+    return page
 
 
 @router.post("/onboarding/{step}", response_class=HTMLResponse)
@@ -361,6 +378,9 @@ async def claim(request, db, principal, user, form):
         await hub.issue_token(db, outcome.device.id)
     except Exception as exc:                          # the claim itself stands
         accounts.log.error("token issue for %s failed: %s", outcome.device.id, exc)
+    household = db.get(Household, user.household_id) if user.household_id else None
+    if accounts.grant_setup_view(db, household, user=user, ip=security.client_ip(request)):
+        db.commit()
     await accounts.push_profile(db, user.household_id)
     return outcome, 200
 

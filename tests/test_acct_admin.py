@@ -87,7 +87,7 @@ class TestCustomers:
         admin.get(f"/admin/customers/{home['household_id']}")
         admin.post(f"/admin/customers/{home['household_id']}/status",
                    {"action": "deactivate"})
-        assert owner.get("/home").headers["location"] == "/login"
+        assert owner.get("/home").headers["location"].split("?")[0] == "/login"
         again = Browser(portal)
         again.get("/login")
         assert again.post("/login", {"username": "riya",
@@ -221,7 +221,7 @@ class TestStaff:
         admin.post(f"/admin/operators/{desk_id}", {"action": "reset_2fa"})
         user = query(portal, User, id=desk_id)[0]
         assert not user.totp_enabled and user.totp_secret_enc is None
-        assert desk.get("/account").headers["location"] == "/login", "signed out"
+        assert desk.get("/account").headers["location"].split("?")[0] == "/login", "signed out"
         admin.post(f"/admin/operators/{desk_id}", {"action": "disable"})
         assert query(portal, User, id=desk_id)[0].status == "disabled"
         me = query(portal, User, username="admin1")[0].id

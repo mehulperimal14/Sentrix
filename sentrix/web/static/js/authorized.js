@@ -17,7 +17,14 @@
         S.show(box, lines.length > 0);
     }
 
+    // Through the Portal tunnel every preview frame counts against the user's
+    // media budget (60/min, shared with snapshots and face tiles): poll at
+    // 0.5 Hz there, 2 Hz on the LAN, and not at all while the tab is hidden.
+    const TUNNELLED = document.body && document.body.dataset.tunnelled === "1";
+    const PREVIEW_MS = TUNNELLED ? 2000 : 500;
+
     function refreshPreview() {
+        if (document.hidden) return;
         const preview = document.getElementById("capture-preview");
         if (preview) preview.setAttribute("src", S.url("/api/authorized/preview.jpg") + "?t=" + Date.now());
     }
@@ -29,7 +36,7 @@
         S.show(section, visible);
         if (visible) {
             refreshPreview();
-            if (!previewTimer) previewTimer = window.setInterval(refreshPreview, 500);
+            if (!previewTimer) previewTimer = window.setInterval(refreshPreview, PREVIEW_MS);
         } else if (previewTimer) {
             window.clearInterval(previewTimer);
             previewTimer = null;

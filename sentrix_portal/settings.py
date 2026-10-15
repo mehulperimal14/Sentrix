@@ -22,6 +22,7 @@ import secrets
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from sentrix.alerting.guard import test_mode_flag
 from sentrix.paths import PORTAL_VAR_DIR
 
 
@@ -122,7 +123,7 @@ class PortalSettings:
             secret_key=_str("PORTAL_SECRET_KEY", ""),
             data_key=_str("PORTAL_DATA_KEY", ""),
             base_url=_str("PORTAL_BASE_URL", "http://portal.localhost:8100").rstrip("/"),
-            test_mode=_flag("PORTAL_TEST_MODE", True),
+            test_mode=test_mode_flag("PORTAL_TEST_MODE"),
             host=_str("PORTAL_HOST", "127.0.0.1"),
             port=_int("PORTAL_PORT", 8100),
             secure_cookies=_flag("PORTAL_SECURE_COOKIES", False),

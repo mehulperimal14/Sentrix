@@ -24,6 +24,8 @@ Owner: track T-LINK.
 
 from __future__ import annotations
 
+import re
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
@@ -62,7 +64,10 @@ def _cfg():
 def call_112(settings) -> dict:
     """The "Call 112 now" target: never a tel:112 link in test mode (D13)."""
     if settings.test_mode:
-        number = settings.desk_number
+        from sentrix.alerting.guard import is_emergency_number
+        number = re.sub(r"[^\d+]", "", str(settings.desk_number or ""))
+        if number and is_emergency_number(number):
+            number = ""                           # never tel:112 in test mode
         return {"href": f"tel:{number}" if number else None,
                 "label": f"Call the SENTRIX Desk ({number})" if number
                 else "Call 112 now (test mode: no number set)", "test_mode": True}

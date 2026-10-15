@@ -11,7 +11,7 @@ from sentrix_portal import security
 from sentrix_portal.models import (AuditLog, ClaimAttempt, Consent, Device,
                                    EmergencyContact, Household, User, UserSession)
 from sentrix_portal.services import accounts
-from test_acct_support import (add_device, add_household, add_user, fake_hub,  # noqa: F401
+from test_acct_support import (PASSWORD, Browser, add_device, add_household, add_user, fake_hub,  # noqa: F401
                                outbox, owner_browser, portal, query)
 
 STEP1 = {"display_name": "Riya Sharma", "phone": "+91 98123 45610",
@@ -200,6 +200,9 @@ class TestWizard:
         device = query(portal, Device, serial="SX5-000123")[0]
         assert device.state == "CLAIMED" and device.claim_code_hash is None
         assert fake_hub.tokens == [device.id]
+        # The step-5 view check needs the device's remote_view consent.
+        assert [c.method for c in query(portal, Consent, purpose="remote_view")
+                if c.withdrawn_at is None] == ["wizard_view_check"]
         no_check = browser.post("/onboarding/5", {"action": "device", "device_id": device.id,
                                                   "name": "Living room unit",
                                                   "room_label": "Living room", "mode": "armed"})
@@ -303,6 +306,29 @@ class TestClaim:
         browser = owner_browser(portal)
         assert browser.get("/claim?sn=SX5-000001").headers["location"] == \
             "/onboarding/5?sn=SX5-000001"
+
+    def test_a_qr_scanned_before_step_5_keeps_its_serial(self, portal):
+        home = add_household(portal)
+        add_device(portal, serial="SX5-000777", household_id=home["household_id"],
+                   state="ASSIGNED", claim_code="KTRW-BQXL")
+        browser = owner_browser(portal)
+        early = browser.get("/onboarding/5?sn=SX5-000777")
+        assert early.headers["location"] == "/onboarding/1"
+        with portal.state.db.session() as db:
+            db.query(Household).one().onboarding_step = 5
+        page = browser.get("/onboarding/5")
+        assert page.status_code == 200 and 'value="SX5-000777"' in page.text
+
+    def test_signed_out_links_come_back_after_sign_in(self, portal):
+        add_household(portal, complete=True)
+        browser = Browser(portal)
+        target = browser.get("/claim?sn=SX5-000222")
+        assert target.headers["location"] == "/login?next=/claim%3Fsn%3DSX5-000222"
+        assert browser.get("/sos/abc").headers["location"] == "/login?next=/sos/abc"
+        browser.get(target.headers["location"])
+        signed_in = browser.post("/login", {"username": "riya", "password": PASSWORD,
+                                            "next": "/claim?sn=SX5-000222"})
+        assert signed_in.headers["location"] == "/claim?sn=SX5-000222"
 
     def test_only_a_device_assigned_to_your_household(self, portal):
         mine = add_household(portal)

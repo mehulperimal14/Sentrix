@@ -524,11 +524,28 @@ def require_role(*roles: str, csrf: bool | str = True,
     return dependency
 
 
+def login_url_for(request: Request) -> str:
+    """``/login?next=<path+query>`` for a signed-out GET, so a label QR
+    (``/claim?sn=...``), an SOS link or a ``/d/`` deep link lands where it
+    pointed after signing in. (A ``#code=`` fragment never reaches the
+    server; the browser keeps it on the redirect.)"""
+    from urllib.parse import quote
+    if request.method != "GET":
+        return "/login"
+    target = request.url.path
+    if request.url.query:
+        target += "?" + request.url.query
+    if target in ("/", "/login") or len(target) > 1000:
+        return "/login"
+    return "/login?next=" + quote(target, safe="/")
+
+
 def _signed_in(request: Request, db: Session) -> Principal:
     principal = principal_of(request, db)
     if principal is None:
         if _wants_html(request):
-            raise HTTPException(status.HTTP_303_SEE_OTHER, headers={"Location": "/login"})
+            raise HTTPException(status.HTTP_303_SEE_OTHER,
+                                headers={"Location": login_url_for(request)})
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="not signed in")
     return principal
 

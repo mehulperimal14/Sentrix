@@ -32,7 +32,8 @@
     </div>
     <h3>Check the view</h3>
     <p>Open the live view and make sure the camera sees the room as intended (mounted
-      1.8-2.2 m high, tilted down, the room lit).</p>
+      1.8-2.2 m high, tilted down, the room lit). Remote live view is switched on for
+      this check; you can turn it off in step 7.</p>
     <p><a class="btn btn-secondary btn-small" href="/d/{{ d.id }}/live" target="_blank" rel="noopener">Open the live view</a>
       {% if not item.online %}<span class="small muted">The device is offline: connect it to the internet first.</span>{% endif %}</p>
     {{ ui.checkbox('view_checked', 'I have checked the view.', form_values.get('view_checked'), errors=errors) }}

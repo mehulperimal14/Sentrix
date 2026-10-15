@@ -289,7 +289,9 @@ def test_tunnel_parity_on_every_console_page(world):
                 csp.split("script-src")[1].split(";")[0]
             assert re.search(r'<meta name="csrf-token" content="[^"]+">', response.text)
         assert f'data-base="{base}"' in remote.text and 'data-base=""' in lan.text
-        hrefs = re.findall(r'(?:href|src|action)="(/[^"]*)"', remote.text)
+        # The tunnelled nav links back to the Portal's own pages on purpose.
+        hrefs = [h for h in re.findall(r'(?:href|src|action)="(/[^"]*)"', remote.text)
+                 if h not in ("/home", "/desk", "/account")]
         assert hrefs and all(h.startswith(base + "/") for h in hrefs), \
             (path, [h for h in hrefs if not h.startswith(base + "/")][:5])
     # The tunnel refuses what is never tunnelled.

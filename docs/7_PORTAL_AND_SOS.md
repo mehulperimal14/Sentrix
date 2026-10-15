@@ -1854,8 +1854,9 @@ Vocabulary: token purpose `phone_verify`; household status `active | disabled
 owner/member page and links the user's name to `/account`.
 
 **Tools.** `python -m sentrix` and `python -m sentrix_portal` take `--help`,
-`--host`, `--port`. `tools/doctor.py --no-camera` never opens a camera, and a
-file or stream `CAMERA_SOURCES` is never probed; a "model runtime" section
+`--host`, `--port`. `tools/doctor.py` never opens a camera by default (it
+reports the configured `CAMERA_SOURCES`; `--probe-camera` reads one frame from
+the configured index only, `--no-camera` skips the section); a "model runtime" section
 lists the exports for `SENTRIX_RUNTIME` onnx/ncnn. `deploy/pi5/pi.env` sets
 the clip profile (`SENTRIX_PIPELINE_MODE=clip`, `SENTRIX_RUNTIME=onnx`,
 `SENTRIX_FAST_LANE=1`, `SENTRIX_FACE_DET_SIZE=320`).

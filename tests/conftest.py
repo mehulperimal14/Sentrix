@@ -11,6 +11,10 @@ below is in place before anything imports ``sentrix``:
 * **Every service is off** and runtime files go to a temporary directory
   (the device ``var/`` tree via ``SENTRIX_VAR_DIR``, Portal data dir and
   database, device identity dir).
+* **No webcam, no microphone.** ``CAMERA_SOURCES`` points at a missing file,
+  ``SENTRIX_AUDIO=0``, and a device guard makes ``cv2.VideoCapture(<index>)``,
+  ``CaptureSource(<index>)`` and ``sounddevice`` capture raise
+  :class:`DeviceBlocked`.
 * **No network.** A socket guard allows loopback only; anything else raises
   :class:`NetworkBlocked` (an ``OSError``) and is recorded in
   ``BLOCKED_CONNECTIONS``.
@@ -59,6 +63,10 @@ _FORCED_ENV = {
     "PORTAL_DATA_DIR": str(_SESSION_DIR / "portal"),
     "PORTAL_DATABASE_URL": f"sqlite:///{(_SESSION_DIR / 'portal' / 'portal.db').as_posix()}",
     "SENTRIX_DEVICE_IDENTITY_DIR": str(_SESSION_DIR / "identity"),
+    # no webcam, no microphone: a pipeline built by a test reads a file that
+    # does not exist, and audio is off (the device guard below enforces it)
+    "CAMERA_SOURCES": str(_SESSION_DIR / "no-camera-in-tests.mp4"),
+    "SENTRIX_AUDIO": "0",
 }
 os.environ.update(_FORCED_ENV)
 
@@ -137,7 +145,74 @@ if sys.platform == "win32":
         pass
 
 
+# ── device guard: no webcam, no microphone ────────────────────────────────────
+BLOCKED_DEVICES: list[str] = []
+
+
+class DeviceBlocked(RuntimeError):
+    """A test tried to open a webcam or a microphone."""
+
+
+def _block_device(what: str):
+    BLOCKED_DEVICES.append(what)
+    raise DeviceBlocked(f"tests/conftest.py device guard: {what} opened in a test")
+
+
+def _is_device_index(value) -> bool:
+    return isinstance(value, int) or (isinstance(value, str) and value.strip().isdigit())
+
+
+try:
+    import cv2 as _cv2
+
+    _real_video_capture = _cv2.VideoCapture
+
+    def _guarded_video_capture(*args, **kwargs):
+        index = args[0] if args else kwargs.get("index", kwargs.get("filename"))
+        if _is_device_index(index):
+            _block_device(f"cv2.VideoCapture({index!r})")
+        return _real_video_capture(*args, **kwargs)
+
+    _cv2.VideoCapture = _guarded_video_capture
+except ImportError:                                 # pragma: no cover
+    pass
+
+try:
+    import sounddevice as _sd
+
+    def _guarded_audio(name):
+        def guarded(*args, **kwargs):
+            _block_device(f"sounddevice.{name}")
+        return guarded
+
+    for _name in ("rec", "playrec", "InputStream", "RawInputStream", "Stream", "RawStream"):
+        if hasattr(_sd, _name):
+            setattr(_sd, _name, _guarded_audio(_name))
+except (ImportError, OSError):                      # pragma: no cover - no PortAudio
+    pass
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _no_capture_devices():
+    """A CaptureSource on a webcam index never starts in a test."""
+    from sentrix.io import sources
+    real_init = sources.CaptureSource.__init__
+
+    def guarded_init(self, source, *args, **kwargs):
+        if _is_device_index(source):
+            _block_device(f"CaptureSource({source!r})")
+        return real_init(self, source, *args, **kwargs)
+
+    sources.CaptureSource.__init__ = guarded_init
+    yield
+    sources.CaptureSource.__init__ = real_init
+
+
 def pytest_terminal_summary(terminalreporter):
+    if BLOCKED_DEVICES:
+        terminalreporter.write_line(
+            f"device guard blocked {len(BLOCKED_DEVICES)} webcam/microphone attempt(s): "
+            f"{sorted(set(BLOCKED_DEVICES))[:10]}", red=True)
     if BLOCKED_CONNECTIONS:
         terminalreporter.write_line(
             f"socket guard blocked {len(BLOCKED_CONNECTIONS)} network attempt(s): "

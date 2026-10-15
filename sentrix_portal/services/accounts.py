@@ -1481,6 +1481,23 @@ def consent_history(db: Session, household_id: str) -> list[Consent]:
             .order_by(Consent.granted_at.desc()).all())
 
 
+def grant_setup_view(db: Session, household: Household | None, *, user: User,
+                     ip: str | None = None) -> bool:
+    """Onboarding step 5 asks the owner to check the camera's view, which the
+    device only relays with the ``remote_view`` consent. During a first
+    onboarding, a household that never decided on it gets it granted for
+    that check (audited, method ``wizard_view_check``); step 7 shows it
+    ticked and unticking it withdraws it."""
+    if household is None or household.onboarding_completed_at is not None:
+        return False
+    decided = (db.query(Consent).filter_by(household_id=household.id,
+                                           purpose="remote_view").first())
+    if decided is not None:
+        return False
+    return set_consent(db, household, "remote_view", True, user=user,
+                       method="wizard_view_check", ip=ip)
+
+
 def set_consent(db: Session, household: Household, purpose: str, granted: bool, *,
                 user: User, method: str, ip: str | None = None) -> bool:
     """Grant or withdraw one purpose (withdrawing is as easy as granting).

@@ -276,6 +276,9 @@ def call_number(profile: Mapping | None, test_mode: bool) -> str:
         return "112"
     desk = profile.get("desk") if isinstance(profile, Mapping) else None
     phone = clean(desk.get("phone"), 20) if isinstance(desk, Mapping) else ""
+    from sentrix.alerting.guard import is_emergency_number
+    if phone and is_emergency_number(re.sub(r"[^\d+]", "", phone)):
+        phone = ""                                # never "call 112" in test mode
     return phone or "the SENTRIX desk"
 
 

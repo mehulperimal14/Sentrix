@@ -83,7 +83,7 @@ def test_unauthenticated_routes_are_only_the_listed_ones(portal):
         response = anonymous.get(concrete)
         assert response.status_code in (303, 401), path
         if response.status_code == 303:
-            assert response.headers["location"] == "/login", path
+            assert response.headers["location"].split("?")[0] == "/login", path
 
 
 def _ids_of_b(b) -> list[str]:

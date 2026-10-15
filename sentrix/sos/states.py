@@ -111,6 +111,10 @@ TRANSITIONS: dict[tuple[str | None, str], str] = {
     (ACKNOWLEDGED, RESOLVE): CLOSED,
     (DISPATCHED, STALE_CLOSE): CLOSED,
     (ACKNOWLEDGED, STALE_CLOSE): CLOSED,
+    # An undelivered request must still be able to close (a standalone device
+    # has no Desk to acknowledge it).
+    (FAILED, RESOLVE): CLOSED,
+    (FAILED, STALE_CLOSE): CLOSED,
 }
 
 _ALL_OPEN = OPEN_STATES

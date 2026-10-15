@@ -26,6 +26,7 @@ test_mode_env="PORTAL_TEST_MODE")``.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from dataclasses import dataclass, field
@@ -66,6 +67,27 @@ def _flag(name: str, default: bool) -> bool:
     if not raw:
         return default
     return raw in ("1", "true", "yes", "on")
+
+
+_FALSY = ("0", "false", "no", "off")
+
+
+def test_mode_flag(name: str = "SENTRIX_TEST_MODE") -> bool:
+    """Test mode is a default-ON safety switch: it fails closed.
+
+    Only an explicit falsy value ("0", "false", "no", "off") turns it off. Any
+    other value (a typo such as ``y``, ``ture`` or ``enabled``) keeps test mode
+    on and logs a warning (D13).
+    """
+    raw = os.getenv(name, "").strip().lower()
+    if not raw:
+        return True
+    if raw in _FALSY:
+        return False
+    if raw not in ("1", "true", "yes", "on"):
+        logging.getLogger("sentrix.guard").warning(
+            "%s=%r is not a recognised value; test mode stays ON", name, raw)
+    return True
 
 
 def normalize_address(channel: str, address: str | None) -> str:
@@ -137,7 +159,7 @@ class SendPolicy:
         entries = (_canonical_entry(x) for x in re.split(r"[,;\n]+", raw))
         allow = frozenset(e for e in entries if e)
         return cls(
-            test_mode=_flag(test_mode_env, True),
+            test_mode=test_mode_flag(test_mode_env),
             live_alerts=_flag("SENTRIX_LIVE_ALERTS", False),
             switches={ch: _flag(env, False) for ch, env in CHANNEL_SWITCHES.items()},
             allowlist=allow,

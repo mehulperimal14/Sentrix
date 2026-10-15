@@ -23,10 +23,19 @@
   {% endif %}
 
   <nav class="nav">
+    {#- Tunnelled: absolute Portal paths (not url()), the way back to the Portal. -#}
+    {% set portal_home = '/desk' if role == 'operator' else '/home' %}
+    {% if tunnelled %}
+    <a class="nav-brand" href="{{ portal_home }}" title="Back to the SENTRIX Portal">
+      <span class="nav-icon">⬡</span>
+      <span class="nav-title">SENTRIX</span>
+    </a>
+    {% else %}
     <div class="nav-brand">
       <span class="nav-icon">⬡</span>
       <span class="nav-title">SENTRIX</span>
     </div>
+    {% endif %}
     <div class="nav-links">
       {% for key, path, label, need in nav_items %}
       {% if need is none or need in caps %}
@@ -44,7 +53,8 @@
       <span class="status-dot idle" id="dot-link"  title="Portal link: disabled"></span>
       <span class="status-dot idle" id="dot-modem" title="4G modem: not configured"></span>
       {% if tunnelled %}
-      <span class="nav-link nav-action" title="Signed in on the SENTRIX Portal">{{ principal.user_name or role }} · {{ role }}</span>
+      <a href="{{ portal_home }}" class="nav-link nav-action">Portal</a>
+      <a href="/account" class="nav-link nav-action" title="Signed in on the SENTRIX Portal">{{ principal.user_name or role }} · {{ role }}</a>
       {% else %}
       <a href="{{ url('/logout') }}" class="nav-link nav-action" id="logout-link">Logout</a>
       {% endif %}

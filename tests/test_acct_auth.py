@@ -47,8 +47,8 @@ class TestLogin:
         assert browser.post("/logout", {}, csrf=False).status_code == 403
         assert browser.get("/home").status_code == 200, "still signed in"
         response = browser.post("/logout", {})
-        assert response.status_code == 303 and response.headers["location"] == "/login"
-        assert browser.get("/home").headers["location"] == "/login"
+        assert response.status_code == 303 and response.headers["location"].split("?")[0] == "/login"
+        assert browser.get("/home").headers["location"].split("?")[0] == "/login"
         events = [r.event for r in query(portal, AuditLog)]
         assert "auth.login" in events and "auth.logout" in events
 
@@ -362,7 +362,7 @@ class TestAccount:
         laptop.post("/account/sessions", {"session": theirs})
         assert stranger.get("/account").status_code == 200, "not yours to revoke"
         laptop.post("/account/sessions", {"session": "others"})
-        assert phone.get("/home").headers["location"] == "/login"
+        assert phone.get("/home").headers["location"].split("?")[0] == "/login"
         assert laptop.get("/home").status_code == 200
 
     def test_step_up_and_password_change(self, portal, outbox):
@@ -380,7 +380,7 @@ class TestAccount:
             "current_password": PASSWORD, "password": "a new long phrase",
             "password_confirm": "a new long phrase"})
         assert changed.status_code == 303
-        assert other.get("/home").headers["location"] == "/login"
+        assert other.get("/home").headers["location"].split("?")[0] == "/login"
         assert outbox.to("riya@example.com"), "the owner is told"
         assert len([s for s in query(portal, UserSession) if s.revoked_at is None]) == 1
 

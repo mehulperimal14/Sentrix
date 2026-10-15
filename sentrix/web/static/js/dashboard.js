@@ -184,7 +184,12 @@
         const now = Date.now();
         if (!force && now - panel.fetchedAt < 5000) return;
         panel.fetchedAt = now;
-        S.api("/api/dispatch/latest").then(result => {
+        // In SOS mode: the request's own package in any status, so the
+        // address stays for the life of the request (not only while PENDING).
+        const block = S.sos.block();
+        const query = block && block.request_id
+            ? "?request_id=" + encodeURIComponent(block.request_id) : "";
+        S.api("/api/dispatch/latest" + query).then(result => {
             panel.pkg = result.ok && result.data && result.data.id ? result.data : null;
             renderPanel();
         });

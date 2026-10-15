@@ -377,7 +377,11 @@ def on_trigger(facts: TriggerFacts, *, open_request: Snapshot | None,
 def _recent_decline(facts: TriggerFacts, history: Sequence[Snapshot],
                     rules: Rules) -> Snapshot | None:
     for snap in history:
-        if snap.state == S.DECLINED and snap.incident_type == facts.incident_type:
+        # A FALSE verdict while prompting (CANCELLED with an answer recorded)
+        # counts as a decline; a test reset or a merge (no answer) does not.
+        answered = snap.state == S.DECLINED or (snap.state == S.CANCELLED
+                                                and snap.responded_at is not None)
+        if answered and snap.incident_type == facts.incident_type:
             declined_at = snap.responded_at or snap.created_at
             if facts.at - declined_at < rules.repeat_window:
                 return snap
@@ -393,6 +397,12 @@ def attach_steps(snap: Snapshot, facts: TriggerFacts, rules: Rules) -> tuple:
                                               "incident_type": facts.incident_type,
                                               "level": facts.level},
                           fields={"incident_ids": list(snap.incident_ids) + [facts.incident_id]}))
+    if steps and snap.state == S.FAILED:
+        # Help for this request was not delivered: a new alarm joining it must
+        # reach the owner again, not be absorbed silently.
+        steps[-1] = replace(steps[-1], notices=steps[-1].notices + (
+            Notice("owner", f"attached-{facts.incident_id}", T_FAILED, urgency="HIGH",
+                   sms=True),))
     rise = level_rise(snap, facts.level, facts.evidence_state, facts.at, rules)
     if rise is not None:
         steps.append(rise)
@@ -642,22 +652,35 @@ def cloud_event(snap: Snapshot, event: str, *, actor: Actor, now: float,
 
 
 def reconcile(snap: Snapshot, cloud_state: str, *,
-              cloud_version: int | None = None) -> Step | None:
+              cloud_version: int | None = None,
+              cloud_outcome: str | None = None) -> Step | None:
     """The reconnect merge (docs/7 §7.6) as one ``conflict`` event that sets
-    the merged state, with the effects of arriving there. None: nothing to do."""
+    the merged state, with the effects of arriving there. None: nothing to do.
+
+    The incidents get the label the cloud's answer implies, as they would on
+    the device: a decline FALSE, a Desk resolve its outcome's verdict
+    (``cloud_outcome``), a duress approval FALSE (it looks like a decline)."""
     if cloud_state not in S.STATES:
         return None
     target = S.reconcile(snap.state, cloud_state)
     if target == snap.state:
         return None
     package = verdict = None
+    fields: dict[str, Any] = {}
     if target == S.EXPIRED:
         package = "expired"
     elif target in (S.DECLINED, S.CANCELLED):
         package = "cancelled"
     elif target in (S.APPROVED, S.DISPATCHED, S.ACKNOWLEDGED):
         package = "sent" if target != S.APPROVED else "authority"
+    if target == S.DECLINED:
+        verdict = "FALSE"
+    elif target == S.CLOSED and cloud_outcome in S.OUTCOMES:
+        verdict, fields["outcome"] = S.OUTCOMES[cloud_outcome], cloud_outcome
+    elif snap.duress and target in S.HELP_PATH:
+        verdict = "FALSE"
     step = Step(S.CONFLICT, forced_state=target, package=package, verdict=verdict,
+                fields=fields,
                 detail={"from": snap.state, "to": target, "cloud_state": cloud_state,
                         "cloud_version": cloud_version})
     return _restricted(snap, step)
@@ -683,10 +706,36 @@ def repage_at(snap: Snapshot, n: int, rules: Rules) -> float | None:
 
 
 def expire_step(snap: Snapshot, reach: Reach, reason: str = "window") -> Step:
-    notices = [Notice("owner", S.STEP_LAPSED, T_LAPSED, sms=reach.offline)]
+    notices = [Notice("owner", S.STEP_LAPSED, T_LAPSED, sms=not reach.remote_prompt)]
     if snap.flags.get("contacts_notified"):
         notices.append(Notice("contacts", S.STEP_LAPSED, T_LAPSED))
     return Step(S.EXPIRE, detail={"reason": reason}, package="expired", notices=tuple(notices))
+
+
+def _owed_contacts(snap: Snapshot, rules: Rules) -> tuple:
+    """(rule, owed, step): the safety-default contacts alert of a prompting
+    request, and whether it is still owed."""
+    rule = contacts_delay(snap.policy, incident_type=snap.incident_type,
+                          peak_level=snap.peak_level, rules=rules)
+    owed = rule is not None and not snap.flags.get("contacts_notified")
+    contacts = Step(S.CONTACTS_NOTIFIED, flags={"contacts_notified": True},
+                    detail={"step": S.STEP_CONTACTS_T0,
+                            "reason": rule[1] if rule else None},
+                    notices=(Notice("contacts", S.STEP_CONTACTS_T0, T_SMS,
+                                    urgency=snap.urgency),))
+    return rule, owed, contacts
+
+
+def expiry_steps(snap: Snapshot, rules: Rules, reach: Reach,
+                 reason: str = "window") -> tuple:
+    """The window lapsed: a safety-default alert still owed goes out first
+    (a window shorter than the delay, the 90 s demo window vs the fire rule's
+    2 min, or a restart after the window, must not swallow it), then EXPIRE."""
+    _, owed, contacts = _owed_contacts(snap, rules)
+    if owed:
+        told = replace(snap, flags={**snap.flags, "contacts_notified": True})
+        return _finalise(snap, (contacts, expire_step(told, reach, reason)))
+    return _finalise(snap, (expire_step(snap, reach, reason),))
 
 
 def due(snap: Snapshot, now: float, rules: Rules, reach: Reach) -> tuple:
@@ -695,22 +744,9 @@ def due(snap: Snapshot, now: float, rules: Rules, reach: Reach) -> tuple:
         return ()
     steps: list[Step] = []
     if snap.state == S.PENDING:
-        rule = contacts_delay(snap.policy, incident_type=snap.incident_type,
-                              peak_level=snap.peak_level, rules=rules)
-        owed = rule is not None and not snap.flags.get("contacts_notified")
-        contacts = Step(S.CONTACTS_NOTIFIED, flags={"contacts_notified": True},
-                        detail={"step": S.STEP_CONTACTS_T0,
-                                "reason": rule[1] if rule else None},
-                        notices=(Notice("contacts", S.STEP_CONTACTS_T0, T_SMS,
-                                        urgency=snap.urgency),))
+        rule, owed, contacts = _owed_contacts(snap, rules)
         if snap.expires_at is not None and now >= snap.expires_at:
-            # A safety-default alert still owed when the window lapses goes
-            # out first: a window shorter than the delay (the 90 s demo window
-            # vs the fire rule's 2 min) must not swallow it (live smoke run).
-            if owed:
-                told = replace(snap, flags={**snap.flags, "contacts_notified": True})
-                return _finalise(snap, (contacts, expire_step(told, reach)))
-            return _finalise(snap, (expire_step(snap, reach),))
+            return expiry_steps(snap, rules, reach)
         if owed and now >= snap.created_at + rule[0]:
             steps.append(contacts)
         steps.extend(_owner_timeline(snap, now, rules, reach))
@@ -731,10 +767,16 @@ def due(snap: Snapshot, now: float, rules: Rules, reach: Reach) -> tuple:
             steps.append(Step(S.RETRY, detail={"reason": "link_online"}))
         else:
             steps.extend(_repage(snap, now, rules))
-    if snap.state in (S.DISPATCHED, S.ACKNOWLEDGED) and snap.help_since is not None \
+    if snap.state in (S.DISPATCHED, S.ACKNOWLEDGED, S.FAILED) and snap.help_since is not None \
             and now >= snap.help_since + rules.stale_close:
         steps = [Step(S.STALE_CLOSE, flags={"stale": True},
                       detail={"after_seconds": int(rules.stale_close)})]
+    elif (snap.state == S.FAILED and snap.flags.get("resident_safe") and not reach.online
+          and snap.help_since is not None and now >= snap.help_since + rules.repeat_window):
+        # Undeliverable (no link) and the resident said they are safe: nobody
+        # else can close it, and it must not absorb every later alarm.
+        steps = [Step(S.STALE_CLOSE, flags={"stale": True},
+                      detail={"reason": "resident_safe_undelivered"})]
     return _finalise(snap, steps)
 
 
@@ -756,7 +798,8 @@ def _owner_timeline(snap: Snapshot, now: float, rules: Rules, reach: Reach) -> l
             latest = overdue[-1]
             name = S.reminder_step(latest)
             unseen_long = latest >= rules.owner_sms_unseen_after and snap.seen_at is None
-            sms = reach.offline or unseen_long
+            # SMS only when no remote prompt can reach the owner, or unseen long (D8).
+            sms = not reach.remote_prompt or unseen_long
             steps.append(Step(S.REMINDER, detail={"step": name, "offset": int(latest),
                                                   "collapsed": [int(o) for o in overdue[:-1]]},
                               notices=(Notice("owner", name, T_REMINDER, urgency=snap.urgency,
@@ -813,6 +856,8 @@ def next_due(snap: Snapshot, now: float, rules: Rules) -> float | None:
         times += [snap.help_since + rules.delivery_warning,
                   snap.help_since + rules.delivery_fail_after,
                   snap.help_since + rules.stale_close]
+        if snap.state == S.FAILED and snap.flags.get("resident_safe"):
+            times.append(snap.help_since + rules.repeat_window)
         at = repage_at(snap, snap.repage_count + 1, rules)
         if at is not None:
             times.append(at)
@@ -825,4 +870,5 @@ __all__ = ["Snapshot", "TriggerFacts", "Notice", "Step", "Outcome", "LinkedReque
            "prompt", "level_rise", "may_respond", "needs_pin", "approve_step", "respond",
            "help_notices",
            "cloud_event", "reconcile", "due", "next_due", "repage_at", "expire_step",
+           "expiry_steps",
            "CONFIRMED_STATES", "RESPOND_ACTIONS", "UPDATE_EVENTS", "DELIVERED_STATUSES"]

@@ -169,28 +169,35 @@ class SoundSiren(Actuator):
         threading.Thread(target=self._play, args=(duration,), daemon=True).start()
 
     def _play(self, duration: float) -> None:
+        """Play the file and stop it after ``duration`` (siren.wav is ~6 s;
+        the siren test is 1 s, the L5 alarm 5 s)."""
         log.warning("*** LOCAL SIREN ACTIVATED (%.1fs) ***", duration)
         system = platform.system()
         path = str(self.sound_path)
         exists = self.sound_path.exists()
+        stop: Callable[[], None] | None = None
         try:
             if system == "Windows":
                 import winsound
                 if exists:
                     winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+                    stop = lambda: winsound.PlaySound(None, 0)  # noqa: E731
                 else:
                     winsound.Beep(1000, int(duration * 1000))
             elif system == "Darwin":
                 if exists:
-                    subprocess.Popen(["afplay", path])
+                    stop = subprocess.Popen(["afplay", path]).terminate
             else:
                 for player in ("paplay", "aplay"):
                     if exists:
                         try:
-                            subprocess.Popen([player, path])
+                            stop = subprocess.Popen([player, path]).terminate
                             break
                         except FileNotFoundError:
                             continue
+            if stop is not None:
+                time.sleep(max(0.0, float(duration)))
+                stop()
         except Exception as exc:
             log.debug("siren playback failed: %s", exc)
 

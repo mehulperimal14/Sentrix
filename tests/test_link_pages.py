@@ -94,7 +94,7 @@ class TestSosPages:
         rid, _ = open_request(app, seeded)
         anonymous = TestClient(app, follow_redirects=False)
         page = anonymous.get("/sos", headers={"accept": "text/html"})
-        assert page.status_code == 303 and page.headers["location"] == "/login"
+        assert page.status_code == 303 and page.headers["location"].split("?")[0] == "/login"
         assert anonymous.get("/sos/api/open").status_code == 401
         desk, _ = client_for(app, seeded.operator_id, totp=True)
         assert desk.get("/sos").status_code == 403
@@ -422,7 +422,7 @@ class TestOfflineProxy:
         anonymous = TestClient(app, follow_redirects=False)
         bookmark = anonymous.get(f"/d/{seeded.device_id}/dashboard",
                                  headers={"accept": "text/html"})
-        assert bookmark.status_code == 303 and bookmark.headers["location"] == "/login"
+        assert bookmark.status_code == 303 and bookmark.headers["location"].split("?")[0] == "/login"
         assert anonymous.get(f"/d/{seeded.device_id}/api/health").status_code == 401
 
     def test_the_state_relay_needs_a_session_and_the_same_origin(self, portal):

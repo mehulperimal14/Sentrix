@@ -22,6 +22,8 @@ import os
 from dataclasses import dataclass, field, asdict
 from typing import Any
 
+from sentrix.alerting.guard import test_mode_flag
+
 
 def _env_float(name: str, default: float) -> float:
     try:
@@ -658,7 +660,7 @@ class ChannelConfig:
 
     #: The channel router and its outbox worker (a service).
     enabled: bool = _env_bool("SENTRIX_CHANNELS_ENABLED", False)
-    test_mode: bool = _env_bool("SENTRIX_TEST_MODE", True)
+    test_mode: bool = test_mode_flag("SENTRIX_TEST_MODE")
     live_alerts: bool = _env_bool("SENTRIX_LIVE_ALERTS", False)
     modem_live: bool = _env_bool("SENTRIX_MODEM_LIVE", False)
     twilio_enabled: bool = _env_bool("SENTRIX_TWILIO_ENABLED", False)

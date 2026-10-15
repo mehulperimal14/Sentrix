@@ -78,12 +78,32 @@ OUTCOME_LABELS = {"help_arrived": "help arrived", "real_threat": "real threat",
 #: PIN back-off on the cloud path (the device has its own, sos/pins.py).
 PIN_ATTEMPTS, PIN_WINDOW = 5, 600.0
 _pin_failures: dict[str, deque] = defaultdict(deque)
+#: PIN checks allowed while locked (the duress PIN only), per window.
+LOCKED_CHECKS = 3
+_locked_checks: dict[str, deque] = defaultdict(deque)
 _pin_lock = threading.Lock()
 
 
 def _cfg():
     from sentrix.config import settings
     return settings
+
+
+def _test_mode() -> bool:
+    """The Portal's test mode (``PORTAL_TEST_MODE``), the one its send guard
+    enforces; never the device's ``SENTRIX_TEST_MODE``."""
+    from sentrix_portal import settings as portal_settings
+    return bool(portal_settings.current().test_mode)
+
+
+def _call_text() -> str:
+    """What a Portal text tells the reader to call: 112, or in test mode the
+    Desk number (never 112 in test mode, D13)."""
+    from sentrix.sos import templates
+    from sentrix_portal import settings as portal_settings
+    test_mode = _test_mode()
+    desk = getattr(portal_settings.current(), "desk_number", None) if test_mode else None
+    return templates.call_number({"desk": {"phone": desk or ""}}, test_mode)
 
 
 def _aware(value: datetime | None) -> datetime | None:
@@ -374,6 +394,9 @@ def event_dict_from(fields: dict, digest: str, prev: str) -> dict:
     return {**fields, "prev_hash": prev, "hash": digest}
 
 
+#: Flags the cloud sets itself; the device's snapshot cannot clear them.
+_CLOUD_SET_FLAGS = frozenset({"duress", "contacts_notified", "resident_safe", "stale",
+                              "unacknowledged"})
 _MERGED = ("urgency", "trigger_level", "peak_level", "evidence_state", "authority",
            "responded_by", "response_channel", "sos_text_full", "sos_text_sms",
            "profile_version", "parent_request_id", "package_id", "outcome")
@@ -401,8 +424,14 @@ def _merge_request(db, row: AssistanceRequest, request: dict, cloud_acted: bool)
     flags = dict(row.flags or {})
     for key, value in (request.get("flags") or {}).items():
         if key in S.FLAGS:
-            flags[key] = bool(value) or bool(flags.get(key))
+            # A flag the cloud's own answers set (duress, contacts notified,
+            # resident safe) is never cleared by the device; the device's own
+            # flags (device_offline, undelivered, ...) follow the device.
+            flags[key] = (bool(value) or bool(flags.get(key))) if key in _CLOUD_SET_FLAGS \
+                else bool(value)
     row.flags = flags
+    if isinstance(request.get("repage_count"), int):
+        row.repage_count = max(int(row.repage_count or 0), request["repage_count"])
     if isinstance(request.get("policy"), dict):
         row.policy = request["policy"]
     for key in ("created_at", "expires_at", "seen_at", "responded_at"):
@@ -512,7 +541,7 @@ def _window(household: Household | None) -> int:
     window = int((household.sos_window_s if household else None) or cfg.window_seconds)
     if window not in cfg.window_choices:
         window = min(cfg.window_choices, key=lambda w: abs(w - window))
-    if _cfg().test_mode and cfg.demo_window_seconds:
+    if _test_mode() and cfg.demo_window_seconds:
         window = max(60, int(cfg.demo_window_seconds))
     return window
 
@@ -535,14 +564,22 @@ def create_cloud_request(db, device: Device | None, household_id: str, *,
         evidence_state="unconfirmed", created_at=now, updated_at=now,
         expires_at=now + timedelta(seconds=policy["window_seconds"]), policy=policy,
         profile_version=household.profile_version if household else None,
-        test_mode=_cfg().test_mode, version=0, authority_side="cloud",
+        test_mode=_test_mode(), version=0, authority_side="cloud",
         parent_request_id=parent.id if parent else None)
     row.sos_text_full = text or cloud_sos_text(db, row, household)
     db.add(row)
     db.flush()
     _cloud_event(db, row, S.CREATED,
                  detail={"why": "device_offline" if not parent else "help_requested_later",
-                         "incident_ids": row.incident_ids})
+                         "incident_ids": row.incident_ids,
+                         "incident_id": row.incident_ids[0] if row.incident_ids else None,
+                         "incident_type": incident_type, "level": int(level),
+                         "evidence_state": row.evidence_state,
+                         "expires_at": _iso(row.expires_at),
+                         "policy": {"window_seconds": policy["window_seconds"],
+                                    "safety_defaults": policy["safety_defaults"],
+                                    "contacts": [{"id": c["id"]} for c in
+                                                 policy.get("contacts") or []]}})
     return row
 
 
@@ -620,11 +657,16 @@ def sync_messages(db, device_id: str) -> list[dict]:
            .join(AssistanceRequest, AssistanceRequest.id == RequestEvent.request_id)
            .filter(AssistanceRequest.device_id == device_id, RequestEvent.origin == "cloud",
                    AssistanceRequest.updated_at >= since).distinct()}
+    # A takeover that wrote no event yet is handed back too.
+    ids |= {r[0] for r in db.query(AssistanceRequest.id)
+            .filter(AssistanceRequest.device_id == device_id,
+                    AssistanceRequest.authority_side == "cloud")}
     messages = []
     for request_id in sorted(ids):
         row = db.get(AssistanceRequest, request_id)
         if row.authority_side == "cloud" and row.state in S.OPEN_STATES:
-            _cloud_event(db, row, S.DEVICE_ONLINE, detail={"via": "reconnect"})
+            _cloud_event(db, row, S.DEVICE_ONLINE, detail={"via": "reconnect"},
+                         flags={"device_offline": False})
         side = row.authority_side or "device"
         row.authority_side = "device"
         events = [event_dict(e) for e in db.query(RequestEvent)
@@ -665,8 +707,14 @@ async def respond(db, request_id: str, action: str, *, actor: dict, channel: str
     if channel not in S.CHANNELS:
         channel = "portal"
 
-    online = (row.device_id and hub.is_online(row.device_id)
-              and (row.authority_side or "device") == "device")
+    device_side = (row.authority_side or "device") == "device"
+    online = row.device_id and hub.is_online(row.device_id) and device_side
+    if not online and device_side and _heartbeat_alive(db, row):
+        # Not connected right now, but the heartbeat is not lost yet (docs/7
+        # §7.6): the device still runs this request's timers, so the cloud
+        # must not take over on a reconnect blip.
+        return result("timeout", "the device did not answer in time; try again",
+                      request_view(row, view))
     if online:
         # Hold no write lock while waiting for the device: its answer arrives
         # with outbox events the hub stores on another connection.
@@ -686,11 +734,23 @@ async def respond(db, request_id: str, action: str, *, actor: dict, channel: str
             body = reply.get("result") if isinstance(reply.get("result"), dict) else {}
             return result(reply["code"], reply.get("message", ""),
                           body.get("request") or request_view(row, view))
-        db.refresh(row)                           # the device left meanwhile: the cloud acts
+        db.refresh(row)                           # the device left meanwhile
+        if _heartbeat_alive(db, row):
+            return result("timeout", "the device did not answer in time; try again",
+                          request_view(row, view))
     outcome = _cloud_respond(db, row, action, who, channel, authority, pin, detail)
     if outcome["ok"]:
         _portal_bookkeeping(db, row, action, who, detail)
     return outcome
+
+
+def _heartbeat_alive(db, row: AssistanceRequest) -> bool:
+    """The device is not connected but has not lost its heartbeat yet
+    (``Device.online`` is cleared by the hub's watcher after 45 s)."""
+    if not row.device_id:
+        return False
+    device = db.get(Device, row.device_id)
+    return bool(device is not None and device.online)
 
 
 def _view_for(who) -> str:
@@ -752,10 +812,24 @@ def _pin_failed(household_id: str) -> None:
         _pin_failures[household_id].append(time.monotonic())
 
 
+def _locked_check_ok(household_id: str) -> bool:
+    """While locked: may one more PIN be tried as the duress PIN?"""
+    with _pin_lock:
+        hits = _locked_checks[household_id]
+        now = time.monotonic()
+        while hits and now - hits[0] > PIN_WINDOW:
+            hits.popleft()
+        if len(hits) >= LOCKED_CHECKS:
+            return False
+        hits.append(now)
+        return True
+
+
 def reset_pin_limiter() -> None:
     """Tests only."""
     with _pin_lock:
         _pin_failures.clear()
+        _locked_checks.clear()
 
 
 def _check_pin(db, row: AssistanceRequest, pin: str | None) -> str:
@@ -765,6 +839,10 @@ def _check_pin(db, row: AssistanceRequest, pin: str | None) -> str:
     if household is None or not household.sos_pin_hash:
         return "none"
     if not _pin_ok(household.id):
+        # Help is never blocked (D9): the duress PIN still works while locked.
+        if (pin and household.duress_pin_hash and _locked_check_ok(household.id)
+                and security.verify_pin(household.duress_pin_hash, pin)):
+            return "duress"
         return "locked"
     if pin and security.verify_pin(household.sos_pin_hash, pin):
         return "ok"
@@ -800,10 +878,19 @@ def _policy_contact_ids(db, row: AssistanceRequest) -> set[str]:
 
 def _cloud_respond(db, row: AssistanceRequest, action: str, who, channel: str,
                    authority: str | None, pin: str | None, detail: dict | None) -> dict:
+    previous_side, before = row.authority_side, row.version or 0
+    outcome = _cloud_answer(db, row, action, who, channel, authority, pin, detail)
+    if (row.version or 0) != before or row.authority_side == "cloud":
+        row.authority_side = "cloud"           # the cloud wrote the answer
+    else:
+        row.authority_side = previous_side     # nothing written: no takeover
+    return outcome
+
+
+def _cloud_answer(db, row: AssistanceRequest, action: str, who, channel: str,
+                  authority: str | None, pin: str | None, detail: dict | None) -> dict:
     view = _view_for(who)
     actor_type, actor_id = who.event_actor_type, who.ref
-    if row.authority_side != "cloud":
-        row.authority_side = "cloud"           # the device could not be reached
     if action == "approve":
         if who.type == "contact" and not _contact_allowed(db, row, who):
             return result("forbidden_role", "this request does not let contacts ask for help",
@@ -846,6 +933,28 @@ def _cloud_respond(db, row: AssistanceRequest, action: str, who, channel: str,
                              response_channel=channel)
                 _cloud_event(db, row, S.DELIVERED, detail={"target": "desk"},
                              restricted=True)
+            elif row.state in S.OPEN_STATES and not (row.flags or {}).get("duress"):
+                # Help path: the duress banner to the Desk and the contacts.
+                _cloud_event(db, row, S.CONTACTS_NOTIFIED, actor_type=actor_type,
+                             actor_id=actor_id, channel=channel, restricted=True,
+                             flags={"duress": True, "contacts_notified": True},
+                             detail={"step": S.STEP_DURESS, "duress": True, "via": action})
+            elif row.state in S.TERMINAL_STATES:
+                # Closed already: a silent linked request, approved at once.
+                device = db.get(Device, row.device_id) if row.device_id else None
+                new = create_cloud_request(db, device, row.household_id,
+                                           incident_type=row.incident_type or "unknown",
+                                           level=int(row.peak_level or 3),
+                                           incident_ids=list(row.incident_ids or []),
+                                           parent=row, flags={"duress": True},
+                                           text=row.sos_text_full)
+                _cloud_event(db, new, S.APPROVE, actor_type=actor_type, actor_id=actor_id,
+                             channel=channel, detail={"duress": True}, restricted=True,
+                             flags={"duress": True}, authority=_default_authority(new),
+                             responded_at=utcnow(), responded_by=actor_id,
+                             response_channel=channel)
+                _cloud_event(db, new, S.DELIVERED, detail={"target": "desk"},
+                             restricted=True)
             # The person forcing the resident sees the same answer as a decline.
             return result("ok", "", request_view(row, view))
         event = S.DECLINE if action == "decline" else S.RESIDENT_SAFE
@@ -857,6 +966,14 @@ def _cloud_respond(db, row: AssistanceRequest, action: str, who, channel: str,
                           request_view(row, view))
         return result("ok", "", request_view(row, view))
     if action == "help_now":
+        if (row.flags or {}).get("duress"):
+            # Looks declined to the household: answer as a declined request
+            # would, and page the Desk and contacts again with the banner.
+            _cloud_event(db, row, S.NOTIFICATION, actor_type=actor_type, actor_id=actor_id,
+                         channel=channel, restricted=True,
+                         detail={"step": f"help_now{int(row.repage_count or 0) + 1}",
+                                 "duress": True})
+            return result("ok", "Help requested", request_view(row, view))
         if row.state not in (S.EXPIRED, S.DECLINED, S.CANCELLED):
             return result("conflict", "this request is still open", request_view(row, view))
         _cloud_event(db, row, S.HELP_REQUESTED_LATER, actor_type=actor_type,
@@ -1226,7 +1343,9 @@ def _after_event(db, row: AssistanceRequest, ev: dict, origin: str) -> list[tupl
                     text=(f"SENTRIX {short}: the alert rose to level {level} ({what}, "
                           f"{_evidence(row)}): {page}. {FOOTER}"))
     elif event == S.CONTACTS_NOTIFIED:
-        _send_contacts(db, row, step=S.STEP_CONTACTS_T0, template="sos.full",
+        # A duress PIN on the help path: the duress banner, as a new step.
+        _send_contacts(db, row, step=S.STEP_DURESS if duress else S.STEP_CONTACTS_T0,
+                       template="sos.duress" if duress else "sos.full",
                        text_for=sos_texts, subject=f"SENTRIX SOS {short}")
     elif event in (S.APPROVE, S.RETRY):
         _send_contacts(db, row, step=S.STEP_DURESS if duress else S.STEP_CONTACTS_T0,
@@ -1326,9 +1445,14 @@ def run_timers(db, now: datetime | None = None) -> int:
                     and (S.LAPSE_WARNING, S.STEP_LAPSE) not in done):
                 written += _cloud_event(db, row, S.LAPSE_WARNING,
                                         detail={"step": S.STEP_LAPSE}) is not None
+            checking = _last_checking(db, row)
+            snoozed = checking is not None and \
+                now < checking + timedelta(seconds=cfg.seen_snooze_seconds)
             for offset in cfg.reminder_offsets_seconds:
                 step = S.reminder_step(offset)
                 due = created + timedelta(seconds=offset)
+                if snoozed:
+                    break                         # "I'm checking" pauses reminders only
                 if now >= due and (S.REMINDER, step) not in done:
                     if expires is None or due < expires - timedelta(seconds=cfg.lapse_warning_seconds):
                         written += _cloud_event(db, row, S.REMINDER,
@@ -1344,7 +1468,7 @@ def run_timers(db, now: datetime | None = None) -> int:
             written += _cloud_event(db, row, S.STALE_CLOSE, flags={"stale": True}) is not None
             continue
         if row.state in (S.DISPATCHED, S.FAILED):
-            cap = cfg.repage_cap_test_mode if _cfg().test_mode else cfg.repage_cap
+            cap = cfg.repage_cap_test_mode if _test_mode() else cfg.repage_cap
             count = int(row.repage_count or 0)
             if count >= cap:
                 if not (row.flags or {}).get("unacknowledged"):
@@ -1354,13 +1478,25 @@ def run_timers(db, now: datetime | None = None) -> int:
                     _send_owner(db, row, step="unacknowledged", template="sos.reminder",
                                 subject=f"SENTRIX {short_id(row)} not acknowledged",
                                 text=(f"SENTRIX {short_id(row)}: nobody has acknowledged the "
-                                      f"request yet. Call 112 if you need help. {FOOTER}"))
+                                      f"request yet. Call {_call_text()} if you need help. "
+                                      f"{FOOTER}"))
                 continue
             if now >= started + timedelta(seconds=_repage_offset(count + 1)):
-                row.repage_count = count + 1
+                # One re-page for the latest one due (a late takeover does not
+                # burst every missed re-page, one per sweep).
+                n = count + 1
+                while n < cap and now >= started + timedelta(seconds=_repage_offset(n + 1)):
+                    n += 1
+                row.repage_count = n
                 written += _cloud_event(db, row, S.REPAGE,
-                                        detail={"n": count + 1}) is not None
+                                        detail={"n": n, "collapsed": n - count - 1}) is not None
     return written
+
+
+def _last_checking(db, row: AssistanceRequest) -> datetime | None:
+    last = (db.query(RequestEvent).filter_by(request_id=row.id, event=S.CHECKING)
+            .order_by(RequestEvent.at.desc()).first())
+    return _aware(last.at) if last is not None else None
 
 
 def _repage_offset(n: int) -> float:

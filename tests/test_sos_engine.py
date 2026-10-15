@@ -1105,3 +1105,87 @@ class TestService:
         assert world.engine.respond(req["id"], "approve", actor=OWNER,
                                     channel="lc")["code"] == "internal"
         assert world.engine.set_mode(True, pin=None, actor=OWNER)["ok"]
+
+
+# ── adversarial review regressions ────────────────────────────────────────────
+class TestReviewRegressions:
+    def test_a_duress_approval_made_in_the_cloud_stays_hidden_on_the_lc(self, world):
+        incident = fire_trigger(world)
+        req = the_request()
+        chain = cloud_chain(req["id"], [
+            ("device_offline", "PENDING", "PENDING", {}),
+            ("approve", "PENDING", "APPROVED", {"duress": True}),
+            ("delivered", "APPROVED", "DISPATCHED", {"target": "desk"})])
+        assert world.engine.sync(req["id"], cloud_state="DISPATCHED", cloud_version=5,
+                                 authority_side="cloud", events=chain)["ok"]
+        merged = requests.get_request(req["id"])
+        assert merged["state"] == S.DISPATCHED and merged["flags"]["duress"]
+        conflict = [e for e in requests.events(req["id"], include_restricted=True)
+                    if e["event"] == "conflict"][0]
+        assert conflict["restricted"]
+        assert "conflict" not in event_names(req["id"], restricted=False)
+        shown = world.engine.project(merged, "owner")
+        assert shown["state"] == S.DECLINED
+        assert incident_row(incident)["verdict"] == "FALSE"
+
+    def test_a_cloud_decline_labels_the_incident_false(self, world):
+        incident = fire_trigger(world)
+        req = the_request()
+        chain = cloud_chain(req["id"], [("decline", "PENDING", "DECLINED", {})])
+        world.engine.sync(req["id"], cloud_state="DECLINED", cloud_version=3,
+                          authority_side="cloud", events=chain)
+        assert requests.get_request(req["id"])["state"] == S.DECLINED
+        assert incident_row(incident)["verdict"] == "FALSE"
+
+    def test_a_weapon_during_the_entry_delay_opens_at_once(self, world):
+        mode.set_armed(True, by="test")
+        incident = new_incident("intrusion")
+        intrusion_level(world, incident)
+        assert requests.list_requests(5) == []
+        fire_trigger(world, "weapon", level=4, evidence="corroborated", incident_id=incident)
+        req = the_request()
+        assert req["incident_type"] == "weapon" and req["state"] == S.PENDING
+        assert world.engine.health()["held_intrusions"] == 0
+        advance(world, 31, tick=5)
+        assert len(requests.list_requests(5)) == 1
+
+    def test_a_weapon_after_a_dropped_hold_still_opens(self, world):
+        mode.set_armed(True, by="test")
+        incident = new_incident("intrusion")
+        intrusion_level(world, incident)
+        assert world.engine.set_mode(False, pin=SOS_PIN, actor=OWNER)["ok"]
+        advance(world, 31, tick=5)
+        assert requests.list_requests(5) == []
+        fire_trigger(world, "weapon", incident_id=incident)
+        assert the_request()["incident_type"] == "weapon"
+
+    def test_a_cloud_opened_request_keeps_its_type_and_merges_by_incident_ids(self, world):
+        incident = fire_trigger(world, "fire")
+        own = the_request()
+        chain = cloud_chain("cloud-fire", [
+            ("created", None, "DRAFTED", {"why": "device_offline",
+                                          "incident_ids": [incident],
+                                          "incident_type": "fire", "level": 3,
+                                          "policy": {"window_seconds": 2700,
+                                                     "safety_defaults": True,
+                                                     "contacts": [{"id": "c1"}]}}),
+            ("prompted", "DRAFTED", "PENDING", {})])
+        assert world.engine.sync("cloud-fire", cloud_state="PENDING", cloud_version=2,
+                                 authority_side="cloud", events=chain)["ok"]
+        cloud = requests.get_request("cloud-fire")
+        assert cloud["incident_type"] == "fire" and cloud["incident_id"] == incident
+        assert cloud["policy"]["window_seconds"] == 2700
+        assert [c["id"] for c in cloud["policy"]["contacts"]] == ["c1"]
+        assert requests.get_request(own["id"])["state"] == S.CANCELLED
+        assert len(requests.open_requests()) == 1
+
+    def test_recovery_sends_an_owed_contacts_alert_before_expiring(self, world):
+        fire_trigger(world, "fire")
+        req = the_request()
+        world.clock.now += 60                        # contacts due at T+2 min
+        assert not requests.get_request(req["id"])["flags"].get("contacts_notified")
+        world.clock.now += 4000                      # the device was off past the window
+        TestRecovery().restart(world)
+        names = event_names(req["id"])
+        assert names.index("contacts_notified") < names.index("expire")
+        assert requests.get_request(req["id"])["state"] == S.EXPIRED

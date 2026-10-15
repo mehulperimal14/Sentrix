@@ -740,7 +740,7 @@ class TestLcPrincipal:
         monkeypatch.setenv("SENTRIX_PASSWORD", "pw")
         client = TestClient(_lc_app(), follow_redirects=False)
         page = client.get("/page", headers={"accept": "text/html"})
-        assert page.status_code == 307 and page.headers["location"] == "/login"
+        assert page.status_code == 307 and page.headers["location"].split("?")[0] == "/login"
         api = client.get("/api/who")
         assert api.status_code == 401 and api.json() == {"detail": "not signed in",
                                                          "code": "unauthorised"}
@@ -1131,7 +1131,7 @@ class TestPortalSecurityFixes:
 
         client = TestClient(portal_app, follow_redirects=False)
         html = client.get("/d/dev/dashboard", headers={"accept": "text/html"})
-        assert html.status_code == 303 and html.headers["location"] == "/login"
+        assert html.status_code == 303 and html.headers["location"].split("?")[0] == "/login"
         api = client.get("/d/dev/api/health", headers={"accept": "text/html"})
         assert api.status_code == 401
 
