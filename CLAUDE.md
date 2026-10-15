@@ -207,7 +207,7 @@ to the room. Decisions D15 and D16, D2/D8 amended; milestone M11 (section 6).
 | `sentrix/finetuned-v3` | `66accb9` | baseline + scene integration + training tooling + fine-tuned v3 models |
 | `sentrix/custom-v4` | `3772acf` | baseline + scene integration + training tooling + new DINOv2/YOLO11n models |
 | `sentrix/e2e-repair` | `eb82ff5` | custom-v4 + M1–M5 + fresh-clone setup + docs/8 (Pi plan); the state before M10 |
-| `sentrix/portal` | `594d91b` (= `main`) + M11 (`30074ab`, `6f15ae3`, `fd1bc88`, `1a85f28`, `565c23f`) + M11b review fixes (`ba0bf17` and the docs/results commit; `git log -1 sentrix/portal`); **not pushed** | main + Portal/SOS foundation + the eight tracks + integration, demo tools, e2e tests, live smoke fixes, review fixes, clean-up (M10), multimodal fusion and the talk-down speaker (M11; commits below) |
+| `sentrix/portal` | `594d91b` (= `main`) + M11 (`30074ab`, `6f15ae3`, `fd1bc88`, `1a85f28`, `565c23f`) + M11b review fixes (`ba0bf17`, `819619a` and this hash note; `git log -1 sentrix/portal`); **not pushed** | main + Portal/SOS foundation + the eight tracks + integration, demo tools, e2e tests, live smoke fixes, review fixes, clean-up (M10), multimodal fusion and the talk-down speaker (M11; commits below) |
 | `wip/hw`, `wip/clip`, `wip/ch`, `wip/sos`, `wip/web`, `wip/acct`, `wip/link`, `wip/model` | `4418de3`, `cc53443`, `f19e056`, `0b703b6`, `c340f29`, `e9d251c`, `24b897e`, `3bfb441` | the track branches, all merged into `sentrix/portal`; local only, not pushed |
 
 Published to `github.com/mehulperimal14/Sentrix` on 2026-10-10. Before publishing,
@@ -239,9 +239,9 @@ fd1bc88 docs(m11): multimodal fusion and talk-down speaker - decisions, results,
 ```
 then `565c23f` (THIRD_PARTY.md rows) and the M11b review fixes:
 ```
+819619a docs(m11b): review fixes - decisions, offline rule, results
 ba0bf17 fix(m11): review findings - offline SOS, sound-model threads, banter, overlapping audio
 ```
-(and the M11b docs/results commit after it)
 
 Commits on `sentrix/portal` up to `main` (first parent, newest first; each
 merge brings in its track's commits from the `wip/*` branch):
