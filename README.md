@@ -54,13 +54,13 @@ real person unless two switches are on, and even then only to an allowlist (see
 | 3. Install the device; activate the account with the code and choose a password | customer | Portal `/activate` |
 | 4. Onboarding wizard, 7 steps: profile, address, household, emergency contacts (each confirms by link), claim the device, alerts + SOS PIN + window, consent and SOS preview | customer | Portal `/onboarding` |
 | 5. Daily use: the device's dashboard, live view, events, evidence, access (faces), SOS, node | customer | LC on the LAN, or the Portal through `/d/{device_id}/...` |
-| 6. A **confirmed L3** of an alarm class (weapon, fire), or an armed-mode intrusion that outlasts the 30 s entry delay, opens an **assistance request**, pre-filled from the profile | device | SOS engine |
+| 6. A **confirmed L3** of an alarm class (weapon, fire, or a fight confirmed by video *and* time-aligned aggression audio) opens an **assistance request**, pre-filled from the profile. An unrecognised person is an L2 only (no request) | device | SOS engine |
 | 7. "Do you need assistance?" on the Portal, the LC, Telegram and e-mail (SMS only when offline or unseen for 10 min); window 30/45/60 min | owner | |
 | 8. Approve → the Desk and the confirmed contacts get the dispatch. False alarm → PIN. No answer → **EXPIRED** ("unanswered", never "safe"); "Request help now" opens a linked request | owner | |
 | 9. The Desk acknowledges and resolves; the incident verdict is recorded | Desk operator | Portal `/desk` |
 
 Safety defaults (on unless the household turns them off): a corroborated L4/L5,
-a confirmed fire (at T+2 min), an armed intrusion, or the device going offline
+a confirmed fire (at T+2 min), or the device going offline
 during an open L2+ incident alerts the confirmed contacts while the owner is
 still being asked. A single-source weapon L3 goes to the owner only. A duress
 PIN "declines" on screen but alerts the contacts. The full rules are decisions
@@ -117,13 +117,30 @@ a model score and the alarm:
 | Confirmation | a source must cross its threshold on 2 of its last 3 fresh evaluations |
 | Person gate | weapon votes count only with a person seen in the last 2 s |
 | Thresholds | the checkpoint's, raised to at least weapon 0.50 / fire 0.45; a per-room calibration may replace them |
-| One confirmed source | at most L3 (snapshot and evidence; SOS prompt) |
-| Classifier **and** detector confirmed | L4; L5 when both are well above threshold |
-| Assault, robbery, stick, smoke, audio | experimental: logged and shown, never above L2 |
-| Unknown person | home mode (default): logged only. Armed mode: an unrecognised track for 3 s opens an intrusion at L3 |
+| Modalities | video detector (YOLO heads), video classifier (scene / violence model: one modality), audio (only when its 4 s window overlaps the frame within 1.5 s; otherwise *unavailable*, never "calm") |
+| One visual modality confirmed | L3 (snapshot and evidence; SOS prompt) |
+| Two modalities confirmed for one class (detector + scene, or video + aligned audio, e.g. a pistol box and a gunshot) | L4; L5 when the weaker is well above threshold, or when all three agree |
+| Audio alone (gunshot, smoke alarm) | at most L2; a scream alone is never a weapon |
+| Fight (assault) | L2 (experimental) unless the video fight **and** aligned aggression audio (shouting, screaming) agree with 2+ people and motion: then L3. Aligned laughter or calm talk (banter) holds it under L2. Unvalidated until room recordings exist |
+| Robbery, stick, smoke | experimental: logged and shown, never above L2 |
+| Unknown person, PIR, door | presence context: an unrecognised person (3 s armed, 10 s at home), or armed-mode sensor activity with nobody recognised, is an **L2 only** in both modes |
+
+Every tick records what each input did for the leading class (video detector,
+scene model, audio, motion, people, identity, sensors) in the event log and on
+the dashboard's Threat Analysis card (decision D15).
 
 | Level | Side effects |
-|---|---|
+|### Speak to the room
+
+The dashboard's "Speak to the room" card lets the owner (through the Portal,
+with a fresh password step-up) or the device admin (on the LAN) send a preset
+("You are being recorded. Leave the premises now.", "Help is on the way.",
+"This is SENTRIX. The owner can hear you." ...) or up to 200 characters to the
+device speaker, spoken with offline text-to-speech (pyttsx3 / espeak-ng; no
+cloud). Off by default (`SENTRIX_SPEAKER_ENABLED=1`), 3 messages a minute,
+every message audited (decision D16; hardware in docs/8 §6.6).
+
+---|---|
 | 1 SECURE | log |
 | 2 SUSPICIOUS | incident opened (log and dashboard) |
 | 3 ELEVATED | snapshot, AES-256-GCM evidence bundle, SOS request for alarm classes |
@@ -391,8 +408,13 @@ Limits that matter for any claim:
 * **No fitted fusion model.** The TCI is a published rule over confirmed
   evidence until real session logs exist (M8).
 * **Darkness and faces closer than 1 m** are out of scope for an RGB webcam.
-* **The audio model is under-trained** (375 clips; no gunshot or glass-break
-  class). It is optional and not in the alarm path.
+* **The sound model is general, not room-tested.** PANNs CNN10 (AudioSet,
+  25 MB, ≈ 50 ms per 4 s window on the laptop CPU) maps its labels to five cues
+  by a published rule; the cue thresholds are a priori, and the custom videos'
+  soundtracks are phone recordings of staged scenes: the staged assault (vid05)
+  sounds like calm talk (benign 0.91, aggression < 0.01), so no fight in the
+  custom data can reach L3. Fight-vs-banter needs recordings of play-fighting,
+  real staged fights, laughter and shouting (ROADMAP.md §15.1).
 * **Training-corpus metrics are optimistic.** The v3 models' own validation
   splits share source videos or near-duplicate images with training
   (`tools/audit_splits.py`; CLAUDE.md §4.1).

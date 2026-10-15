@@ -42,7 +42,7 @@ questions, and section 17 the results of the live verification run.
 | 3 Install | Customer | The device dials out to the Portal (outbound only, so it works behind CGNAT) and shows as "online, unclaimed" |
 | 4 Onboard | Customer | Activate, choose a password, then a 7-step wizard: about you, home, household, contacts, device claim, alerts and SOS (PIN, window), consent with an SOS preview |
 | 5 Daily use | Owner, members | The **same console pages** as on the device, in any browser, through the Portal's tunnel; plus Portal pages for home, account, settings, SOS and privacy |
-| 6 Alarm | Device | A **confirmed L3** of a weapon or fire (or an armed intrusion after a 30 s entry delay) opens an **assistance request**: "Do you need assistance?" with a 30, 45 or 60 minute window |
+| 6 Alarm | Device | A **confirmed L3** of a weapon or fire, or a fight corroborated by video *and* time-aligned aggression audio (D15), opens an **assistance request**: "Do you need assistance?" with a 30, 45 or 60 minute window. An unrecognised person is an L2 in both modes and opens none (D8 as amended by D15) |
 | 7 Decide | Owner, member | "Alert my contacts and the SENTRIX desk" · "Call 112 now" · "I'm checking" · "False alarm (PIN)" |
 | 8 Help path | Desk, contacts | The SENTRIX Desk (a simulated responder console) and the confirmed emergency contacts get the SOS. The Desk acknowledges and resolves it |
 | 9 No answer | System | The request **expires as "unanswered"**, never "safe". For serious events the safety defaults alert the contacts without waiting (§7.5) |
@@ -253,6 +253,7 @@ Frozen names in other files (keep them working and keep their signatures):
 | `sentrix/io/actuators.py` | The siren on gpiozero behind `build_siren` / `Actuator` / `siren_test` |
 | `sentrix/io/sources.py`, `demo_reel.py` | `picamera:`, `demo-reel:` and the other camera specs; source names are redacted |
 | `sentrix/web/node_routes.py` | `GET /api/node`, `POST /api/node/siren-test` (via `actuators.siren_test`) |
+| `sentrix/web/speaker_routes.py`, `sentrix/io/speaker.py` | `GET /api/speaker`, `POST /api/speaker/say` - the talk-down speaker (D16) |
 | `run.sh` (Pi path), `requirements-pi.txt`, `deploy/pi5/**`, `tools/doctor.py` | Pi install and service; doctor hardware rows; services print through `preflight` |
 | `sentrix/pipeline/clip.py`, `fastlane.py`, `sentrix/runtime/**` | `ClipBuffer`, `ClipScheduler`, `ClipEngine`, `ClipScores`, `build_strategy(pipeline) -> InferenceStrategy`, `prepare_eval_pipeline(pipeline) -> Pipeline`; the fast lane; exported-model backends |
 | `tools/export_models.py`, `tools/bench_clip.py`, `tools/replay_custom_videos.py --mode clip` | Exports with a parity check; the clip bench (calls `services.assert_measurement_safe`); clip-mode replay through `build_eval_pipeline(mode="clip")` |
@@ -343,8 +344,9 @@ from the environment at use time. `settings.test_mode` mirrors
 |---|---|---|---|---|
 | `enabled` | `SENTRIX_SOS_ENABLED` | bool | False | Build the SOS service (engine + sweeper) |
 | `min_level` | — | int | 3 | `ActionPlan.sos` from this committed level |
-| `alarm_classes` | — | tuple | ("weapon", "fire") | D1/D8 classes that open a request (+ `intrusion` in armed mode) |
-| `intrusion_entry_delay_seconds` | — | float | 30 | Armed intrusion opens a request only after this, unless disarmed (PIN or authorised face) |
+| `alarm_classes` | — | tuple | ("weapon", "fire", "assault") | Classes that open a request at L3+. `assault` reaches L3 only corroborated (video + aligned aggression audio, D15), and `machine.classify` also refuses an `assault` trigger whose evidence state is not `corroborated` |
+| `intrusion_requests` | `SENTRIX_SOS_INTRUSION` | bool | False | D8 as amended by D15: an unrecognised person opens no request. On: the pre-D15 armed-intrusion request after the entry delay (only reachable if a level rule ever commits an intrusion at L3) |
+| `intrusion_entry_delay_seconds` | — | float | 30 | With `intrusion_requests`: an armed intrusion opens a request only after this, unless disarmed (PIN or authorised face) |
 | `window_seconds` | `SENTRIX_SOS_WINDOW_SECONDS` | int | 1800 | Fallback window; the profile's value wins; clamp to `window_choices` |
 | `window_choices` | — | tuple | (1800, 2700, 3600) | Allowed windows |
 | `demo_window_seconds` | `SENTRIX_SOS_DEMO_WINDOW_SECONDS` | int | 0 | Test mode only, ≥ 60 when set |
@@ -921,6 +923,7 @@ call; every request → `remote_audit`):
 | gallery writes (`POST /authorized/upload`, `POST /api/authorized/capture`, `DELETE /api/authorized/*`) | owner | consent `face_recognition`; DELETE needs step-up |
 | `POST /api/incidents/*/verdict`, `POST /api/sos/*`, `POST /api/dispatch/*` | owner, member | |
 | `POST /api/node/siren-test` | owner | step-up; 1/min |
+| `POST /api/speaker/say` (D16) | owner | step-up; 3/min (`io.speaker.Speaker`); members and the Desk refused |
 | Desk view: `GET /dashboard`, `/live`, `/static/*`, `/api/health`, `/api/metrics`, video and state relays | operator | only while a request of this device is on the help path **and** consent `desk_live_view` |
 | anything | company_admin | always refused |
 
@@ -1187,12 +1190,19 @@ resident".
 ### 7.1 When a request opens (D8)
 
 A request opens only at a **confirmed L3+ commit** of `sos.alarm_classes`
-(weapon, fire) — experimental classes are capped at L2 and never prompt — and,
-in armed mode, for an `intrusion` that outlives the 30 s entry delay. No siren
-at L3. One open request per device: later incidents (including the 300 s
-rollover) attach to it.
+(weapon, fire, and `assault` - which reaches L3 only when the video fight and
+time-aligned aggression audio agree, D15). Robbery and an uncorroborated
+fight are capped at L2 and never prompt. **An unrecognised person never opens
+a request** (D8 as amended by D15): the pipeline caps it at L2 in home and
+armed mode (`ThreatConfig.intrusion_level` 0.30, held under the L3 threshold
+whatever the configuration). No siren at L3. One open request per device:
+later incidents (including the 300 s rollover) attach to it.
 
-Entry delay (decided): T-SOS holds an armed-intrusion trigger for
+The armed-intrusion path below is kept behind `sos.intrusion_requests`
+(`SENTRIX_SOS_INTRUSION=1`, off by default); with it off `machine.classify`
+returns None for `intrusion` and `_handle_level` holds nothing.
+
+Entry delay (with `intrusion_requests`): T-SOS holds an armed-intrusion trigger for
 `intrusion_entry_delay_seconds`. It is cleared by (a) a disarm with the SOS
 PIN on the LC or the Portal (`sos.set_mode`), or (b) an **authorised face**:
 at the end of the delay T-SOS reads the live per-track identity (`state.get()`
@@ -1207,6 +1217,22 @@ an `intrusion` incident), not through `trigger`: `wants("intrusion", ...)` is
 False, so a weapon that appears during the entry delay still triggers its own
 request, and a face or PIN disarm leaves nothing claimed. `trigger()` still
 accepts an intrusion trigger and holds it the same way.
+
+### 7.1a The state blocks fusion adds (D15)
+
+`state` (and so `/ws/threat` and the link's state relay) carries
+four more blocks, each with a safe idle value:
+
+| Key | Content |
+|---|---|
+| `contributions` | For the leading class: one row per input - `video detector`, `scene model` / `violence model`, `audio` (or `audio (banter)`, `audio (aggression)`), `people`, `motion`, `identity`, `sensors` - with `value`, `detail` and `effect` (`raises`, `lowers`, `gated`, `below confirmation`, `gate ok`/`gate failed`, `context`, `unavailable`) |
+| `audio` | The audio window heard for this tick: `status` (`aligned`, `stale`, `future`, `untimed`, `disabled`), `lag_s` (frame time minus window end), `tolerance_s`, `model` (`panns_cnn10`, `cnn`, `quiet`), `cues` (aggression, weapon_sound, fire_sound, benign_social, siren), `start`/`end` (monotonic), `wall_end` |
+| `fusion` | `class`, `state`, `rule` (`single`, `corroborated`, `three modalities`, `audio only`, `fight corroborated`, `banter`, `experimental`...), `modalities`, `context` (`persons_recent`, `motion`), `sensors` (seconds since the last PIR/door event) |
+| `speaker` | D16: `enabled`, `backend`, `ready`, `speaking`, `last` |
+
+Event-log tick rows are schema 5: the same `audio` and `fusion` records, the
+audio sources in `votes`, and `context.persons_recent` / `motion` /
+`sensors` (CLAUDE.md D15).
 
 ### 7.2 The SOS service interface *(`sentrix/sos/__init__.py`, `engine.py`)*
 
@@ -1339,7 +1365,7 @@ legacy L4 owner SMS folds into `rise4`, the L5 call into `rise5`.
 
 Safety defaults (ON by default, D9) alert CONFIRMED contacts while the owner is
 still asked: corroborated L4/L5 at once; confirmed fire at T+2 min; armed
-intrusion at once; device offline / heartbeat lost during an open L2+ incident
+intrusion at once (only with `intrusion_requests`); device offline / heartbeat lost during an open L2+ incident
 at once (cloud side). Single-source weapon L3: owner only until gate P8
 (`contacts_for_single_source_l3`, T+5 min when on). The duress PIN exists
 whenever contacts exist and differs from the SOS PIN in ≥ 2 digits. Repeats:
@@ -1650,6 +1676,8 @@ leave).
 | POST | `/api/dispatch/{id}/send/{authority}` | `routes.py` | POLICE / FIRE / MEDICAL → `sos.approve_package`; 409 `conflict` for SENT/CANCELLED/EXPIRED; `{status: sent|failed}` |
 | GET | `/api/node` | T-HW | the `state.node` block; `gpio` = `{siren, leds: {green, amber, red}, buzzer, pir, door, mains}`; also `siren`, `siren_arming`, `siren_test`, `camera`, `services` |
 | POST | `/api/node/siren-test` | T-HW | device admin or owner + step-up (policy.py); `actuators.siren_test` (1 s; ≤ 1/min, shared with the command; 429 with `Retry-After`); 409 `conflict` while the siren line is disarmed |
+| GET | `/api/speaker` | D16 | the speaker's status: `enabled`, `backend`, `real`, `ready`, `speaking`, `last`, `max_chars`, `per_minute`, `retry_after`, `presets` |
+| POST | `/api/speaker/say` | D16 | JSON `{text}` (≤ 200 printable characters) or `{preset_id}`; device admin or owner + step-up (policy.py, class `speaker`); ≤ 3/min device-wide (429 with `Retry-After`); 409 `conflict` while the speaker is off (`SENTRIX_SPEAKER_ENABLED=0`) or still talking; 400 `invalid_args`; audited as `speaker_say` (event log, mirrored by the link). `/api/node` adds a `speaker` block |
 | GET | `/api/link` | T-LINK | the `state.link` block + `remote_viewers` |
 | GET | `/api/link/remote-audit?limit` | T-LINK | `remote_audit` rows |
 | POST | `/api/link/reconnect` | T-LINK | device admin |

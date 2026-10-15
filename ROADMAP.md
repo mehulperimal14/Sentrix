@@ -161,6 +161,8 @@ These are small, but each one must be closed or stated in the report.
 | `buffalo_s` face pack not on disk; `deploy/pi5/pi.env` selects it | docs/7 §16 q10 | Pi identity; match threshold must be re-checked on enrolled team faces |
 | Template wording nit "near opposite the SBI ATM" | docs/7 §17 | Polish before the demo |
 | The custom weapon detector knows `pistol` and `stick` only; there is no knife footage in the custom dataset | `models/v4_custom/weapon_detector_custom_v4_metadata.json` | D1 promises knife: record knife data (§15) or drop knife from the promise |
+| Fight vs banter (D15) is a published rule over an AudioSet tagger, never measured on room audio; the cue thresholds are a priori | `CLAUDE.md` D15, M11 | Record the audio sessions in §15.1; check the cue thresholds on S3, report S4 once |
+| Talk-down speaker never run on the Pi (USB adapter, espeak-ng, ALSA device) | docs/8 §6.6 | Bench check before the demo |
 
 ---
 
@@ -224,10 +226,10 @@ decisions are written into `CLAUDE.md`.
 
 | Order | Contents | Price |
 |---|---|---|
-| **Order 1: bench kit** | Raspberry Pi 5 8 GB (₹19,852), official 27 W PSU (₹1,255), Active Cooler (₹531), SanDisk High Endurance 128 GB (₹3,699), Camera Module 3 Wide (₹4,379), Pi 5 camera cable 22-pin Standard–Mini (₹117), ML-2020 RTC cell (≈ ₹500), USB microphone (₹289), relay module + transistors + diodes (≈ ₹150), PIR HC-SR505 (₹73), MC-38 door reed switch (₹52), breadboard, jumpers, LEDs, resistors, buzzer (≈ ₹350) | **≈ ₹31,250** |
+| **Order 1: bench kit** | Raspberry Pi 5 8 GB (₹19,852), official 27 W PSU (₹1,255), Active Cooler (₹531), SanDisk High Endurance 128 GB (₹3,699), Camera Module 3 Wide (₹4,379), Pi 5 camera cable 22-pin Standard–Mini (₹117), ML-2020 RTC cell (≈ ₹500), USB microphone (₹289), talk-down speaker: USB audio adapter CM108 + PAM8403 amplifier + 3 W 4 Ω speaker (≈ ₹450, D16; or a USB speakerphone ≈ ₹1,500–2,500 that also replaces the microphone), relay module + transistors + diodes (≈ ₹150), PIR HC-SR505 (₹73), MC-38 door reed switch (₹52), breadboard, jumpers, LEDs, resistors, buzzer (≈ ₹350) | **≈ ₹31,700** |
 | **Order 2: integration kit** | BIS-marked 12 V ≥ 4 A adapter (₹566), Resonate router mini UPS 12 V 3 A (₹2,399), XY-3606 step-down 12 V → 5.2 V (₹119), short thick USB-C cable (≈ ₹150), 12 V siren SQR117 (₹194), key/toggle arming switch (≈ ₹50), 3 inline fuses + PC817 optocoupler (≈ ₹80), 7Semi Quectel EC200U-CN 4G modem (₹2,236), Airtel/Vi prepaid SIM (≈ ₹300), IP65 ABS box + label (₹300–899), fan, mesh, cable glands (≈ ₹150), mount, perfboard, terminals (≈ ₹450) | **≈ ₹7,300** |
 | Tools | multimeter, soldering kit, wire stripper, heat-shrink, micro-HDMI cable, card reader, 12 V panel meter, earplugs | ≈ ₹2,000 |
-| **Device total** | Order 1 + Order 2 + tools | **≈ ₹40,500** (cheapest ≈ ₹36,000) |
+| **Device total** | Order 1 + Order 2 + tools | **≈ ₹41,000** (cheapest ≈ ₹36,500) |
 | Running cost | SIM ≈ ₹200/month; demo hotspot data ≈ ₹200–300/month (est.); `.in` domain ≈ ₹500–800/year; Portal on free tiers ₹0 | |
 | Buy only if needed | AI HAT+ 13/26 TOPS (₹9,749 / ₹14,999) if Gate A fails; Camera Module 3 NoIR + 850 nm IR light (₹3,379 + ≈ ₹200–2,000) if night is required; Geekworm X1202 UPS HAT (₹5,299 + cells) if the router UPS fails; MQ-2 + ADS1115 (₹98 + ₹142) for a log-only smoke signal; powered USB hub (≈ ₹800 est.) if the modem browns out | |
 | Do not buy | a Jio SIM for the modem; A7670E modems (no band B40); unbranded 18650 cells; open-frame 230 V supplies; an AI HAT before Gate A; Coral or Intel NCS2 | |
@@ -679,7 +681,20 @@ object is visible. Classes:
 | handgun (replica) | yes | drawn from a pocket, pointed, held at the side |
 | knife | yes | kitchen knife held, raised, half hidden |
 | visible flame | yes | lighter flame, small controlled flame in a tray |
-| assault, robbery, stick, smoke | no, experimental (≤ L2) | record a few for later work only |
+| assault (staged fight) | L3 only with aligned aggression audio (D15) | **with sound**: shouting, screaming, a slap on a cushion; actors agree a script and a stop word |
+| play-fighting / banter | must stay ≤ L1 (D15 banter rule) | the same moves as the staged fight, with laughter and calm talk; as many clips as the fight |
+| robbery, stick, smoke | no, experimental (≤ L2) | record a few for later work only |
+
+**Audio with every clip (D15).** The microphone you will deploy (USB, or the
+speakerphone), at the device, recorded together with the video so the two stay
+in sync (`rpicam-vid` plus `arecord` started by one script, or the app's
+planned "record normal session" mode). For each room and session also record:
+laughter and calm conversation (5 min), a raised-voice argument without
+contact (2 min), shouting and screaming (staged, 2 min), TV/music in the
+background (5 min), a smoke-alarm test beep, and gunshot / glass-break sounds
+played from a speaker (never real). These check the cue thresholds
+(`settings.audio.cue_thresholds`) and the fight and banter rules; until then
+they are a priori values.
 
 **Hard negatives: as many as positives.** Things that look like a threat but
 are not:
@@ -852,11 +867,15 @@ Set the pass bar **before** the runs (as `slim/PROTOCOL.md` did). The next
 untested candidate is DINOv2-S/14. Use `training/custom/screen_backbones.py`
 to screen backbones in seconds before fine-tuning any of them.
 
-**d) Audio (Prashant, not gating).** Audio stays experimental and outside the
-alarm path (D1). `training/scripts/train_audio_classifier.py` trains the
-log-mel CNN from `data/audio_data`. Record gunshot-like and glass-break sounds
-(from speakers, safely) and the room's normal sound in the same sessions; log
-the scores; promote audio only when it passes the same gates.
+**d) Audio (Prashant, not gating).** Since D15 the sound model is the
+pretrained PANNs CNN10 AudioSet tagger (`sentrix/perception/sound_tagger.py`,
+`models/audio/`), mapped to five cues by a published rule; audio alone stays at
+most L2, and it corroborates a visual source only when its window is aligned
+with the frame. Nothing is fine-tuned yet. With the §15.1 audio sessions:
+measure each cue's AUROC per room (laughter/calm vs shouting/screaming;
+gunshot-from-speaker vs normal), set the cue thresholds on S3, report S4 once.
+`training/scripts/train_audio_classifier.py` (the old log-mel CNN, the
+fallback) remains for a deployment-specific head if the tagger fails.
 
 ### 15.6 Calibration and thresholds
 

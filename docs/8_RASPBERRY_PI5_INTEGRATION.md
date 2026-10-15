@@ -34,7 +34,7 @@ sources at the end; "est." marks our own arithmetic.
 | Slim scene model | Tried and **rejected**: MobileNetV3-L and EfficientNet-B0 reach LOVO macro-F1 0.229 / 0.211 vs DINOv2 0.440. DINOv2-B stays (§5 T1) |
 | Main track | **T1 — clip engine on the Pi 5 CPU**. Fallbacks if Gate A fails: **T2** Hailo AI HAT+, or **T3** the laptop as a local hub (both plans only) |
 | Process layout | **One process** (`python -m sentrix`) owns the pipeline, Local Console, SOS, channels and the Portal link (§4) |
-| Cost | Device ≈ **₹40,500** once (bench kit + integration kit + tools); SIM ≈ ₹200/month; `.in` domain ≈ ₹500–800/year; Portal ₹0 on free tiers (§8) |
+| Cost | Device ≈ **₹41,000** once (bench kit + integration kit + tools, incl. the talk-down speaker); SIM ≈ ₹200/month; `.in` domain ≈ ₹500–800/year; Portal ₹0 on free tiers (§8) |
 
 ---
 
@@ -105,7 +105,7 @@ MobileNetV3-L 6.6 / 2.4 ms; EfficientNet-B0 9.5 / 4.3 ms.
 | On a non-PD 5 V supply USB is capped at 600 mA [11] | `PSU_MAX_CURRENT=5000` in the EEPROM, or the 4G modem browns out; doctor and the installer warn |
 | Throttling at 80–85 °C [11][RPB] | Active Cooler; temperature, throttle flags and EXT5V on the Node page and `/api/health` |
 | GPIO is 3.3 V, not 5 V tolerant [56] | Relay through an NPN driver (§6); never feed 5 V into a GPIO pin |
-| No analogue audio jack [12] | USB microphone |
+| No analogue audio jack [12] | USB microphone in; a USB audio adapter (or USB speakerphone) out for the talk-down speaker (§6.6, D16) |
 | Coral USB TPU (PyCoral ≤ Python 3.9, archived) and Intel NCS2 (discontinued) [47][48][50] | Not options. Accelerator choice is Hailo or the IMX500 AI Camera |
 
 ---
@@ -237,8 +237,14 @@ alarm path). DINOv2 ViT-S/14 is the untested fallback and needs its own LOVO run
   `PiCameraSource.latest_lores()`.
 - S1 runs three YOLO passes per keyframe. M7's single detector (person, pistol,
   knife, fire) is not trained yet.
-- Live audio: S5 uses the audio engine's 4 s result rather than buffering the
-  microphone itself.
+- Live audio: the clip buffer receives the microphone's 1 s hops
+  (`AudioEngine.add_sample_listener`), so S5 classifies the clip's own 4 s
+  window (aligned by construction); without buffered samples it uses the
+  audio engine's newest window only when it overlaps the clip end within
+  `SENTRIX_AUDIO_ALIGN_TOLERANCE` (1.5 s), else audio is *unavailable* (D15).
+- The general sound model (PANNs CNN10, 25 MB) costs ≈ 50 ms per 4 s window on
+  the laptop CPU at 2 threads; on the Pi it is still unmeasured
+  (`tools/bench_clip.py` with audio).
 
 ### T2 — Pi 5 + AI HAT+ (Hailo NPU) (Priority 3, plan)
 
@@ -298,7 +304,7 @@ factory uses the same map, so a laptop run and the tests exercise it.
 | 7 | 4 | DHT22 DATA (optional) | Kernel `dht11` overlay [55]; `SENTRIX_SENSOR_DHT22=1` |
 | 2 / 4, 1, GND | 5 V, 3.3 V | PIR power, relay power | An opto relay board instead of the NPN driver: VCC 3.3 V, JD-VCC 5 V, jumper off |
 | CAM/DISP 0 | — | Camera Module 3 Wide | Needs the **Standard–Mini 22-pin** cable; the camera's own cable does not fit a Pi 5 [24] |
-| USB | — | Microphone, 4G modem | Modem needs `PSU_MAX_CURRENT=5000` (§6.3) |
+| USB | — | Microphone, 4G modem, USB audio adapter (speaker) | Modem needs `PSU_MAX_CURRENT=5000` (§6.3) |
 
 Room sensors are telemetry only (Node page); they are not in the feature
 contract until data exists.
@@ -383,6 +389,26 @@ fails, one long beep on mains loss, three on tamper. A restart is quiet.
 
 ---
 
+### 6.6 Talk-down speaker (D16)
+
+The owner can speak to the room from the dashboard (`POST /api/speaker/say`:
+a preset or ≤ 200 characters; owner + step-up through the Portal, the device
+admin on the LAN; 3 messages a minute). The Pi 5 has no analogue audio out
+[12], so sound leaves through USB:
+
+| Option | Parts | Notes |
+|---|---|---|
+| A (recommended) | USB audio adapter (C-Media CM108, ≈ ₹250) → 3.5 mm → **PAM8403** 2 × 3 W class-D amplifier board (≈ ₹60, 5 V from the Pi's 5 V pin or the 5.2 V rail) → 3 W 4 Ω speaker (≈ ₹120) | Loud enough for a room; amplifier ground to Pi ground; keep the speaker leads away from the camera ribbon |
+| B | USB speakerphone (microphone + speaker in one, ≈ ₹1,500–2,500) | One USB port, echo cancellation in hardware; also replaces the USB microphone |
+
+Software: offline text-to-speech, no cloud. `apt install espeak-ng alsa-utils`
+(`deploy/pi5/install_pi.sh` does it); `SENTRIX_SPEAKER_ENABLED=1`,
+`SENTRIX_SPEAKER_BACKEND=espeak`, `SENTRIX_SPEAKER_DEVICE=plughw:1,0` (the
+adapter's ALSA card; `aplay -l` lists it), `SENTRIX_SPEAKER_VOLUME=0.9`. On the
+laptop `pip install pyttsx3` uses Windows SAPI5. The Node page shows the
+speaker's backend and whether it makes real sound. Bench check still to do:
+`speaker-test -D plughw:1,0 -c 2 -t wav`, then a preset from the dashboard.
+
 ## 7. Gates
 
 **Gate A — T1 on the Pi (decides whether to buy an AI HAT+), W3:**
@@ -448,11 +474,12 @@ price that could not be confirmed. Re-check before ordering.
 | Pi 5 camera cable, 22-pin Standard–Mini | thingbits | ₹117 |
 | RTC cell ML-2020 (rechargeable; never a CR2032) | — | ≈ ₹500 |
 | USB microphone | Robocraze | ₹289 |
+| Talk-down speaker: USB audio adapter (CM108) + PAM8403 amplifier + 3 W 4 Ω speaker (§6.6) | Robocraze / local (est.) | ≈ ₹450 |
 | 1-channel relay module + 2N2222/BC547 transistors + 1N4007 diodes | Robocraze | ≈ ₹150 |
 | PIR HC-SR505 (or HC-SR501, ₹54–59) | Robocraze / thingbits | ₹73 |
 | MC-38 door reed switch | Robocraze | ₹52 |
 | Breadboard, jumpers, LEDs, resistors, active buzzer | — | ≈ ₹350 |
-| **Subtotal** | | **≈ ₹31,250** |
+| **Subtotal** | | **≈ ₹31,700** |
 
 Cheaper: Camera Module 3 Standard (₹3,245) saves ₹1,134; a 64 GB card (₹2,449)
 saves ₹1,250. A 4 GB Pi 5 at ₹12,000–12,300 (KSP Electronics, unconfirmed) would
@@ -485,7 +512,7 @@ the finished setup.
 
 | Cost | One-time | Per month / year |
 |---|---|---|
-| Device (Order 1 + Order 2 + tools) | **≈ ₹40,500** (cheapest ≈ ₹36,000; ≈ ₹28,300 with a confirmed ₹12,300 4 GB Pi) | — |
+| Device (Order 1 + Order 2 + tools) | **≈ ₹41,000** (cheapest ≈ ₹36,500; ≈ ₹28,800 with a confirmed ₹12,300 4 GB Pi) | — |
 | SIM in the modem | — | ≈ ₹200/month |
 | Demo hotspot phone data (never campus Wi-Fi) | — | ≈ ₹200–300/month (est.) |
 | Portal: Oracle Always Free VM, Postgres, Caddy HTTPS | ₹0 | ₹0 |
