@@ -1,665 +1,605 @@
 # Integrating SENTRIX with a Raspberry Pi 5
 
-**Status: planning.** No hardware has been bought yet. This file is the working plan
-for moving SENTRIX from a laptop onto a camera module + Raspberry Pi 5 edge unit.
-It gives the targets, the measured compute problem, four integration techniques
-(each complete enough to build), their priority order, the parts list per
-technique, the wiring, the software changes, and the test plan that can start
-before any part arrives.
+**Status (2026-10-15, branch `sentrix/portal`): the software is written; no Pi
+has been bought or run yet.** Every hardware path is tested on the laptop
+against fakes (gpiozero mock pins acting as a Pi 5, a fake `picamera2`, fake
+`vcgencmd`, `nmcli` and `/sys`). The clip engine has been replayed and
+benchmarked on the laptop under a 4-core budget. Nothing in this file is a
+Pi measurement unless it says so.
 
-Read with: `CLAUDE.md` (project state, milestones M6–M9), `docs/3_HARDWARE_SPECIFICATION_AND_BOM.md`
-(the original ESP32 / Orange Pi plan this supersedes), `sentrix/io/` (the code seams
-hardware plugs into). Facts were checked on 2026-10-10; numbers in `[n]` point to
-the sources at the end. "est." marks our own arithmetic, "unverified" marks a fact
-we could not confirm — re-check both when the parts arrive.
+This file is the hardware guide: what the unit must do, why the Pi needs a
+different analysis design (the clip engine), what code exists for each part,
+the wiring and power design, the parts list with prices, and Gate A — the
+test that decides whether the Pi CPU is enough. The step-by-step bring-up is
+[`deploy/pi5/README.md`](../deploy/pi5/README.md); the cloud side is
+[`deploy/portal/README.md`](../deploy/portal/README.md) and
+[`docs/7_PORTAL_AND_SOS.md`](7_PORTAL_AND_SOS.md).
+
+Read with: `CLAUDE.md` (project state, milestones M6–M10, gates G0–G5),
+`docs/3_HARDWARE_SPECIFICATION_AND_BOM.md` (the original ESP32 / Orange Pi
+plan, superseded by this file), the SENTRIX Prototype Roadmap v2 (the
+reviewed plan; prices checked 2026-10-14). Numbers in `[n]` point to the
+sources at the end; "est." marks our own arithmetic.
 
 ---
 
-## 0. Decision summary
+## 0. Summary
 
 | | |
 |---|---|
-| Core idea | Analyse a **rolling 4-second context window** (video + audio + sensors) as one unit, instead of running every model on every frame |
-| Main track (Priority 1) | **T1 — Clip Engine on the Pi 5 CPU**: one decision every 2 s from the last 4 s, a cheap per-frame "fast lane", slimmed models in NCNN/ONNX |
-| Safety net (Priority 2) | **T3 — Pi as sensor node, laptop as hub**: the unchanged SENTRIX stack runs on the laptop; the Pi captures, gates, records and drives the siren |
-| Upgrade path (Priority 3) | **T2 — Pi 5 + AI HAT+ (Hailo NPU)**: per-frame detection at 15–30 Hz; buy only if T1 misses its gate (§7) |
-| Add-on (Priority 4) | **T4 — Event-triggered smart camera** (AI Camera IMX500 / PIR wake): the Pi sleeps until a person appears; for 24/7 power and heat |
-| Buy first | Pi 5 (8 GB) + 27 W PSU + Active Cooler + Camera Module 3 + USB mic + relay/siren/PIR/LEDs (≈ ₹30,500, §8). Everything for T1 and T3 |
-| Do before buying anything | Build the clip engine and the model exports on the laptop, emulating a 4-core budget (§10, H1) |
-
-The original `₹20,000` budget (mid-semester report) is no longer reachable with a
-Pi 5: memory-driven price rises took the 8 GB board to about ₹19,600–20,000 in India
-on its own [7][8][9]. §8 gives a 4 GB variant for a tighter budget.
+| Core idea | Analyse a **rolling 4-second window** (video + audio + sensors) as one clip every 2 s, instead of running every model on every frame (§5 T1) |
+| Built | Clip engine + fast lane + torch/ONNX/NCNN runtimes; Picamera2 source; gpiozero siren, LEDs, buzzer, PIR, door, mains sense; board telemetry and systemd watchdog; Wi-Fi setup and 4G failover profiles; modem SMS driver; `deploy/pi5/` installer and units (§9) |
+| Measured on the laptop | Clip mode keeps the replay results (weapon at L3 9/12 with the fast lane, fire 3/3, 0 false onsets). Clip compute p95 **2145 ms**, over the 1.6 s budget, already on the laptop's 4 CPUs (§7) |
+| Not yet measured | Anything on a Pi: camera, GPIO, temperature, the clip budget, the modem, power |
+| Slim scene model | Tried and **rejected**: MobileNetV3-L and EfficientNet-B0 reach LOVO macro-F1 0.229 / 0.211 vs DINOv2 0.440. DINOv2-B stays (§5 T1) |
+| Main track | **T1 — clip engine on the Pi 5 CPU**. Fallbacks if Gate A fails: **T2** Hailo AI HAT+, or **T3** the laptop as a local hub (both plans only) |
+| Process layout | **One process** (`python -m sentrix`) owns the pipeline, Local Console, SOS, channels and the Portal link (§4) |
+| Cost | Device ≈ **₹40,500** once (bench kit + integration kit + tools); SIM ≈ ₹200/month; `.in` domain ≈ ₹500–800/year; Portal ₹0 on free tiers (§8) |
 
 ---
 
 ## 1. What the unit must do
 
-From the proposal, the mid-semester report and the CLAUDE.md gates:
-
 | Requirement | Target | Source |
 |---|---|---|
 | Detect handgun (replica), knife, visible flame; log experimental classes | per class ≥ 27/30 episodes caught | CLAUDE.md D1, gate G2 |
 | False alarms in an ordinary home | 0 L4/L5 in ≥ 3 h normal footage, ≤ 1 L3/h | gate G3 |
-| Detect → alert | p95 ≤ 2 s (L3); revisited for clip mode in §7 | gate G4 |
-| Autonomy | Siren and evidence keep working with no network or PC | report §1.5 |
-| Inputs | Camera (1080p capable, low light), microphone 16 kHz, PIR, door contact, temperature | report §2.2.3.2, docs/3 |
-| Outputs | 12 V 110 dB siren via relay, status LEDs/buzzer, dashboard, SMS (when online) | docs/3 §5 |
-| Evidence | AES-256-GCM sealed clip around the trigger, correct time even offline | M3 |
-| Privacy | Raw video stays on the device or LAN; snapshots only from L3 | D4 |
+| Detect → alert (clip mode) | fast-lane L3 p95 ≤ 2 s; a clip decision every ≤ 2 s; L4/L5 p95 ≤ 6 s | CLAUDE.md M9 (G4 for clip mode) |
+| Autonomy | Detection, siren, evidence and SOS creation keep working with no Internet or PC | roadmap v2 §7 |
+| Inputs | Camera (Camera Module 3 Wide), USB microphone, PIR, door contact, mains sense; optional BME280 / DHT22 | roadmap v2 §10 |
+| Outputs | 12 V siren via relay, three status LEDs, buzzer, Local Console, SMS from a 4G modem | roadmap v2 §10, docs/7 §8 |
+| Evidence | AES-256-GCM bundles, with the clip before the trigger; correct time offline (RTC cell) | M3, T1 |
+| Privacy | Faces, evidence and continuous video stay on the device; the Portal sees them only through the tunnel | D12 |
 
 ---
 
-## 2. The compute problem, measured
+## 2. The compute problem
 
-SENTRIX's live stack today (`main`): YOLOv8n person (+ByteTrack), YOLO11n weapon and
-fire heads, DINOv2 ViT-B/14 scene classifier, InsightFace `buffalo_l`
-(SCRFD-10G + ArcFace R50), a 4-class audio CNN, all on a laptop CPU at 5.6 Hz.
+The live stack (laptop, `main`): YOLOv8n person (+ByteTrack), YOLO11n weapon and
+fire heads, DINOv2 ViT-B/14 scene classifier, InsightFace `buffalo_l`, a 4-class
+audio CNN — 5.6 Hz on the laptop CPU (M2).
 
-Measured on the laptop (Intel i7-14650HX) **limited to 4 threads** to mimic the
-Pi 5's 4 cores, against published Raspberry Pi 5 figures:
+Planning measurements: laptop (Intel i7-14650HX) **limited to 4 threads** to mimic
+the Pi 5's 4 cores (2026-10-10, median of 12 runs), next to published Pi 5
+figures:
 
-| Model (as shipped) | Compute | Laptop, 4 threads | Pi 5 CPU | Pi 5 + Hailo-8 |
+| Model (as shipped) | Compute | Laptop, 4 threads | Pi 5 CPU (published / est.) | Pi 5 + Hailo-8 |
 |---|---|---|---|---|
-| YOLOv8n person @640 | 8.9 GFLOPs, 3.2 M params | 24 ms (12 ms @320) | **94 ms NCNN**, 509 ms PyTorch [U8] | ≈ 60 FPS app-level [IJ] |
-| YOLO11n weapon / fire @640 | 6.5 GFLOPs, 2.6 M | 21–24 ms (10–11 @320) | **81–88 ms** OpenVINO/NCNN, 405 ms PyTorch [U11]; @320 ≈ 25–35 ms est. | 105 FPS measured on a Pi [HF105] |
-| YOLO26n @640 (newer) | — | — | **67 ms NCNN** [U26] | — |
-| DINOv2 ViT-B/14 scene @224 | 43.9 GFLOPs, 85.7 M | 83 ms | **≈ 0.6–1.05 s** est. [NCNN][ARM] | not in the Hailo zoo; generic vit_base 22–29 FPS on an x86 host [HZ] — risky |
-| DINOv2 ViT-S/14 @224 | 11.0 GFLOPs, 21.6 M | 26 ms | ≈ 0.15–0.27 s est. | compiles only with a community script [HFdino] |
-| EfficientNet-B0 @224 | 0.77 GFLOPs, 4.0 M | 11 ms | **12.3 ms** ncnn [NCNN] | > 1000 FPS [HZ] |
-| MobileNetV3-L @224 | 0.43 GFLOPs, 4.2 M | 7 ms | **7.4 ms** ncnn [NCNN] | > 1900 FPS [HZ] |
-| ResNet-18 (violence), per frame | 3.6 GFLOPs | 12 ms (126 ms for 16) | 20 ms ncnn → 0.32 s for 16 [NCNN] | > 1000 FPS [HZ] |
-| SCRFD-10G face det @640 + ArcFace R50 | ~10 GFLOPs + R50 | 54 ms + 58 ms/face | `buffalo_l` ≈ 0.5–0.6 FPS with several faces [THESIS] | 440 / 113 FPS zoo [HZ] |
-| SCRFD-500M + MobileFaceNet (`buffalo_s`) | ~0.5 GFLOPs + small | — | ≈ 1.8–2.4 FPS with several faces [THESIS] | 1332 / 5191 FPS zoo [HZ] |
-| Audio CNN, 4 s log-mel | 1.2 M params | < 5 ms | < 20 ms est. | — (CPU) |
+| YOLOv8n person @640 | 8.9 GFLOPs | 24 ms (12 ms @320) | 94 ms NCNN, 509 ms PyTorch [U8] | ≈ 60 FPS [IJ] |
+| YOLO11n weapon / fire @640 | 6.5 GFLOPs | 21–24 ms (10–11 @320) | 81–88 ms NCNN/OpenVINO, 405 ms PyTorch [U11] | 105 FPS [HF105] |
+| DINOv2 ViT-B/14 scene @224 | 43.9 GFLOPs | 83 ms | ≈ 0.6–1.05 s est. [NCNN][ARM] | not in the Hailo zoo [HFdino] |
+| DINOv2 ViT-S/14 @224 | 11.0 GFLOPs | 26 ms | ≈ 0.15–0.27 s est. | community script only [HFdino] |
+| EfficientNet-B0 @224 | 0.77 GFLOPs | 11 ms | 12.3 ms ncnn [NCNN] | > 1000 FPS [HZ] |
+| MobileNetV3-L @224 | 0.43 GFLOPs | 7 ms | 7.4 ms ncnn [NCNN] | > 1900 FPS [HZ] |
+| SCRFD-10G + ArcFace R50 (`buffalo_l`) | ~10 GFLOPs + R50 | 54 ms + 58 ms/face | ≈ 0.5–0.6 FPS, several faces [THESIS] | zoo 440 / 113 FPS [HZ] |
+| SCRFD-500M + MobileFaceNet (`buffalo_s`) | ~0.5 GFLOPs | — | ≈ 1.8–2.4 FPS, several faces [THESIS] | — |
 
-What this means:
+What follows:
 
-1. **The current per-frame stack would run at ≈ 0.5–0.7 Hz on a Pi 5 CPU** (est.:
-   three YOLO passes ≈ 0.25 s + DINOv2-B 0.6–1 s + faces ≈ 0.5 s) — the rate at which
-   the first live test failed (CLAUDE.md §5).
-2. **Convolutional nets port well** (≈ 4× slower than the laptop's 4 threads with
-   NCNN). **Transformers port badly** (≈ 8–12×): DINOv2-B is the single biggest
-   obstacle. Every technique below either shrinks it, runs it rarely, or moves it off
-   the Pi.
-3. **Runtime matters as much as the model**: the same YOLO is 5× faster in NCNN than
-   in PyTorch on the Pi [U8][U11]. PyTorch is for development only on the Pi.
-4. **Cooling is not optional**: uncooled, the Pi 5 sits above 85 °C and throttles
-   continuously under 4-core load; with the Active Cooler it peaks at 62–63 °C [RPB].
+1. The per-frame stack would run at **≈ 0.5–0.7 Hz on a Pi 5 CPU** (est.) — the
+   rate at which the first live test failed (CLAUDE.md §5).
+2. CNNs port well (≈ 4× slower than the laptop's 4 threads with NCNN);
+   transformers port badly (≈ 8–12×). DINOv2-B is the biggest obstacle.
+3. The runtime matters as much as the model: the same YOLO is ≈ 5× faster in
+   NCNN than in PyTorch on the Pi [U8][U11]. PyTorch on the Pi is for
+   development only.
+4. Cooling is mandatory: uncooled, the Pi 5 throttles at 80–85 °C under load;
+   with the Active Cooler it peaks at 62–63 °C [RPB].
+
+Later laptop measurement (slim report, `training/runs/custom/slim/latency.json`,
+4 threads, 200 runs): DINOv2-B 96.9 ms in PyTorch / 106.4 ms in ONNX Runtime;
+MobileNetV3-L 6.6 / 2.4 ms; EfficientNet-B0 9.5 / 4.3 ms.
 
 ---
 
 ## 3. Platform facts that shape the design
 
-| Fact | Consequence for SENTRIX |
+| Fact | What the code does about it |
 |---|---|
-| Pi 5: 4× Cortex-A76 @ 2.4 GHz, RAM 1–16 GB, RTC on board, 5 V/5 A USB-C PD [1] | 8 GB recommended (torch for development + models + buffers). Fit the RTC battery so evidence timestamps survive power loss offline |
-| **RPi.GPIO does not work on the Pi 5**; gpiozero uses lgpio (≥ 2.0.1.post3), or the `rpi-lgpio` shim [16][17][18] | `sentrix/io/actuators.py` `GpioSiren` imports `RPi.GPIO` → it would silently fall back to a console siren. Rewrite on gpiozero (§9) |
-| **OpenCV cannot open the CSI camera** on the Pi 5; capture with Picamera2 `capture_array()` [21][22][23] | New `PiCameraSource(FrameSource)`; USB webcams still work through the existing `CaptureSource` |
-| **No hardware H.264 encoder** on the Pi 5; software encode only [13][15] | Streaming/recording costs CPU. T3 streams one modest stream (720p) or sends event clips; T1 records evidence clips as JPEG sequences or low-rate MP4 |
-| One PCIe 2.0 x1 lane (Gen 3 possible, uncertified) [1][11] | An AI HAT+ and an NVMe SSD cannot share it without a switch board [45]. With T2, put evidence on a USB 3 SSD or high-endurance microSD |
-| 27 W PSU needed; on a 3 A supply USB is capped at 600 mA [11] | Use the official 27 W supply; the siren gets its own 12 V supply |
-| Throttling 80–85 °C; Active Cooler $5 keeps 62–63 °C [11][RPB] | Active Cooler mandatory; thermal state goes to `/api/health` and the dashboard |
-| Raspberry Pi OS Trixie (Debian 13, Python 3.13) is current; Hailo now requires Trixie [19][39] | SENTRIX already supports Python 3.10–3.14. Picamera2 comes from apt → create the venv with `--system-site-packages` |
-| No analogue audio jack [12] | Microphone over USB (recommended) or I2S (INMP441 recipe exists but is unverified on the Pi 5 [52]) |
-| GPIO is 3.3 V, not 5 V tolerant [56]; 5 V opto relays may stick on at 3.3 V [60] | Relay with separate JD-VCC or a transistor driver (§6) |
-| Coral USB TPU: PyCoral only for Python ≤ 3.9, repo archived 2026 [47][48]; Intel NCS2 discontinued [50] | Not options. The accelerator choice is Hailo (AI HAT+ / AI HAT+ 2) or the IMX500 AI Camera |
+| Pi 5: 4× Cortex-A76 @ 2.4 GHz, RTC on board, 5 V / 5 A USB-C PD [1] | 8 GB board; ML-2020 RTC cell charged by `dtparam=rtc_bbat_vchg` |
+| **RPi.GPIO does not work on the Pi 5**; gpiozero uses lgpio [16][17] | Siren and GPIO service on gpiozero (`sentrix/io/actuators.py`, `gpio.py`); lgpio from apt |
+| **OpenCV cannot open the CSI camera** on the Pi 5 [21][22] | `PiCameraSource` on Picamera2 (`sentrix/io/picamera.py`); USB webcams still use `CaptureSource` |
+| Picamera2 and lgpio come from apt, not pip | The venv is made with `--system-site-packages` (`run.sh`, `install_pi.sh`); doctor fails the check otherwise |
+| ultralytics pulls the full `opencv-python` next to the headless build; both provide `cv2` | `run.sh` and `install_pi.sh` remove the full build so one headless OpenCV < 5 remains |
+| No hardware H.264 encoder on the Pi 5 [13] | No continuous stream to the cloud; remote video is MJPEG frames over the link, on demand, ≤ 15 fps |
+| On a non-PD 5 V supply USB is capped at 600 mA [11] | `PSU_MAX_CURRENT=5000` in the EEPROM, or the 4G modem browns out; doctor and the installer warn |
+| Throttling at 80–85 °C [11][RPB] | Active Cooler; temperature, throttle flags and EXT5V on the Node page and `/api/health` |
+| GPIO is 3.3 V, not 5 V tolerant [56] | Relay through an NPN driver (§6); never feed 5 V into a GPIO pin |
+| No analogue audio jack [12] | USB microphone |
+| Coral USB TPU (PyCoral ≤ Python 3.9, archived) and Intel NCS2 (discontinued) [47][48][50] | Not options. Accelerator choice is Hailo or the IMX500 AI Camera |
 
 ---
 
-## 4. The common architecture (all techniques)
+## 4. Architecture as built
 
-Every technique uses the same unit and the same software seams; they differ in
-**where** the models run and **how often**.
+One device process, the same one the laptop runs (decision in docs/7 §1.2):
 
 ```
-                         Raspberry Pi 5 edge unit
- ┌──────────────────────────────────────────────────────────────────────────┐
- │ Capture process (always on, light)                                        │
- │   Camera Module 3 ──Picamera2──► main stream 1280×720 (preview/evidence)  │
- │                               └► lores stream 640×480 (analysis)          │
- │   USB mic 16 kHz mono ─────────► audio ring buffer                        │
- │   PIR / door reed / BME280 ────► sensor events + readings                 │
- │   Ring buffer: last 4–8 s of frames (+ JPEG main frames), audio, sensors  │
- │   Motion energy per frame (cheap) ─► activity flag                        │
- ├──────────────────────────────────────────────────────────────────────────┤
- │ Analysis (technique-specific)                                             │
- │   T1: Clip Engine on CPU (NCNN/ONNX)   T2: per-frame on Hailo NPU         │
- │   T3: forward stream/clips to the hub  T4: wake on IMX500/PIR person      │
- ├──────────────────────────────────────────────────────────────────────────┤
- │ Decision: evidence → TCI → LevelPolicy → IncidentManager (existing code)  │
- │ Actions: gpiozero siren relay, LEDs, buzzer; evidence vault; SMS if online│
- │ Web: FastAPI dashboard + /api/health (thermal, throttling, rates)         │
- └──────────────────────────────────────────────────────────────────────────┘
+python -m sentrix  (systemd: Type=notify, Restart=always, WatchdogSec=30)
+├─ capture thread      PiCameraSource (Picamera2): main 1280×720 → preview, HUD, evidence
+│                      (lores 640×480 stream available; see "open" below)
+├─ clip strategy       on_frame: downscale to 640 wide, motion thumbnail → ClipBuffer (15 fps)
+│   ├─ inference thread   one clip per 2 s hop, stages S0–S6 (§5 T1), newest clip wins
+│   └─ fast-lane thread   YOLO @320 on every 4th buffered frame, may raise L3
+├─ identity worker     face recognition off the hot path (M2)
+├─ preview / MJPEG     every captured frame composited with the latest overlay
+├─ decision            evidence → TCI → level policy → incidents → side effects (unchanged)
+├─ web (FastAPI)       Local Console on the LAN :8000, /api/node, /api/health
+├─ services            gpio (LEDs, buzzer, inputs), node (telemetry, watchdog),
+│                      sos, channels (outbox, modem SMS), link (Portal WSS + tunnel)
+└─ siren               GpioSiren on GPIO17 (relay), pin forced low by the unit after any exit
 ```
 
-**Three processes, not threads**, so Python's GIL does not let capture starve
-inference: `sentrix-capture` (Picamera2, audio, GPIO inputs, ring buffer in shared
-memory), `sentrix-infer` (models), `sentrix-web` (dashboard). Each is a systemd
-service with `Restart=always`; the Pi's hardware watchdog reboots a hung unit.
+Rules that matter for hardware:
 
-**What already exists and is reused unchanged:** the evidence layer
-(`fusion/evidence.py`), TCI (`fusion/tci.py`), level policy, incidents, evidence
-vault, event log, dashboard, per-track identity, the side-effect-free evaluation
-harness. **What is new** is listed per technique and collected in §9.
+* The pipeline only enqueues an idempotent SOS trigger per incident; the SOS
+  service, outbox and link run in the same process.
+* The siren pin is held low by `config.txt` from power-on, set low again by the
+  unit's `ExecStartPre` and `ExecStopPost` (also after `kill -9`), and released
+  by a timer inside the process (one on-period ≤ 90 s).
+* The node service tells systemd it is ready and pets its watchdog only while
+  the web event loop answers and the live loop runs. The board's hardware
+  watchdog (10 s) reboots a hung kernel.
+* The device accepts no inbound connection from the Internet. The Portal link
+  is outbound `wss://`; the firewall admits SSH and the console from the LAN
+  (and the setup hotspot) only.
+
+The three-process layout of the first plan (capture, inference, web in
+separate processes with a shared-memory ring buffer) was **not built**. It is
+the fallback if Gate A fails with the link and console running (docs/7 §16 q5).
 
 ---
 
 ## 5. The techniques
 
-Each technique below is complete: how it works, the per-cycle budget, latency, the
-parts, the code, how to test it, its risks, and when to choose it.
+T1 is built. T2, T3 and T4 are plans; none of their code exists.
 
-### T1 — Clip Engine: 4-second context window on the Pi 5 CPU  (Priority 1)
+### T1 — Clip engine on the Pi 5 CPU (Priority 1, built)
 
-**Idea.** Keep the last 4 s of everything in a ring buffer. Every **hop of 2 s**,
-cut the window `[t−4 s, t]` into a *clip* and analyse the clip as one unit: a few
-well-chosen keyframes for vision, the whole 4 s for audio and motion, the sensor
-events in the window. Each clip produces one set of scores; consecutive clips
-overlap by 2 s, so nothing falls between them. This turns "run every model 30 times
-a second" (impossible on the Pi) into "run each model a handful of times every 2 s"
-(fits, §2).
-
-It also fits SENTRIX's models naturally: the audio classifier already scores a
-4.0 s window with a 1 s hop, and the violence model already samples 16 frames over
-2 s (`config.py` `WindowConfig`).
+**Idea.** Keep the last 4 s in a ring buffer. Every hop of 2 s, analyse the window
+`[t−4 s, t]` as one clip: a few keyframes for vision, the whole window for motion
+and audio, the sensor events in it. Consecutive clips overlap by 2 s.
 
 ```
-time ─────────────────────────────────────────────────────────────────►
-frames   |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||  (15 fps)
+frames   |||||||||||||||||||||||||||||||||||||||||||||||||||||||  (15 fps buffered)
 clip n   [────────────── 4 s ──────────────]
-clip n+1           [────────────── 4 s ──────────────]        hop = 2 s
-decision                                    ▲ n            ▲ n+1
+clip n+1           [────────────── 4 s ──────────────]   hop = 2 s
 ```
 
-**Stage cascade per clip** (cheap stages decide whether expensive ones run):
+**Code:** `sentrix/pipeline/clip.py` (`ClipBuffer`, `select_keyframes`,
+`ClipScheduler`, `ClipEngine`, `ClipPolicy`, `ClipRunner`, `ClipStrategy`),
+`sentrix/pipeline/fastlane.py`, `sentrix/runtime/` (torch, onnxruntime and ncnn
+backends; a detector on exported heads with ByteTrack ids), within-clip
+confirmation in `fusion/evidence.py`, clip rows (event-log schema 4) in
+`pipeline/events.py`, clip evidence bundles in `evidence/vault.py`. Settings:
+`ClipConfig` in `sentrix/config.py`. Switched on by `SENTRIX_PIPELINE_MODE=clip`
+(default `tick`, today's loop).
 
-| Stage | Runs when | Model (Pi runtime) | Calls / clip | Pi 5 time / clip |
-|---|---|---|---|---|
-| S0 gate | always | motion energy (frame diff on 320×240, computed during capture), audio RMS, PIR/door state | — | ≈ 0 (precomputed) |
-| S1 objects | S0 active | **one unified YOLO11n/YOLO26n** (person, pistol, knife, fire) NCNN @640 | 6 keyframes | 0.40–0.55 s |
-| S2 scene | S1 saw a person or a fire candidate | DINOv2 ViT-B/14 on at most 1 keyframe (the slim heads failed, see below; DINOv2-S/14 untested) | 1 keyframe | ≈ 0.6–1 s est. |
-| S3 identity | persons present; ≤ 1 per 2 s | SCRFD-500M + MobileFaceNet (`buffalo_s`) on person crops | 2 keyframes | ≈ 0.1–0.15 s est. |
-| S4 action | ≥ 2 persons and high motion | ResNet-18 per frame, 16 frames (existing violence model) | 16 | ≈ 0.32 s |
-| S5 audio | always | log-mel + audio CNN over the full 4 s | 1 | < 0.02 s |
-| S6 fusion | always | evidence → TCI → policy (existing) | 1 | < 0.01 s |
-| **Total** | idle room / 1–2 people / fight | | | **≈ 0.05 / 0.6–0.8 / 1.1–1.6 s** |
+**Stage cascade per clip** (as implemented, `ClipConfig` defaults):
 
-**Keyframe selection.** 6 keyframes per clip: 4 uniformly spaced (2 fps) plus the 2
-frames with the highest motion energy (catches a brief gesture between the uniform
-ones). Keyframes come from the `lores` 640×480 stream; evidence uses the matching
-`main` frames.
-
-**Confirmation moves inside the clip.** Today a source must cross its threshold on
-2 of 3 *ticks*. In clip mode the 4 s window already supplies time: a class is
-*confirmed in a clip* when it crosses on **≥ 2 of the 6 keyframes on the same
-ByteTrack track** (or, for fire, in the same image region). Overlapping clips are
-not independent, so the cross-clip rule is only the existing level policy (step
-down after 5 s untouched). Set `min_escalate_observations=1` for L4/L5 in clip
-mode: one confirmed clip already contains ≥ 2 observations. The corroboration rules
-of M1 (one source ≤ L3; classifier + detector → L4/L5) are unchanged.
-
-**Fast lane (meets the 2 s L3 target).** Between clips, the capture process runs
-YOLO @320 (≈ 25–35 ms est.) on every 4th frame (≈ 4 Hz at 15 fps). Two consecutive
-weapon/fire hits on one track raise **L3 immediately** (snapshot + evidence); the
-clip confirms, types and escalates to L4/L5. Cost ≈ 12–15 % of one core.
-
-**Latency** (event starts at t₀, hop H = 2 s, clip compute P ≈ 0.6–1.6 s):
-
-| Alert | Path | Typical | Worst |
-|---|---|---|---|
-| L3 (snapshot, evidence) | fast lane, 2 hits at 4 Hz | ≈ 0.6–1.0 s | ≈ 1.5 s |
-| L3 (no fast lane) | first clip with ≥ 2 positive keyframes | ≈ 2.5–3.5 s | ≈ 4.5 s |
-| L4/L5 (SMS, siren) | clip-confirmed + corroborated | ≈ 3–4.5 s | ≈ 6 s |
-
-**Budget rule.** P must stay below 80 % of H (1.6 s) at p95, leaving one core for
-capture, the fast lane and the dashboard. If a clip runs late, the scheduler drops
-it and analyses the newest window (the same "newest frame wins" rule as the live
-loop today); dropped clips are counted on the dashboard.
-
-**Model changes needed for T1** (all trainable/exportable on the laptop now):
-- Merge the three YOLO passes into **one YOLO11n/26n detector** (person, pistol,
-  knife, fire) — already milestone M7; export to NCNN.
-- ~~Replace DINOv2-B with an EfficientNet-B0 or MobileNetV3 scene head.~~ Tried
-  (T-MODEL, `training/runs/custom/slim/REPORT.md`): MobileNetV3-L LOVO macro-F1
-  0.229 and EfficientNet-B0 0.211 vs DINOv2-B 0.440 (pre-registered bar 0.396);
-  distillation from DINOv2 did not help. **S2 stays DINOv2 ViT-B/14 on at most one
-  keyframe per clip**; DINOv2-S/14 is the untested fallback and needs its own LOVO
-  run. The slim checkpoints are in `models/v5_slim/` for evaluation only.
-- Switch identity to **`buffalo_s`** (SCRFD-500M + MobileFaceNet).
-- Keep the audio CNN; consider YAMNet / EfficientAT later (M-audio track).
-
-**Evidence for free.** The ring buffer *is* the pre-roll the vault never had
-(CLAUDE.md M3 deferral): when L3 commits, seal the 4 s clip before the trigger and
-the next 4–8 s after it.
-
-**Parts:** base kit only (§8). **Extra cost: ₹0.**
-
-**Code:** `sentrix/pipeline/clip.py` (`ClipBuffer`, `ClipScheduler`, `ClipEngine`,
-`ClipScores`), `sentrix/io/picamera.py`, NCNN/ONNX runtime backends,
-`tools/export_models.py`, `tools/bench_clip.py`, `replay_custom_videos.py --mode clip`,
-event-log rows per clip (schema 4). Details in §9.
-
-**Test before hardware:** run the clip engine on the laptop with 4 threads and
-NCNN/ONNX exports; replay the 10 custom videos and the live session log in clip
-mode; compare episodes, false onsets and latency with the M5 run
-(`training/runs/custom_eval/m5/`). Scale laptop timings by the factors in §2 until
-the Pi is measured.
-
-**Risks:** smaller scene model loses accuracy (mitigation: fast lane carries the
-detector; DINOv2-S fallback); alerts are seconds, not sub-second; clips can hide
-very short events (< 0.5 s) — the motion-peak keyframes and the fast lane cover
-most of these.
-
-**Choose it when:** you want a fully autonomous Pi with no extra hardware cost.
-**It is the main track.**
-
----
-
-### T2 — Pi 5 + AI HAT+ (Hailo NPU): accelerated per-frame streaming  (Priority 3)
-
-**Idea.** Put the neural networks on a Hailo NPU over the Pi's PCIe lane and keep
-SENTRIX's per-frame architecture: detector at 15–30 Hz, faces and scene at a few Hz,
-the CPU doing tracking, audio, fusion, evidence and the web server.
-
-| Option | Chip | Price | Notes |
-|---|---|---|---|
-| AI HAT+ 13 TOPS | Hailo-8L | $70, ₹7,465 in stock [36][10] | enough for YOLO + faces |
-| **AI HAT+ 26 TOPS** (recommended) | Hailo-8 | $110, ₹11,309 [36][10] | ≈ 2× the 8L on CNNs; YOLO11n 105 FPS measured on a Pi [HF105] |
-| AI HAT+ 2 | Hailo-10H, 8 GB on board | $200 now [38] | vision ≈ the 26 TOPS HAT [38]; ≈ 2× Hailo-8 on ViTs [HZ]; early software issues [40] |
-
-**Per-frame budget at 10 Hz** (Hailo-8, est. from measured Pi results at 30–60 % of
-zoo FPS):
-
-| Network | Where | Rate | Cost |
-|---|---|---|---|
-| Unified YOLO11n @640 | NPU | 10–15 Hz | ≈ 10–16 ms each [HF105][IJ] |
-| SCRFD-2.5G + MobileFaceNet | NPU | 1–2 Hz on new tracks | ≈ 1–3 ms each [HZ] |
-| Scene head (EfficientNet-Lite0 or vit_small) | NPU | 2–5 Hz | ≈ 1 ms / ≈ 10–20 ms [HZ] |
-| Action (r3d_18 16×112 or ResNet-18 per frame) | NPU | 1 Hz | ≈ 25 ms / 1 ms [HZ] |
-| Audio CNN, tracking, fusion, evidence | CPU | as today | ≈ 45 % of the CPU for host pre/post-processing [IJ] |
-
-**Latency:** detect → L3 ≈ 0.3–0.8 s, detect → L4/L5 ≈ 1–1.5 s — **meets G4 as
-written.**
-
-**What it takes:**
-- Compile every model to Hailo's `.hef` with the **Dataflow Compiler**: Linux x86-64
-  only (WSL2 on the laptop), 16 GB RAM minimum / 32 GB recommended, calibration
-  images from the custom dataset [42][43] (unverified against Hailo's guide).
-- **DINOv2 is the main risk**: not in the model zoo, DINOv2-S compiles only with a
-  community script, no FPS reported [HFdino]. Plan to retrain the scene head on a
-  Hailo-friendly backbone (EfficientNet-Lite, ResNet, vit_small) — the same model
-  change T1 needs.
-- Several networks share one NPU through HailoRT's scheduler; switching costs
-  throughput, and models the compiler splits ("multi-context") suffer most on the
-  single PCIe lane [HFgen][HFctx].
-- Software: `hailo-all` (AI HAT+) and `hailo-h10-all` (AI HAT+ 2) are mutually
-  exclusive and need Raspberry Pi OS Trixie [39].
-- PCIe is taken by the HAT: evidence storage on microSD (high endurance) or a USB 3
-  SSD, not NVMe — or a PCIe switch board [45].
-
-**Parts:** base kit + AI HAT+ 26 TOPS (≈ ₹11,300) → ≈ ₹42,000 total (§8).
-**Code:** `sentrix/runtime/hailo.py` (HailoRT backend behind the same engine
-interfaces), HEF build scripts in `training/hailo/`, NPU temperature and load in
-`/api/health`. **Test:** compile and validate HEF accuracy against the PyTorch
-models on the custom frames *before* buying (the compiler runs without the
-hardware); then bench on the Pi.
-
-**Risks:** toolchain effort and lock-in; quantisation (INT8) accuracy loss on small
-objects; Hailo-10H thermal throughput drop reported [H10T].
-
-**Choose it when:** T1 fails its gate (§7), or the demo must meet "≤ 2 s to
-siren" with every model per frame.
-
----
-
-### T3 — Sensor node + local hub (split compute)  (Priority 2)
-
-**Idea.** Let each machine do what it is good at. The **Pi 5** is the sensor and
-actuator node: camera, mic, PIR, door contact, temperature, siren relay, LEDs, the
-ring buffer, motion gating and audio scoring (cheap). The **hub** (the team laptop
-with the RTX 4060, or any PC on the LAN) runs the full, unchanged SENTRIX stack on
-the Pi's stream — the configuration measured in M5.
-
-```
-  Pi 5 node                                        Hub (laptop / PC)
-  ┌─────────────────────────┐   RTSP 720p H.264    ┌───────────────────────────┐
-  │ Picamera2 → MediaMTX    │ ───────────────────► │ CAMERA_SOURCES=rtsp://pi… │
-  │ mic → audio scores      │   MQTT  scores/events│ full SENTRIX (DINOv2-B,   │
-  │ PIR, door, temp         │ ───────────────────► │ YOLO, buffalo_l, fusion)  │
-  │ ring buffer (evidence)  │                      │ dashboard, incidents, SMS │
-  │ gpiozero siren/LEDs     │ ◄─────────────────── │ siren / evidence commands │
-  │ local fallback rules    │   MQTT  commands     └───────────────────────────┘
-  └─────────────────────────┘
-```
-
-- **Stream:** MediaMTX serves the Pi camera over RTSP (port 8554) [70]; the Pi 5
-  encodes H.264 in software [13], so stream 720p at 15 fps (the hub analyses at
-  6 Hz anyway). SENTRIX already accepts `rtsp://` in `CAMERA_SOURCES` — no new code
-  on the hub to receive video.
-- **Messages:** Mosquitto MQTT [69]; topics `sentrix/<node>/status` (retained, with
-  a last-will message so the hub sees the node die), `…/audio`, `…/sensor`,
-  `…/cmd/siren`, `…/cmd/seal`. The hub sends "seal clip from t₁ to t₂" and the node
-  seals its own ring buffer, so evidence is the node's full-quality footage.
-- **Autonomy fallback:** if the hub is silent for 10 s, the node enters
-  *degraded-local* mode: PIR + motion + loud audio (or T1's clip engine, once it
-  exists) raise a local L3 with snapshot and buzzer. The siren stays off in home
-  mode and is allowed only in armed mode — a lost Wi-Fi link must not become a false
-  siren.
-- **Latency:** network ≈ 50–200 ms + the laptop's measured 0.2 s frame age → detect
-  → L3 ≈ 0.5–1.5 s.
-
-**Parts:** base kit (a 4 GB Pi is enough here) + the existing laptop. **Extra
-cost: ₹0.** **Code:** `sentrix/node/` (node agent: MediaMTX config, MQTT bridge,
-heartbeat, command handler) and a hub-side `RemoteNode` (MQTT → actuator calls and
-sensor/audio inputs). Mostly glue; ≈ 1–2 days.
-
-**Why it is Priority 2 even though it is the easiest:** it is not edge-autonomous
-(the project's stated goal), but it is the **guaranteed demo**, it measures the
-full-accuracy reference on Pi-camera footage that T1's slimmed models must match,
-and it is the **recording tool for M6** (the deployment-room dataset must be
-recorded with the Pi camera, not the laptop webcam).
-
-**Risks:** Wi-Fi drops; software-encode CPU on the Pi (keep 720p15); two machines
-to run at the demo.
-
----
-
-### T4 — Event-triggered smart camera (AI Camera IMX500 / PIR wake)  (Priority 4)
-
-**Idea.** Most of a home's day is an empty room. Let a near-zero-cost sensor decide
-*when* to think: the **Raspberry Pi AI Camera (IMX500)** runs a person detector on
-the sensor itself (YOLO11n @640 ≈ 59 ms per inference, ≈ 16 FPS, no host CPU)
-[UIMX][29], or a **PIR** triggers on body heat. The Pi keeps only the ring buffer
-running; when a person appears it wakes the analysis — T1's clip engine (or the T3
-stream, or T2) — and goes back to idle after 30 s without a person.
-
-| | IMX500 AI Camera | PIR (HC-SR501) |
+| Stage | Runs when | What |
 |---|---|---|
-| Cost | $70 [29] | ≈ ₹100 |
-| Signal | person boxes at ≈ 16 FPS from the camera's view | body heat in a cone, no location |
-| Limits | 8 MB for weights + activations, int8, input ≤ 640×640, one network at a time (unverified), first model load takes minutes, no NoIR version [30][31] | false triggers from heaters/sunlight; nothing for fire |
-| Use | wake + per-frame person tracks for free | wake only |
+| S0 gate | always | motion energy (160 px thumbnail difference), audio RMS, PIR/door events; held open 10 s after activity, during an alarm, and a full cascade at least every 10 s |
+| S1 objects | gate open | person, weapon and fire heads on the keyframes not analysed by the previous clip (the shared half is reused). 6 keyframes: 4 uniform + 2 highest-motion |
+| S2 scene | a person or a fire candidate | DINOv2 ViT-B/14 on up to **2** new keyframes (`scene_keyframes`) |
+| S3 identity | persons present | the identity check, at most once per 2 s (a new track at once) |
+| S4 action | ≥ 2 persons and clip motion ≥ 0.10 | the violence model over the two 2 s halves |
+| S5 audio | always | the audio engine's own 4 s result |
+| S6 fusion | always | within-clip confirmation, then the unchanged evidence → TCI → level policy → incident path |
 
-**Gain:** idle power ≈ 3 W instead of ≈ 8 W under load [68], cooler board, longer
-UPS runtime, fewer clips to analyse (fewer false-alarm opportunities). **Rule that
-keeps it safe:** fire is never gated on a person — the flame path (audio, motion,
-and a once-per-10 s scene check) keeps running while idle.
+**Confirmation.** A class is confirmed in a clip on **2 keyframes of one track**
+(fire: one image region). The M1 corroboration rules are unchanged: one source
+stays in the L3 band; a classifier and a detector box together reach L4/L5;
+experimental classes stop at L2. `ClipPolicy` commits L4/L5 on one clip
+(`min_escalate_observations=1`), with the 0.6 s dwell measured inside the clip.
 
-**Parts:** AI Camera instead of Camera Module 3 (+ ≈ ₹4,500 vs CM3, est.), or a
-PIR (+ ₹100). **Code:** IMX500 tensor reader in `PiCameraSource` (Picamera2 exposes
-the output tensors as metadata) and a wake/sleep state in `ClipScheduler`.
+**Fast lane.** The detector heads at 320 px on every 4th buffered frame
+(≈ 4 Hz at 15 fps). Two consecutive hits on one track raise **L3** at once
+(snapshot and evidence); a weapon hit also needs a person seen recently. It is
+one detector source, so it never passes L3 alone. The heads are loaded a second
+time on the configured runtime and run on their own thread. `SENTRIX_FAST_LANE=1`.
 
-**Choose it when:** T1 or T2 works and the unit must run 24/7 on a UPS, or the board
-runs hot.
+**Evidence.** The ring buffer is the pre-roll the vault never had: when an
+incident seals evidence, the clip around it is sealed (5 fps), then 8 s after it
+(`EvidenceVault.save_clip`).
 
----
+**Runtimes and exports.** `SENTRIX_RUNTIME=torch|onnx|ncnn`. `tools/export_models.py`
+writes the exports to `models/exported/` (not committed; built on the laptop and
+copied) and checks parity. Measured parity (`training/runs/custom_eval/clip/export_parity.json`):
+YOLO raw scores within 2.5e-5, scene probabilities within 2e-6 end to end. A
+missing export falls back to torch. ONNX sessions never spin-wait. The NCNN
+backend is tested only against a fake `ncnn` module: `ncnn`/`pnnx` were not
+installed, so no NCNN export exists yet.
 
-### Not chosen (and why)
+**Faces.** `SENTRIX_FACE_MODEL=buffalo_s` (SCRFD-500M + MobileFaceNet) is
+supported and is the Pi default in `pi.env`. The pack was not on disk, so it is
+tested only with a fake loader; its match threshold must be re-checked on
+enrolled team faces.
+
+**Slim scene model (tried, rejected).** Track T-MODEL trained MobileNetV3-L and
+EfficientNet-B0 scene heads under a rule committed before any run
+(`training/runs/custom/slim/PROTOCOL.md`, commit `5f8b589`). Results
+(`training/runs/custom/slim/REPORT.md`):
+
+| | LOVO macro-F1 | Val acc / macro-F1 | Weapon AUROC (OOF) | 4 threads, PyTorch / ONNX |
+|---|---|---|---|---|
+| DINOv2 ViT-B/14 (shipped) | **0.440** | 0.679 / 0.768 | 0.750 | 96.9 / 106.4 ms |
+| MobileNetV3-L `mnv3l_full` | 0.229 | 0.357 / 0.229 | 0.607 | 6.6 / 2.4 ms |
+| EfficientNet-B0 `effb0_kd` | 0.211 | 0.405 / 0.271 | 0.483 | 9.5 / 4.3 ms |
+
+The pre-registered bar was 0.396. Distillation from DINOv2 did not help. Neither
+slim model recognises fire in a video it has not seen. **S2 stays DINOv2 ViT-B/14.**
+The checkpoints are in `models/v5_slim/` for development only (never in the
+alarm path). DINOv2 ViT-S/14 is the untested fallback and needs its own LOVO run.
+
+**Still open in T1:**
+- The clip engine downscales the main frame; it does not yet read
+  `PiCameraSource.latest_lores()`.
+- S1 runs three YOLO passes per keyframe. M7's single detector (person, pistol,
+  knife, fire) is not trained yet.
+- Live audio: S5 uses the audio engine's 4 s result rather than buffering the
+  microphone itself.
+
+### T2 — Pi 5 + AI HAT+ (Hailo NPU) (Priority 3, plan)
+
+Per-frame analysis on a Hailo NPU over the Pi's PCIe lane: detector at 10–15 Hz,
+faces and scene at a few Hz, the CPU for tracking, audio, fusion and the web.
+Expected detect → L3 ≈ 0.3–0.8 s (est.). It needs every model compiled to `.hef`
+with the Dataflow Compiler (Linux x86-64, WSL2 on the laptop) and a Hailo-friendly
+scene backbone (DINOv2 is not in the zoo [HFdino]). The HAT takes the PCIe lane,
+so evidence stays on the microSD card. `hailo-all` needs Raspberry Pi OS Trixie
+[39]. **Buy only if T1 fails Gate A.** Price in §8.
+
+### T3 — Pi as sensor node, laptop as hub (Priority 2, plan)
+
+The laptop runs the full, unchanged stack on a stream from the Pi (MediaMTX RTSP
+720p15 [70]; SENTRIX already accepts `rtsp://` in `CAMERA_SOURCES`), and the Pi
+keeps the siren, sensors and a degraded-local mode. It would be the guaranteed
+demo and the M6 recording tool. **No code exists** (no MediaMTX config, MQTT
+bridge or hub-side `RemoteNode`). If Gate A fails, the quickest form is the
+laptop reading a USB camera itself with the Pi unused.
+
+### T4 — Event-triggered camera (Priority 4, plan)
+
+An IMX500 AI Camera or the PIR wakes the analysis only when a person appears;
+fire is never gated on a person. Today S0 already skips S1–S4 in a still, empty
+room and opens on PIR/door events. The IMX500 tensor reader is **not built**.
+
+### Not chosen
 
 | Option | Why not |
 |---|---|
-| Full current stack on the Pi CPU, per frame | ≈ 0.5–0.7 Hz (§2) — the failure mode of the first live test |
-| Coral USB TPU, Intel NCS2 | dead ends: PyCoral ≤ Python 3.9, Coral repo archived; NCS2 discontinued [47][48][50] |
-| ESP32-S3 + laptop (old Architecture A) | OV2640 640×480, weak mic path; T3 does the same job with a far better camera and on-node buffering |
-| Jetson Orin Nano Super | YOLO11n in 4–5 ms with TensorRT [UJ] and the lowest risk if DINOv2-B must stay unchanged, but now $399 [CNX] and outside "camera + Raspberry Pi 5". Keep as plan B for M7 if the scene model cannot shrink |
-| Jetson Nano (JetPack 4.6) | Python 3.6, CUDA 10.2, end of life; SENTRIX needs Python ≥ 3.10 |
+| Full per-frame stack on the Pi CPU | ≈ 0.5–0.7 Hz (§2) |
+| Coral USB TPU, Intel NCS2 | Dead ends [47][48][50] |
+| ESP32-S3 + laptop (docs/3) | Weak camera and microphone path |
+| Jetson Orin Nano Super | Lowest risk if DINOv2-B must stay, but $399 [CNX] and not a Pi |
+| Cloud inference (Pi streams video) | ₹11,200–40,600/month for a GPU + ≈ ₹1,500 of 4G data; blind when the Internet is down; everyone's footage held by the company (roadmap v2 §3) |
 
 ---
 
-## 6. Wiring and pinout (Pi 5 40-pin header)
+## 6. Wiring, pinout and power
 
-Same physical header as earlier Pis; GPIO is 3.3 V and **not** 5 V tolerant [56].
+### 6.1 Pinout (Pi 5 40-pin header)
 
-| Pin | GPIO (BCM) | Connects to | Notes |
+The pin numbers are `settings.gpio` in `sentrix/config.py`; the code's mock pin
+factory uses the same map, so a laptop run and the tests exercise it.
+
+| Pin | GPIO | Connects to | Notes |
 |---|---|---|---|
-| 1 | 3V3 | BME280 VCC, relay *VCC* (logic side) | |
-| 2 / 4 | 5V | PIR VCC, relay *JD-VCC* (coil side) | coil power separate from logic, see below |
-| 3 / 5 | GPIO2 / GPIO3 (I2C1 SDA/SCL) | BME280 (temp/humidity/pressure) | preferred over DHT22 (§ below) |
-| 7 | GPIO4 | DHT22 DATA (if used) | kernel `dht11` overlay supports DHT22 [55] |
-| 11 | GPIO17 | siren relay through an NPN transistor (1 kΩ base, 4.7 kΩ base pull-down, 1N4007 across the coil) | **active-high** (`SENTRIX_SIREN_ACTIVE_HIGH=1`); `gpio=17=op,dl` in config.txt holds it off from power-on. An active-low opto board: `SENTRIX_SIREN_ACTIVE_HIGH=0` and `op,dh` |
-| 16 | GPIO23 | PIR OUT | HC-SR501 output is 3.3 V [57] |
-| 18 | GPIO24 | door reed switch → GND | internal pull-up; contact closed = door closed |
-| 36 | GPIO16 | mains sense (PC817 output → GND) | internal pull-up; low while mains is present |
-| 29 / 32 / 33 | GPIO5 / 12 / 13 | status LEDs green / amber / red | 330 Ω each; amber kept off GPIO6 so a UPS HAT stays possible |
-| 37 | GPIO26 | active buzzer (via NPN transistor) | local chirp for L2/L3 |
-| any free | e.g. GPIO25 | siren arming key's second contact → GND (optional) | `SENTRIX_SIREN_ARM_PIN`; tests refused while the key is off |
-| 12 / 35 / 38 | GPIO18 / 19 / 20 | INMP441 BCLK / LRCL / DOUT (only if I2S mic) | unverified on Pi 5 [52]; USB mic preferred |
-| 6, 9, 14, 20, 25, 30, 34, 39 | GND | grounds | |
-| CAM/DISP 0 | — | Camera Module 3 | needs the **Standard-to-Mini** 22-pin cable [24] |
-| PCIe FFC | — | AI HAT+ (T2) | HAT passes the GPIO header through |
+| 11 | 17 | Siren relay through an NPN transistor (1 kΩ base, 4.7 kΩ base pull-down to GND, 1N4007 across the coil) | **Active-high** (`SENTRIX_SIREN_ACTIVE_HIGH=1`, default). `gpio=17=op,dl` holds it off from power-on |
+| 16 | 23 | PIR output (HC-SR505 or HC-SR501) | PIR powered from 5 V; its output is 3.3 V [57]. High = motion |
+| 18 | 24 | Door reed switch (MC-38) → GND | Internal pull-up; contact closed = door closed |
+| 36 | 16 | Mains sense: PC817 output → GND | Internal pull-up; low while mains is present |
+| 29 / 32 / 33 | 5 / 12 / 13 | Green / amber / red LEDs, 330 Ω each | Amber kept off GPIO6 so a UPS HAT stays possible |
+| 37 | 26 | Active buzzer through an NPN transistor | Chirps on level rises; `SENTRIX_BUZZER_ENABLED` |
+| free pin | `SENTRIX_SIREN_ARM_PIN` | Arming key's second contact → GND (optional) | Closed = armed; a siren test is refused (409) while it is off |
+| free pin | `SENTRIX_TAMPER_PIN` | Enclosure lid switch → GND (optional) | Open = tamper alert |
+| 3 / 5 | 2 / 3 (I2C1) | BME280 (optional) | Kernel IIO driver; `SENTRIX_SENSOR_BME280=1` |
+| 7 | 4 | DHT22 DATA (optional) | Kernel `dht11` overlay [55]; `SENTRIX_SENSOR_DHT22=1` |
+| 2 / 4, 1, GND | 5 V, 3.3 V | PIR power, relay power | An opto relay board instead of the NPN driver: VCC 3.3 V, JD-VCC 5 V, jumper off |
+| CAM/DISP 0 | — | Camera Module 3 Wide | Needs the **Standard–Mini 22-pin** cable; the camera's own cable does not fit a Pi 5 [24] |
+| USB | — | Microphone, 4G modem | Modem needs `PSU_MAX_CURRENT=5000` (§6.3) |
 
-**Relay and siren.** Settled (docs/7 §16 q3): the siren relay is driven through an
-NPN transistor with a flyback diode, which makes it **active-high**: GPIO17 HIGH =
-siren on, and the 4.7 kΩ base pull-down keeps it off whenever the pin floats. A
-relay module with a JD-VCC jumper (logic VCC from 3.3 V, coil JD-VCC from 5 V, so
-a 3.3 V level really switches it [60]) is usually active-low: then set
-`SENTRIX_SIREN_ACTIVE_HIGH=0` and `gpio=17=op,dh`. The siren runs from its own
-**12 V supply** through the relay's NO contact; never from the Pi. The code side
-(gpiozero, pin held off at claim, 90 s maximum on-time, release timer, pin forced
-off by the systemd unit after any exit) is `sentrix/io/actuators.py`; the
-bring-up procedure is `deploy/pi5/README.md`.
+Room sensors are telemetry only (Node page); they are not in the feature
+contract until data exists.
 
-**Safety during bring-up:** test the relay with an LED in place of the siren
-(110 dB at close range damages hearing) through a cold start, a reboot,
-`systemctl stop`, `kill -9` and the mains-to-UPS switchover
-(`deploy/pi5/README.md`); keep the 12 V wiring in the enclosure, fused; the UPS's
-lithium cells need a ventilated, non-flammable spot.
+### 6.2 Relay polarity and the siren
+
+Settled (docs/7 §16 q3): with the NPN driver the relay is **active-high** —
+GPIO17 high = siren on — and the 4.7 kΩ base pull-down keeps it off whenever the
+pin floats. An optocoupler relay board that switches on a *low* input is
+active-low: set `SENTRIX_SIREN_ACTIVE_HIGH=0` and `gpio=17=op,dh`
+(`install_pi.sh` then renders `pinctrl ... dh` into the unit too). Getting this
+backwards means a siren that sounds from boot.
+
+What the code guarantees (`GpioSiren`, `sentrix/io/actuators.py`): the pin starts
+off; every activation is released by a timer; one on-period never exceeds
+`SENTRIX_SIREN_MAX_ON_SECONDS` (90 s; alarms use 5 s); the relay is switched off
+on a normal exit; the systemd unit drives the pin low after any exit. A siren
+test (`POST /api/node/siren-test`, or the link's `siren.test`) is 1 s, at most
+once per minute (one shared limiter), and refused while the arming key reads off.
+A real alarm drives the relay either way; the key switch on the 12 V line is
+what physically silences it.
+
+The siren runs from the fused 12 V bus through the relay's NO contact, never
+from the Pi. **Before connecting the siren**, prove the relay never closes with an
+LED in its place through a cold start, a reboot, `systemctl stop`, `kill -9` and
+the mains-to-UPS switchover (`deploy/pi5/README.md`). 110 dB at close range
+damages hearing: ear protection for every siren test.
+
+### 6.3 Power design
+
+```
+230 V wall → surge strip → 12 V adapter (BIS-marked, ≥ 4 A) → router mini UPS 12 V 3 A (outside the box)
+                                    │                                │
+                                    └─ PC817 opto → GPIO16           └─ fused 12 V bus (UPS-backed)
+                                       (taps the adapter output,          ├─ F1 3 A → XY-3606 buck 12 V → 5.2 V, 6 A
+                                        before the UPS: mains present)    │           → short thick USB-C (5 A) → Pi 5
+                                                                          └─ F2 1 A → arming key → relay NO → 12 V siren
+```
+
+* The siren shares the UPS-backed bus, so it still works in a power cut; each
+  branch has its own fuse. 230 V stays inside sealed adapters; everything in the
+  box is 12 V or below. Keep the UPS and its lithium cells outside the box.
+* The buck converter is not a USB-PD supply, so set `PSU_MAX_CURRENT=5000` with
+  `sudo rpi-eeprom-config --edit`. Without it the Pi limits USB devices to
+  600 mA and the 4G modem browns out. If it still browns out, add a powered USB
+  hub (≈ ₹800 est.).
+* Bench bring-up uses the official 27 W supply; the 12 V path comes in W4.
+* **Pass test:** EXT5V (`vcgencmd pmic_read_adc`) ≥ 4.8 V under full load with the
+  siren pulsing and the modem sending; `vcgencmd get_throttled` = `0x0`; 10 mains
+  pulls with no reboot. UPS runtime ≈ 2 h+ is an estimate, to be measured.
+* Mains loss: amber LED fast blink, one long beep, a `node_alert` event, and
+  `node.alert` to the Portal. Over-temperature and under-voltage raise one alert
+  each until they clear.
+
+### 6.4 The 4G modem
+
+| | |
+|---|---|
+| Modem | 7Semi Quectel **EC200U-CN** USB dongle (Indian bands B1/3/5/8/40/41 + GSM). Alternative: Waveshare SIM7600G-H. Not A7670E (no B40) |
+| SIM | **Airtel or Vi** prepaid in a team member's name. **Not Jio**: Jio is 4G/VoLTE only, and SMS from these modules may fail without IMS registration |
+| Data (failover) | NetworkManager profiles: Wi-Fi route metric 600, modem 700, set explicitly (an ECM dongle would otherwise be an Ethernet device at metric 100 and carry everything). The connectivity check adds +20000 to a link without Internet, so 4G takes over. `install_pi.sh --modem-apn <apn>` (ModemManager, e.g. Airtel `airtelgprs.com`, Vi `www`) or `--modem-ecm` |
+| SMS (Tier 1) | `sentrix/alerting/channels/modem.py`: AT commands over pyserial, PDU mode (GSM-7, Hindi as UCS-2, long messages joined, delivery reports); `SENTRIX_MODEM_PORT` empty = probe, a device path, or `mmcli` when ModemManager owns the port. Only numbers in the current profile (owner, confirmed contacts, Desk), ≤ 30 segments a day |
+| Switches | `SENTRIX_MODEM_ENABLED=1` builds the worker. A real send needs `SENTRIX_LIVE_ALERTS=1` **and** `SENTRIX_MODEM_LIVE=1`; in test mode (the only mode this semester) only `SENTRIX_TEST_RECIPIENTS` receive anything |
+| Tested | Against a fake serial port that speaks AT. Not on a real modem: PDU mode, delivery-report routing, Jio IMS and the AT port number are to check in W1 on the laptop |
+
+Keep a spare Android phone as a documented fallback SMS sender.
+
+### 6.5 LEDs and buzzer
+
+At start the three LEDs light for 0.5 s (lamp test). Then (`led_patterns`,
+`sentrix/io/gpio.py`):
+
+| LED | Off | Slow blink | Fast blink | Solid |
+|---|---|---|---|---|
+| Green | camera offline, or link enabled and not connected | connected, not yet claimed by an owner | — | camera online and link off or claimed |
+| Amber | all well | Wi-Fi setup mode | fault: camera offline, critical temperature, under-voltage, on battery, tamper | link enabled but not connected |
+| Red | below L3 | committed L3, or an SOS request open | L4 | L5, or an approved SOS that could not be delivered |
+
+Buzzer: 1/2/3 short chirps on a rise to L2/L3/L4 (L5 is the siren's job), one
+chirp when the Portal claims the device, one long tone when an approved SOS
+fails, one long beep on mains loss, three on tamper. A restart is quiet.
 
 ---
 
-## 7. Priority order and decision gates
+## 7. Gates
 
-**Scores** (5 = best) for this team, this budget, this codebase:
+**Gate A — T1 on the Pi (decides whether to buy an AI HAT+), W3:**
+1. clip compute p95 ≤ 1.6 s at hop 2 s; ≤ 2 % clips dropped over 1 h;
+2. fast-lane detect → L3 p95 ≤ 2 s; clip detect → L4 p95 ≤ 6 s;
+3. on the 10 custom videos in clip mode: episodes caught at L3 ≥ the M5 result
+   minus one (M5: weapon 9/12, fire 3/3) and 0 false onsets;
+4. 1 h soak: CPU ≤ 75 °C, no throttling flags, memory flat;
+5. all of it **with the link and the Local Console running** in the one-process
+   layout.
 
-| Criterion (weight) | T1 Clip Engine | T2 Hailo | T3 Hub | T4 Trigger (add-on) |
-|---|---|---|---|---|
-| Meets alert targets (3) | 3 (with fast lane) | 5 | 4 | 3 |
-| Keeps model accuracy (3) | 3 (slimmed models) | 4 (INT8, scene retrain) | 5 (unchanged) | 3 |
-| Edge autonomy, the project goal (3) | 5 | 5 | 2 | 5 |
-| Extra cost (2) | 5 (₹0) | 2 (+₹7.5–11.3k) | 5 (₹0) | 3 (+₹100–4.5k) |
-| Engineering effort (2) | 3 | 2 (compiler, HEFs) | 5 (glue) | 3 |
-| Risk (2) | 4 | 2 (DINOv2 on Hailo, toolchain) | 4 | 3 |
-| Reuses existing code (1) | 4 | 3 | 5 | 3 |
-| **Weighted total (/80)** | **61** | **57** | **66** | **54** |
+Fail → Hailo AI HAT+ (T2) or laptop-hub mode (T3), and revisit the multi-process
+layout.
 
-T3 scores highest because it is cheap and certain, but it does not deliver the
-edge unit the project promises; T1 is the best *autonomous* option. Hence:
+**Status on 2026-10-15.** Laptop numbers from `training/runs/custom_eval/clip/`
+(code `575e463`, shipped models, 4 threads, evaluation only, nothing tuned; the
+bench ran while other training jobs loaded the machine, and timings swung about
+2× between runs):
 
-1. **T1 — Clip Engine** (main track). Build and validate it on the laptop **now**;
-   it needs no purchase beyond the base kit.
-2. **T3 — Hub** in the same week as hardware bring-up: guaranteed demo, the
-   full-accuracy reference, and the M6 recording tool.
-3. **T2 — Hailo** only if T1 fails Gate A.
-4. **T4 — Trigger** once T1 or T2 works, for 24/7 running.
+| Criterion | Measured on the laptop (4 CPUs) | Pi |
+|---|---|---|
+| 3. Replay episodes and false onsets | **Met.** Weapon at L3 9/12 with the fast lane (8/12 without; M5 9/12), fire 3/3, 0 false onsets at every level. Weapon at L5 5/12 (M5 2/12). Robbery no longer reaches L2 (M5: L2) | re-run on Pi exports |
+| 1. Clip compute p95 ≤ 1.6 s | **Not met.** ONNX + fast lane: p50 1060 / p95 2145 ms (60 s bench, `7.mov` as the camera). Torch + fast lane: p95 6473 ms, 70 % dropped. ONNX without the fast lane: p95 3797 ms, 38 % dropped (a loaded run) | not measured |
+| 1. ≤ 2 % dropped over 1 h | 0 dropped in the 60 s ONNX + fast-lane run; no 1 h run | not measured |
+| 2. Fast-lane L3 p95 ≤ 2 s | **Not met in replay.** Weapon L3 median 1.00 s, p95 7.21 s, 8 of 12 within 2 s (clip-end stamps; live adds compute) | not measured |
+| 2. Clip L4 p95 ≤ 6 s | Met in replay: weapon p95 3.46 s (6/12 caught), fire 0.46 s (2/3); compute not included | not measured |
+| 4. 1 h soak | — | needs the Pi |
+| 5. With link and console | — | needs the Pi |
 
-**Gate A — T1 on the Pi (decides whether to buy an AI HAT+):**
-- clip compute p95 ≤ 1.6 s at hop 2 s, ≤ 2 % clips dropped over 1 h;
-- fast lane detect → L3 p95 ≤ 2 s; clip detect → L4 p95 ≤ 6 s;
-- on the 10 custom videos in clip mode: episodes caught at L3 ≥ the M5 result
-  minus one (weapon 9/12, fire 3/3) and 0 false onsets;
-- 1 h soak: CPU ≤ 75 °C, no throttling flags (`vcgencmd get_throttled`), memory flat.
+Where the time goes (ONNX + fast lane bench): S1 objects p50 636 / p95 1344 ms
+(three YOLO passes per keyframe), S2 scene p50 401 / p95 507 ms (DINOv2-B on 2
+keyframes), fast-lane pass p50 61 / p95 115 ms at 3.75 passes/s. Scaled to the
+Pi (§2), the current models will not fit: Gate A needs M7's single detector,
+probably one scene keyframe per clip (the slim report's suggestion), and NCNN.
+Tools for the Pi run: `tools/bench_clip.py --runtime onnx --fast-lane --seconds
+3600 --json ...` (side effects stubbed, refuses to run with live services) and
+`tools/replay_custom_videos.py --mode clip --fast-lane --threads 4`.
 
-**Gate B — T2 (if bought):** all networks on the NPU at ≥ 10 Hz combined, detect →
-L4 p95 ≤ 2 s, HEF accuracy within 2 points of the PyTorch models on val.
+**Gate B — T2 (if bought):** all networks on the NPU at ≥ 10 Hz combined, detect
+→ L4 p95 ≤ 2 s, HEF accuracy within 2 points of the PyTorch models on val.
 
-**Gates for clip mode.** CLAUDE.md G4 ("loop ≥ 5 Hz, detect → alert p95 ≤ 2 s")
-assumes per-frame analysis. For T1 it becomes: fast-lane L3 p95 ≤ 2 s, clip
-decision every ≤ 2 s, L4/L5 p95 ≤ 6 s (recorded in CLAUDE.md M9).
-
-**Clip mode on the laptop (T-CLIP, `training/runs/custom_eval/clip/`).** All 10
-custom videos, shipped models, 4 threads, evaluation only: 0 false onsets at every
-level; weapon at L3 9/12 with the fast lane (8/12 without; M5 tick mode 9/12),
-fire 3/3; weapon at L5 5/12 (M5 2/12); robbery no longer reaches L2. Weapon L3
-latency median / p95 1.00 / 7.21 s with the fast lane (clip-end stamps; live adds
-compute). Gate A's replay criterion is met. Bench on 4 CPUs: ONNX + fast lane clip
-compute p50 1060 / p95 2145 ms — **over the 1.6 s budget at p95**; torch + fast
-lane collapses (70 % dropped), so on a Pi the fast lane must run on onnx/ncnn. The
-dominant stages are S1 (three YOLO passes per keyframe) and S2 (DINOv2-B), so the Pi
-budget needs M7's single YOLO; no Pi measurement exists yet.
+The product gates P1–P8 (parity, isolation, SOS, latency, offline, privacy,
+no alerts in tests, prompt budget) are in docs/7 and roadmap v2 §13. P5
+(offline: local prompt and modem SMS work; reconnect syncs every queued event)
+needs the modem on the Pi.
 
 ---
 
 ## 8. Bill of materials
 
-Prices: US list from Raspberry Pi where available; India from retailers on
-2026-10-10 [7][8][10]; rows marked ≈ are estimates — check robu.in, thingbits.in,
-robocraze.com before ordering.
+Prices from Indian retailers, checked on 2026-10-14 (roadmap v2 §9); ≈ marks a
+price that could not be confirmed. Re-check before ordering.
 
-**Base kit — needed by every technique**
+**Order 1 — bench kit (order first)**
 
-| Part | Choice | Price |
+| Item | Where | Price |
 |---|---|---|
-| Compute | Raspberry Pi 5 **8 GB** | ₹19,600–20,000 [7][8] ($175) |
-| Power | Official 27 W USB-C PSU | ≈ ₹1,200 ($12) [12] |
-| Cooling | Official Active Cooler | ≈ ₹500 ($5) [12] |
-| Storage | 128 GB high-endurance microSD (OS + clips) | ≈ ₹1,500 |
-| RTC | ML-2020 rechargeable cell for the RTC connector | ≈ ₹300 |
-| Camera | Camera Module 3 **Wide** (102°) + Standard–Mini cable | ≈ ₹3,500 ($35) [25] |
-| Microphone | USB omnidirectional mic | ≈ ₹850 (docs/3) |
-| Siren path | 5 V relay module with JD-VCC + 12 V 110 dB siren + 12 V 2 A adapter | ≈ ₹1,000 (docs/3) |
-| Sensors | HC-SR501 PIR, door reed switch, BME280 | ≈ ₹600 |
-| Indicators | 3 LEDs + resistors, active buzzer + NPN | ≈ ₹150 |
-| Housing | ABS enclosure, wall mount at 1.8–2.2 m, cable glands, wires | ≈ ₹1,000 |
-| **Base total** | | **≈ ₹30,200–30,600** |
+| Raspberry Pi 5 **8 GB** | thingbits (in stock) | ₹19,852 |
+| Official 27 W USB-C power supply | Robocraze | ₹1,255 |
+| Official Active Cooler (mandatory) | thingbits | ₹531 |
+| microSD SanDisk **High Endurance** 128 GB | Flipkart | ₹3,699 |
+| Camera Module 3 **Wide** (102°) | Robocraze | ₹4,379 |
+| Pi 5 camera cable, 22-pin Standard–Mini | thingbits | ₹117 |
+| RTC cell ML-2020 (rechargeable; never a CR2032) | — | ≈ ₹500 |
+| USB microphone | Robocraze | ₹289 |
+| 1-channel relay module + 2N2222/BC547 transistors + 1N4007 diodes | Robocraze | ≈ ₹150 |
+| PIR HC-SR505 (or HC-SR501, ₹54–59) | Robocraze / thingbits | ₹73 |
+| MC-38 door reed switch | Robocraze | ₹52 |
+| Breadboard, jumpers, LEDs, resistors, active buzzer | — | ≈ ₹350 |
+| **Subtotal** | | **≈ ₹31,250** |
 
-**Per technique**
+Cheaper: Camera Module 3 Standard (₹3,245) saves ₹1,134; a 64 GB card (₹2,449)
+saves ₹1,250. A 4 GB Pi 5 at ₹12,000–12,300 (KSP Electronics, unconfirmed) would
+save ≈ ₹7,500; the only 4 GB confirmed in stock costs ≈ ₹18,490.
 
-| Technique | Adds | Total |
+**Order 2 — integration kit (power backup, siren, 4G modem, box); order the modem in W0**
+
+| Item | Where | Price |
 |---|---|---|
-| T1 Clip Engine | nothing | ≈ ₹30,500 |
-| T3 Hub | nothing (uses the laptop); a **4 GB** Pi (≈ ₹14,500 [7]) is enough | ≈ ₹25,000–30,500 |
-| T2 Hailo | AI HAT+ 26 TOPS ≈ ₹11,300 (or 13 TOPS ≈ ₹7,500) [10] | ≈ ₹37,700–41,900 |
-| T4 Trigger | AI Camera instead of CM3 (≈ +₹4,500 est.) or a PIR (already in base) | ≈ ₹30,500–35,000 |
-| Recommended options for 24/7 | UPS HAT (Waveshare UPS HAT (E) or Geekworm X1202) [63][64]; 850 nm IR illuminator + CM3 **NoIR** for night | ≈ +₹4,000–6,000 |
+| 12 V adapter, ≥ 4 A, **BIS-marked** (check its R-number on crsbis.in) | e.g. NOVEL 12 V 5 A | ₹566 |
+| Router mini UPS **12 V 3 A** | Resonate CRU12V3A Pro | ₹2,399 |
+| Step-down converter 12 V → 5.2 V, 6 A (fixed output) | XY-3606, Robocraze | ₹119 |
+| Short, thick USB-C cable, converter to Pi (5 A) | — | ≈ ₹150 |
+| 12 V siren, low current (≈ 110 mA) | SQR117, Robocraze | ₹194 |
+| Key or toggle **arming switch** for the siren line | — | ≈ ₹50 |
+| 3 inline fuse holders + fuses; PC817 optocoupler | — | ≈ ₹80 |
+| **4G USB modem**, Indian bands | 7Semi Quectel EC200U-CN, Evelta / Robocraze | ₹2,236 |
+| Airtel or Vi prepaid SIM (not Jio) | ₹199 / 28 days (2 GB + 100 SMS/day) | ≈ ₹300 |
+| ABS box, IP65, ≥ 200 × 120 × 75 mm; serial/QR label | — | ₹300–899 |
+| 40 mm 5 V fan, insect mesh, 4 cable glands | Robocraze (fan ₹49) | ≈ ₹150 |
+| Wall/camera mount, perfboard, screw terminals | — | ≈ ₹450 |
+| **Subtotal** | | **≈ ₹7,300** |
 
-**Tighter budget:** Pi 5 4 GB + T1/T3 (≈ ₹25,000) works if development (PyTorch)
-happens on the laptop and the Pi runs only NCNN/ONNX models.
+Tools (multimeter ₹515, soldering kit ₹510, wire stripper, heat-shrink,
+micro-HDMI cable ₹449, card reader, 12 V panel meter ₹125, earplugs): ≈ ₹2,000.
+Strongly recommended: a spare 64 GB High Endurance card (₹2,449) for a clone of
+the finished setup.
+
+**Running costs**
+
+| Cost | One-time | Per month / year |
+|---|---|---|
+| Device (Order 1 + Order 2 + tools) | **≈ ₹40,500** (cheapest ≈ ₹36,000; ≈ ₹28,300 with a confirmed ₹12,300 4 GB Pi) | — |
+| SIM in the modem | — | ≈ ₹200/month |
+| Demo hotspot phone data (never campus Wi-Fi) | — | ≈ ₹200–300/month (est.) |
+| Portal: Oracle Always Free VM, Postgres, Caddy HTTPS | ₹0 | ₹0 |
+| `.in` domain (DuckDNS may be blocked by campus filters) | — | ≈ ₹500–800/year |
+| E-mail API, Telegram bot; fallback Render + Supabase | ₹0 | ₹0 |
+| Powered USB hub, only if the modem browns out | ≈ ₹800 (est.) | — |
+
+**Buy later, only if needed**
+
+| Item | Price | Buy only when |
+|---|---|---|
+| AI HAT+ 13 / 26 TOPS (Probots) | ₹9,749 / ₹14,999 | The Pi fails Gate A |
+| Camera Module 3 NoIR + 850 nm IR illuminator | ₹3,379 + ≈ ₹200–2,000 | Night operation is required (and IR training data) |
+| Geekworm X1202 UPS HAT + branded cells | ₹5,299 + cells | The router UPS fails its power tests |
+| MQ-2 smoke sensor + ADS1115 converter | ₹98 + ₹142 | A second fire signal is wanted (log-only first) |
+
+**Do not buy:** a Jio SIM for the modem; A7670E modems (no band B40); unbranded
+18650 cells; open-frame 230 V power supplies; an AI HAT before Gate A; Coral or
+Intel NCS2.
 
 ---
 
-## 9. Software changes (repository map)
+## 9. Software (repository map)
 
-| Change | Where | For |
+| Part | Where | State |
 |---|---|---|
-| `PiCameraSource(FrameSource)`: Picamera2 main + lores streams, sensor timestamps, optional IMX500 tensors | `sentrix/io/picamera.py` | all |
-| Replace `RPi.GPIO` with gpiozero (lgpio): siren relay, LEDs, buzzer; inputs PIR, door | `sentrix/io/actuators.py`, new `sentrix/io/gpio.py` | all |
-| Sensors: BME280 (I2C) / DHT22 (kernel IIO); telemetry only — not in the feature contract until data exists (docs/3 §7) | `sentrix/io/sensors.py` | all |
-| Ring buffer in shared memory (frames, JPEG main frames, audio, sensor events) | `sentrix/pipeline/ringbuffer.py` | all |
-| Clip engine: `ClipBuffer`, `ClipScheduler`, `ClipEngine` (stage cascade), `ClipScores`; within-clip confirmation reusing `ConfirmationWindow` | `sentrix/pipeline/clip.py`, `fusion/evidence.py` | T1, T4 |
-| Fast lane (YOLO @320 every 4th frame in the capture process) | `sentrix/pipeline/fastlane.py` | T1 |
-| Model runtime backends: torch (dev), onnxruntime, ncnn, hailort — selected per engine in config | `sentrix/runtime/` | T1, T2 |
-| Model exports and slimming: unified YOLO → NCNN; scene head EfficientNet-B0 / DINOv2-S → ONNX/NCNN; `buffalo_s` | `tools/export_models.py`, `training/custom/` | T1, T2 |
-| HEF compilation scripts and calibration sets | `training/hailo/` | T2 |
-| Node agent (MediaMTX config, MQTT bridge, heartbeat, commands, degraded-local mode) and hub-side `RemoteNode` | `sentrix/node/` | T3 |
-| Evidence clips from the ring buffer (pre-roll + post-roll), sealed as one bundle | `sentrix/evidence/vault.py` | all |
-| Profiles: `SENTRIX_PROFILE=laptop | pi5-clip | pi5-hailo | pi5-node | hub` | `sentrix/config.py` | all |
-| Event log schema 4: one row per clip with stage timings and keyframe votes | `sentrix/pipeline/events.py` | T1 |
-| Health: CPU temp, throttle flags, PSU current, clip latency, dropped clips, NPU temp/load, node heartbeat | `/api/health`, `tools/doctor.py` | all |
-| Bench and replay: `tools/bench_clip.py`; `replay_custom_videos.py --mode clip` | `tools/` | T1 |
-| systemd units, hardware watchdog, log rotation, read-only root option | `deploy/pi5/` | all |
+| Picamera2 source: main 1280×720 + lores 640×480 from one frame, sensor timestamps, reconnect, Pi 4 YUV fallback; `CAMERA_SOURCES=picamera:0` | `sentrix/io/picamera.py`, `io/sources.py` | built; fake `picamera2` only |
+| Siren on gpiozero: polarity, timer release, 90 s cap, arming, `siren_test` | `sentrix/io/actuators.py` | built; mock pins only |
+| GPIO service: LEDs, buzzer, PIR, door, mains, arming key, tamper; 50 ms software debounce; mock pins and a visible error when lgpio fails | `sentrix/io/gpio.py` | built; debounce to check on real inputs |
+| Board telemetry: CPU temperature, throttle flags, EXT5V, uptime, BME280/DHT22 (IIO); alerts; systemd ready + watchdog | `sentrix/io/node.py`, `sensors.py`, `watchdog.py` | built; `pmic_read_adc` format to check on the firmware |
+| Wi-Fi scan/connect/status for `/setup/wifi` | `sentrix/io/network.py` | built; fake `nmcli` only |
+| Local Console API: `GET /api/node`, `POST /api/node/siren-test`; Node page (telemetry, inputs, relay, clip status, test siren) | `sentrix/web/node_routes.py`, templates | built |
+| Clip engine, fast lane, runtimes, exports, bench | `pipeline/clip.py`, `pipeline/fastlane.py`, `sentrix/runtime/`, `tools/export_models.py`, `tools/bench_clip.py`, `replay_custom_videos.py --mode clip` | built; laptop only; NCNN untested |
+| Modem SMS and ringing call | `sentrix/alerting/channels/modem.py` | built; fake serial port only |
+| Doctor hardware section (venv, camera enumerated not opened, OpenCV, temperature, throttling, EXT5V, config.txt lines, `PSU_MAX_CURRENT`, unit, network) | `tools/doctor.py`, `node.hardware_report` | built; one "skipped" row on a laptop |
+| Installer, systemd unit, journald caps, watchdog, config.txt snippet, Pi env, NetworkManager, polkit, firewall | `deploy/pi5/`, `run.sh` (Pi path), `requirements-pi.txt` | built; checked by `tests/test_hw_deploy.py` |
+| Profile label `SENTRIX_PROFILE=laptop\|pi5-clip\|pi5-hailo\|pi5-node\|hub` | `sentrix/config.py` (`NodeConfig`) | a label on the Node page and a doctor hint only; it changes no behaviour |
+| Shared-memory ring buffer, three processes | — | not built (one-process decision) |
+| Hailo backend, HEF scripts | — | not built (T2) |
+| Node agent (MediaMTX, MQTT), hub `RemoteNode` | — | not built (T3) |
+| IMX500 tensor reader | — | not built (T4) |
+| Single YOLO detector (person, pistol, knife, fire) | — | not trained (M7) |
 
-**Dashboard work this implies** (input for the next task): a *Node* panel —
-temperature, throttling, power, clip/fast-lane latency, dropped clips, NPU load,
-sensor readings (PIR, door, temperature), relay state, last heartbeat — and a
-"test siren" button that requires confirmation and drives the relay for 1 s.
+All hardware tests: `tests/test_hw_*.py`, `tests/test_clip_*.py`,
+`tests/test_model_slim.py`.
 
-**Security on the unit:** SSH keys only, `ufw` allowing the dashboard on the LAN
-only (or behind Tailscale); dashboard password and evidence key generated by
-`tools/setup_env.py` and stored readable by the service user only; the Pi has no
-TPM, so keep a copy of `EVIDENCE_AES_KEY` off the device (losing it makes every
-bundle unreadable); updates through `apt` and pinned `requirements.txt`.
+**Security on the unit:** SSH keys only; ufw admits SSH and the console from the
+LAN (and the setup hotspot); the console is plain HTTP on the LAN (accepted for
+the demo, stated in the report); remote access only through the Portal tunnel.
+The Pi has no TPM: keep a copy of `EVIDENCE_AES_KEY` and `.env` off the device
+(losing the key makes every bundle unreadable). Device identity lives in
+`/etc/sentrix` (outside `var/`, kept by a factory reset).
 
 ---
 
 ## 10. Roadmap
 
-| Phase | When | Work | Done when |
-|---|---|---|---|
-| **H0 Plan** | now | this file; choose T1 → T3 → (T2) → T4; order the base kit | parts ordered |
-| **H1 Laptop prep** (no hardware) | 1–2 weeks | clip engine + fast lane; unified YOLO and slim scene head trained/exported (M7 overlap); NCNN/ONNX backends; gpiozero actuators with a mock pin factory; `PiCameraSource` with a `FileSource` fallback; profiles; clip-mode replay and bench | clip mode on the 10 videos ≥ M5 results minus one episode, 0 false onsets; 4-thread clip compute within the scaled budget |
-| **H2 Bring-up** | days 1–3 after parts | Trixie 64-bit, cooler, RTC cell; `rpicam-hello`, `arecord`, gpiozero tests with an LED in place of the siren; install SENTRIX (`run.sh`); `doctor` hardware checks | camera, mic, PIR, door, relay, LEDs verified; laptop profile runs (slowly) on the Pi |
-| **H3 T1 on the Pi** | week 1 | NCNN models, clip engine, fast lane, evidence clips; `bench_clip` and 1 h soak | **Gate A** |
-| **H4 T3 hub** | week 1 (parallel) | MediaMTX + MQTT node agent; hub `RemoteNode`; degraded-local mode | laptop dashboard drives the Pi siren; node death detected in ≤ 10 s |
-| **H5 Data** | weeks 1–3 | record M6 sessions **with the Pi camera** (T3 makes this easy): scripted clips, hard negatives, ≥ 3 h normal | dataset in `frames.csv` schema |
-| **H6 Upgrade or optimise** | after Gate A | fail → T2 (compile HEFs, Gate B); pass → T4 for 24/7 | gate passed |
-| **H7 Deploy** | week 4 | enclosure, mounting 1.8–2.2 m, UPS, M9 gates on S4 | G0–G5 (clip-mode G4) |
+Device track and the connectivity-and-cloud phase, mapped to the 9-week plan of
+roadmap v2 (W0–W8).
+
+| Phase | Week | Work | Done when | State |
+|---|---|---|---|---|
+| H0 Plan | W0 | this file; decisions D8–D14; order parts incl. 4G modem + SIM | parts ordered | plan done; parts not ordered |
+| H1 Laptop prep | W1 | clip engine + fast lane; ONNX exports; gpiozero with mock pins; `PiCameraSource`; clip replay and bench; modem tested on the laptop with an Airtel/Vi SIM | clip replay ≥ M5 minus one, 0 false onsets; SMS out from the laptop | software done (§9); replay met; budget not met; modem not tested |
+| C Connectivity and cloud | W0–W1 | Oracle VM, `.in` domain, Docker, Caddy HTTPS, backups + tested restore; reachable from 4G and the demo room (`deploy/portal/README.md`) | HTTPS live, restore tested, fallback deploy ≤ 30 min | files written and tested statically; nothing deployed |
+| H2 Bench bring-up | W2 | OS, cooler, RTC; camera, mic, PIR, door, LEDs; relay test with an LED; doctor; "record normal session" | every input and output verified on the bench | not started |
+| H3 Gate A | W3 | NCNN/ONNX models on the Pi, clip engine, fast lane, link running; `bench_clip` and a 1 h soak | **Gate A**; go/no-go 1 | not started |
+| H4 Power and alarm | W4 | 12 V UPS path, buck, fuses, siren relay; modem on the Pi; offline SMS path | power pass test (§6.3); offline SMS works on the bench | not started |
+| H5 Data | W3–W5 | M6 sessions recorded **with the Pi camera** | dataset in the `frames.csv` schema | not started |
+| H6 Upgrade or optimise | after Gate A | fail → T2 (HEFs, Gate B) or T3; pass → M7 single YOLO, T4 for 24/7 | gate passed | — |
+| H7 Deploy | W6–W8 | box and mount at 1.8–2.2 m, burn-in, code freeze end of W6, M9 gates on S4, rehearsals | G0–G5 (clip-mode G4), P1–P8 | — |
 
 ---
 
 ## 11. Open questions for the team
 
-1. **Budget:** is ≈ ₹30,500 for the base kit approved (the old ₹20,000 cap predates
-   the Pi 5 price rises)? With T2, ≈ ₹42,000.
-2. **Darkness:** D5 says darkness is out of scope for RGB. If night operation is
-   required, choose Camera Module 3 **NoIR** + an IR illuminator — and record
-   training data in IR, because the models have never seen grayscale IR.
-3. **Alert latency:** is "L3 within 2 s, siren within ≈ 6 s" acceptable for the demo
-   (T1), or must the siren fire within 2 s (→ T2)?
-4. **Hub at the demo:** may the laptop be present (T3 as fallback), or must the unit
-   run alone?
-5. **Who owns what:** suggested — Mehul: node agent, GPIO, wiring, enclosure (the
-   report's hardware owner); Kartik: unified YOLO + exports; Akshay: `buffalo_s` +
-   identity on the Pi; Harshit: clip engine fusion + recording protocol; Prashant:
-   audio path on the Pi.
+1. **Budget:** is ≈ ₹40,500 for the device approved (bench kit ≈ ₹31,250 +
+   integration kit ≈ ₹7,300 + tools)? Phone KSP about the 4 GB Pi first?
+2. **Card and SIM owner:** who holds the Oracle account and card, and the SIM
+   (KYC, recharges)?
+3. **Darkness:** D5 keeps darkness out of scope. Night operation needs the NoIR
+   camera, an IR illuminator and IR training data.
+4. **Alert latency:** is "L3 within ≈ 2 s, siren within ≈ 6 s" acceptable for the
+   demo, or must the siren fire within 2 s (→ T2)?
+5. **Hub at the demo:** may the laptop be present as a fallback?
+6. **Arming key:** which free GPIO carries its second contact (optional)?
 
 ---
 
 ## Sources
 
 [1] https://www.raspberrypi.com/products/raspberry-pi-5/ ·
-[7] https://kspelectronics.in/product-category/raspberry-pi/raspberry-pi-boards/raspberry-pi-5-boards/ ·
-[8] https://thingbits.in/t/brands/raspberry-pi/boards ·
-[9] https://robocraze.com/products/raspberry-pi-5-8gb ·
-[10] https://robocraze.com/collections/ai-hats ·
 [11] https://www.raspberrypi.com/documentation/computers/raspberry-pi.html ·
 [12] https://www.raspberrypi.com/news/introducing-raspberry-pi-5/ ·
 [13] https://www.raspberrypi.com/documentation/computers/camera_software.html ·
-[15] https://forums.raspberrypi.com/viewtopic.php?t=378329 ·
 [16] https://gpiozero.readthedocs.io/en/stable/api_pins.html ·
 [17] https://gpiozero.readthedocs.io/en/stable/changelog.html ·
-[18] https://pypi.org/project/rpi-lgpio/ ·
-[19] https://www.raspberrypi.com/news/trixie-the-new-version-of-raspberry-pi-os/ ·
 [21] https://github.com/opencv/opencv/issues/21653 ·
 [22] https://datasheets.raspberrypi.com/camera/picamera2-manual.pdf ·
-[23] https://forum.opencv.org/t/rpi5-camera-doesnt-work/17303/4 ·
 [24] https://www.raspberrypi.com/documentation/accessories/camera.html ·
-[25] https://www.raspberrypi.com/news/new-autofocus-camera-modules/ ·
-[29] https://www.raspberrypi.com/news/raspberry-pi-ai-camera-on-sale-now/ ·
-[30] https://www.raspberrypi.com/documentation/accessories/ai-camera.html ·
-[31] https://www.waveshare.com/raspberry-pi-ai-camera.htm ·
-[36] https://www.raspberrypi.com/news/raspberry-pi-ai-hat/ ·
-[38] https://www.raspberrypi.com/products/ai-hat-plus-2/ ·
 [39] https://www.raspberrypi.com/documentation/computers/ai.html ·
-[40] https://jeffgeerling.com/blog/2026/raspberry-pi-ai-hat-2 ·
-[42] https://community.hailo.ai/t/how-to-install-the-hailo-dataflow-compiler-dfc-on-wsl2/2890 ·
-[43] https://www.macnica.co.jp/en/business/semiconductor/articles/hailo/144988/ ·
-[45] https://www.elektor.com/products/seeed-studio-pcie-3-0-to-dual-m-2-hat-for-raspberry-pi-5 ·
 [47] https://coral.ai/docs/accelerator/get-started/ ·
 [48] https://github.com/google-coral/edgetpu ·
 [50] https://www.intel.com/content/www/us/en/support/articles/000093181.html ·
-[52] https://learn.adafruit.com/adafruit-i2s-mems-microphone-breakout/raspberry-pi-wiring-test ·
 [55] https://github.com/raspberrypi/linux/blob/rpi-6.12.y/arch/arm/boot/dts/overlays/README ·
 [56] https://pinout.xyz/pinout/gpio ·
 [57] https://components101.com/sensors/hc-sr501-pir-sensor ·
-[60] https://forum.core-electronics.com.au/t/5v-4-channel-relay-module-10a-ce05279/2921 ·
-[63] https://www.cnx-software.com/2024/08/03/waveshare-ups-hat-e-for-raspberry-pi-5-4-3b-takes-four-21700-lithium-batteries-supports-usb-pd-3-0/ ·
-[64] https://geekworm.com/collections/raspberry-pi/products/x1202 ·
-[68] https://raspberry.tips/en/raspberrypi-tutorials/raspberry-pi-power-consumption-update-2026-all-models-compared ·
-[69] https://mosquitto.org/download/ ·
 [70] https://github.com/bluenviron/mediamtx
 
 [U8] https://raw.githubusercontent.com/ultralytics/ultralytics/v8.2.50/docs/en/guides/raspberry-pi.md ·
 [U11] https://raw.githubusercontent.com/ultralytics/ultralytics/v8.3.150/docs/en/guides/raspberry-pi.md ·
-[U26] https://docs.ultralytics.com/guides/raspberry-pi/ ·
-[UIMX] https://docs.ultralytics.com/integrations/sony-imx500/ ·
-[UJ] https://raw.githubusercontent.com/ultralytics/ultralytics/v8.3.150/docs/en/guides/nvidia-jetson.md ·
 [HZ] https://github.com/hailo-ai/hailo_model_zoo/tree/master/docs/public_models ·
 [HF105] https://community.hailo.ai/t/official-fps-benchmark-on-hailo-8-using-raspberry-pi-5/18873 ·
-[HFgen] https://community.hailo.ai/t/hailo8-pi5-on-pcie-gen2-and-gen3-hats-no-inference-speed-difference/17692 ·
-[HFctx] https://community.hailo.ai/t/the-performance-on-the-raspberry-pi-5-with-the-hailo-8-chip-seems-not-good-as-he-official-results/17473 ·
 [HFdino] https://community.hailo.ai/t/deployment-of-dinov2-model-from-torch-hub/7720 ·
-[H10T] https://community.hailo.ai/t/hailo-10h-throughput-degrades-irreversibly-within-minutes-of-continuous-use-125-41-fps-only-host-reboot-recovers/19218/5 ·
 [IJ] https://www.ijert.org/comparative-benchmarking-of-cpu-gpu-and-npu-architectures-for-real-time-yolov8n-inference-on-embedded-edge-platforms-ijertv15is030232 ·
 [NCNN] https://github.com/Tencent/ncnn/blob/master/benchmark/README.md ·
 [ARM] https://huggingface.co/Arm/deit-tiny-int8-xnnpack-executorch ·
@@ -667,5 +607,20 @@ bundle unreadable); updates through `apt` and pinned `requirements.txt`.
 [RPB] https://www.raspberrypi.com/news/heating-and-cooling-raspberry-pi-5/ ·
 [CNX] https://cnx-software.com/2026/07/22/nvidia-increases-the-price-of-jetson-modules-and-devkits-by-up-to-101
 
-Laptop measurements: `torch.set_num_threads(4)` / ONNX Runtime 4 intra-op threads on
-an Intel i7-14650HX, median of 12 runs, models as shipped on `main` (2026-10-10).
+Prices (roadmap v2 appendix, checked 2026-10-14): Pi 5 8 GB
+https://thingbits.in/products/raspberry-pi-5-computer · Active Cooler
+https://thingbits.in/products/official-active-cooler-for-raspberry-pi-5 · 27 W
+supply https://robocraze.com/products/raspberry-pi-5-27w-usb-c-power-supply-black-colour ·
+Camera Module 3 Wide https://robocraze.com/products/raspberry-pi-camera-module-3-wide ·
+camera cable https://www.thingbits.in/products/raspberry-pi-5-camera-cable-22-pin-to-15-pin ·
+XY-3606 https://robocraze.com/products/24v-12v-to-5v-5a-power-module-dc-dc-xy-3606-step-down-converter-with-usb-fast-charging ·
+router UPS https://www.flipkart.com/search?q=resonate+routerups · EC200U-CN
+https://evelta.com/7semi-ec200u-4g-lte-cat-1-dongle-gnss-positioning/ · AI HAT+
+https://probots.co.in/official-raspberry-pi-ai-hat-13-tops.html · `.in` tariff
+https://registry.in/tariff · BIS registration https://www.crsbis.in/BIS/products-bis.do ·
+Jio SMS on LTE modules
+https://forums.quectel.com/t/ec25-connected-with-jio-sim-its-not-sending-and-receiving-messages/7008
+
+Laptop measurements in §2: `torch.set_num_threads(4)` / ONNX Runtime 4 intra-op
+threads on an Intel i7-14650HX, median of 12 runs, models as shipped on `main`
+(2026-10-10). Clip and slim numbers: the report files named in §5 and §7.
