@@ -1,6 +1,11 @@
-# SENTRIX — Model Benchmarks, Training Results & KPIs
+# 2. SENTRIX — Model Benchmarks, Training Results & KPIs
 
-**Version 3.0 · Run ID 20260824_193729 · Updated: August 2026**
+**What this document covers.** §1–§4 and §6 are the **v3 training results**
+(run `20260824_193729`, August 2026), measured on the public corpora each model
+was trained on. They are historical and still true as statements about those
+runs. §5 (the weights the device loads, with v4 and v5), §7 (latency) and §8
+(KPIs) describe branch `sentrix/portal` (October 2026). For results on the
+team's own footage see [doc 6](6_CUSTOM_DATASET_EVALUATION.md).
 
 > **Read this first.** Version 2.1 of this document contained several factual
 > errors about our own training runs. They are corrected below, each with the
@@ -229,23 +234,33 @@ behaviour. See doc 1 §5.
 
 ## 5. Deployed Weights
 
-`models/`, resolved in preference order at startup. Verify with
-`python tools/doctor.py`.
+`models/`, resolved in preference order at startup (the first file present
+wins; doc 4 §6). Verify with `python tools/doctor.py`.
 
-| Engine | File actually loaded | Size |
+| Engine | File loaded on this branch | Size |
 |---|---|---|
-| Person detection | `yolov8n.pt` | 6.5 MB |
-| Weapon | `v4_custom/weapon_detector_custom_v4.pt` (YOLO11n, custom data; boxes only by default) | 5.5 MB |
-| Fire | `v4_custom/fire_detector_custom_v4.pt` (YOLO11n, custom data; boxes only by default) | 5.5 MB |
-| Scene (normal/fire/weapon/assault/robbery) | `v4_custom/scene_classifier_custom_v4.pt` (DINOv2 ViT-B/14, delta on the public weights) | 57.1 MB |
+| Person detection | `yolov8n.pt` (COCO) | 6.5 MB |
+| Weapon | `v4_custom/weapon_detector_custom_v4.pt` (YOLO11n, custom data) | 5.5 MB |
+| Fire | `v4_custom/fire_detector_custom_v4.pt` (YOLO11n, custom data) | 5.5 MB |
+| Scene (normal / fire / weapon / assault / robbery) | `v4_custom/scene_classifier_custom_v4.pt` (DINOv2 ViT-B/14, delta on the public weights) | 57.1 MB |
 | Violence | `v3_real/violence_classifier_real_v3.pt` — **not loaded** while a scene model is present | 44.8 MB |
 | Audio | `v3_real/audio_classifier_real_v3.pt` | 4.9 MB |
-| TCI fusion | `tci_xgboost.json` (synthetic) | 0.3 MB |
+| Faces | InsightFace `buffalo_l` (detection and recognition only; downloaded on first use, not in git); `SENTRIX_FACE_MODEL=buffalo_s` for the Pi | — |
+| TCI fusion | none: the TCI is the strongest confirmed class evidence (doc 1 §5) | — |
 
-Retained but **not loaded by anything**: `violence_classifier.pt` and
-`audio_classifier.pt` (V2 fallbacks), `anomaly_classifier.pt`,
-`v2_real/ucf_crime_dvs/ucf_crime_dvs_anomaly_v1.pt`. (The Vosk model and the v1 flat
-`weapon_detector.pt` / `fire_smoke_detector.pt` were removed from the tree; see git history.)
+The `v4_finetuned/` weights that the preference order also names live on branch
+`sentrix/finetuned-v3`, not here. On the device the detector votes count next
+to the scene classifier's (`SENTRIX_THREAT_SOURCES=both`, the default since
+M1), and only the two together reach L4/L5.
+
+Retained but **not loaded by anything**: `tci_xgboost.json` (synthetic labels,
+retired in M1), `violence_classifier.pt` and `audio_classifier.pt` (V2
+fallbacks), `anomaly_classifier.pt`, `v2_real/ucf_crime_dvs/ucf_crime_dvs_anomaly_v1.pt`,
+`v3_real/weapon_detector_real_v3.pt` and `v3_real/fire_smoke_detector_real_v3.pt`
+(fallbacks behind v4), and `v5_slim/` (§5.2). The Vosk model and the v1 flat
+`weapon_detector.pt` / `fire_smoke_detector.pt` were removed from the tree (see
+git history). Exported ONNX/NCNN copies for clip mode are written to
+`models/exported/` by `tools/export_models.py` and are not tracked.
 
 > **Corrected from v2.1.** The previous deployed-weights table claimed
 > `violence_classifier.pt` and `audio_classifier.pt` came from `runs_v3_real`.
@@ -255,16 +270,12 @@ Retained but **not loaded by anything**: `violence_classifier.pt` and
 > architectures (25 vs 52 tensors, `conv.*`/`fc.*` vs `features.*`/`classifier.*`,
 > 5 vs 4 classes), so copying the file over would have raised
 > `load_state_dict` inside a bare `except` and silently disabled audio.
->
 > `perception/audio.py` now builds its architecture from the checkpoint's own
-> parameter names, so both load. **The V3 audio and violence models are serving
-> for the first time.**
+> parameter names, so both load.
 
----
+### 5.1 v4: models trained on the custom dataset
 
-### v4: new models trained on the custom dataset
-
-Every metric above is measured on the corpus each model was trained on; on the
+Every metric in §4 is measured on the corpus each model was trained on; on the
 team's own labelled footage (765 frames, 10 videos) the v3 models score 0.043
 test accuracy. The v4 scene classifier — DINOv2 ViT-B/14 with its last four
 blocks trained on that footage, chosen by leave-one-video-out cross-validation
@@ -272,6 +283,30 @@ blocks trained on that footage, chosen by leave-one-video-out cross-validation
 13.96 to 0.79 per normal minute, but misses the stick swung in the test video.
 Full protocol, the comparison with the fine-tuned v3 models, and every
 limitation: [doc 6](6_CUSTOM_DATASET_EVALUATION.md).
+
+### 5.2 v5: slim scene classifiers for the Pi (not promoted)
+
+Two small CNN scene heads were trained for the Raspberry Pi under a protocol
+fixed before any run (`training/runs/custom/slim/PROTOCOL.md`, commit
+`5f8b589`). Numbers from `training/runs/custom/slim/REPORT.md` and
+`latency.json` (commit `3bfb441`; laptop CPU, 4 threads, on mains power):
+
+| | LOVO macro-F1 | Val acc / macro-F1 | Test acc / macro-F1 | CPU latency, PyTorch / ONNX Runtime |
+|---|---|---|---|---|
+| DINOv2 ViT-B/14 (shipped) | 0.440 | 0.679 / 0.768 | 0.720 / 0.419 | 96.9 / 106.4 ms |
+| MobileNetV3-L `mnv3l_full` | 0.229 | 0.357 / 0.229 | 0.720 / 0.419 | 6.6 / 2.4 ms |
+| EfficientNet-B0 `effb0_kd` | 0.211 | 0.405 / 0.271 | 0.720 / 0.419 | 9.5 / 4.3 ms |
+
+The bar set in advance was LOVO macro-F1 ≥ 0.396 with threat FPR ≤ 0.15. The
+best slim head reached 0.229 with FPR 0.194, so **neither replaces DINOv2**.
+The test row is the same for all three because no model detects the stick in
+the test corridor: each calls every `wa02` frame normal.
+No slim head recognises fire in a video it has not seen; their weapon AUROC is
+0.46–0.61 against 0.75 for DINOv2. Distillation from per-fold DINOv2 teachers
+did not close the gap (students 0.211 and 0.224). The checkpoints
+(`models/v5_slim/`, plus an ONNX export of `mnv3l`) load through
+`SENTRIX_SCENE_WEIGHTS` for development only and are not in the preference
+order.
 
 ---
 
@@ -320,25 +355,25 @@ is retained but should not be referenced as a result.
 
 ## 7. Latency
 
-Measured per frame through the full pipeline, RTX 4060 laptop, `inference_fps = 6`.
-Regenerate with `python tools/evaluate.py`.
+Measured on the maintainer laptop (Intel i7-14650HX, `.venv` with CPU torch;
+the RTX 4060 is not used by the app environment). Each row cites its report.
 
-| Stage | Typical |
-|---|---|
-| YOLOv8n person + track | ~8 ms |
-| YOLOv8n weapon | ~7 ms |
-| YOLOv8n fire/smoke | ~7 ms |
-| Violence window (1 Hz, 16 frames) | ~25 ms on hop ticks, 0 otherwise |
-| Identity (ArcFace, when a face is present) | ~20 ms |
-| Behaviour + motion | < 1 ms |
-| Audio (read from capture thread) | < 1 ms |
-| TCI + policy + incident | < 1 ms |
-| Event log + state publish | ~1 ms |
+| Measurement | Result | Source |
+|---|---|---|
+| Live configuration, tick mode (vid07 as a 30 fps camera, 4 faces, real identity and gallery, no audio) | preview 29.7 fps; AI 5.6 Hz; tick p50 168 / p95 226 ms; frame age p50 198 ms | `training/runs/custom_eval/m5/bench_live.json` (`tools/bench_live.py`, commit `8f21f47`) |
+| Per stage in that run (p50) | identity 156 ms (own thread); scene 92 ms; YOLO person / weapon / fire 25 / 24 / 23 ms | same |
+| Clip mode, ONNX + fast lane, 4 threads pinned to 4 CPUs | clip compute p50 1060 / p95 2145 ms against a 1600 ms budget (missed at p95); 0 clips dropped; fast lane p50 61 ms | `training/runs/custom_eval/clip/bench_clip_onnx_fastlane.json` (commit `cc53443`; other training jobs ran on the machine, and timings varied about 2x between runs) |
+| Scene classifier alone, 4 threads | DINOv2 96.9 ms (PyTorch) / 106.4 ms (ONNX); MobileNetV3-L 6.6 / 2.4 ms | `training/runs/custom/slim/latency.json` (commit `3bfb441`) |
+| Replay through the harness (identity and audio off) | custom-v4 mean 213 / p95 245 ms per tick | doc 6 §6.7 |
 
-> **Corrected from v2.1.** The previous latency table was measured on Apple M2
-> MPS and included rows for a Roboflow cloud path ("cached every 10 frames") that
-> no longer existed even then. It also reported a 15.83 ms total against a 30 FPS
-> target, which conflated the capture rate with the inference rate.
+Pi 5 figures exist only as estimates from published benchmarks (doc 8 §2).
+Nothing has been measured on a Pi.
+
+> **Removed.** The previous table listed ~8 ms per YOLO head and ~20 ms for
+> identity on an RTX 4060. No committed report produced it, and the app
+> environment runs CPU torch, so it did not describe the product. v2.1's table
+> before it was measured on Apple M2 MPS and included a Roboflow cloud path
+> that no longer existed.
 
 ---
 
@@ -352,11 +387,13 @@ Against the objectives approved at proposal stage.
 | Weapon mAP@50 | > 80% | 90.8% — **on a contaminated split** |
 | Fire/smoke mAP@50 | > 65% | 71.9% — **on a contaminated split** |
 | Audio macro F1 | > 90% (proposal) / > 65% (v2.1) | ~0.58 honest — **not met** |
-| Inference hot path | < 20 ms | Met |
-| End-to-end detect → alert | < 2 s | **Not yet measured** — needs `tools/evaluate.py` on labelled footage |
+| Inference hot path | < 20 ms | **Not met on CPU**: tick p50 168 ms (§7); each YOLO head 23–25 ms |
+| End-to-end detect → alert | < 2 s | **Not met**: episode onset → committed L3 p95 4.0 s on the custom videos (gate G4 FAIL, `training/runs/custom_eval/m5/gates.json`); weapon 8 of 12 episodes within 2 s |
 | False alarms vs motion baseline | ≥ 60% reduction | **Not yet measured** — needs `tools/baseline.py` and a boring set |
 | ReID rank-1 | ≥ 85% | **Not yet measured** |
 | Evidence integrity | tamper-evident | Met — AES-256-GCM + HMAC chained manifest |
 
-The three unmeasured rows are the ones that matter most in the final report, and
-all three are blocked on the same thing: recorded footage. See doc 5 §2.
+The unmeasured rows, and a false-alarm rate with a useful bound (the 3.7
+normal minutes in the custom videos bound it only at ≤ 60 false L3 onsets per
+hour, doc 6 §6.8), are blocked on the same thing: recorded footage from the
+deployment room (`CLAUDE.md` M6). See doc 5 §2.

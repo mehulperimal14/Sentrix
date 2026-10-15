@@ -1,13 +1,17 @@
-﻿# SENTRIX — Hardware Specifications & Bill of Materials
-**Version 3.0 · Updated: August 2026**
+﻿# 3. SENTRIX — Original Hardware Plan & Bill of Materials
 
-> **No hardware is currently attached.** SENTRIX runs today on a laptop webcam.
-> Everything in this document is a build plan, and the software interfaces it
-> plugs into already exist — see §5 and §7.
+> **Superseded.** This is the hardware plan from the mid-semester report
+> (August 2026): an ESP32-S3 node with a laptop (Architecture A) or an Orange
+> Pi 5 / Raspberry Pi 4 edge unit (Architecture B). The team has since chosen a
+> **Raspberry Pi 5** unit; its parts list, prices (checked October 2026),
+> wiring, pin table and software are in
+> [doc 8](8_RASPBERRY_PI5_INTEGRATION.md) and `deploy/pi5/README.md`.
+> §1–§4 below are kept as the record of the original plan; their prices were
+> not re-checked. §5–§7 describe the code on branch `sentrix/portal`.
 >
-> The bill of materials in §2 and §3 is unchanged from v2.1 and remains accurate.
-> Section 5 has been corrected: the previous version presented GPIO code that did
-> not exist anywhere in the repository.
+> **No hardware is attached yet.** SENTRIX runs on a laptop with a webcam, a
+> video file or the demo reel as its camera. The Pi hardware code exists and is
+> tested against fakes only.
 
 ---
 
@@ -141,119 +145,88 @@ The single-board computer (SBC) is a fully self-contained edge server. It runs t
 ## 5. Siren Relay Control
 
 Actuation sits behind the `Actuator` interface in
-[`sentrix/io/actuators.py`](../sentrix/io/actuators.py). `build_siren()` selects
-the strongest available backend at startup and logs which one it chose, so the
-running system reports its real capability rather than an aspirational one:
+[`sentrix/io/actuators.py`](../sentrix/io/actuators.py). `build_siren()` picks
+the strongest backend available at startup and logs which one it chose:
 
 | Backend | When selected | Behaviour |
 |---|---|---|
-| `GpioSiren` | `RPi.GPIO` importable | Drives the relay, auto-releases after the burst |
-| `SoundSiren` | Host audio available | Plays `web/static/sounds/siren.wav` |
-| `ConsoleSiren` | Neither | Logs a warning; **no physical deterrent** |
+| `GpioSiren` | a real pin factory resolves (lgpio on a Pi 5), or `SENTRIX_SIREN=gpio` (then mock pins off a Pi, `siren_is_real` false) | Drives the relay through gpiozero; a timer releases it |
+| `SoundSiren` | host audio available | Plays `web/static/sounds/siren.wav` |
+| `ConsoleSiren` | neither | Logs a warning; **no physical deterrent** |
 
-Override with `SENTRIX_SIREN=gpio|sound|console` in `.env`.
+Override with `SENTRIX_SIREN=auto|gpio|sound|console` (`auto`, the value
+`.env.example` ships, picks the best backend; before M10 it gave the console
+stub). `/api/health` exposes `siren_backend` and `siren_is_real`, so the
+dashboard cannot claim a deterrent that does not exist; `GET /api/node` adds
+the arming state.
 
-`/api/health` exposes `siren_backend` and `siren_is_real`, so the dashboard
-cannot claim a deterrent that does not exist.
+Rules in the code (doc 8 §6 has the wiring and the pin table):
 
-### Wiring (when the relay arrives)
+* **Pin and polarity.** GPIO17, **active-high** by default (an NPN transistor
+  driver, `gpio=17=op,dl` in `config.txt` keeps it off at boot). Opto relay
+  boards: `SENTRIX_SIREN_ACTIVE_HIGH=0` with `gpio=17=op,dh`. RPi.GPIO does
+  not work on a Pi 5, which is why the code uses gpiozero.
+* **Safety.** The pin starts off, a timer releases it, and one on-period never
+  exceeds `SENTRIX_SIREN_MAX_ON_SECONDS` (90 s). The systemd unit forces the
+  pin off after any exit (`deploy/pi5/`).
+* **Arming.** A siren test is refused (409) while the arming switch
+  (`SENTRIX_SIREN_ARM_PIN`, or `SENTRIX_SIREN_ARMED=0`) is off; a real alarm
+  still drives the relay, and the physical switch is what cuts the sound.
+* **Tests.** `POST /api/node/siren-test`: 1 s, at most once a minute, shared
+  with the Portal's `siren.test` command (owner with a fresh step-up).
+* **Timing.** `AlertConfig`: `siren_duration_seconds = 5.0`,
+  `siren_cooldown_seconds = 60.0`; the siren fires from level 5 only and is
+  claimed once per incident.
 
-```
-  SBC 40-pin header        Peripheral
-  ──────────────────────────────────────────────
-  Pin 2  (5.0V)        →   Relay VCC
-  Pin 11 (GPIO17/BCM17)→   Relay IN
-  Pin 14 (GND)         →   Relay GND
-  Pin 1  (3.3V)        →   DHT22 VCC
-  Pin 7  (GPIO4/BCM4)  →   DHT22 DATA
-  Pin 9  (GND)         →   DHT22 GND
-```
+Still to verify on the bench with an LED in place of the siren
+(`deploy/pi5/README.md`).
 
-> **Active-low matters.** Most inexpensive optocoupler relay boards are
-> active-low, so driving the pin HIGH *releases* the relay. `GpioSiren` defaults
-> to `active_low=True`. Getting this backwards produces a siren that runs
-> continuously until level 5 and then stops — the exact opposite of intended
-> behaviour, and it will not be obvious from the logs.
-
-Timing comes from `AlertConfig`: `siren_duration_seconds = 5.0`,
-`siren_cooldown_seconds = 60.0`, and the siren fires from level 5 only. It is
-also claimed once per incident, so a flapping signal cannot retrigger it.
-
-> **Corrected from v2.1.** The previous §5 showed a `GPIO.output(GPIO_SIREN_PIN,
-> GPIO.HIGH)` snippet captioned "hardware/siren.py (simplified)". No such code
-> existed. That file was a desktop beep player (`winsound.Beep` / `afplay` /
-> `paplay`) whose sound path pointed at a directory that no longer existed after
-> an earlier restructure, so even the beep fell through to a fallback tone.
-> Doc 5 v2.1 additionally listed the GPIO relay as operational.
+> **History.** v2.1 showed a `GPIO.output(GPIO_SIREN_PIN, GPIO.HIGH)` snippet
+> captioned "hardware/siren.py (simplified)". No such code existed; that file
+> was a desktop beep player. v3 then wrote an RPi.GPIO siren defaulting to
+> active-low, which would have fallen back to the console stub on a Pi 5.
 
 ---
 
 ## 6. Camera Configuration
 
-SENTRIX supports multiple simultaneous camera sources via `CAMERA_SOURCES` in `.env`:
+`CAMERA_SOURCES` in `.env`, comma-separated, handled by
+[`sentrix/io/sources.py`](../sentrix/io/sources.py):
 
-```bash
-# Single USB webcam
-CAMERA_SOURCES=0
+| Value | Source |
+|---|---|
+| `0`, `1` | USB webcam by index (`0,1` tiles two) |
+| `rtsp://user:pass@host/stream`, `http://…/video` | IP camera, ESP32-S3 node, phone IP-webcam app |
+| a video file path | file played as a camera at its own rate (the demo and the benches use this) |
+| `picamera:0` | Raspberry Pi camera through Picamera2: a 1280×720 main stream and a 640×480 analysis stream (`sentrix/io/picamera.py`) |
+| `demo-reel:<reel.json>` | the demo camera: idle footage in a loop, scenes on request (`sentrix/io/demo_reel.py`, doc 7 §15 item 3) |
 
-# Multiple cameras
-CAMERA_SOURCES=0,1
+Each source runs its own reader thread that keeps the capture buffer drained;
+without it OpenCV queues frames and latency grows without bound on RTSP.
+Credentials in a camera URL are redacted wherever the name appears (health,
+logs, link messages).
 
-# RTSP IP camera
-CAMERA_SOURCES=rtsp://admin:password@192.168.1.100:554/stream
-
-# Mixed
-CAMERA_SOURCES=0,rtsp://192.168.1.101:554/stream1
-```
-
-Sources are handled by [`sentrix/io/sources.py`](../sentrix/io/sources.py). Each
-runs its own reader thread that keeps the capture buffer drained — without that,
-OpenCV queues frames internally and latency grows without bound on an RTSP feed.
-
-A phone running any IP-webcam app is a valid second camera and needs no purchase:
-
-```bash
-CAMERA_SOURCES=0,http://192.168.1.20:8080/video
-```
-
-That is the cheapest route to a genuine two-view, non-overlapping setup for
-cross-camera re-identification.
-
-> **Trade-off worth stating in the report.** `MultiSource` tiles feeds into one
-> mosaic for a single inference pass. Tiling four 1080p streams into one 640 px
-> inference frame quarters each stream's effective resolution, so small-object
-> recall — a knife at three metres — degrades sharply. Beyond two cameras,
-> per-camera inference is the correct design. Tiling is retained for demo parity
-> with the mid-semester submission.
+> **Trade-off.** `MultiSource` tiles feeds into one mosaic for a single
+> inference pass. Tiling four 1080p streams into one 640 px frame quarters each
+> stream's resolution, so small-object recall (a knife at three metres) drops
+> sharply. Beyond two cameras, per-camera inference is the right design.
 
 ---
 
-## 7. Adding Hardware Later — What Is Already Built
+## 7. What is built for hardware today
 
-The software was restructured so that attaching hardware is an integration task,
-not a rewrite. Two interfaces carry the whole boundary.
-
-**Input** — [`sentrix/io/sources.py`](../sentrix/io/sources.py). `FrameSource` has
-four implementations today (`CaptureSource` for webcam and RTSP, `FileSource` for
-replay, `MultiSource` for tiling). An ESP32-S3 pushing RTSP already works through
-`CaptureSource` with no new code — it is a URL in `CAMERA_SOURCES`.
-
-**Output** — [`sentrix/io/actuators.py`](../sentrix/io/actuators.py). `GpioSiren`
-is written, tested for import safety on non-Pi hosts, and selected automatically
-the moment `RPi.GPIO` becomes importable.
-
-Realistic bring-up sequence:
-
-| Step | Work | Depends on |
+| Part | Code | State |
 |---|---|---|
-| 1 | Flash ESP32-S3, expose an RTSP stream | Hardware only |
-| 2 | Point `CAMERA_SOURCES` at it | Config line |
-| 3 | Wire the relay per §5, install `RPi.GPIO` | Hardware only |
-| 4 | Verify with `python tools/doctor.py` — `siren_is_real` must read `True` | — |
-| 5 | DHT22 telemetry | **New code.** No thermal input exists in the feature contract |
+| Siren relay | `io/actuators.py` | gpiozero, tested on mock pins |
+| Status LEDs (GPIO5/12/13), buzzer (GPIO26) | `io/gpio.py` | tested on mock pins; off unless `SENTRIX_GPIO_ENABLED=1` |
+| PIR (GPIO23), door contact (GPIO24), mains sense (GPIO16), tamper, arming key | `io/gpio.py` | debounced inputs; mains lost/restored and tamper go to the event log and the Portal |
+| CPU temperature, throttling, 5 V supply, BME280 / DHT22 | `io/node.py`, `io/sensors.py` | tested against a fake `vcgencmd` and `/sys` tree; off unless `SENTRIX_NODE_ENABLED=1` |
+| Pi camera | `io/picamera.py` | tested with a fake `picamera2` |
+| Wi-Fi setup | `io/network.py`, `/setup/wifi` | nmcli; only in setup mode |
+| systemd watchdog, unit, installer, network failover | `io/watchdog.py`, `deploy/pi5/` | not run on a Pi |
+| 4G modem SMS | `alerting/channels/modem.py` | tested against a fake AT serial port |
 
-Step 5 is the only one requiring development. Thermal telemetry is deliberately
-absent from `CONTRACT_V2`: with no sensor attached, adding the feature would mean
-feeding the fusion model a constant, which is exactly the defect that `is_night`
-represented in the previous build. Add the feature when the sensor exists, and
-retrain the fusion model against a contract that includes it.
+Bring-up order, wiring and the LED test: `deploy/pi5/README.md` and doc 8.
+Thermal telemetry is reported on the Node page but is still not a fusion
+feature: adding a feature means a new contract version and a refit on data
+that includes it.

@@ -1,288 +1,208 @@
-# SENTRIX — Roadmap & Remaining Work
+# 5. SENTRIX — Roadmap & Remaining Work
 
-**Version 3.0 · Updated: August 2026**
+**Describes branch `sentrix/portal` (October 2026).** What works, what is
+built but unverified, and what is left, in priority order. The milestone
+plan with its status boxes is `CLAUDE.md` §6 (M1–M10); the reviewed plan for
+the product and the Pi is the team's "SENTRIX Prototype Roadmap v2" (October
+2026). This document summarises both and keeps the model-research notes that
+are still valid. It replaces the August 2026 roadmap, whose cloud-GPU
+deployment section no longer applies: detection stays on the device
+(decisions D10–D12).
 
 ---
 
-## 1. Current Status
+## 1. Current status
 
-Version 2.1 of this document contained a capability matrix marking eleven
-subsystems "✅ Operational". Six of them were inert. The table below is generated
-in substance by `python tools/doctor.py`; run it rather than trusting any table.
+### Working and verified
 
-### Working
-
-| Capability | Notes |
+| Capability | Evidence |
 |---|---|
-| YOLOv8 person, weapon, fire/smoke detection | One component, three heads, one load each |
-| ByteTrack multi-object tracking | Built into ultralytics; replaced the DeepSORT dependency |
-| TCI fusion from confirmed per-class evidence | 2-of-3 fresh evaluations, one source ≤ L3, classifier + detector → L4/L5 (hard overrides and the display EMA were removed after the first live test, CLAUDE.md M1) |
-| Hysteresis and incident grouping | L2/L3 immediate on confirmed evidence, L4/L5 0.6 s + 2 obs, 5.0 s down; side effects bind to incidents |
-| Violence classification | 16 frames over 2.0 s, re-scored at 1 Hz |
-| Acoustic classification | 4.0 s log-mel window, 1.0 s hop, RMS-gated |
-| Face authorisation | ArcFace 512-d **when `insightface` is installed**; fails closed otherwise |
-| AES-256-GCM evidence vault | HMAC hash-chained manifest, collision-free naming |
-| Session auth, rate limiting, upload validation | Magic-byte checks, path confinement |
-| Incident database with operator verdicts | One row per episode |
-| JSONL event log | Audit trail, fusion training set, evaluation input |
-| Structured telemetry | Always on, not gated behind an eval flag |
+| Detection pipeline with confirmed per-class evidence, level policy, incidents | 0 false alarm onsets on the replayed first live session (home mode); 13 of 18 labelled episodes caught (doc 1 §5, doc 6 §6.8) |
+| Smooth preview and honest rates on the laptop CPU | preview 29.7 fps, AI 5.6 Hz with four faces (doc 2 §7) |
+| Evidence vault, records, verdicts, event log | `tests/test_records.py`; crash test lost 0 event rows (`CLAUDE.md` M3) |
+| Per-track identity, enrolment from the monitoring camera | unit tests (`CLAUDE.md` M4); team acceptance still to do |
+| Portal accounts, onboarding, claim, tunnel parity, SOS approve / decline / expiry / Request help now, Desk, offline takeover | e2e suite (13 scenarios) and one live two-process run (doc 7 §17) |
+| Send guard: nothing sent by default, two switches, allowlist | guard tests; every message SUPPRESSED in the live run |
 
-### Not working, or not wired
+### Built, not yet verified on real hardware or accounts
 
-| Item | State | Why it matters |
-|---|---|---|
-| **TCI fusion trained on real data** | Synthetic labels | The central scientific claim of the project |
-| **Re-identification** | Histogram fallback | `torchreid` not installed; approved objective is rank-1 ≥ 85% |
-| **UCF-Crime anomaly** | Not wired; polarity bug | Doc 2 §6 |
-| **Voice SOS** | Not wired | Vosk model not shipped; download from alphacephei.com when voice SOS is wired |
-| **Thermal telemetry** | No sensor | Deliberately absent from the feature contract |
-| **GPIO siren** | Interface only | No hardware attached |
-| **Pose estimation** | `PoseEstimator` written, not wired | Needs evaluation first |
-
-### Corrections to v2.1's status table
-
-Marked "✅ Operational" but inert at the time of the mid-semester submission:
-
-- **UCF-Crime anomaly** — no `anomaly` key in the score dict; neither checkpoint was ever loaded
-- **Face recognition** — no backend installed; the live path compared HSV colour histograms
-- **Voice SOS** — model path resolved relative to the working directory and never found the model
-- **GPIO siren relay** — no GPIO code existed in the repository
-- **ReID tracking** — threshold of 120.0 against unit vectors; every person collapsed to `GID-1`
-- **Instrumentation telemetry** — no-op unless `SENTRIX_EVAL_MODE=1`
-
----
-
-## 2. The Critical Path
-
-Everything below is ordered by how much it moves the three claims that actually
-matter: **≥ 60% false-alarm reduction versus a motion-only baseline**,
-**< 2 s detection-to-alert**, and **tamper-evident evidence**.
-
-### 2.1 Record a boring set — the blocker for three KPIs
-
-Nothing else on this list is more important, and it needs no ML work.
-
-The abstract opens by attacking a 94–98% false-alarm rate. That claim is
-unfalsifiable until false alarms per hour have been measured on continuous,
-unattended footage — and no public dataset can supply it. UCF-Crime, VIRAT and
-ShanghaiTech normal clips are trimmed and curated; they cannot give a rate per
-hour of an empty room, because they were never unattended rooms.
-
-**What is needed:** 8–10 hours of continuous recording. Two overnight sessions
-plus a few study-session recordings. It contains, deliberately, nothing
-interesting: an empty room, someone at a desk, a ceiling fan, curtains, a TV
-changing scenes, lights switching, a phone ringing, a pet if available.
-
-**Practical note that materially affects results.** Your models were trained on
-CCTV — RWF-2000 is surveillance footage, the weapon set contains mounted-camera
-frames. A laptop webcam at desk height, with a face filling the frame at under a
-metre, is the one geometry they have never seen. **Put the laptop on a shelf or
-cupboard angled down across the room.** Person bounding boxes drop to CCTV-like
-scale, the training and test domains converge, and it also matches the mounted
-IMX291 geometry planned for Architecture B. This costs nothing.
-
-Then:
-
-```bash
-python tools/baseline.py --clips data/clips          # the comparator
-python tools/replay.py  --clips data/clips --no-audio
-python tools/evaluate.py --json report.json
-```
-
-Unblocks: false-alarm reduction, detection-to-alert latency, and the labelled
-event logs that everything in §2.2 depends on.
-
-### 2.2 Train the fusion model on real data
-
-`models/tci_xgboost.json` is fitted on labels generated by a formula. Its
-`R² = 0.984` measures memorisation of that formula.
-
-The V3 notebook was right to refuse to fabricate this dataset. The way to
-produce a real one:
-
-1. `tools/replay.py` over labelled clips → `var/events/*.jsonl`. One hour at 6 Hz
-   is ~21,600 labelled rows.
-2. **Or** run live and mark incidents `TRUE`/`FALSE` via
-   `POST /api/incidents/{id}/verdict`. Slower, but it is real deployment data.
-3. `notebooks/02_tci_calibration.ipynb` — fit isotonic calibration, report ECE.
-4. `notebooks/03_tci_thresholds.ipynb` — derive the level bands from a cost
-   matrix instead of asserting them.
-
-**Train against `CONTRACT_V2` (8 features), not the legacy 5.** Doing so also
-removes the `contract == "v1"` compensation branch in `fusion/tci.py`.
-
-Reframe the target while you are there. Rather than regressing an invented
-continuous TCI, define it as a calibrated `P(threat | features)`. Then
-"TCI = 0.7" has a statable meaning, a reliability diagram becomes a figure, and
-ECE becomes the headline metric. That is a stronger contribution than R² on
-self-generated labels.
-
-### 2.3 Re-split every dataset and re-measure
-
-Doc 2 §3. Split by **source video** for violence, and de-duplicate images for the
-two detectors. Then re-run and report the corrected figures with the
-de-duplication step described — that reads as rigour.
-
-The weapon dataset also has an unused `test/` split of 703 images. Evaluating on
-it, post-de-duplication, is the cheapest credible improvement available.
-
-### 2.4 Fix the UCF-Crime polarity bug
-
-`python tools/diagnose_anomaly.py`. Likely a one-line fix that recovers
-AUC ≈ 0.806. Only after that is ruled out should an architecture change be
-considered. Version 2.1 proposed a SpikingJelly → MobileNetV3 rewrite; that would
-have been roughly a month spent on a sign error.
-
----
-
-## 3. Model Work — what needs training, and on what
-
-Ordered by value per unit effort. Nothing here has been started.
-
-### 3.1 Acoustic classifier — retrain (highest priority)
-
-**Why:** the current model is the weakest link. 375 clips across 4 classes,
-`scream` with 8 validation samples, and a reported macro-F1 that is a
-single-epoch spike (doc 2 §4).
-
-**Taxonomy.** Drop `explosion` — near-zero base rate in a home, training audio
-would come from film sound design, and it is acoustically confusable with
-firecrackers. But note that the current V3 model has **no `gunshot` class and no
-`glass_break` class either**, while the proposal promises both, and research
-gap RG-5 — distinguishing festive firecrackers from ballistic detonations — is
-unaddressable without `gunshot`.
-
-Recommended 6 classes:
-
-| Class | Sources |
+| Item | What is missing |
 |---|---|
-| `ambient` | room tone, speech, appliances, TV |
-| `scream` | AudioSet, MIVIA |
-| `glass_break` | MIVIA, ESC-50 — **promised, never implemented** |
-| `gunshot` | UrbanSound8K `gun_shot`, MIVIA, AudioSet |
-| `alarm_siren` | UrbanSound8K `siren`, AudioSet smoke alarm |
-| **`nuisance_impulsive`** | **firecrackers, car horns, door slams, dropped objects** |
+| Raspberry Pi 5: siren relay, LEDs, inputs, telemetry, Pi camera, systemd, network failover | a Pi; bench test with an LED in place of the siren (docs 8, `deploy/pi5/README.md`) |
+| 4G modem SMS | a modem and SIM; check PDU mode, delivery reports, the AT port |
+| Telegram bot, Brevo / Resend e-mail | a bot token and provider accounts; one rehearsal message per channel to an allowlisted team account |
+| Portal on Oracle / Render with Postgres | Docker run, a live Postgres check (`tools/portal_pg_check.py live`), DNS and TLS |
+| Clip mode on ONNX | a Pi measurement; the laptop bench misses the 1.6 s budget at p95 (doc 2 §7) |
+| NCNN backend, `buffalo_s` face pack | not installed; tested with fakes |
 
-That last class is the design idea worth keeping: rather than binary
-threat/not-threat, give the model somewhere to put loud-but-harmless impulsive
-sounds. It is what actually delivers RG-5, and a firecracker-vs-gunshot confusion
-matrix is one of the strongest figures available for the report.
+### Not built
 
-**Data:** target ≥ 200 clips per class (~1,200 total, versus 375 today). AudioSet
-+ UrbanSound8K + MIVIA cover all six without a recording session. AudioSet has
-`Fireworks` and `Firecracker` ontology classes directly.
-
-**Architecture — the strongest ViT case in this project.** **AST (Audio
-Spectrogram Transformer)** is a ViT over mel-spectrogram patches, pretrained on
-AudioSet, which is the corpus this task draws from. Fine-tuning from AudioSet
-weights needs far less data than training a CNN from scratch — with 375 clips
-that is not a preference, it is the only realistic path. `perception/audio.py`
-builds architecture from checkpoint parameter names, so an AST checkpoint drops
-in behind the same interface.
-
-`THREAT_WEIGHTS` in that module is keyed by class *name*, so adding or removing a
-class needs no code change.
-
-### 3.2 Violence classifier — retrain with a temporal head
-
-**Why:** the current model is per-frame, and a still of two people standing close
-is genuinely ambiguous. The runtime aggregates 16 frames over 2 s at inference,
-which recovers some benefit, but it is not a trained temporal model.
-
-**Data:** RWF-2000 — **re-split by video** — plus **XD-Violence**, which is the
-other major recommendation in this document. XD-Violence (Wu et al., ECCV 2020)
-is 4,754 untrimmed videos, ~217 hours, with **aligned audio and video**, weakly
-labelled across 6 categories. It is the multimodal event dataset the V3 notebook
-searched for and could not find. Caveat for the report: it is sourced from films
-and YouTube rather than pure CCTV, so pair it with UCF-Crime for camera realism.
-
-**Architecture:** the proposal's original ResNet-18 + LSTM is the minimum. Better:
-**VideoMAE** or **TimeSformer**. For edge, **MobileViT** or **EfficientFormer** —
-a ViT-B is roughly 10× ResNet-18 and will not hold 6 Hz on an Orange Pi. A
-cascade also works: run the heavy model only on frames the cheap path flagged.
-
-### 3.3 Weapon and fire detectors — re-measure, probably not retrain
-
-These are the strongest models in the project. The work is de-duplication and
-honest re-measurement, not retraining. Retrain only if the corrected numbers
-fall below the KPI targets.
-
-If retraining does become necessary, the same weights fine-tune on Indian-context
-data — IDD (IIIT Hyderabad) for pedestrian and lighting variation.
-
-### 3.4 Re-identification — no training needed
-
-Install `torchreid` and evaluate against **Market-1501**, which gives a published
-rank-1 protocol an examiner recognises; OSNet reaches ~94% there, comfortably
-above the ≥ 85% objective. That is far stronger evidence than home-made clips.
-
-Use a phone as a second camera for the live demo — free, and it makes the
-cross-camera handoff real rather than simulated.
-
-Upgrade path: **CLIP-ReID** or DINOv2 embeddings outperform OSNet and need no
-ReID-specific training. `ReIDEngine` already normalises and cosine-matches, so
-swapping the embedding function is a one-line change.
-
-### 3.5 Pose estimation — no training needed
-
-`yolov8n-pose.pt` is pretrained; `PoseEstimator` is written and unwired. Keypoints
-beat bounding-box centroids for aggression detection because the signal is limb
-velocity and body configuration. It also fixes the crawl heuristic, which
-currently infers "crawling" from box aspect ratio and therefore fires on anyone
-the detector clips at the frame edge.
-
-### Where ViTs do *not* belong
-
-Object detection. YOLOv8 at 640 px is faster and more accurate than DETR-family
-detectors at this scale, and small-object recall — a knife at three metres — is
-exactly where transformer detectors are weakest.
+| Item | Notes |
+|---|---|
+| Device retention caps and signed vault tombstones | doc 7 §3.8 |
+| Alembic baseline for the Portal | needed before any column rename (doc 7 §16 q7) |
+| `tools/bench_link.py` | remote fps, glass-to-glass latency, uplink, CPU |
+| Fitted fusion model | M8; needs real labelled sessions |
+| Re-identification beyond the histogram fallback | install `torchreid`, evaluate on Market-1501 (§3.4) |
+| UCF-Crime anomaly model | not wired; polarity bug (doc 2 §6) |
+| Voice SOS | not wired; the Vosk model is not shipped |
+| Tier 2 product items | inbound SMS parsing, web push / PWA, owner TOTP, Hindi templates, automated export and erasure jobs, WebRTC video, multi-process Pi layout |
 
 ---
 
-## 4. Deferred
+## 2. The critical path
 
-| Item | Effort | Notes |
+### 2.1 Record deployment-room data (M6) — the blocker for every gate
+
+Every remaining claim depends on footage the team does not have yet. The
+custom dataset holds 341 s of labelled video from two rooms, and its 3.7
+normal minutes bound false alarms only at ≤ 60 per hour (doc 6 §6.8).
+
+The protocol (`CLAUDE.md` M6): the demo room R1 plus one other room R2; the
+camera mounted at 1.8–2.2 m, tilted down, in a lit room; sessions S1/S2 for
+training, S3 for validation, S4 for the test (day 5 or later, unseen
+volunteers); scripted 20 s clips, 12 per class per room per session, with as
+many hard negatives as positives (a phone or remote held like a pistol, an
+unlit lighter, an aerosol can, fire on a screen, orange clothing); at least
+3 h of ordinary footage in R1 on non-training days; replicas and flames only
+with written permission and a safety notice.
+
+This unlocks gates G0, G3 and G5 (`CLAUDE.md` M9), the SOS prompt budget P8
+(doc 7 §15 item 7), and the data that M7 and M8 train on.
+
+### 2.2 Models that fit the room (M7)
+
+* One YOLO11n detector (person, pistol, knife, fire) at 640 px from COCO, with
+  QC'd teacher boxes, rehearsal and all the hard negatives; it replaces three
+  YOLO passes.
+* A person-crop weapon classifier as the second vote; the scene classifier
+  retrained with deployment negatives and an out-of-distribution guard.
+* Slim scene heads did not replace DINOv2 (doc 2 §5.2). Next fallback to test
+  for the Pi: DINOv2-S/14, which was outside the pre-registered candidates.
+
+### 2.3 Fitted fusion (M8)
+
+The synthetic XGBoost booster was retired in M1. A real model needs the feature
+contract logged every tick on the M6 sessions, a per-class logistic fit on
+session-grouped CV, a prior correction to the deployment base rate, and
+thresholds from the cost matrix in `notebooks/03_tci_thresholds.ipynb` plus a
+false-alarm budget. Define the target as a calibrated `P(threat | features)`,
+so "TCI = 0.7" has a meaning and ECE is the headline metric. Dataset builders
+must drop or relabel incidents behind a duress PIN (doc 7 §7.8).
+
+### 2.4 Gates before the demo (M9 and P1–P8)
+
+Measured once on the S4 test sessions and the final build:
+
+| Gate | Pass when | Today |
 |---|---|---|
-| Voice SOS | Small | Download the Vosk model; wire behind a `VoiceEngine` |
-| Mobile companion | Small | A Telegram bot gives push, images and inline confirm/dismiss in ~2 days and satisfies the mobile objective |
-| Thermal telemetry | Medium | Needs the sensor first, then a contract version bump |
-| Multi-node ESP-NOW mesh | Large | Hardware scope |
-| INT8 edge quantisation | Medium | Only meaningful once running on the SBC |
-| Federated learning | Large | Beyond this project |
+| G0 | gate data exists and is untouched | not run |
+| G1 | detector frame AUROC ≥ 0.90 per class | PASS on the custom videos (scene weapon 0.93, fire 0.999), partly in-sample |
+| G2 | ≥ 27/30 episodes per class confirmed within 2 s | FAIL (weapon 8 of 12 within 2 s) |
+| G3 | 0 L4/L5 in ≥ 3 h of normal footage and all hard negatives; ≤ 1 L3/h | not run (no footage) |
+| G4 | loop ≥ 5 Hz; detect → alert p95 ≤ 2 s | FAIL (5.6 Hz, but onset → L3 p95 4.0 s) |
+| G5 | 30-min live dry run, 10/10 scripted events, 0 unscripted L3+ | not run |
+| P1–P8 | parity, isolation, SOS correctness, latency, offline, privacy, no alerts in tests, prompt budget | doc 7 §15 item 7 |
+
+Gate results: `training/runs/custom_eval/m5/gates.json` (`tools/gate_report.py`).
+A failing class is dropped from the promise or re-tested on a fresh session,
+never tuned on S4.
+
+### 2.5 Hardware bring-up
+
+In order: the bench kit (doc 8 §8), the LED relay test, debounce checks on
+real PIR, door and mains signals, Picamera2 on the Camera Module 3 Wide, the
+clip-mode gate on the Pi with the link running (Gate A, doc 8 §7), then the
+modem on the Pi and network failover with the actual 4G dongle.
+
+### 2.6 Demo rehearsal
+
+The 10 live pre-runs per demo clip (keep a clip only at ≥ 9 of 10; 3 of 3 so
+far for `gun.mov` and `4.mov`, doc 7 §17), a rehearsal with real delivery to
+allowlisted team phones (both switches on, test mode on), and the demo script
+of the Roadmap v2 (admin, onboarding, approve, false alarm, no answer, internet
+down).
 
 ---
 
-## 5. Cloud Deployment
+## 3. Model research notes (still valid, not started)
 
-Unchanged in substance from v2.1 and still accurate, with two corrections:
+### 3.1 Acoustic classifier — retrain
 
-- The Dockerfile in v2.1 copied `backend/`. The layout is now a single `sentrix/`
-  package, so `COPY sentrix/ ./sentrix/` plus `models/` and `pyproject.toml`.
-- The quantisation example referenced `backend/models/...`; weights are now at
-  `models/`.
+The current model is the weakest: 375 clips across 4 classes, `scream` with 8
+validation samples, and a reported macro-F1 that is a single-epoch spike
+(doc 2 §4). Audio is log-only under decision D1 until this changes.
 
-Instance guidance (AWS `g4dn.xlarge`, RunPod RTX 3080, GCP T4) is unchanged.
+Recommended 6 classes: `ambient`, `scream`, `glass_break`, `gunshot`,
+`alarm_siren` and **`nuisance_impulsive`** (firecrackers, horns, door slams,
+dropped objects). The last class gives the model somewhere to put loud but
+harmless sounds; a firecracker-vs-gunshot confusion matrix closes research gap
+RG-5 with evidence. Data: ≥ 200 clips per class from AudioSet, UrbanSound8K and
+MIVIA. Architecture: **AST** (Audio Spectrogram Transformer) fine-tuned from
+AudioSet weights; `perception/audio.py` builds its architecture from the
+checkpoint, so it drops in.
 
-**Scale note.** `MultiSource` tiles feeds into one inference pass, which quarters
-effective resolution at four cameras and materially hurts small-object recall.
-Beyond two cameras, run one pipeline process per camera and aggregate at the
-dashboard.
+### 3.2 Violence / action recognition
+
+The v3 violence model is per-frame and only used without a scene model. A
+temporal model (ResNet-18 + LSTM as proposed, or VideoMAE / TimeSformer; for
+the Pi a MobileViT-class model) on RWF-2000 **re-split by video** plus
+XD-Violence (aligned audio and video). Assault and robbery stay experimental
+(≤ L2) until the M6 data can validate them.
+
+### 3.3 Re-split and re-measure the v3 corpora
+
+Doc 2 §3: split violence by source video, de-duplicate the detector image
+sets, evaluate the unused 703-image weapon `test/` split. Report the corrected
+figures with the de-duplication step described.
+
+### 3.4 Re-identification
+
+Install `torchreid` and evaluate on Market-1501 (published rank-1 protocol;
+OSNet reaches about 94 %, above the ≥ 85 % objective). Upgrade path: CLIP-ReID
+or DINOv2 embeddings behind the same cosine matcher.
+
+### 3.5 Pose estimation
+
+`yolov8n-pose.pt` is pretrained and `PoseEstimator` is written but not wired.
+Keypoints beat box centroids for aggression, and fix the crawl heuristic that
+fires on boxes clipped at the frame edge.
+
+### 3.6 UCF-Crime anomaly
+
+`python tools/diagnose_anomaly.py`: the inverted AUC is 0.806, so the likely
+fix is one line (doc 2 §6). Only then consider wiring it.
 
 ---
 
-## 6. Indian Deployment Context
+## 4. Deferred (Tier 2 and later)
 
-The strongest research contribution available to this project, and it survives
-independent of everything above.
+| Item | Notes |
+|---|---|
+| Inbound SMS (approve by reply) | the modem's read API exists; parsing is not built |
+| Web push / PWA | needs the HTTPS Portal |
+| Owner TOTP, Hindi message templates | designed, not built |
+| WebRTC remote video | today: an MJPEG relay up to 15 fps |
+| Multi-process Pi layout | deferred by the single-process decision; revisit if Gate A fails with the link running |
+| Liveness for the face disarm | a photograph of a resident could clear the entry delay (doc 7 §16 q6) |
+| End-to-end encryption of remote viewing | video passes through the Portal in memory over TLS, not end-to-end encrypted |
+| Voice SOS | download the Vosk model; wire behind a `VoiceEngine` |
+| Thermal input to fusion | telemetry exists; a fusion feature needs a contract version and data |
 
-**Acoustic false-positive suppression** is the concrete one: festive
-pyrotechnics, multi-tone pressure horns and street celebrations. The
-`nuisance_impulsive` class in §3.1 is the mechanism, and AudioSet supplies the
-data without a recording trip. A confusion matrix showing firecracker versus
-gunshot separation closes RG-5 with evidence rather than assertion.
+---
 
-**Visual domain adaptation** — IDD (IIIT Hyderabad) for unstructured scenes and
-lighting; Smart Cities Mission municipal footage where obtainable.
+## 5. Indian deployment context
 
-**Regional SOS keywords** — Hindi *bachao*, *chor*, *aag* — remain a good idea and
-depend on Voice SOS being wired first.
+* **Acoustic false-positive suppression** — festive pyrotechnics, pressure
+  horns, street celebrations — through the `nuisance_impulsive` class (§3.1).
+* **Visual domain adaptation** — IDD (IIIT Hyderabad) for unstructured scenes
+  and lighting.
+* **Emergency services.** India's 112 (ERSS) has no public interface for
+  private alarm companies, so SENTRIX never calls it: an approved SOS goes to
+  the SENTRIX Desk and confirmed contacts, and every text says "SENTRIX does
+  not contact 112 itself".
+* **Data protection (DPDP Act 2023, Rules 2025).** Consent per purpose, data
+  stored in India, hard retention caps, no minors' faces in the capstone
+  (doc 7 §12, decision D12).
+* **Regional SOS keywords** (Hindi *bachao*, *chor*, *aag*) depend on Voice
+  SOS being wired first.
