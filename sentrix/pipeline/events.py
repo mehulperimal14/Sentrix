@@ -115,6 +115,9 @@ class EventLog:
             row["audio"] = audio
         evidence = features.extras.get("evidence") or {}
         leading = evidence.get(result.incident_type) if isinstance(evidence, dict) else None
+        if getattr(result, "source", None) == "intrusion":
+            leading = {"state": "context", "rule": "unrecognised person (L2 only)",
+                       "modalities": {}}
         row["fusion"] = {
             "class": result.incident_type,
             "state": (leading or {}).get("state"),

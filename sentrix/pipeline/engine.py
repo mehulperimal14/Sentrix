@@ -1051,6 +1051,10 @@ def _fusion_block(features: FeatureVector, result: TCIResult) -> dict:
     """The leading class's evidence state, rule and modalities (D15)."""
     evidence = (features.extras or {}).get("evidence") or {}
     leading = evidence.get(result.incident_type) or {}
+    if result.source == "intrusion":
+        # Not a threat class: presence context, held in the L2 band (D15).
+        leading = {"state": "context", "rule": "unrecognised person (L2 only)",
+                   "modalities": {}}
     return {"class": result.incident_type, "state": leading.get("state", "none"),
             "rule": leading.get("rule"), "modalities": leading.get("modalities") or {},
             "context": (features.extras or {}).get("fusion_context") or {},

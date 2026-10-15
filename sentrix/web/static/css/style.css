@@ -1021,15 +1021,15 @@ body.standalone {
 }
 /* Threat Analysis: per-input contributions (D15) */
 .contrib-list { margin-top: 0.4rem; font-size: 0.72rem; line-height: 1.5; }
-.contrib-row { display: grid; grid-template-columns: 7.5rem 7.5rem 1fr; gap: 0.4rem; padding: 0.1rem 0; border-bottom: 1px solid #1e2535; }
+.contrib-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 0.5rem; padding: 0.15rem 0; border-bottom: 1px solid #1e2535; }
 .contrib-input { color: #c5d0e8; text-transform: capitalize; }
 .contrib-effect { font-weight: 600; }
-.contrib-detail { color: #8a9bb8; overflow-wrap: anywhere; }
+.contrib-effect { text-align: right; }
+.contrib-detail { grid-column: 1 / -1; color: #8a9bb8; overflow-wrap: anywhere; }
 .contrib-raises .contrib-effect { color: #ef4444; }
 .contrib-lowers .contrib-effect { color: #22c55e; }
 .contrib-gated .contrib-effect { color: #facc15; }
 .contrib-off .contrib-effect, .contrib-context .contrib-effect { color: #8a9bb8; }
-@media (max-width: 600px) { .contrib-row { grid-template-columns: 1fr 1fr; } .contrib-detail { grid-column: 1 / -1; } }
 
 /* Talk-down speaker card (D16) */
 .speaker-card { margin-top: 0.75rem; }
