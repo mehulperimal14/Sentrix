@@ -1,56 +1,79 @@
 # CLAUDE.md — SENTRIX
 
 Project memory and working plan. Read this first in every session. Sections 1–4
-are facts; section 5 is the diagnosis of the live product; section 6 is the
-repair plan and its progress. Keep section 6's status boxes current.
+are facts; section 5 is the diagnosis of the first live run; section 6 is the
+plan, the decisions and their progress. Keep section 6's status boxes current.
 
 ---
 
 ## 1. What this project is
 
-**SENTRIX** — a local, edge-first multimodal threat-detection system (Capstone
-CPG-299, CSED, Thapar Institute; mentor Dr. Ashutosh Mishra; team: Kartik Garg,
-Akshay Ranveer, Prashant Gagneja, Harshit Mishra, Mehul Perimal).
+**SENTRIX** — an edge-first home threat-detection product with an owner-approved
+SOS flow (Capstone CPG-299, CSED, Thapar Institute; mentor Dr. Ashutosh Mishra;
+team: Kartik Garg, Akshay Ranveer, Prashant Gagneja, Harshit Mishra, Mehul
+Perimal).
 
-A camera and a microphone feed a stack of perception engines; their scores are
-fused into a **Threat Confidence Index (TCI, 0–1)** that drives a five-level
-escalation ladder:
+Two programs:
 
-| Level | TCI band (asserted) | Side effects |
-|---|---|---|
-| 1 SECURE | 0.00–0.20 | log |
-| 2 SUSPICIOUS | 0.20–0.40 | + snapshot, incident opened |
-| 3 ELEVATED | 0.40–0.65 | + AES-256-GCM evidence bundle |
-| 4 HIGH | 0.65–0.85 | + SMS, dispatch package |
-| 5 CRITICAL | 0.85–1.00 | + siren, voice call |
+* **Device** (`python -m sentrix`, one process; laptop today, Raspberry Pi 5
+  later): camera (+ optional microphone) → perception → confirmed per-class
+  evidence → **Threat Confidence Index (TCI, 0–1)** → five-level alarm →
+  incidents, event log, encrypted evidence. It serves the **Local Console (LC)**
+  on `http://127.0.0.1:8000` and runs the SOS engine, the channel router
+  (modem SMS, Telegram, e-mail, Twilio — all behind the send guard) and the
+  outbound link client. Pi I/O: siren relay, LEDs, buzzer, PIR, door, mains
+  sense, node telemetry, watchdog.
+* **Portal** (`python -m sentrix_portal`, `http://127.0.0.1:8100`; demo on
+  `portal.localhost:8100`): accounts with activation codes, TOTP for admin and
+  Desk, 7-step onboarding wizard, household and contacts with consent, SOS pages,
+  the **SENTRIX Desk** (simulated responder console), admin console, privacy
+  (export, erasure, retention), the link hub and the tunnel
+  `/d/{device_id}/...` that replays requests into the device's own LC app.
 
-Everything runs locally; FastAPI dashboard at `http://127.0.0.1:8000/dashboard`.
+| Level | Side effects (current code) |
+|---|---|
+| 1 SECURE | log |
+| 2 SUSPICIOUS | incident opened (log and dashboard only; D4) |
+| 3 ELEVATED | + snapshot, AES-256-GCM evidence bundle, SOS request for D1 alarm classes and armed intrusion (D8) |
+| 4 HIGH | + dispatch package; legacy SMS only when no SOS request owns the incident |
+| 5 CRITICAL | + siren; legacy voice call only when no SOS request owns the incident |
 
-### Architecture (one frame, `sentrix/pipeline/engine.py` → `Pipeline.process`)
+The TCI bands 0.20 / 0.40 / 0.65 / 0.85 are asserted, not fitted. One
+confirmed source lands in L3 (≤ 0.62); L4+ needs a classifier and a detector
+both confirmed (D3).
+
+### Architecture (one tick, `sentrix/pipeline/engine.py` → `Pipeline.process`)
 
 ```
-FrameSource (io/sources.py: webcam | file | RTSP)
+FrameSource (io/sources.py: webcam | file | RTSP | picamera:0 | demo-reel:<json>)
+  capture thread at camera rate → newest-frame slot → inference thread (≤ 6 Hz)
   └─ Detector (perception/detector.py)   YOLO person (+ByteTrack) / weapon / fire heads
-  └─ SceneEngine (perception/scene.py)   5-class classifier: normal fire weapon assault robbery
-       └─ replaces ViolenceEngine (perception/violence.py) when a scene model is installed
-  └─ BehaviourEngine, MotionEngine, IdentityEngine (insightface, fail-closed), ReIDEngine
-  └─ AudioEngine (own thread, mic)
-  → FeatureVector (fusion/features.py, CONTRACT_V2: 8 features)
-  → TCIEngine (fusion/tci.py): hard overrides → XGBoost (synthetic, 5-feature v1) → boosts → EMA
-  → LevelPolicy (fusion/policy.py): hysteresis (0.6 s up / 5 s down)
-  → IncidentManager (pipeline/incidents.py) → side effects (_act): snapshot, evidence, SMS, siren, dispatch
-  → EventLog (var/events/*.jsonl), SystemState (dashboard websocket), HUD overlay
+  └─ SceneEngine (perception/scene.py)   5-class: normal fire weapon assault robbery (DINOv2)
+  └─ IdentityWorker + TrackIdentity      InsightFace on its own thread, per track, fail-closed
+  └─ BehaviourEngine, MotionEngine, ReIDEngine, AudioEngine (optional, own thread)
+  → fusion/evidence.py: k-of-n confirmation, person gate, corroboration cap, experimental cap
+  → TCIEngine (fusion/tci.py): TCI = strongest confirmed class evidence (no booster, no EMA)
+  → LevelPolicy (fusion/policy.py): per-threshold timers (L4/L5 0.6 s + 2 obs; 5 s down)
+  → IncidentManager (pipeline/incidents.py, PeakSnapshot) → _act: snapshot, evidence, dispatch, siren
+  → SOS hook: sos.trigger (idempotent per incident) → sentrix/sos (machine, sweeper, channels)
+  → EventLog (var/events/*.jsonl, schema 3, flushed per row), SystemState (websocket), HUD
+Clip mode (SENTRIX_PIPELINE_MODE=clip, pipeline/clip.py): 4 s window, 2 s hop, optional fast lane.
 ```
 
-All tunables: `sentrix/config.py` (seconds, never frames). Runtime output:
-`var/` (gitignored, never web-mounted).
+All tunables: `sentrix/config.py` (seconds, never frames; `SosConfig`,
+`LinkConfig`, `ChannelConfig`, `GpioConfig`, `ClipConfig`, `NodeConfig`,
+`WebConfig`, `RetentionConfig`). Runtime output: `var/` (gitignored, never
+web-mounted; `SENTRIX_VAR_DIR` moves the whole tree). Contract for the Portal,
+link, tunnel and SOS: `docs/7_PORTAL_AND_SOS.md`; Pi plan:
+`docs/8_RASPBERRY_PI5_INTEGRATION.md`.
 
 ### Environments
 
 | Purpose | Python | Notes |
 |---|---|---|
-| App, tests, evaluation | `.venv` (Python 3.10–3.14; maintainer PC: 3.14, **CPU** torch) | `run.bat` / `run.sh`, or `python -m sentrix`; `python -m pytest` |
+| App, Portal, tests, evaluation | `.venv` (Python 3.10–3.14; maintainer PC: 3.14, **CPU** torch) | `run.bat` / `run.sh`, or `python -m sentrix`; `python -m sentrix_portal`; `python -m pytest` |
 | Training (GPU) | `C:\Users\PC\anaconda3\envs\sentrix\python.exe` (3.11, torch cu126, RTX 4060 8 GB) | has ultralytics, timm, transformers |
+| Raspberry Pi 5 | `requirements-pi.txt`, venv with system site packages (`run.sh` detects the Pi) | not yet run on a Pi |
 
 ### Data locations
 
@@ -60,17 +83,34 @@ All tunables: `sentrix/config.py` (seconds, never frames). Runtime output:
 | Its 10 source videos | `training/datasets/sentrix_custom/videos/` (tracked; `SENTRIX_CUSTOM_VIDEOS` overrides) |
 | Vendored ground truth, boxes, QC rejects | `training/datasets/sentrix_custom/` |
 | Original public corpora (RWF-2000 frames, weapon, fire/smoke, audio, UCF-DVS) | not in git; `data/` or `SENTRIX_VIOLENCE_DATA` / `SENTRIX_WEAPON_DATA` / `SENTRIX_FIRE_DATA` (maintainer PC: `G:\Capstone\data`) |
+| Device runtime (database, events, evidence, snapshots, faces, calibration, `mode.json`) | `var/` (private; never modify `var/sentrix.db` from tools or tests) |
+| Portal data (SQLite, `secret_key`, `data_key`) | `var/portal/` by default (`PORTAL_DATA_DIR`) |
+| Device identity (`identity.json`, `profile.key`) | `/etc/sentrix` on a Pi, else `var/link` (`SENTRIX_DEVICE_IDENTITY_DIR`) |
+| Demo world | `var/demo/` by default (`tools/demo_reset.py --dir`; only a marked directory is wiped) |
 
 ### Rules for working here
 
-* **Never let a test or evaluation send an alert.** Evaluation goes through
-  `sentrix/evaluation/harness.py` (`build_eval_pipeline`: `_act`/`_submit` are
-  no-ops, identity neutral, no mic). `.env` may hold live Twilio keys.
-* **Never tune on the test video** (`wa02`). Select with leave-one-video-out CV
-  over the nine train+val videos, confirm on val, report test once.
-* Quote numbers from generated reports (`tools/custom_eval_table.py`), with the
-  commit that produced them.
-* Branches carry configurations; commit, never push unless asked.
+* **Never let a test, evaluation, replay or demo send an alert.** `.env` may hold
+  live Twilio keys. Test mode is on by default (D13); every message passes
+  `sentrix/alerting/guard.py`. Evaluation goes through
+  `sentrix/evaluation/harness.py` (`build_eval_pipeline`: `_act`/`_submit` and the
+  shutdown save are no-ops, identity neutral, no mic, `NullSosService`;
+  measurement tools call `assert_measurement_safe`). `tests/conftest.py` forces
+  test mode and every switch off before any import, moves `var/` and the Portal
+  data to a temp dir, blocks webcam and microphone and allows loopback sockets
+  only.
+* **Never tune or select on the test video** (`wa02`). Select with
+  leave-one-video-out CV over the nine train+val videos, confirm on val, report
+  test once. The demo reel refuses `wa02`.
+* **Never open a webcam or microphone** in diagnostics or tests
+  (`tools/doctor.py` opens none unless `--probe-camera`).
+* Quote numbers from generated reports (`tools/custom_eval_table.py`,
+  `training/runs/**`, docs/7 §17), with the commit that produced them.
+* Branches carry configurations; commit freely, **never push** unless asked; no
+  attribution lines (Co-Authored-By, "Generated with") in commits. When several
+  writers share the working tree, stage only your own files (never `git add -A`).
+* The full suite stays green: `.venv\Scripts\python.exe -m pytest` (add
+  `-o addopts=""` for the summary line).
 
 ---
 
@@ -82,7 +122,7 @@ V3 restructure and model training in notebooks: violence ResNet-18 (RWF-2000),
 audio log-mel CNN (AudioSet clips), weapon and fire/smoke YOLOv8n (Roboflow
 corpora), UCF-Crime DVS anomaly model (not wired). TCI fusion booster fitted to a
 synthetic formula. A staged (uncommitted) rewrite moved `backend/` into the
-`sentrix/` package with 15 documented fixes (see README "What changed in v3").
+`sentrix/` package with 15 documented fixes (README "What changed in v3", in the README up to `e7ca89e`).
 
 ### Custom-dataset work (2026-09-30)
 
@@ -117,18 +157,45 @@ synthetic formula. A staged (uncommitted) rewrite moved `backend/` into the
 
 The product did not work as a whole — see section 5.
 
+### End-to-end repair (2026-10-01 → 10-10, `sentrix/e2e-repair` = `main`)
+
+M1–M5 (section 6): containment of the false alarms, real-time live loop,
+coherent records, per-track identity and enrolment from the monitoring camera,
+evaluation per committed level and a gate report. Published to GitHub with a
+fresh-clone setup.
+
+### Pi plan and Portal/SOS product (2026-10-10 → 10-15, `sentrix/portal`)
+
+1. `docs/8_RASPBERRY_PI5_INTEGRATION.md` (was `HARDWARE.md`): 4 s clip engine,
+   hub topology, Hailo option, event trigger, pin table.
+2. The team's proposal (company provisions → customer activates → onboarding →
+   same dashboard anywhere → SOS on a confirmed L3) turned into the reviewed
+   plan (*SENTRIX Prototype Roadmap v2*) and decisions D8–D14, then the
+   developer contract `docs/7_PORTAL_AND_SOS.md`.
+3. Foundation and contract review, then eight parallel tracks (T-HW, T-CLIP,
+   T-CH, T-SOS, T-WEB, T-ACCT, T-LINK, T-MODEL) in worktrees, merged in that
+   order, integration notes applied (M10).
+4. Demo tools (`tools/demo_reset.py`, `tools/demo_run.py`, demo reel camera) and
+   `deploy/portal/`.
+5. An in-process product end-to-end suite (13 scenarios), a live smoke run with
+   the Portal and the device as two real processes (docs/7 §17, 5 bugs fixed),
+   an adversarial review, and a repository clean-up (unused weights, the Vosk
+   model and old run dumps removed; capstone submissions to `docs/capstone/`,
+   diagrams to `docs/assets/`).
+
 ---
 
 ## 3. Git history
 
 | Branch | Head | Contents |
 |---|---|---|
-| `main` | = `sentrix/e2e-repair` | the published state: custom-v4 models + M1–M5 + fresh-clone setup (pre-session head was `0f75a0e`) |
+| `main` | `eb82ff5` (= `sentrix/e2e-repair`, = `origin/main`) | the published state: custom-v4 models + M1–M5 + fresh-clone setup + docs/8 (Pi plan) (pre-session head was `0f75a0e`) |
 | `sentrix/baseline-v3` | `d8629eb` | staged rewrite committed (`9e0037a`) + evaluation harness (`05a04fe`) + doc fixes |
 | `sentrix/finetuned-v3` | `66accb9` | baseline + scene integration + training tooling + fine-tuned v3 models |
-| `sentrix/custom-v4` | `3772acf` | baseline + scene integration + training tooling + new DINOv2/YOLO11n models (recommended) |
-| `sentrix/e2e-repair` | same as `main` | custom-v4 + this plan + M1–M5 + fresh-clone setup (commits below) |
-| `sentrix/portal` | the "fix(foundation): contract review" commit (`git log -1 sentrix/portal`) | main + docs/8_RASPBERRY_PI5_INTEGRATION.md + Portal/SOS foundation (`685df9b`) + contract review; tracks branch from it (M10 below) |
+| `sentrix/custom-v4` | `3772acf` | baseline + scene integration + training tooling + new DINOv2/YOLO11n models |
+| `sentrix/e2e-repair` | `eb82ff5` (same as `main`) | custom-v4 + this plan + M1–M5 + fresh-clone setup (commits below) |
+| `sentrix/portal` | `e7ca89e` + the docs commits after it (`git log -1 sentrix/portal`); **not pushed** | main + Portal/SOS foundation + the eight tracks + integration, demo tools, e2e tests, live smoke fixes, review fixes, clean-up (M10; commits below) |
+| `wip/hw`, `wip/clip`, `wip/ch`, `wip/sos`, `wip/web`, `wip/acct`, `wip/link`, `wip/model` | `4418de3`, `cc53443`, `f19e056`, `0b703b6`, `c340f29`, `e9d251c`, `24b897e`, `3bfb441` | the track branches, all merged into `sentrix/portal`; kept for reference |
 
 Published to `github.com/mehulperimal14/Sentrix` on 2026-10-10. Before publishing,
 history was rewritten once: private runtime data that earlier commits had
@@ -150,7 +217,38 @@ ec2e936 fix(fusion): M1 containment - confirmed per-class evidence replaces sing
 4f17576 docs: CLAUDE.md - project memory, live diagnosis and end-to-end repair plan
 ```
 
-Commits on `sentrix/custom-v4` since `main`:
+Commits on `sentrix/portal` since `main` (first parent, newest first; each
+merge brings in its track's commits from the `wip/*` branch):
+
+```
+e7ca89e chore(repo): remove unused files and restructure
+58f62c9 fix(review): adversarial review findings
+640e713 fix(integration): live smoke findings
+7aca186 test(e2e): product flow end to end
+232f938 feat(demo): demo tools and portal deployment
+4c7eca2 chore(integration): apply track integration notes
+2fa40cf merge: T-MODEL (slim scene classifiers v5, ONNX export, slim report)
+7710f18 merge: T-LINK (device link client, tunnel, commands, Portal hub, proxy, SOS mirror, Desk, contacts)
+bd37675 merge: T-ACCT (Portal accounts, activation, TOTP, admin console, onboarding wizard, household, retention)
+acf0b99 merge: T-WEB (LC hardening, CSP/CSRF, base-aware URLs, new LC pages)
+7fc5cc9 merge: T-SOS (device SOS engine, policy, templates, PINs, sweeper, LC SOS API, dispatch)
+43d396f merge: T-CH (channel router, outbox, Telegram, e-mail, modem SMS, Twilio wrapper)
+1be98c2 merge: T-CLIP (4 s clip engine, fast lane, runtime backends, model export)
+6626a9b merge: T-HW (Pi hardware I/O, siren, GPIO, node telemetry, deploy/pi5)
+31c6c50 fix(foundation): contract review
+5a7a9a7 docs(claude): M10 foundation commit hash
+685df9b feat(foundation): contracts, config, guard, schema, services, portal skeleton
+```
+
+Commits on `main` since `sentrix/e2e-repair`'s M5 work (`8f21f47`):
+
+```
+eb82ff5 docs: architecture diagram as PNG (replaces the JPG)
+3e8ecf4 docs: HARDWARE.md - Raspberry Pi 5 integration plan (4 s clip engine, hub, Hailo, event trigger)
+739e98b docs: point cited commit hashes at the rewritten history
+```
+
+Commits on `sentrix/custom-v4` since the pre-session `main`:
 
 ```
 3772acf docs(readme): test count
@@ -204,6 +302,16 @@ vs 0.440 (DINOv2, last 4 blocks); weapon frame AUROC val 0.71 (fine-tuned) vs
 0.65 (YOLO11n new); fire AUROC 0.91 vs 0.62. Assault and robbery **cannot be
 validated** (2 videos / 1 event). Only two rooms are represented.
 
+### 4.3 After the repair (committed-level replay, clip mode, slim heads)
+
+| What | Result | Source |
+|---|---|---|
+| M5 tick-mode replay, 10 custom videos (partly in-sample) | 0 false onsets at every level over 3.7 normal min; L3 weapon 9/12, fire 3/3, robbery 0/1, assault 0/2; L5 weapon 2/12, fire 2/3 | `training/runs/custom_eval/m5/` (`19d607d`) |
+| Clip mode, fast lane, same videos | weapon L3 9/12, fire 3/3, 0 false onsets (Gate A's detection criterion) | `training/runs/custom_eval/clip/replay_all_fastlane.json` (code `575e463`, results `cc53443`) |
+| Clip-mode live bench, laptop, 4 threads, 7.mov | compute p95: torch 3381 ms, ONNX 3797 ms, torch + fast lane 6473 ms, **ONNX + fast lane 2145 ms**; budget 1.6 s, none within it (other training jobs ran concurrently: upper bounds) | `training/runs/custom_eval/clip/bench_clip_*.json` |
+| Slim scene heads (LOVO macro-F1) | MobileNetV3-L `mnv3l_full` 0.229, EfficientNet-B0 `effb0_kd` 0.211, DINOv2 `dino_b_last4` 0.440; bar 0.396 fixed in advance; **neither passes**, DINOv2 stays; MobileNetV3-L ONNX 2.4 ms at 4 threads | `training/runs/custom/slim/REPORT.md` (protocol `5f8b589`, models `3bfb441`) |
+| Live smoke, Portal + device as two processes, demo reel | `scene gun` → PENDING weapon request 8.0–9.8 s; `scene fire` → 11.6–11.9 s; approve → device DISPATCHED 0.01–0.28 s; MJPEG 29.9 fps direct, 13.6 fps tunnelled (cap 15) | docs/7 §17 (`640e713`) |
+
 ---
 
 ## 5. Live diagnosis (2026-09-30 → 10-01)
@@ -253,7 +361,7 @@ with the real models inferring in the same process.
 
 ---
 
-## 6. Repair plan
+## 6. Plan, decisions and milestones
 
 Principles: **measure before and after every change** (the replayed live log is a
 regression test); **a single modality never reaches L4 alone**; **presence is
@@ -266,8 +374,8 @@ video/session is never used for tuning.
 |---|---|---|
 | D1 | Alarm classes for the demo: **handgun (replica), knife, visible flame**. Assault, robbery, stick, smoke and audio are *experimental*: logged and shown, never above L2. | They exist in 1–3 clips; unvalidatable classes only add false alarms. |
 | D2 | **Home mode** (default): an unknown person is logged, never escalates. **Armed mode** (`SENTRIX_ARMED=1`): a *confirmed-unknown* track sustained ≥ 3 s opens an intrusion incident at L3. | Team members and guests are "unknown" by default. |
-| D3 | A scene-classifier verdict alone is capped at **L3** (snapshot + evidence, no SMS/siren). L4+ needs corroboration (detector box of that class, or a second modality). | The classifier is the least reliable input and out of domain. |
-| D4 | Snapshots move from L2 to **L3**; L2 is UI/log only. | Privacy of residents; L2 becomes "unconfirmed". |
+| D3 | A scene-classifier verdict alone is capped at **L3** (snapshot + evidence, no SMS/siren). L4+ needs corroboration (detector box of that class, or a second modality). *Amended by D8: a confirmed L3 of an alarm class also opens an SOS prompt.* | The classifier is the least reliable input and out of domain. |
+| D4 | Snapshots move from L2 to **L3**; L2 is UI/log only. *Amended by D8: L3 also prompts the owner (no siren at L3).* | Privacy of residents; L2 becomes "unconfirmed". |
 | D5 | Darkness and faces < 1 m are **out of scope** for an RGB webcam: the HUD shows `DEGRADED` and threat typing is held. | Physics, not model tuning. |
 | D6 | Fusion becomes **transparent per-class evidence** (published rules) until a fitted, calibrated model exists from ≥ 4 recorded sessions. The synthetic booster is retired. | It is polarity-inverted and ranks worse than its inputs. |
 | D7 | The 7 incidents of session `c27258a25457` are false alarms; the team labels them through the new verdict buttons (M3). They become the first real fusion labels. | Operator feedback loop. |
@@ -325,7 +433,9 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done (with commit).
 - [x] **Results** (`training/runs/custom_eval/m5/`, all 10 custom videos — partly in-sample, *not* the S4 gate set): committed-level false onsets **0** at every level over 3.7 normal minutes (95 % bound still ≤ 60/h: far too little normal footage to claim a rate); caught at L3 weapon 9/12, fire 3/3, robbery 0/1 (L2 1/1), assault 0/2; at L5 weapon 2/12, fire 2/3. At **2 Hz** the same episodes are caught (13/18) with 0 false onsets. Gates: G1 PASS (weapon scene AUROC 0.93, fire 0.999), **G2 FAIL** (weapon 8/12 within 2 s), **G4 FAIL** (5.6 Hz OK, but onset → L3 p95 4.0 s), G0/G3/G5 need the S4 recordings. These are the M6–M7 targets.
 - Found by the M5 run and fixed: the eval harness and `bench_live` stubbed `_submit` but the pipeline's *shutdown* save still reached `var/sentrix.db`. It failed on the not-yet-migrated column, so no row was written (verified read-only: newest incident is the user's live run, schema unchanged); the connection close did checkpoint the user's own WAL into the main file. The shutdown save is now a hook both stub.
 
-**M6 — Deployment-room data (team, weeks 1–3)** — protocol in the strategy
+**M6 — Deployment-room data (team, weeks 1–3)** — `[ ]` not started (no
+recordings, no `tools/build_custom_dataset.py`, no "record normal session"
+mode yet). Protocol in the strategy
 findings: demo room R1 + one other room R2; camera mounted 1.8–2.2 m, tilted
 down, lit room; sessions S1/S2 train, S3 val, S4 test (≥ day 5, unseen
 volunteers); scripted 20 s clips (12 per class per room per session) with
@@ -339,14 +449,16 @@ schema) and a "record normal session" mode in the app.
 - [ ] One **YOLO11n detector** (person, pistol, knife, fire) at 640 from COCO + QC'd teacher boxes + rehearsal (pistol/knife/fire only; smoke dropped) + all hard negatives; held-object association with ByteTrack; k-of-n confirmation; fire flicker check. Replaces 3 YOLO passes.
 - [ ] Person-crop weapon classifier (DINOv2-S probe → last blocks) as the second vote; scene classifier retrained with deployment negatives, OOD guard (NN cosine floor) and ≤ 1 Hz.
 - [ ] Optional OpenVINO export for the Intel CPU; YOLO11s fallback if knife/flame recall fails at 3–4 m.
+- [x] *Related, from T-MODEL:* slim MobileNetV3-L / EfficientNet-B0 scene heads for the Pi (`models/v5_slim/`, `3bfb441`) — **failed** the pre-registered bar (LOVO macro-F1 0.229 / 0.211 vs DINOv2 0.440, §4.3); kept for clip-engine development only. ONNX/NCNN export path exists (`tools/export_models.py`); NCNN untested.
 
-**M8 — Fitted fusion (week 3–4)**: feature contract v3 logged every tick;
+**M8 — Fitted fusion (week 3–4)** — `[ ]` not started (needs M6 logs): feature contract v3 logged every tick;
 cross-fitted perception outputs; per-class logistic on session-grouped CV;
 prior correction to the deployment base rate; thresholds from the notebook-03
 cost matrix *and* an FA budget; monotonicity contract test; notebooks 02/03 on
 real logs.
 
-**M9 — Gates before any demo (week 4)** — measured once on S4:
+**M9 — Gates before any demo (week 4)** — `[ ]` not measured (tooling in M5;
+needs S4): measured once on S4:
 G0 data exists and is untouched · G1 detector frame AUROC ≥ 0.90 per class ·
 G2 ≥ 27/30 episodes per class confirmed within 2 s · G3 0 L4/L5 in ≥ 3 h
 normal + all hard negatives, ≤ 1 L3/h · G4 loop ≥ 5 Hz, detect→alert p95 ≤ 2 s ·
@@ -359,7 +471,7 @@ every ≤ 2 s, L4/L5 p95 ≤ 6 s.
 contract: `docs/7_PORTAL_AND_SOS.md` (ownership, config, schemas, link protocol
 v1, tunnel + auth bridge, SOS state machine, channels, roles, endpoints).
 - [x] **Foundation** (`685df9b`, "feat(foundation): contracts, config, guard, schema, services, portal skeleton"): `SosConfig`/`LinkConfig`/`ChannelConfig`/`GpioConfig`/`ClipConfig`/`NodeConfig`/`WebConfig`; send guard `sentrix/alerting/guard.py` (legacy Twilio SMS/call now a no-op unless `SENTRIX_TWILIO_ENABLED=1` + `SENTRIX_LIVE_ALERTS=1` + allowlist in test mode); additive device tables (assistance_requests, request_events, link_outbox, profile_cache, notifications, remote_audit) and columns; `set_verdict` by request state; services registry + lifespan; pipeline SOS hook (`NullSosService` default, asserted by the eval harness and tools); state blocks (sos, link, node, channels, mode, remote_viewers, test_mode); runtime HOME/ARMED; link protocol + tunnel auth; channel interfaces; LC extension routers; camera-URL redaction; `/docs` off by default; `sentrix_portal` skeleton (all tables, Argon2id, sessions, CSRF, `require_role`, audit chain, `/healthz`). 266 tests pass.
-- [x] **Contract review** ("fix(foundation): contract review"; 30 integration gaps, docs/7 §16 lists the ones answered differently): full `SosService` interface (`respond`, `cloud_event`, `sync`, `false_verdict`, `set_mode`, `approve_package`, `demo_*`, `current`; `SosResult`; null service keeps the pre-portal console behaviour) and `sentrix/actor.py`; one LC principal `sentrix/web/auth.py` (`require_lc`, 401 JSON for tunnel/API, `rate_key`, fail-closed fallback when hardening cannot load); once SOS owns an incident the legacy L4 SMS, L4 package and L5 call are skipped (siren stays); `REQUEST_LOCK` + `expected_version`, per-(request, origin) hash chains with a unique index, `import_event`, cloud-created requests, (DRAFTED, expire); `sentrix/listeners.py` (incident, dispatch, verdict, evidence, snapshot, audit, mode) and `sentrix.link.publish` (no-op without the link); `ChannelsService` + router listeners + `ready`, outbox meta round-trip, 64-byte Telegram callback data; profile accessor/cache keyed by `<identity_dir>/profile.key`; `Pipeline.observe/decide`, `InferenceStrategy`, `request_close_incident`, draining shutdown, lifespan order (pipeline drains before services stop; `close_interrupted` after services; ARMED persisted in `var/mode.json`); `siren_test` shared limiter; `RetentionConfig`; Portal key files, lifespan + background/middleware modules, CSP not on `/d/*`, `csrf="header"`, service stubs (hub, sos, accounts, notify, retention), `/consent/{token}`; `tests/conftest.py` (forced-off switches before any import, loopback-only socket guard, shared fixtures). 340 tests pass.
+- [x] **Contract review** (`31c6c50`; 30 integration gaps, docs/7 §16 lists the ones answered differently): full `SosService` interface (`respond`, `cloud_event`, `sync`, `false_verdict`, `set_mode`, `approve_package`, `demo_*`, `current`; `SosResult`; null service keeps the pre-portal console behaviour) and `sentrix/actor.py`; one LC principal `sentrix/web/auth.py` (`require_lc`, 401 JSON for tunnel/API, `rate_key`, fail-closed fallback when hardening cannot load); once SOS owns an incident the legacy L4 SMS, L4 package and L5 call are skipped (siren stays); `REQUEST_LOCK` + `expected_version`, per-(request, origin) hash chains with a unique index, `import_event`, cloud-created requests, (DRAFTED, expire); `sentrix/listeners.py` (incident, dispatch, verdict, evidence, snapshot, audit, mode) and `sentrix.link.publish` (no-op without the link); `ChannelsService` + router listeners + `ready`, outbox meta round-trip, 64-byte Telegram callback data; profile accessor/cache keyed by `<identity_dir>/profile.key`; `Pipeline.observe/decide`, `InferenceStrategy`, `request_close_incident`, draining shutdown, lifespan order (pipeline drains before services stop; `close_interrupted` after services; ARMED persisted in `var/mode.json`); `siren_test` shared limiter; `RetentionConfig`; Portal key files, lifespan + background/middleware modules, CSP not on `/d/*`, `csrf="header"`, service stubs (hub, sos, accounts, notify, retention), `/consent/{token}`; `tests/conftest.py` (forced-off switches before any import, loopback-only socket guard, shared fixtures). 340 tests pass.
 - [x] **Tracks** (parallel worktrees, merged in this order; no file touched by two tracks; nothing has run on real hardware or real provider accounts):
   - **T-HW**: gpiozero siren (active-high NPN default, 90 s max on-period, arming switch, 409 on a disarmed test, `SENTRIX_SIREN=auto` now honoured), GPIO service (LEDs 5/12/13, buzzer 26, PIR 23, door 24, mains 16, tamper), node telemetry + systemd watchdog, `PiCameraSource` (main 1280×720 + lores 640×480), nmcli Wi-Fi, `/api/node`, doctor hardware rows, `run.sh` Pi path, `deploy/pi5/**`, docs/8_RASPBERRY_PI5_INTEGRATION.md §6 pin table. Bench checks with an LED, real PIR/door/mains, Camera Module 3 and the 4G dongle still to do.
   - **T-CLIP**: 4 s clip engine (`pipeline/clip.py`), fast lane, torch/onnx/ncnn runtimes, `tools/export_models.py`, `tools/bench_clip.py`, `replay_custom_videos.py --mode clip`, `SENTRIX_FACE_MODEL`. Replay meets Gate A's criterion (weapon L3 9/12 with fast lane, fire 3/3, 0 false onsets); laptop bench p95 2145 ms > 1.6 s budget (docs/8_RASPBERRY_PI5_INTEGRATION.md T1). NCNN and `buffalo_s` untested (not installed).
@@ -369,9 +481,14 @@ v1, tunnel + auth bridge, SOS state machine, channels, roles, endpoints).
   - **T-ACCT**: activation codes, back-off, TOTP for admin/Desk, admin console + welcome letter + provisioning (`tools/provision_device.py`), 7-step wizard, household/contacts with consent, settings, privacy (export, erasure), retention worker, `build_profile`.
   - **T-LINK**: device link client (outbox, heartbeat, adaptive video), tunnel executor, device-enforced command rules and path table, Portal hub, `/d/{id}` proxy + relays, SOS mirror and cloud authority, Desk, contact pages. 100 forced disconnects lose 0 events; loopback end-to-end run green with the real hardening.
   - **T-MODEL**: MobileNetV3-L / EfficientNet-B0 scene heads (`models/v5_slim/`), ONNX export: **neither passes** (LOVO macro-F1 0.229 / 0.211 vs DINOv2 0.440); DINOv2 stays.
-- [x] **Integration** (`chore(integration): apply track integration notes`): the eight merges; every hand-off note applied (config fields for T-HW and T-CLIP, `app.live_loop_alive`, idle `node`/`clip` blocks, redacted `ws_payload`, `cloud_online` from the link, `Pipeline.decide(extra=)` + clip-log refusal in `replay_decisions.py`, clip-mode "AI STALLED" limit, `AudioEngine.classify_window` + sample listeners wired into the clip buffer, incident filters in `database.py`, legacy `session_token` retired, `SendResult.retry_after`, Portal `telegram_mode` / `grievance_contact`, SOS delivery feedback from the Portal worker, `render_preview` seam, Portal SOS banner on every owner page, `link_outbox` AUTOINCREMENT, doctor export rows + `--no-camera`, Pi clip profile in `pi.env`); the link tests now run against the real LC hardening. **Found and fixed:** tests without `temp_db` opened the developer's `var/sentrix.db` (`SENTRIX_VAR_DIR` now moves the whole `var/` tree; conftest points it at a temp dir). Not applied (docs/7 §16 q7–q11): `bootstrap_revoked_at` column (needs Alembic), Portal SOS texts from the template module, bundled fonts, ncnn/`buffalo_s`. `python -m sentrix --help` and `python -m sentrix_portal --help` (new `--host`/`--port`) start nothing; both apps were smoke-started in temp dirs (LC on a video file, no microphone) and `tools/doctor.py --no-camera` passes on the laptop. 1538 tests pass.
-- [x] **Demo tools and Portal deployment** ("feat(demo): demo tools and portal deployment"): `tools/demo_reset.py` (demo world in a marked demo dir, never `var/`: admin + Desk operator with TOTP printed once, "Riya Sharma (demo)" fully onboarded or with `--live-steps 1-3` / `--activation` left for the stage, confirmed contact, provisioned + claimed device, `--safety-net`, 90 s window; team phones from `SENTRIX_DEMO_*` env only), `tools/demo_run.py` (Portal + device together: test mode, live switches forced off and provider keys blanked, `SENTRIX_AUDIO=0`, link to the local Portal, distinct hosts/cookies; `scene` / `close` / `trigger` / `clips`), the **demo reel camera** `sentrix/io/demo_reel.py` (`CAMERA_SOURCES=demo-reel:<json>`: idle vid07 0–60 s, scenes gun.mov / 4.mov held out (val), 2.mov / 6.mov in-sample backups; wa02 refused by name and split table), scripted trigger now **device-admin only** with a button on the LC SOS page. Live smoke run on the laptop: gun scene → PENDING weapon request ≈ 8 s after the scene start, mirrored on the Portal (e-mail SUPPRESSED by the guard), `close` cancels it (`test_reset`), `trigger` opens a `simulated` request whose text says SIMULATED DETECTION, 90 s window. `deploy/portal/` (python-slim non-root image, compose with Postgres on an internal network and only Caddy on 80/443, Caddyfile with HSTS + WebSockets + unbuffered MJPEG, names-only `.env.example`, backup/restore-test/port-check scripts, Oracle/Render+Supabase runbook) — Docker not run; checked by `tests/test_deploy_portal.py`. `tools/portal_pg_check.py`: DDL compiles for Postgres, the Portal tests pass under a VARCHAR length guard; psycopg not installed, so no live Postgres run yet. `deploy/pi5/pi.env` gained the test-mode, SOS, channels and link keys. Clip reliability is from the M5 replay only; the 10 live pre-runs per clip are still to do.
-- [ ] Still to do: end-to-end scenario tests (docs/7 §15.2), Alembic baseline, a live Postgres run, README, gates P1–P8.
+- [x] **Integration** (`4c7eca2`, merges `6626a9b` T-HW · `1be98c2` T-CLIP · `43d396f` T-CH · `7fc5cc9` T-SOS · `acf0b99` T-WEB · `bd37675` T-ACCT · `7710f18` T-LINK · `2fa40cf` T-MODEL): the eight merges; every hand-off note applied (config fields for T-HW and T-CLIP, `app.live_loop_alive`, idle `node`/`clip` blocks, redacted `ws_payload`, `cloud_online` from the link, `Pipeline.decide(extra=)` + clip-log refusal in `replay_decisions.py`, clip-mode "AI STALLED" limit, `AudioEngine.classify_window` + sample listeners wired into the clip buffer, incident filters in `database.py`, legacy `session_token` retired, `SendResult.retry_after`, Portal `telegram_mode` / `grievance_contact`, SOS delivery feedback from the Portal worker, `render_preview` seam, Portal SOS banner on every owner page, `link_outbox` AUTOINCREMENT, doctor export rows + `--no-camera`, Pi clip profile in `pi.env`); the link tests now run against the real LC hardening. **Found and fixed:** tests without `temp_db` opened the developer's `var/sentrix.db` (`SENTRIX_VAR_DIR` now moves the whole `var/` tree; conftest points it at a temp dir). Not applied (docs/7 §16 q7–q11): `bootstrap_revoked_at` column (needs Alembic), Portal SOS texts from the template module, bundled fonts, ncnn/`buffalo_s`. `python -m sentrix --help` and `python -m sentrix_portal --help` (new `--host`/`--port`) start nothing; both apps were smoke-started in temp dirs (LC on a video file, no microphone) and `tools/doctor.py --no-camera` passes on the laptop. 1538 tests pass.
+- [x] **Demo tools and Portal deployment** (`232f938`): `tools/demo_reset.py` (demo world in a marked demo dir, never `var/`: admin + Desk operator with TOTP printed once, "Riya Sharma (demo)" fully onboarded or with `--live-steps 1-3` / `--activation` left for the stage, confirmed contact, provisioned + claimed device, `--safety-net`, 90 s window; team phones from `SENTRIX_DEMO_*` env only), `tools/demo_run.py` (Portal + device together: test mode, live switches forced off and provider keys blanked, `SENTRIX_AUDIO=0`, link to the local Portal, distinct hosts/cookies; `scene` / `close` / `trigger` / `clips`), the **demo reel camera** `sentrix/io/demo_reel.py` (`CAMERA_SOURCES=demo-reel:<json>`: idle vid07 0–60 s, scenes gun.mov / 4.mov held out (val), 2.mov / 6.mov in-sample backups; wa02 refused by name and split table), scripted trigger now **device-admin only** with a button on the LC SOS page. Live smoke run on the laptop: gun scene → PENDING weapon request ≈ 8 s after the scene start, mirrored on the Portal (e-mail SUPPRESSED by the guard), `close` cancels it (`test_reset`), `trigger` opens a `simulated` request whose text says SIMULATED DETECTION, 90 s window. `deploy/portal/` (python-slim non-root image, compose with Postgres on an internal network and only Caddy on 80/443, Caddyfile with HSTS + WebSockets + unbuffered MJPEG, names-only `.env.example`, backup/restore-test/port-check scripts, Oracle/Render+Supabase runbook) — Docker not run; checked by `tests/test_deploy_portal.py`. `tools/portal_pg_check.py`: DDL compiles for Postgres, the Portal tests pass under a VARCHAR length guard; psycopg not installed, so no live Postgres run yet. `deploy/pi5/pi.env` gained the test-mode, SOS, channels and link keys. Clip reliability is from the M5 replay only; the 10 live pre-runs per clip are still to do.
+- [x] **Product end-to-end tests** (`7aca186`): `tests/test_e2e_product.py` + `tests/e2e/world.py` — Portal app, device LC with a fake pipeline, the real SOS engine on an injected clock, the real link client over an in-memory pipe into the Portal hub, fake Telegram/e-mail/modem transports, one event loop. 13 scenarios: provision → letter → activation → wizard → claim → tunnel parity on every LC page → L3 weapon to CLOSED; decline (PIN), expiry + Request help now, safety defaults, duress, device offline + reconnect, internet down SMS, Telegram and e-mail answers, XSS, cross-household isolation, admin view, test mode. Found: the Portal owner timeline dropped a duress "false alarm" row; conftest sets `YOLO_OFFLINE=1` (ultralytics probed public DNS on import).
+- [x] **Live smoke run** (`640e713`, docs/7 §17): Portal and device as two real processes on the laptop, linked over a real WebSocket, driven over HTTP like a browser (test mode, demo reel, no audio, scratch dirs; `var/sentrix.db` untouched). Every LC page and 14 GET APIs gave the same status direct and tunnelled; numbers in §4.3. Five bugs fixed: Portal sign-in could land on /login (session committed after the 303 — routes now take `DB = Depends(get_db, scope="function")`); a Portal restart read as a lost device heartbeat (silence now counted from the hub's start at the earliest); a fire safety-default alert owed at T+2 min was dropped by the 90 s demo window (sent before the expiry now); LC showed 0 queued while offline; the scene model asked huggingface.co for a revision at every start (cached weights load from the cache file). Not verified live: Telegram (no bot), modem/SMS, delivery to allowlisted phones, 10 live pre-runs per clip (3/3 gun, 3/3 fire done).
+- [x] **Adversarial review** (`58f62c9`): test mode fails closed on unrecognised values; conftest blocks webcam indexes and the microphone; the Portal call button never dials an emergency number and SOS texts never say "call 112" in test mode; siren stops after the requested duration; PIR edges reach the clip buffer; doctor opens no camera unless `--probe-camera`; SOS machine/service, onboarding step 5 and Portal SOS service fixes with tests (`tests/test_review_guards.py` and the track test files).
+- [x] **Repository clean-up** (`e7ca89e`): unreachable v1 weapon/fire weights, the unwired Vosk model, the duplicate `yolov8n.pt`, v1/v2 run dumps, duplicate v3 checkpoints, old UCF-DVS probe files and the university templates removed; capstone submissions → `docs/capstone/`, `HARDWARE.md` → `docs/8_RASPBERRY_PI5_INTEGRATION.md`, diagrams → `docs/assets/`. Voice SOS (Vosk) is no longer planned in this repository.
+- [x] **Docs for the integrated product**: README (product, quickstart, flow, configuration, structure, status), this file, `.env.example` comments, `THIRD_PARTY.md`; docs 1–8 by their own writers. Full suite at `e7ca89e`: **1647 passed** in 6 min 30 s (laptop; the device and socket guards blocked 4 camera/mic and 2 network attempts by tests that check those guards).
+- [ ] **Still to do:** Alembic baseline (and the `bootstrap_revoked_at` column it unblocks); a live Postgres run (`tools/portal_pg_check.py` only compiles the DDL; psycopg not installed); `deploy/portal/` on a real VM (Docker not run); hardware bench checks (LED relay test, PIR, door, mains, Camera Module 3, 4G modem); real Telegram bot, e-mail account and modem SMS to allowlisted team phones (both switches); `tools/bench_link.py` (named in docs/7 §15.3, not written); Portal SOS texts from the device template module, bundled fonts, NCNN and `buffalo_s` (docs/7 §16 q7–q11); 10 live pre-runs per demo clip; **gates P1–P8** measured once on the final build (P1, P2, P3, P7 have partial evidence in the test suite; P4, P5, P8 need hardware or recordings).
 
 ### Owners (from the README team table)
 
@@ -388,3 +505,12 @@ Demo date and room; which camera (laptop webcam vs a mounted USB camera — data
 must be recorded with it); permission for replica weapons and flames on campus;
 whether darkness is a requirement (needs IR); ~34 person-hours of recording,
 correction and QC in weeks 1–3; who deleted `Kartik.jpg` during the run.
+
+**Owner decisions from the Portal/SOS roadmap (v2, §17):** Pi 5 8 GB now or
+4 GB; Camera Module 3 Wide or Standard, and whether night operation (NoIR + IR)
+is needed; default SOS window 30 or 60 min and whether the D9 safety defaults
+stay on; whether a corroborated fire sounds the siren at L4 instead of L5
+(validate on fire-on-screen hard negatives first); who plays the Desk, owns the
+Oracle account and card, and holds and recharges the SIM; demo room, hotspot
+phone, English only or Hindi too; permission for replica weapons and flames and
+the consent notice to the legal cell.

@@ -1,56 +1,147 @@
 # SENTRIX
 
-**Multimodal edge threat intelligence and physical security system**
-
-[![Python 3.10–3.14](https://img.shields.io/badge/Python-3.10--3.14-blue.svg)](https://www.python.org/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.4-EE4C2C.svg)](https://pytorch.org/)
-[![YOLOv8](https://img.shields.io/badge/YOLOv8-ultralytics-00BFA5.svg)](https://docs.ultralytics.com/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688.svg)](https://fastapi.tiangolo.com/)
-[![Tests](https://img.shields.io/badge/tests-215%20passing-brightgreen.svg)](tests/)
+**Edge-first home threat detection with an owner-approved SOS flow**
 
 > **Capstone Project CPG-299** · Computer Science and Engineering, Thapar Institute of
 > Engineering and Technology, Patiala · Mentor: Dr. Ashutosh Mishra
 
-SENTRIX watches a camera and a microphone, runs a stack of neural models over both,
-and fuses their outputs into a single continuous **Threat Confidence Index (TCI)** in
-`[0, 1]`. The TCI drives a five-level escalation ladder — from passive logging through
-encrypted evidence capture to siren, SMS and a pre-populated emergency dispatch package.
+SENTRIX is two programs:
 
-Everything runs locally. There is no cloud inference and no subscription.
+* **The device** (`python -m sentrix`). It runs at home, on a laptop today and on a
+  Raspberry Pi 5 later. It reads a camera (and optionally a microphone), runs the
+  perception models, turns their outputs into a **Threat Confidence Index (TCI,
+  0–1)** and a five-level alarm, and keeps the incident records, the encrypted
+  evidence and the face gallery. It serves the **Local Console (LC)**, the
+  dashboard on `http://127.0.0.1:8000`. It also runs the **SOS engine**, the
+  alert channels and the outbound link to the Portal.
+* **The Portal** (`python -m sentrix_portal`). It runs in the cloud (planned:
+  Oracle Always Free, India). It holds accounts, onboarding, the household and
+  its emergency contacts, the SOS requests, the **SENTRIX Desk** (a simulated
+  responder console) and the company admin console. It shows the device's own
+  console pages through a tunnel, so the owner sees the same dashboard from any
+  browser.
+
+Detection stays on the device. The Portal stores profiles, metadata and one
+consented snapshot per SOS request; faces, evidence and video stay on the device
+and are only viewed on demand through the tunnel.
+
+**Test mode is the default and the only mode this semester.** Nothing is sent to a
+real person unless two switches are on, and even then only to an allowlist (see
+[Configuration](#configuration)). SENTRIX never contacts 112 itself.
 
 ---
 
-## Status
+## Contents
 
-Software-only. Testing runs on a laptop webcam; no hardware is required or attached.
-The hardware interfaces (`sentrix/io/`) are written and selected automatically, so
-adding an ESP32 node or a GPIO relay later is a configuration change, not a rewrite.
+1. [The product flow](#the-product-flow)
+2. [Architecture](#architecture)
+3. [Quickstart](#quickstart)
+4. [Configuration](#configuration)
+5. [Tests and evaluation](#tests-and-evaluation)
+6. [Repository structure](#repository-structure)
+7. [Documentation](#documentation)
+8. [Status and limits](#status-and-limits)
+9. [Team](#team)
 
-| Subsystem | State | Notes |
+---
+
+## The product flow
+
+| Step | Who | Where |
 |---|---|---|
-| Person / weapon / fire detection | **Working** | One YOLO component, three heads, ByteTrack; weapon and fire heads are YOLO11n trained on the custom dataset and draw boxes, but by default do not drive the alarm (see *Custom dataset evaluation*) |
-| TCI fusion + escalation | **Working** | Confirmed per-class evidence, hysteresis, incident grouping |
-| Encrypted evidence vault | **Working** | AES-256-GCM, HMAC hash-chained manifest; each sidecar records the evidence votes, scene probabilities and identity behind the frame |
-| Incident records | **Working** | Every field from the incident's peak tick; written at open so a crash keeps it; operator verdicts on the Events page (a false alarm cancels its pending dispatch) |
-| Scene classification | **Working** | normal / fire / weapon / assault / robbery; DINOv2 ViT-B/14 trained on the custom dataset (`models/v4_custom/`) |
-| Violence classification | **Superseded** | The RWF-2000 model calls the test corridor a fight; replaced by the scene classifier's assault head whenever a scene model is installed |
-| Acoustic classification | **Working** | Model is under-trained — see *Known limitations* |
-| Face authorisation | **Working** | ArcFace 512-d via `insightface`, per tracked person, on its own thread (about once a second); enrol from the monitoring camera with quality checks; fails closed without it |
-| Cross-camera re-identification | **Degraded** | Histogram fallback; install `torchreid` |
-| Voice SOS | **Not wired** | Deferred; Vosk model retained |
-| Hardware actuation | **Interface only** | No hardware attached |
+| 1. Provision a device: id, serial, claim code, label | company | `tools/provision_device.py` |
+| 2. Create the customer; print the welcome letter (username, activation code, device serial and claim code) | company admin | Portal admin console |
+| 3. Install the device; activate the account with the code and choose a password | customer | Portal `/activate` |
+| 4. Onboarding wizard, 7 steps: profile, address, household, emergency contacts (each confirms by link), claim the device, alerts + SOS PIN + window, consent and SOS preview | customer | Portal `/onboarding` |
+| 5. Daily use: the device's dashboard, live view, events, evidence, access (faces), SOS, node | customer | LC on the LAN, or the Portal through `/d/{device_id}/...` |
+| 6. A **confirmed L3** of an alarm class (weapon, fire) or an armed-mode intrusion opens an **assistance request**, pre-filled from the profile | device | SOS engine |
+| 7. "Do you need assistance?" on the Portal, the LC, Telegram and e-mail (SMS only when offline or unseen for 10 min); window 30/45/60 min | owner | |
+| 8. Approve → the Desk and the confirmed contacts get the dispatch. False alarm → PIN. No answer → **EXPIRED** ("unanswered", never "safe"); "Request help now" opens a linked request | owner | |
+| 9. The Desk acknowledges and resolves; the incident verdict is recorded | Desk operator | Portal `/desk` |
 
-Run `python tools/doctor.py` to see the live state of your own install rather than
-trusting this table.
+Safety defaults (on unless the household turns them off): a corroborated L4/L5,
+a confirmed fire (at T+2 min), an armed intrusion, or the device going offline
+during an open L2+ incident alerts the confirmed contacts while the owner is
+still being asked. A single-source weapon L3 goes to the owner only. A duress
+PIN "declines" on screen but alerts the contacts. The full rules are decisions
+D8–D14 in [`CLAUDE.md`](CLAUDE.md) §6 and the state machine in
+[`docs/7_PORTAL_AND_SOS.md`](docs/7_PORTAL_AND_SOS.md) §7.
+
+---
+
+## Architecture
+
+```
+ HOME (device, one process: python -m sentrix)         CLOUD (python -m sentrix_portal)
++--------------------------------------------------+   +-----------------------------------+
+| Camera: webcam | file | RTSP | Pi camera | demo  |   | Accounts, activation, TOTP        |
+|   |                                               |   | Onboarding wizard, household,     |
+|   v  capture thread (camera rate)                 |   |   contacts (consent links)        |
+| Pipeline (tick mode ~6 Hz, or 4 s clip mode)      |   | SOS pages, Desk, admin console    |
+|   Detector: YOLO person (+ByteTrack), weapon,     |   | Privacy: export, erasure,         |
+|     fire heads                                    |   |   retention worker                |
+|   Scene classifier: DINOv2 ViT-B/14, 5 classes    |   | Channel router: Telegram, e-mail  |
+|   Identity: InsightFace, per track, own thread    |   | Offline mirror: incidents, SOS    |
+|   Audio (optional), motion, behaviour             |   |   requests, dispatch, heartbeat   |
+|   -> evidence rules (k-of-n, person gate,         |   | Cloud SOS authority while the     |
+|      corroboration) -> TCI -> level policy        |   |   device is offline               |
+|   -> incidents, event log, evidence vault         |   |                                   |
+|   -> SOS trigger (idempotent, per incident)       |   | Link hub  /device/v1/link         |
+| SOS engine: machine, frozen policy, PINs, sweeper |   | Tunnel    /d/{device_id}/...      |
+| Channels: router + outbox; modem SMS, Telegram,   |WSS|   (replayed in-process into the   |
+|   e-mail, Twilio (all behind the send guard)      |==>|    device's own LC app; /video    |
+| Link client: outbox, heartbeat, tunnel executor,  |out|    and /ws/threat relayed)        |
+|   device-enforced command rules                   |   |                                   |
+| LC web app (FastAPI) on :8000                     |   | SQLite (dev) / Postgres (deploy)  |
+| SQLite var/sentrix.db, vault, faces               |   +-----------------------------------+
+| Pi 5: siren relay, LEDs, buzzer, PIR, door,       |
+|   mains sense, node telemetry, watchdog, 4G modem |
++--------------------------------------------------+
+```
+
+The device only opens outbound connections. Every page the Portal shows under
+`/d/{device_id}/` is served by the device's own code, so the LAN console and the
+remote one cannot drift apart. The device does not trust the Portal: it checks
+consent flags for video and media, allows SMS only to numbers in the current
+profile (30 a day), rate-limits siren tests, and has no command that disables
+the siren or the evidence.
+
+### How a detection becomes an alarm
+
+The first live run on a laptop webcam produced about 171 false weapon alarms per
+hour (CLAUDE.md §5). The rules in `sentrix/fusion/evidence.py` now stand between
+a model score and the alarm:
+
+| Rule | Default |
+|---|---|
+| Confirmation | a source must cross its threshold on 2 of its last 3 fresh evaluations |
+| Person gate | weapon votes count only with a person seen in the last 2 s |
+| Thresholds | the checkpoint's, raised to at least weapon 0.50 / fire 0.45; a per-room calibration may replace them |
+| One confirmed source | at most L3 (snapshot and evidence; SOS prompt) |
+| Classifier **and** detector confirmed | L4; L5 when both are well above threshold |
+| Assault, robbery, stick, smoke, audio | experimental: logged and shown, never above L2 |
+| Unknown person | home mode (default): logged only. Armed mode: an unrecognised track for 3 s opens an intrusion at L3 |
+
+| Level | Side effects |
+|---|---|
+| 1 SECURE | log |
+| 2 SUSPICIOUS | incident opened (log and dashboard) |
+| 3 ELEVATED | snapshot, AES-256-GCM evidence bundle, SOS request for alarm classes |
+| 4 HIGH | dispatch package (legacy SMS only when no SOS request owns the incident) |
+| 5 CRITICAL | siren (legacy voice call only when no SOS request owns the incident) |
+
+The TCI is the strongest confirmed class evidence. It is not smoothed: the
+number on the gauge, in the log and on the incident is the number the level was
+decided on. The synthetic XGBoost booster (`models/tci_xgboost.json`) is
+retired.
 
 ---
 
 ## Quickstart
 
-Runs on a laptop CPU — Windows, macOS or Linux, **Python 3.10–3.14** (fresh
-installs verified on 3.12 and 3.14). Installing, testing and evaluating need no
-GPU, camera or microphone: the repository ships the models, the team's custom
-dataset and its ten source videos.
+Runs on a laptop CPU: Windows, macOS or Linux, Python 3.10–3.14. Installing,
+testing and evaluating need no GPU, camera or microphone: the repository ships
+the models, the custom dataset and its ten source videos.
 
 ### 1. Get the code
 
@@ -59,54 +150,43 @@ git clone https://github.com/mehulperimal14/Sentrix.git
 cd Sentrix
 ```
 
-The clone is about 0.8 GB (weights, dataset and videos are tracked). On Windows,
-clone to a short path such as `C:\src\Sentrix`: long-path support is off by
-default and some files inside the virtual environment are deeply nested.
+On Windows, clone to a short path such as `C:\src\Sentrix`; some files inside
+the virtual environment are deeply nested.
 
-### 2. Start it — one command
+### 2. Start the device
 
 | Windows (PowerShell or cmd) | macOS / Linux |
 |---|---|
 | `.\run.bat` | `./run.sh` |
 
-Both scripts create `.venv`, install `requirements.txt` (several minutes the first
-time, then only when it changes), create `.env` with a generated dashboard
-password — **printed once in the terminal** — plus generated session and evidence
-keys, run the pre-flight checks and start the server. Open
-**http://127.0.0.1:8000** and log in with that password (it is `SENTRIX_PASSWORD`
-in `.env`).
+Both scripts create `.venv`, install `requirements.txt` (several minutes the
+first time, then only when it changes), create `.env` with a generated console
+password (**printed once**), session secret and evidence key, run
+`tools/doctor.py` and start `python -m sentrix`. Open
+**http://127.0.0.1:8000** and sign in with that password (`SENTRIX_PASSWORD` in
+`.env`).
 
-The first start downloads about 600 MB of public weights, once: the DINOv2 base of
-the scene classifier (~330 MB, Hugging Face cache) and InsightFace `buffalo_l`
-(~280 MB, `~/.insightface`). The dashboard answers once the log prints
-`dashboard: http://…`.
+The first start downloads about 600 MB of public weights once: the DINOv2 base
+of the scene classifier (Hugging Face cache) and InsightFace `buffalo_l`
+(`~/.insightface`).
 
 * **Linux:** `sudo apt install python3-venv libportaudio2 libgl1 libglib2.0-0`.
-  On a CPU-only machine, install the CPU build of PyTorch first to skip ~2.5 GB of
-  CUDA wheels:
-  `pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu`.
-* **NVIDIA GPU:** install the CUDA build of PyTorch before `requirements.txt`
-  (`--index-url https://download.pytorch.org/whl/cu126`); the scene model moves to
-  the GPU automatically.
+  On a CPU-only machine install the CPU build of PyTorch first
+  (`pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu`).
+* **NVIDIA GPU:** install the CUDA build of PyTorch before `requirements.txt`; the
+  scene model moves to the GPU automatically.
+* **Raspberry Pi 5:** `run.sh` detects the Pi and installs `requirements-pi.txt`
+  into a venv with system site packages. Bring-up order, `install_pi.sh` and the
+  relay test with an LED are in [`deploy/pi5/README.md`](deploy/pi5/README.md).
 
-**Manual install**, instead of the scripts:
-
-```powershell
-# Windows PowerShell
-py -3 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-python tools\setup_env.py        # creates .env, prints the generated password
-python -m sentrix
-```
+Manual install instead of the scripts:
 
 ```bash
-# macOS / Linux (Git Bash on Windows: source .venv/Scripts/activate)
-python3 -m venv .venv
-source .venv/bin/activate
+python -m venv .venv
+# Windows: .\.venv\Scripts\Activate.ps1    macOS/Linux: source .venv/bin/activate
 python -m pip install -r requirements.txt
 python tools/setup_env.py        # creates .env, prints the generated password
-python -m sentrix
+python -m sentrix                # --host / --port; --help starts nothing
 ```
 
 ### 3. No webcam? Use a bundled video
@@ -116,531 +196,146 @@ Add to `.env`:
 ```bash
 CAMERA_SOURCES=training/datasets/sentrix_custom/videos/gun.mov   # loops; any video path works
 SENTRIX_AUDIO=0         # keep the microphone closed
-SENTRIX_SIREN=console   # the weapon clips reach L5: print the siren instead of sounding it
+SENTRIX_SIREN=console   # print the siren instead of sounding it
 ```
 
-Leave the Twilio fields in `.env` blank and every SMS or call is only printed to
-the console. Other cameras: `CAMERA_SOURCES=1` (second webcam),
-`rtsp://user:pw@host/stream` (IP camera), or several separated by commas.
-
-### 4. Test and evaluate
+### 4. Start the Portal (optional)
 
 ```bash
-python -m pytest                     # 215 tests, ~20 s; no camera, mic, network or GPU
-python tools/doctor.py               # pre-flight report (also probes webcams 0-2)
-python tools/bench_live.py           # live loop on a bundled video: video fps, AI Hz, latency
-
-# The custom-dataset evaluation, on the bundled frames and videos
-python tools/eval_custom_frames.py --splits train,val,test --tag local    # per image
-python tools/replay_custom_videos.py --videos all --tag local             # 10 videos end to end (~6 min)
-python tools/custom_eval_table.py custom local                            # compare with the published run
-python tools/gate_report.py --replay training/runs/custom_eval/local/replay_all.json
+python -m sentrix_portal          # http://127.0.0.1:8100 (PORTAL_HOST / PORTAL_PORT)
+python tools/provision_device.py admin --username admin    # first company admin + activation code
+python tools/provision_device.py device --label label.html # a device identity, claim code, label
 ```
 
-Your runs land in `training/runs/custom_eval/<tag>/` (ignored by git); the
-published runs quoted in `docs/6` are `baseline`, `custom`, `finetuned`, `m1` and
-`m5`. Every evaluation tool builds the pipeline with side effects disabled — no
-alert, siren or database row, whatever `.env` contains.
+The Portal runs in test mode with SQLite in `var/portal/` by default. Its
+background workers (hub watcher, cloud SOS timers, notification worker,
+retention) run only with `PORTAL_WORKERS=1`. To link a device to it, the device
+needs `SENTRIX_LINK_ENABLED=1`, `SENTRIX_PORTAL_URL` and the provisioned
+identity (`SENTRIX_DEVICE_IDENTITY_DIR`); the SOS engine and channels need
+`SENTRIX_SOS_ENABLED=1` and `SENTRIX_CHANNELS_ENABLED=1`.
 
-### 5. Enrol faces
+### 5. The demo: Portal and device together
 
-**Access** page → *Capture from camera* (2–3 photos per person, facing the camera)
-or *Upload photos*. Until someone is enrolled, everyone is "unknown"; in home
-mode (the default) that is only logged.
+The demo tools set all of this up in a separate directory, in test mode, with
+every live switch forced off:
 
-`.env.example` documents every setting (camera, armed mode, thresholds, alerts);
-the algorithmic constants live in `sentrix/config.py`.
+```bash
+python tools/demo_reset.py                 # demo world in var/demo (admin, Desk, "Riya Sharma (demo)",
+                                           # confirmed contact, claimed device); logins printed once
+python tools/demo_run.py                   # start Portal (portal.localhost:8100) + device (127.0.0.1:8000)
+python tools/demo_run.py scene gun         # play the held-out handgun clip through the demo reel camera
+python tools/demo_run.py scene fire        # held-out flame clip
+python tools/demo_run.py trigger weapon    # disclosed scripted trigger (text says SIMULATED DETECTION)
+python tools/demo_run.py close             # close the open incident
+python tools/demo_run.py clips             # the scenes and their measured reliability
+```
 
-### 6. Raspberry Pi 5
+`demo_reset.py --live-steps 3` leaves the last wizard steps for the stage,
+`--activation` leaves the customer to activate live, `--window` sets the demo SOS
+window (default 90 s, test mode only). The demo camera is
+`sentrix/io/demo_reel.py`: idle footage (vid07), then `gun.mov` or `4.mov` on
+request. It refuses the test video `wa02`. Messages appear as SUPPRESSED rows in
+the Portal's outbox, on the Desk and on the LC; nothing leaves the laptop.
 
-The Pi path (Picamera2, gpiozero siren and inputs, node telemetry, systemd
-watchdog, Wi-Fi/4G failover) is in [`deploy/pi5/README.md`](deploy/pi5/README.md):
-bring-up order, `install_pi.sh`, and the relay test with an LED in place of the
-siren. `run.sh` detects a Pi and installs `requirements-pi.txt`.
+### 6. Enrol faces
+
+LC **Access** page → *Capture from camera* (uses the device's own camera frame,
+with quality checks) or *Upload photos*. Until someone is enrolled everyone is
+"unknown"; in home mode that is only logged.
 
 ---
 
-## Project layout
+## Configuration
 
-### Repository structure
+`.env.example` documents every setting; `tools/setup_env.py` creates `.env` from
+it. Algorithmic constants (thresholds, windows, dwell times) live in
+`sentrix/config.py`, in seconds rather than frames.
+
+### Test mode and the two switches (decision D13)
+
+Every outbound message passes `sentrix/alerting/guard.py`, which re-reads the
+environment on each message:
+
+| Rule | Effect |
+|---|---|
+| Emergency number (112, 100, 101, 102, 108, …) | always refused |
+| `SENTRIX_LIVE_ALERTS` is not 1 | refused; the message is recorded as SUPPRESSED |
+| The channel's own switch is not 1 (`SENTRIX_MODEM_LIVE`, `SENTRIX_TELEGRAM_LIVE`, `SENTRIX_EMAIL_LIVE`, `SENTRIX_TWILIO_ENABLED`) | refused |
+| Test mode on (`SENTRIX_TEST_MODE`, on unless explicitly `0`/`false`/`no`/`off`) and the recipient is not in `SENTRIX_TEST_RECIPIENTS` | refused |
+| Otherwise | sent; in test mode the text starts `[SENTRIX DEMO – TEST, NOT A REAL EMERGENCY]` |
+
+In test mode no `tel:112` link is rendered; the Desk number is shown instead.
+The legacy Twilio SMS/call path does nothing unless `SENTRIX_TWILIO_ENABLED=1`
+and `SENTRIX_LIVE_ALERTS=1` (Twilio keys alone send nothing). The Portal uses the
+same guard with `PORTAL_TEST_MODE`.
+
+### Services are opt-in
+
+| Flag | Turns on |
+|---|---|
+| `SENTRIX_SOS_ENABLED` | SOS engine and sweeper |
+| `SENTRIX_CHANNELS_ENABLED`, `SENTRIX_MODEM_ENABLED` | channel router and outbox; the USB 4G modem |
+| `SENTRIX_LINK_ENABLED` | outbound link to the Portal |
+| `SENTRIX_GPIO_ENABLED`, `SENTRIX_NODE_ENABLED` | Pi GPIO (LEDs, buzzer, PIR, door, mains); node telemetry |
+| `SENTRIX_ARMED` | armed mode at start (the mode can also be set on the LC) |
+| `SENTRIX_PIPELINE_MODE=clip`, `SENTRIX_FAST_LANE`, `SENTRIX_RUNTIME` | 4 s clip engine, its fast lane, torch/onnx/ncnn runtime |
+| `PORTAL_WORKERS` | the Portal's background workers |
+
+With none of them set, `python -m sentrix` behaves like the stand-alone console.
+
+---
+
+## Tests and evaluation
+
+```bash
+python -m pytest                     # 1647 tests, ~6.5 min on the laptop CPU; no camera, mic, network or GPU
+python -m pytest -o addopts=""       # same, with the summary line
+python tools/doctor.py               # pre-flight report; never opens a camera unless --probe-camera
+python tools/bench_live.py           # live loop on a bundled video: video fps, AI Hz, latency
+```
+
+`tests/conftest.py` runs before any import: test mode on, every live switch
+off, provider keys blanked, every service flag off, the device `var/` tree and the
+Portal database in a temp directory, webcam and microphone blocked, and a socket
+guard that allows loopback only. `tests/test_e2e_product.py` runs the whole
+product in one process (Portal, device console with a fake pipeline, the real
+SOS engine, the real link client into the Portal hub, fake Telegram/e-mail/modem
+transports): 13 scenarios from provisioning to a closed request, decline,
+expiry, safety defaults, duress, device offline, internet down, XSS and
+cross-household isolation.
+
+The custom-dataset evaluation (bundled frames and videos, side effects
+disabled):
+
+```bash
+python tools/eval_custom_frames.py --splits train,val,test --tag local    # per image
+python tools/replay_custom_videos.py --videos all --tag local             # 10 videos end to end
+python tools/replay_custom_videos.py --videos all --mode clip --tag local_clip   # clip engine
+python tools/custom_eval_table.py custom local                            # compare with a published run
+python tools/gate_report.py --replay training/runs/custom_eval/local/replay_all.json
+python tools/replay_decisions.py var/events/<session>.jsonl               # current rules on a recorded session
+```
+
+Your runs land in `training/runs/custom_eval/<tag>/` (ignored by git). The
+published runs are `baseline`, `finetuned`, `custom`, `m1`, `m5` and `clip`.
+Never tune or select on the test video `wa02`.
+
+---
+
+## Repository structure
 
 | Folder | What it holds |
 |---|---|
-| `sentrix/` | The app package: perception, fusion, pipeline, alerting, evidence, web dashboard (`python -m sentrix`) |
-| `sentrix_portal/` | The Portal and SOS service (`python -m sentrix_portal`) |
-| `models/` | Model weights the runtime loads (`v4_custom/` default, `v3_real/`, `v5_slim/`, `yolov8n.pt`), plus retained provenance checkpoints |
-| `training/` | `custom/` trainers for the shipped models, `datasets/sentrix_custom/` (765 frames, 10 videos), `notebooks/00`–`01`, `scripts/` (legacy trainers), `runs/` (reports the docs cite) |
-| `notebooks/` | TCI analysis notebooks (feature contract, calibration, thresholds) |
-| `tools/` | doctor, setup, benchmarks, replay and evaluation, gate report, auditors |
-| `tests/` | The test suite (`tests/e2e/` for product flows, `test_fresh_clone.py` for a clean checkout) |
-| `deploy/` | `pi5/` Raspberry Pi 5 install, `portal/` Portal deployment |
+| `sentrix/` | The device: `perception/` (detector, scene, identity, audio, behaviour, motion, re-id), `fusion/` (evidence rules, TCI, level policy), `pipeline/` (engine, 4 s clip engine, fast lane, incidents, event log, state), `runtime/` (torch/onnx/ncnn backends), `sos/` (machine, policy, PINs, templates, sweeper, service), `alerting/` (send guard, dispatch, channels: router, modem, Telegram, e-mail, Twilio), `link/` (client, protocol, tunnel, command rules), `io/` (cameras, demo reel, siren, GPIO, node, Wi-Fi, watchdog), `storage/` (SQLite), `evidence/` (vault), `web/` (Local Console), `evaluation/` |
+| `sentrix_portal/` | The Portal: `routes/` (auth, onboarding, home, household, contacts, consent, settings, SOS, Desk, admin, privacy, link hub, device proxy, hooks), `services/` (accounts, hub, SOS, notify, retention), templates and static files |
+| `models/` | Weights the runtime loads: `v4_custom/` (default: DINOv2 scene classifier, YOLO11n weapon and fire heads), `v3_real/`, `v5_slim/` (slim scene heads, experimental), `yolov8n.pt`, and provenance checkpoints |
+| `training/` | `custom/` trainers, `datasets/sentrix_custom/` (765 frames, 10 videos, ground truth), `notebooks/`, `scripts/` (legacy trainers), `runs/` (the reports the docs cite) |
+| `notebooks/` | TCI analysis: feature contract, calibration, thresholds |
+| `tools/` | doctor, setup_env, provision_device, demo_reset, demo_run, benchmarks (`bench_live`, `bench_clip`), replay and evaluation, gate report, model export, `portal_pg_check` |
+| `tests/` | The test suite; `tests/e2e/` holds the product-flow world |
+| `deploy/` | `pi5/` (install script, systemd units, watchdog, NetworkManager failover, firewall, `pi.env`), `portal/` (Dockerfile, compose with Postgres on an internal network, Caddy, backup and restore scripts, runbook) |
 | `docs/` | Numbered specifications `1_`–`8_`, `capstone/` (proposal, mid-semester report, poster), `assets/` (diagrams) |
-| `var/` | Runtime output (gitignored, never web-served) |
-
-```
-Sentrix/
-├── sentrix/                    importable package — all runtime code
-│   ├── config.py               ★ every tunable, in seconds not frames
-│   ├── paths.py                filesystem layout
-│   ├── app.py                  FastAPI factory + live loop
-│   ├── io/                     ★ hardware seams
-│   │   ├── sources.py          webcam | file | RTSP | multi-camera
-│   │   └── actuators.py        console | sound | GPIO relay
-│   ├── perception/             one score per modality
-│   │   ├── detector.py         ★ YOLOv8: person + weapon + fire + tracking
-│   │   ├── scene.py            ★ 5-class scene classifier, threshold-aligned to fusion
-│   │   ├── violence.py         sliding-window action classification (fallback)
-│   │   ├── audio.py            checkpoint-adaptive acoustic CNN
-│   │   ├── identity.py         ★ fail-closed face authorisation
-│   │   ├── behaviour.py        kinematics, resolution-independent
-│   │   ├── reid.py             appearance re-identification
-│   │   └── motion.py           frame differencing + is_night
-│   ├── fusion/
-│   │   ├── features.py         ★ the versioned feature contract
-│   │   ├── calibration.py      Platt / isotonic, fitted not guessed
-│   │   ├── tci.py              ★ TCI computation
-│   │   └── policy.py           ★ level bands + hysteresis
-│   ├── pipeline/
-│   │   ├── engine.py           ★ single process() path — live and replay
-│   │   ├── incidents.py        ★ incident grouping
-│   │   ├── events.py           ★ JSONL event log
-│   │   ├── escalation.py       level → action plan
-│   │   └── state.py            live telemetry
-│   ├── evidence/vault.py       ★ AES-256-GCM + hash-chained manifest
-│   ├── alerting/               Twilio SMS, voice, dispatch packages
-│   ├── storage/                SQLite, one row per incident
-│   ├── web/                    routes, streaming, security, templates, static
-│   ├── evaluation/             ★ custom-dataset ground truth, metrics, harness
-│   └── utils/                  logging and telemetry
-│
-├── models/                     deployed weights
-├── notebooks/                  ★ TCI analysis (contract, calibration, thresholds)
-├── training/
-│   ├── datasets/sentrix_custom/ custom dataset: 765 frames, 10 source videos, ground truth
-│   ├── custom/                 ★ custom-dataset box annotation, training, screening
-│   ├── scripts/                training as .py
-│   ├── notebooks/              training as .ipynb
-│   └── runs/                   run outputs (v3_real, ucf_crime_dvs, custom, custom_eval)
-├── tools/                      doctor, setup_env, bench_live, replay tools, evaluation,
-│                               gate_report, auditors
-├── tests/                      215 regression tests
-├── docs/                       specifications (1_…8_), capstone/ submissions, assets/ figures
-└── var/                        runtime output — gitignored, never web-served
-```
-
-★ marks files that carry the fixes described below.
-
----
-
-## Configuration: the numbers, and why
-
-Every tunable lives in [`sentrix/config.py`](sentrix/config.py), expressed in
-**seconds or fractions of the frame diagonal** — never in frames or pixels. That
-matters: the previous build used a per-frame EMA coefficient and pixel-per-frame
-speed thresholds, so changing the inference rate or the camera resolution silently
-changed the system's behaviour.
-
-### Sliding windows
-
-| Window | Value | Rationale |
-|---|---|---|
-| Violence clip | **2.0 s, 16 frames** | Action recognition converged on 2–3 s clips. I3D uses 64 frames @ 25 fps (2.56 s); VideoMAE and TimeSformer use 16 frames; RWF-2000 is built from 5 s clips |
-| Violence hop | **1.0 s** (50% overlap) | An action straddling a boundary is still caught whole by the neighbouring window |
-| Audio window | **4.0 s** | Fixed by `PRODUCTION_PREPROCESSING_CONTRACT.json`. Long enough to identify tonal events (siren, alarm) |
-| Audio hop | **1.0 s** (75% overlap) | Short enough that an impulsive event (gunshot, glass break) lands fully inside at least one window |
-| Inference rate | **6 Hz** cap | Human actions play out over hundreds of ms. 30 Hz of YOLO buys nothing and starves the edge device. Inference runs on its own thread and always takes the newest frame; the preview runs at the camera's rate whatever the AI rate |
-
-### Temporal thresholds
-
-| Parameter | Value | Rationale |
-|---|---|---|
-| Evidence confirmation | **2 of 3** fresh evaluations | Rejects single-frame spikes before they reach the TCI; no display EMA (it made the gauge lag the level) |
-| Escalate dwell | **0 s** L2/L3, **0.6 s + 2 obs** L4/L5 | Evidence is already confirmed; the costly levels keep a second guard |
-| De-escalate dwell | **5.0 s** | Asymmetric on purpose: an intruder stepping behind a pillar must not clear the alarm |
-| Loiter dwell | **30 s** | Video-analytics convention is 30–60 s stationary in a zone |
-| Incident close | **20 s** quiet | Groups a contiguous episode into one incident |
-| Evidence re-capture | **30 s** | Caps bundles within a long incident |
-| Evidence pre/post roll | **8 s / 15 s** | VMS convention (5–10 s before, 10–30 s after) |
-| SMS cooldown | **300 s** | Plus once-per-incident claiming |
-
-**Confirmation is what suppresses false alarms, not smoothing.** A single large
-spike still drags an EMA across a threshold; it only takes slightly longer. Requiring
-a source to cross on 2 of its last 3 evaluations rejects it outright.
-
-### Detection confidence
-
-| Head | Threshold | Rationale |
-|---|---|---|
-| Person | 0.35 | Cheap to get wrong either way |
-| Weapon | **0.55** | Threshold of the *detector vote*. One confirmed source can reach L3 at most; L4+ needs the scene classifier to agree. Only `pistol`/`knife`/`long_gun` boxes vote; the custom head's `stick` class (test mAP50 0.003) is drawn, never counted |
-| Fire | **0.50** | Same. Only boxes labelled `fire` vote; smoke is not in the alarm path (public smoke heads read a backlit webcam as smoke) |
-
-### How evidence becomes an alarm (`fusion/evidence.py`)
-
-The first live run produced ~171 false weapon alarms per hour, each one tick of
-the scene classifier barely over its threshold in a room it had never seen
-(CLAUDE.md §5). Every threat class now passes four rules before it can move the
-level:
-
-| Rule | Default | Why |
-|---|---|---|
-| Confirmation | a source must cross on **2 of the last 3 ticks** (counted, not timed) | at 0.5 Hz a time window held one frame |
-| Person gate | weapon votes count only with a person seen in the last **2 s** (skipped, and said so in the reason, if the person detector is down) | 65 % of live weapon alarms had nobody in view |
-| Fresh evaluations only | a cached value (a failed inference, the violence model between hops) is carried, never counted again | one evaluation must not confirm itself |
-| Corroboration cap | one confirmed source lands in **L3** (0.45–0.62); a classifier **and** a detector box, both confirmed, score 0.70 + 0.25 × the weaker side's margin: **L4** at threshold, **L5** once both are ~60 % of the way to certainty | the least reliable source cannot text or siren alone; two classifiers are not independent |
-| Experimental cap | assault and robbery stop at **L2** | they exist in 1–3 clips and cannot be validated |
-
-Scene thresholds are the checkpoint's raised to at least weapon 0.50 / fire 0.45
-(the checkpoint's were tuned at 41 % threat prevalence), unless a deployment
-calibration names a class (`var/calibration/scene.json` or
-`SENTRIX_SCENE_THRESHOLDS`, values in (0, 1); other classes keep their floors).
-**Identity never relaxes threat evidence**: frame-level identity cannot tell a
-resident from a stranger next to them, so a weapon counts the same either way until
-per-track identity exists (CLAUDE.md M4).
-
-**Presence is context, not a threat.** In home mode (default) an unknown person
-is logged only. `SENTRIX_ARMED=1` raises an intrusion at L3 once someone has stayed
-unrecognised for 3 s (brief detector misses do not restart the clock). The TCI is
-the strongest confirmed class evidence — a transparent rule — and it is not
-smoothed: the number on the gauge, in the log, in the SMS and on the incident is
-the number the level was decided on. Persistence is counted once, in the evidence
-layer, so L2/L3 commit at the first confirmed tick; L4/L5 (SMS, siren) also need
-0.6 s and 2 observations over their threshold. A level steps down after 5 s without
-touching its threshold. Replaying the live session with these rules: 30 L2+ / 6 L4
-alarm onsets become 0 (`python tools/replay_decisions.py var/events/<session>.jsonl`
-re-runs the current rules on any session you have recorded).
-
-### Escalation ladder
-
-| Level | TCI | Actions |
-|---|---|---|
-| 1 SECURE | 0.00–0.20 | Log only |
-| 2 SUSPICIOUS | 0.20–0.40 | Incident opened (log and dashboard only) |
-| 3 ELEVATED | 0.40–0.65 | + snapshot, AES-256-GCM encrypted evidence |
-| 4 HIGH | 0.65–0.85 | + SMS, dispatch package prepared |
-| 5 CRITICAL | 0.85–1.00 | + siren, voice call |
-
-The bands are currently asserted, matching the mid-semester report.
-[`notebooks/03_tci_thresholds.ipynb`](notebooks/03_tci_thresholds.ipynb) derives them
-from an explicit cost matrix instead, which is the defensible version.
-
----
-
-## Why YOLOv8 does most of the vision work
-
-One model family covers nearly the whole vision surface, and consolidating onto it
-removed a lot of redundant machinery:
-
-| Task | How |
-|---|---|
-| Person localisation | `yolov8n.pt`, class 0 |
-| Weapon localisation | fine-tuned 3-class head — knife, long_gun, pistol |
-| Fire & smoke localisation | fine-tuned 2-class head |
-| **Multi-object tracking** | `model.track(persist=True)` with **ByteTrack**, built in |
-| Pose / keypoints | `yolov8n-pose.pt` — implemented in `PoseEstimator`, not yet wired |
-
-The tracking row replaced an entire dependency. `deep-sort-realtime` was never
-installed, so the old tracker silently degraded to `id = index + 1` per frame —
-track IDs were reused by different people between frames, which corrupted every
-kinematic feature downstream. Loitering and running were computed over trajectories
-that mixed several people together.
-
-Consolidation also fixed a straightforward waste: the old code loaded `yolov8n.pt`
-**twice** (once in `VisionEngine`, once as a COCO fallback inside
-`CloudThreatEngine`) plus two custom detectors — four model loads for three jobs,
-on separate schedules, so a weapon could be attributed to a frame in which the
-person had already moved.
-
-**Next step:** wire up `PoseEstimator`. Bounding-box centroids are a weak proxy for
-what a person is doing; 17 keypoints make limb velocity and body configuration
-directly observable. It also fixes the crawl heuristic, which currently infers
-"crawling" from box aspect ratio and therefore fires on anyone the detector clips at
-the frame edge.
-
----
-
-## Where Vision Transformers fit
-
-Short answer: **yes, in three specific places, and one of them is a clear win.**
-
-### 1. Audio — the strongest case
-
-**AST (Audio Spectrogram Transformer)** is a ViT applied to mel-spectrogram patches,
-pretrained on AudioSet — which is exactly the corpus this project's audio classifier
-is trained on. AST reports ~0.485 mAP on AudioSet against a 3-layer CNN's far lower
-ceiling, and fine-tuning from AudioSet weights needs far less data than training from
-scratch. With only 375 usable clips, transfer learning is not a nice-to-have; it is
-the only realistic path to a usable acoustic model.
-
-`sentrix/perception/audio.py` builds its architecture from the checkpoint's own
-parameter names, so an AST checkpoint drops in behind the same interface.
-
-### 2. Violence / action recognition
-
-**VideoMAE** or **TimeSformer** are the SOTA replacements for the current per-frame
-ResNet-18 — they model time directly instead of aggregating independent frames.
-The caveat is real: a ViT-B is roughly 10× the compute of ResNet-18 and will not hold
-6 Hz on an Orange Pi. Practical middle ground for edge: **MobileViT** or
-**EfficientFormer**, or run VideoMAE only on frames the cheap path already flagged
-(cascade).
-
-### 3. Re-identification
-
-**CLIP-ReID** and DINOv2 embeddings outperform OSNet on cross-camera matching and
-need no ReID-specific training. `ReIDEngine` already normalises and cosine-matches,
-so swapping the embedding function is a one-line change.
-
-### Where ViTs do *not* belong here
-
-Object detection. YOLOv8 at 640px is faster and more accurate than DETR-family
-detectors at this scale, and small-object recall — a knife at 3 m — is precisely
-where transformer detectors are weakest.
-
-**Recommended order:** AST for audio (biggest gain per unit effort) → pose keypoints
-for behaviour → temporal head for violence → ViT re-id last.
-
----
-
-## Evaluation workflow
-
-No training is involved. The point is to measure what already exists, honestly.
-Steps 2–4 need the public corpora the v3 models were trained on (`data/…`, not
-in this repository); everything on the bundled custom dataset is in the
-Quickstart, step 4.
-
-```bash
-# 1. Is anything actually broken or missing?
-python tools/doctor.py
-
-# 2. Check your datasets for train/val contamination BEFORE quoting any metric
-python tools/audit_splits.py manifest \
-    --train training/runs/v3_real/violence/sample_manifest_train.csv \
-    --val   training/runs/v3_real/violence/sample_manifest_val.csv
-
-python tools/audit_splits.py images \
-    --train data/weapon_data/train/images \
-    --val   data/weapon_data/valid/images
-
-# 3. Measure the motion-only baseline — the thing you claim to beat
-python tools/baseline.py --clips data/clips
-
-# 4. Run the same footage through SENTRIX, writing labelled event logs
-python tools/replay.py --clips data/clips
-
-# 5. Produce the metrics table
-python tools/evaluate.py --json report.json
-
-# 6. Analyse
-jupyter lab notebooks/
-```
-
-`tools/replay.py` uses the identical `Pipeline.process` that the live camera uses,
-with every side effect disabled and no camera opened.
-There is deliberately no separate evaluation path — the previous build had one, and
-it had already drifted, which meant every published number came from code that was
-not the product.
-
-### Custom dataset evaluation
-
-The team's own footage — 765 reviewed frames from 10 videos, classes `normal`,
-`fire`, `weapon`, `assault`, `robbery` — is the one evaluation set that looks
-like a real deployment. It is scored two ways, both through the product
-pipeline with every side effect disabled:
-
-```bash
-python tools/eval_custom_frames.py --splits train,val,test   # per image
-python tools/replay_custom_videos.py --videos all            # source videos, end to end
-python tools/custom_eval_table.py                            # markdown tables
-```
-
-On this footage the shipped v3 models score **0.043 accuracy on the test video**:
-the violence classifier calls the entire test corridor a fight, the weapon
-detector is near chance (AUROC 0.54) and the fire detector finds none of the
-flame jets.
-
-Three configurations are kept on separate branches:
-
-| Branch | Models |
-|---|---|
-| `sentrix/baseline-v3` | the shipped v3 models, unchanged |
-| `sentrix/finetuned-v3` | the V3-notebook models fine-tuned on the custom data (ResNet-18 scene model, YOLOv8n heads, with rehearsal) |
-| `sentrix/custom-v4` (the models on `main`) | new models trained on the custom data: a DINOv2 ViT-B/14 scene classifier and YOLO11n heads |
-
-| Held-out result | baseline | finetuned | **custom (on `main`)** |
-|---|---|---|---|
-| Val, per image — accuracy / macro-F1 | 0.417 / 0.281 | 0.583 / 0.401 | **0.679 / 0.768** |
-| Val, video replay — episodes detected, false alarms | 1 of 2, 0 | 1 of 2, 4 | **2 of 2, 0** |
-| Test, per image — accuracy / macro-F1 | 0.043 / 0.114 | 0.677 / 0.460 | 0.720 / 0.419 |
-| Test, video replay — episodes detected | 3 of 3 | 3 of 3 | **0 of 3** |
-| False alarms per normal minute, all 10 videos | 13.96 | 7.12 | **0.79** |
-| Pipeline latency per tick on CPU, mean / p95 | 121 / 205 ms | 117 / 132 ms | 213 / 245 ms |
-
-The custom models are the most accurate on everything that could be used to
-choose a model (validation, cross-validation, false alarms) and ship on `main`.
-This table predates the end-to-end repair: it scores each frame with the
-checkpoint's own thresholds. With the repaired defaults (thresholds raised to
-safety floors, 2-of-3 confirmation) a fresh `eval_custom_frames.py` gives val
-0.607 / 0.718, and the video replay catches the same 13 of 18 episodes with
-**0 false alarms** at every level (docs/6 §6.8). Its blind spot is the stick swung in the test corridor, which
-the fine-tuned branch catches: 39 training frames of a stick *carried* did not
-teach a stick *swung*. Assault is not detected by either branch — it appears in
-two videos in two different rooms, which no model generalises across. The latency
-row comes from the evaluation harness, which stubs identity and audio. The live
-configuration (`python tools/bench_live.py`: real face recognition, a 30 fps video
-as the camera, side effects stubbed) measured on the laptop CPU with four faces in
-view: preview **29.7 fps**, AI **5.6 Hz** (cap 6), tick p50 168 ms, frame age p50
-198 ms (DINOv2 scene 92 ms, three YOLO heads 72 ms; face recognition runs on its own
-thread about once a second). The first live test ran at 0.32 Hz with the video
-frozen at that rate (CLAUDE.md §5, M2). Protocol,
-model selection and the full breakdown are in
-[`docs/6_CUSTOM_DATASET_EVALUATION.md`](docs/6_CUSTOM_DATASET_EVALUATION.md).
-
-### The TCI notebooks
-
-| Notebook | What it does |
-|---|---|
-| [`01_tci_feature_contract.ipynb`](notebooks/01_tci_feature_contract.ipynb) | Documents the 8-feature contract, verifies the deployed booster, and reproduces the train/serve skew |
-| [`02_tci_calibration.ipynb`](notebooks/02_tci_calibration.ipynb) | Fits an isotonic calibrator so TCI becomes a probability; reliability diagram and ECE |
-| [`03_tci_thresholds.ipynb`](notebooks/03_tci_thresholds.ipynb) | Derives level bands from a cost matrix; computes false alarms per hour |
-
-Both 02 and 03 refuse to write anything when no real labelled event logs are present.
-They fall back to a synthetic demo set and say so loudly.
-
----
-
-## What changed in v3
-
-Fifteen defects, each pinned by a regression test in [`tests/`](tests/).
-
-### Critical
-
-**1. TCI alarmed on an empty room.** The booster was fitted on raw scores in `[0, 1]`
-but served through an unfitted sigmoid (`A=-1.5, B=0.5`, its own docstring called them
-"dummy params") that compressed inputs to `[0.378, 0.731]`. The model never saw its
-own training distribution.
-
-| Scene | Before | After |
-|---|---|---|
-| Empty room, day | 0.422 → **L2 SUSPICIOUS** | **0.012 → L1 SECURE** |
-| Unknown person present | 0.437 | 0.292 |
-| Usable range | `[0.42, 0.84]` | `[0.01, 0.95]` |
-
-An empty room and an occupied one differed by **0.015**. TCI was effectively a
-constant.
-
-**2. Alert storm.** Level 2 sent an SMS and level 3 sounded the siren — two steps more
-aggressive than every document — while the system sat permanently at level 2. Result
-on disk: **1,489 evidence bundles, 2,415 snapshots, 642 MB.** Side effects now bind to
-**incidents**, not frames, and each fires once per incident.
-
-**3. Evidence was destroying itself.** Filenames had one-second resolution, so writes
-inside the same second silently overwrote each other. Now millisecond + counter + random
-suffix, plus an HMAC hash-chained manifest — deleting or altering a bundle breaks the
-chain at that point and everywhere after it.
-
-**4. Everything under `/static` was unauthenticated.** FastAPI applies no auth to static
-mounts, and the mount contained the evidence vault, incident snapshots and enrolled face
-photographs. Runtime output moved to `var/` and is served only through authenticated
-`/media/*` routes.
-
-**5. Face "recognition" was a colour histogram.** With `face_recognition` not installed,
-the live path compared a 512-bin HSV histogram of the centre of the frame at cosine
-≥ 0.68. Two frames of the same room routinely pass that. Since authorisation suppresses
-*all* alerting, it was an authentication bypass. Now fails closed.
-
-### Correctness
-
-**6.** The violence classifier was never invoked — `classify()` ran it only
-`if frame is not None`, and both call sites passed two arguments. 42 MB loaded, zero
-inferences. Now windowed and wired.
-
-**7.** `is_night` — one of five model inputs — was never computed. Always zero.
-
-**8.** Weapon, fire and behaviour could not reach the score. With the 5-feature booster,
-a knife at 0.5 confidence and no knife at all produced an identical TCI.
-
-**9.** EMA smoothing was frame-rate dependent, and every hard override returned early
-without updating the smoother, so the EMA resumed from a stale pre-incident value.
-
-**10.** Re-identification compared unit vectors against an L2 distance threshold of
-120.0 — unreachable, since unit vectors are at most 2.0 apart. Every person collapsed
-onto `GID-1`.
-
-**11.** Tracking degraded to per-frame indices, corrupting all kinematics.
-
-**12.** `process()` and `process_eval_frame()` were duplicated and had drifted.
-
-**13.** Telemetry no-opped unless `SENTRIX_EVAL_MODE=1`, so the "operational per-engine
-logging" produced nothing in normal operation.
-
-### Infrastructure
-
-**14.** `requirements.txt` could not start the app — missing `jinja2`, `sqlalchemy`,
-`python-dotenv`, `cryptography`, `scipy`, `sounddevice`, `pandas`; shipped
-`pycryptodome` (unused) instead of `cryptography` (imported). `run.bat`/`run.sh` never
-created a venv or installed anything, despite the docs saying they did.
-
-**15.** `hardware/siren.py` contained no GPIO code at all — it was a desktop beep player
-whose sound path pointed at a pre-restructure directory. `docs/3` showed a GPIO snippet
-captioned as that file's contents.
-
-### Removed
-
-`frontend/` (stale duplicate of a Next.js app that does not exist), `next_prompt.md`,
-and 642 MB of false-positive runtime output. `models/anomaly_classifier.pt` (a
-ResNet-18 with `val_acc = 0.39` at epoch 1) is no longer loaded by anything; the
-file is kept only for provenance.
-
----
-
-## Known limitations
-
-Stated plainly, because they will come up in review.
-
-**There is no fitted fusion model yet.** The shipped `models/tci_xgboost.json` was
-fitted to a synthetic formula (`R² = 0.984` measured only memorisation) in which
-`identity` meant *familiarity*, the opposite of what the runtime feeds; it scored an
-authorised resident ~5x higher than a stranger. It is retired: the TCI is now the
-strongest confirmed class evidence, a published rule. A calibrated model returns only
-once real session logs exist (CLAUDE.md M8).
-
-**No model is validated for a new room.** The first live run (dark bedroom, faces at
-< 1 m) was far outside the two rooms the models were trained on. The M1 rules stop the
-false alarms; making detection *work* there needs footage from that room (CLAUDE.md
-M6–M7).
-
-**Every model was measured on a contaminated split.** `tools/audit_splits.py`
-reproduces it:
-
-| Dataset | Contamination |
-|---|---|
-| Violence (RWF-2000) | **52.7% of validation rows** come from source videos also in training |
-| Weapon | 12.2% of validation images have a train near-duplicate at cos > 0.99 |
-| Fire / smoke | 20.0% at cos > 0.99 |
-
-The published mAP and accuracy figures are optimistic by an unknown margin. Re-split by
-source and re-measure before the final report.
-
-**The audio model is under-trained.** 375 usable clips across 4 classes; `scream` has 8
-validation samples. The reported macro-F1 of 0.7036 is a single-epoch spike selected
-from a noisy series whose surrounding epochs average ~0.58 — selection on a 75-sample
-validation set, not a converged result. It also has no `gunshot` and no `glass_break`
-class, both of which the proposal promises, and `gunshot` is required for the
-firecracker-discrimination research gap. See `docs/5` §3.1.
-
-**The UCF-Crime anomaly model is not wired in, and its test metric is a sign error.**
-`python tools/diagnose_anomaly.py` shows normal footage scoring 0.923 and anomalous
-footage 0.685 — the ranking is inverted. Inverted, AUC is 0.806 against a validation
-AUC of 0.826.
-
-**"Court-admissible" is not a claim this system can make.** Admissibility is a legal
-determination about process and custody, not a property a cipher confers. The
-defensible term is **tamper-evident**, and the docs should be softened accordingly.
-
-**The false-alarm reduction claim is not yet measured.** `tools/baseline.py` provides
-the comparator, but the missing ingredient is hours of continuous unattended footage
-from a real deployment. Public CCTV datasets are trimmed and curated and cannot give a
-rate per hour of an empty room.
+| `var/` | Runtime output: database, events, evidence, snapshots, faces. Gitignored, never web-served |
 
 ---
 
@@ -648,19 +343,61 @@ rate per hour of an empty room.
 
 | Document | Contents |
 |---|---|
-| [`docs/1_SYSTEM_ARCHITECTURE.md`](docs/1_SYSTEM_ARCHITECTURE.md) | Architecture and data flow |
-| [`docs/2_MODEL_BENCHMARKS_AND_KPIS.md`](docs/2_MODEL_BENCHMARKS_AND_KPIS.md) | Training results |
-| [`docs/3_HARDWARE_SPECIFICATION_AND_BOM.md`](docs/3_HARDWARE_SPECIFICATION_AND_BOM.md) | Bill of materials, pinouts |
+| [`CLAUDE.md`](CLAUDE.md) | Project memory: facts, git history, model scores, the live diagnosis, decisions D1–D14 and milestone status |
+| [`docs/1_SYSTEM_ARCHITECTURE.md`](docs/1_SYSTEM_ARCHITECTURE.md) | Device architecture and data flow |
+| [`docs/2_MODEL_BENCHMARKS_AND_KPIS.md`](docs/2_MODEL_BENCHMARKS_AND_KPIS.md) | Model training results |
+| [`docs/3_HARDWARE_SPECIFICATION_AND_BOM.md`](docs/3_HARDWARE_SPECIFICATION_AND_BOM.md) | Hardware and bill of materials |
 | [`docs/4_DEPLOYMENT_AND_RUNBOOK.md`](docs/4_DEPLOYMENT_AND_RUNBOOK.md) | Deployment and operations |
-| [`docs/5_FUTURE_ADVANCEMENTS_AND_CLOUD_DEPLOYMENT.md`](docs/5_FUTURE_ADVANCEMENTS_AND_CLOUD_DEPLOYMENT.md) | Roadmap |
+| [`docs/5_FUTURE_ADVANCEMENTS_AND_CLOUD_DEPLOYMENT.md`](docs/5_FUTURE_ADVANCEMENTS_AND_CLOUD_DEPLOYMENT.md) | Remaining work |
 | [`docs/6_CUSTOM_DATASET_EVALUATION.md`](docs/6_CUSTOM_DATASET_EVALUATION.md) | Custom-dataset protocol and results |
-| [`docs/7_PORTAL_AND_SOS.md`](docs/7_PORTAL_AND_SOS.md) | Portal, onboarding and SOS: developer contract |
-| [`docs/8_RASPBERRY_PI5_INTEGRATION.md`](docs/8_RASPBERRY_PI5_INTEGRATION.md), [`deploy/pi5/README.md`](deploy/pi5/README.md) | Raspberry Pi 5 plan, pin table, Pi deployment |
+| [`docs/7_PORTAL_AND_SOS.md`](docs/7_PORTAL_AND_SOS.md) | Portal, onboarding, link, tunnel and SOS contract; §17 the live smoke run |
+| [`docs/8_RASPBERRY_PI5_INTEGRATION.md`](docs/8_RASPBERRY_PI5_INTEGRATION.md) | Raspberry Pi 5 plan, clip engine, pin table |
+| [`deploy/pi5/README.md`](deploy/pi5/README.md) | Pi bring-up and deployment |
+| [`deploy/portal/README.md`](deploy/portal/README.md) | Portal deployment (Oracle Always Free; Render + Supabase fallback) |
+| [`THIRD_PARTY.md`](THIRD_PARTY.md) | Licences of models, data and services SENTRIX uses |
 
-All six were rewritten for v3. Each carries explicit **"Corrected from v2.1"**
-callouts where the previous version stated something that was not true of the
-code — those corrections need to be carried into the final report, because an
-examiner comparing the docs against `training/runs/` will find them.
+---
+
+## Status and limits
+
+Everything below ran on the maintainer laptop (Windows 11, Python 3.14, CPU
+torch). **Nothing has run on a Raspberry Pi, a real modem, a real Telegram bot,
+a real e-mail account or a live Postgres yet.**
+
+| Area | State | Evidence |
+|---|---|---|
+| Device pipeline, LC, records | working on the laptop | `tools/bench_live.py` on vid07 with four faces: preview 29.7 fps, AI 5.6 Hz (CLAUDE.md M2) |
+| Portal + device as two processes | working on the laptop | docs/7 §17: provisioning → activation → wizard → claim → tunnel → real detection → approve → Desk → closed; decline, expiry, Portal outage |
+| Detection to SOS request | working on bundled clips | docs/7 §17: PENDING weapon request 8.0–9.8 s after `scene gun`; fire 11.6–11.9 s after `scene fire` |
+| Remote view through the tunnel | working, capped | docs/7 §17: MJPEG 29.9 fps direct, 13.6 fps tunnelled (cap 15) |
+| Telegram, e-mail, modem SMS, Twilio | code and fake-transport tests only | no provider accounts or modem used |
+| Raspberry Pi 5 hardware | code and mock-pin tests only | bench checks still to do (deploy/pi5/README.md) |
+| 4 s clip engine | replay meets Gate A's detection criterion; too slow on the laptop | `training/runs/custom_eval/clip/`: weapon L3 9/12 with the fast lane, fire 3/3, 0 false onsets; ONNX + fast lane compute p95 2145 ms vs a 1.6 s budget |
+| Slim scene heads (`models/v5_slim/`) | not usable for alarms | `training/runs/custom/slim/REPORT.md`: LOVO macro-F1 0.229 (MobileNetV3-L) vs 0.440 (DINOv2) |
+| Portal deployment | written, not run | `deploy/portal/` checked by `tests/test_deploy_portal.py`; Docker not run; no Alembic baseline |
+
+Limits that matter for any claim:
+
+* **No model is validated for a new room.** The custom dataset has two rooms and
+  341 s of labelled footage. On its 10 videos (partly in-sample) the committed
+  levels show 0 false onsets over 3.7 normal minutes — far too little normal
+  footage to claim a rate — and catch weapon 9/12 and fire 3/3 at L3
+  (`training/runs/custom_eval/m5/`). Gates G2 (episodes within 2 s) and G4
+  (onset → L3 p95 ≤ 2 s) fail. Deployment-room recordings (M6) come first.
+* **Assault and robbery cannot be validated** (2 videos / 1 event). They stay
+  experimental, capped at L2.
+* **No fitted fusion model.** The TCI is a published rule over confirmed
+  evidence until real session logs exist (M8).
+* **Darkness and faces closer than 1 m** are out of scope for an RGB webcam.
+* **The audio model is under-trained** (375 clips; no gunshot or glass-break
+  class). It is optional and not in the alarm path.
+* **Training-corpus metrics are optimistic.** The v3 models' own validation
+  splits share source videos or near-duplicate images with training
+  (`tools/audit_splits.py`; CLAUDE.md §4.1).
+* **Evidence is tamper-evident, not "court-admissible".** AES-256-GCM with an HMAC
+  hash-chained manifest shows a change; admissibility is a legal question.
+* Release gates P1–P8 (Portal and SOS) and M9 G0–G5 (detection) are defined but
+  not yet measured on a final build (CLAUDE.md §6).
 
 ---
 
@@ -676,14 +413,7 @@ examiner comparing the docs against `training/runs/` will find them.
 
 **Mentor:** Dr. Ashutosh Mishra, Associate Professor, CSED, TIET Patiala
 
----
-
-## Standards
-
-BIS IS 16910 / IEC 62676 (video surveillance) · NIST SP 800-38D / FIPS 197 (AES-GCM) ·
-FIPS 180-4 (SHA-256) · CERT-In cybersecurity directions · MoHUA Smart Cities ICCC
-video-analytics guidelines · OSHA 1910.95 / NFPA 72 (audible alarm levels)
-
 ## License
 
-MIT
+SENTRIX's own code is MIT (see `LICENSE`). Models, data and services it uses
+carry their own terms; see [`THIRD_PARTY.md`](THIRD_PARTY.md).
