@@ -119,9 +119,9 @@ class TestPipelineHook:
         engine = make_engine(Clock())
         try:
             fake = hook_pipeline(engine)
-            incident, _ = fake.incidents.update(3, 0.5, "assault", now=0.0)
+            incident, _ = fake.incidents.update(3, 0.5, "robbery", now=0.0)
             fake._act(incident, plan_for(3), np.zeros((4, 4, 3), np.uint8),
-                      result_of("assault", 3), 3, "ELEVATED", 0.0)
+                      result_of("robbery", 3), 3, "ELEVATED", 0.0)
             assert "sos" not in incident.actions and fake._tasks.empty()
         finally:
             engine.stop()

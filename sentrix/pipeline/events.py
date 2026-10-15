@@ -35,7 +35,12 @@ log = get_logger("events")
 #: ``context.person_recent`` / ``faces`` / ``faces_matched``, so
 #: ``tools/replay_decisions.py`` can re-run the decision layer exactly and
 #: per-track identity (M4) has data to be designed on.
-SCHEMA_VERSION = 3
+#: 5 (D15): ``votes`` may hold the time-aligned ``audio`` / ``audio_benign``
+#: sources; ``audio`` records the window heard and its alignment with the
+#: frame (status, lag); ``context`` adds ``persons_recent``, ``motion`` and
+#: ``sensors``; ``fusion`` names the leading class, its modalities and rule
+#: and the per-input ``contributions``. (4 is the clip row's schema.)
+SCHEMA_VERSION = 5
 
 
 class EventLog:
@@ -99,7 +104,23 @@ class EventLog:
                 "person_recent": features.extras.get("person_recent"),
                 "faces": features.extras.get("faces"),
                 "faces_matched": features.extras.get("faces_matched"),
+                "persons_recent": (features.extras.get("fusion_context") or {}).get(
+                    "persons_recent"),
+                "motion": round(float(features.motion), 5),
+                "sensors": features.extras.get("sensors") or {},
             },
+        }
+        audio = features.extras.get("audio")
+        if audio:
+            row["audio"] = audio
+        evidence = features.extras.get("evidence") or {}
+        leading = evidence.get(result.incident_type) if isinstance(evidence, dict) else None
+        row["fusion"] = {
+            "class": result.incident_type,
+            "state": (leading or {}).get("state"),
+            "rule": (leading or {}).get("rule"),
+            "modalities": (leading or {}).get("modalities"),
+            "contributions": getattr(result, "contributions", None) or [],
         }
         votes = features.extras.get("sources")
         if votes:

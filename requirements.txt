@@ -52,9 +52,12 @@ scipy>=1.14.0
 pandas>=2.2.0                 # event-log tooling and notebooks
 
 # ── audio ─────────────────────────────────────────────────────────────────────
+# The general sound model (PANNs CNN10, models/audio/) needs only torch + scipy.
+# Replaying a video's own soundtrack needs the ffmpeg command on PATH.
 sounddevice>=0.4.7            # microphone capture
 soundfile>=0.12.1
 librosa>=0.10.2               # fallback mel front end
+pyttsx3>=2.90                 # talk-down speaker (D16): SAPI5 / espeak-ng, offline
 
 # ── notifications (optional, degrades to console) ─────────────────────────────
 # Every send passes sentrix/alerting/guard.py: nothing leaves the machine

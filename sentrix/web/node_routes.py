@@ -69,6 +69,10 @@ def node_payload() -> dict[str, Any]:
     health = services.registry.health()
     payload["services"] = {name: (health.get(name) or {}).get("status", "off")
                            for name in ("node", "gpio")}
+    from sentrix.io.speaker import get_speaker
+    speaker = get_speaker().status()
+    payload["speaker"] = {k: speaker[k] for k in ("enabled", "backend", "real", "ready",
+                                                  "speaking", "last")}
     return payload
 
 

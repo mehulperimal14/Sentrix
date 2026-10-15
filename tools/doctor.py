@@ -109,8 +109,16 @@ def check_models(report: Report) -> None:
         else:
             report.add(WARN, role, "not present")
 
+    from sentrix.perception.sound_tagger import WEIGHTS_NAME
+    tagger = MODELS_DIR / "audio" / WEIGHTS_NAME
+    if tagger.exists():
+        report.add(OK, "sound model", f"audio/{WEIGHTS_NAME} (PANNs CNN10, AudioSet), "
+                                       f"{tagger.stat().st_size / 1e6:.1f} MB")
+    else:
+        report.add(WARN, "sound model", "PANNs CNN10 not present: the 4-class audio CNN "
+                                         "is used (python tools/fetch_models.py)")
     expected = {
-        "v3_real/audio_classifier_real_v3.pt": ("audio (V3)", False),
+        "v3_real/audio_classifier_real_v3.pt": ("audio (V3, fallback)", False),
         "audio_classifier.pt": ("audio (V2 fallback)", False),
         "tci_xgboost.json": ("legacy synthetic booster, NOT used (CLAUDE.md D6)", False),
         "tci_calibrator.json": ("fitted TCI calibrator", False),

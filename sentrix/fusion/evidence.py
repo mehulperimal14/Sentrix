@@ -1,4 +1,4 @@
-"""Per-class threat evidence with temporal confirmation.
+"""Per-class threat evidence: temporal confirmation and multimodal fusion.
 
 Why this exists
 ---------------
@@ -6,43 +6,63 @@ The first live run (CLAUDE.md §5) produced ~171 false weapon alarms per hour.
 Every one came from a single tick of the scene classifier a hair over its
 threshold, in a room it had never seen; a single frame was enough because the
 old TCI engine turned any crossing into a hard override. This module is the
-only place threat evidence is formed, and it applies three rules before any
-source may count:
+only place threat evidence is formed. Before any source may count:
 
 1. **Confirmation counted in observations.** A source's crossings for a class
-   count only once they occur on ``confirm_k`` of the last ``confirm_n`` ticks
-   (default 2 of 3). Counting ticks rather than seconds keeps the rule honest
-   at 0.5 Hz, where a 0.5 s window held a single frame.
-2. **A weapon needs a person.** Weapon crossings count only if a person was
-   seen in the last ``person_memory_seconds``.
-3. **Escalation caps by corroboration.** One confirmed source lands in the L3
-   band (evidence and snapshot, no SMS or siren). A classifier source *and* a
-   detector box, both confirmed, move to their own scale: L4 at the threshold,
-   L5 once the weaker of the two is well over it. Experimental classes
-   (assault, robbery) stop at L2.
+   count only once they occur on ``confirm_k`` of the last ``confirm_n``
+   fresh evaluations (default 2 of 3). Counting observations rather than
+   seconds keeps the rule honest at 0.5 Hz, where a 0.5 s window held a
+   single frame.
+2. **Gates from context.** A weapon needs a person seen in the last
+   ``person_memory_seconds``. A fight needs ``fight_min_persons`` people in
+   view (when the person count is known).
 
-Identity never relaxes threat evidence. Frame-level identity says only that
-some face matched, so a stranger next to a resident would inherit the
-resident's authorisation; per-track identity (CLAUDE.md M4) is the
-precondition for any such rule. Replaying the live session showed the
-relaxation bought nothing there.
+How the modalities combine (D15)
+--------------------------------
+Every source belongs to one **modality**: the YOLO heads and the clip
+engine's fast lane are ``video_detector``; the scene classifier and the
+violence model are ``video_classifier`` (two classifiers looking at the same
+pixels are not independent, D3); the sound model is ``audio`` - and audio
+votes exist only when the audio window describes this frame (time-aligned,
+``perception/audio.py``), otherwise audio is *unavailable*, never "calm".
+
+For the alarm classes (weapon, fire):
+
+* nothing confirmed: under the L2 band (``unconfirmed_ceiling``) - shown,
+  never acted on;
+* audio confirmed with no visual source: L2 at most (``audio_only_cap``);
+* one visual modality confirmed: the L3 band (``confirmed_floor`` ..
+  ``single_source_cap``) - snapshot and evidence, no SMS or siren;
+* two independent modalities confirmed (detector + scene, or video + aligned
+  audio): L4 at threshold rising to L5, the weaker of the two setting the
+  value (``corroborated_floor`` .. ``corroborated_cap``);
+* all three confirmed: at least L5 (``three_modality_floor``).
+
+For a fight (``assault``, experimental, D1): capped at L2 (``experimental_cap``)
+unless the video fight **and** aligned aggression audio are both confirmed,
+with ``fight_min_persons`` people and motion over ``fight_motion_floor``: then
+the L3 band (state ``corroborated``: two modalities). L4 needs, on top, a
+second visual source (``fight_max_level`` >= 4). Aligned laughter or calm talk
+(``benign_social``) with no aggression is banter: the fight is held under the
+L2 band (``banter_cap``). Robbery stays experimental (L2).
+
+Identity never relaxes threat evidence: frame-level identity cannot tell a
+resident from a stranger beside them (M4 is per-track, but no rule uses it to
+lower a weapon). Unknown people are a separate, L2-only rule in the TCI engine.
 
 Sources
 -------
 Each tick the pipeline hands in ``sources``: ``{source_name: {class: (value,
-threshold[, fresh])}}``. ``scene`` and ``violence`` are classifier sources;
-``detector`` is the YOLO heads. Which kinds vote is ``ThreatConfig.sources``.
-
-Only *fresh* values - a model evaluation made on this tick - are pushed into
-the confirmation window. A cached value (a model that runs every other tick,
-the violence model between hops, a failed inference) is carried with the
-window's current state and never counts as a new observation, so one
-evaluation cannot confirm itself. A value that is not finite, or a threshold
-outside (0, 1), is recorded as ``gated`` and contributes nothing.
+threshold[, fresh])}}``. Only *fresh* values - a model evaluation made on this
+tick (for audio: a new window) - are pushed into the confirmation window; a
+cached value is carried with the window's state and never counts as a new
+observation, so one evaluation cannot confirm itself. A value that is not
+finite, or a threshold outside (0, 1), is recorded as ``gated`` and
+contributes nothing. ``audio_benign`` votes *against* a fight.
 
 The resulting per-class ``score`` is on the TCI scale and is what the TCI engine
 takes the maximum of — so any event row can be re-derived by hand from the votes
-it records.
+it records (and ``modalities`` in each class's record says which counted).
 """
 
 from __future__ import annotations
@@ -60,7 +80,30 @@ log = get_logger("evidence")
 #: Tie-break order when two classes score the same (mirrors alarm severity).
 CLASS_ORDER: tuple[str, ...] = ("fire", "weapon", "assault", "robbery")
 CLASSIFIER_SOURCES = frozenset({"scene", "violence"})
-DETECTOR_SOURCES = frozenset({"detector"})
+DETECTOR_SOURCES = frozenset({"detector", "fastlane"})
+AUDIO_SOURCES = frozenset({"audio", "audio_aggression", "audio_benign"})
+#: Sources that argue *against* a class (banter lowers a fight). They confirm
+#: on their newest fresh observation: lowering an experimental class needs
+#: less evidence than raising one.
+AGAINST_SOURCES = frozenset({"audio_benign"})
+#: Sources that may corroborate a class but never stand alone for it (a
+#: scream next to a visible gun corroborates the gun; a scream alone is not
+#: a weapon).
+CORROBORATE_ONLY = frozenset({"audio_aggression"})
+
+VIDEO_DETECTOR, VIDEO_CLASSIFIER, AUDIO = "video_detector", "video_classifier", "audio"
+VISUAL_MODALITIES = frozenset({VIDEO_DETECTOR, VIDEO_CLASSIFIER})
+#: Display names for the dashboard's contributions list.
+MODALITY_NAMES = {VIDEO_DETECTOR: "video detector", VIDEO_CLASSIFIER: "scene/action model",
+                  AUDIO: "audio"}
+
+
+def modality_of(source: str) -> str:
+    if source in DETECTOR_SOURCES:
+        return VIDEO_DETECTOR
+    if source in AUDIO_SOURCES:
+        return AUDIO
+    return VIDEO_CLASSIFIER
 
 
 class ConfirmationWindow:
@@ -93,6 +136,10 @@ class ConfirmationWindow:
         self._expire(now)
         return self._state()
 
+    def latest(self) -> bool:
+        """Whether the newest observation was a crossing."""
+        return bool(self._obs) and self._obs[-1][1]
+
     def reset(self) -> None:
         self._obs.clear()
 
@@ -114,6 +161,15 @@ class Vote:
     #: False for an unusable input (non-finite value, threshold outside (0, 1)).
     valid: bool = True
 
+    @property
+    def modality(self) -> str:
+        return modality_of(self.source)
+
+    @property
+    def role(self) -> str:
+        """``for`` (raises the class) or ``against`` (banter lowers a fight)."""
+        return "against" if self.source in AGAINST_SOURCES else "for"
+
     def describe(self) -> str:
         text = (f"{self.source} {self.value:.2f}/{self.threshold:.2f} "
                 f"({self.hits}/{self.seen} ticks)")
@@ -127,7 +183,8 @@ class Vote:
         return {"source": self.source, "value": round(self.value, 4),
                 "threshold": round(self.threshold, 4), "hits": self.hits,
                 "seen": self.seen, "confirmed": self.confirmed,
-                "gated": self.gated, "fresh": self.fresh}
+                "gated": self.gated, "fresh": self.fresh,
+                "modality": self.modality, "role": self.role}
 
 
 @dataclass
@@ -140,13 +197,19 @@ class ClassEvidence:
     experimental: bool = False
     votes: list[Vote] = field(default_factory=list)
     reason: str = ""
-    #: ``unconfirmed``, ``confirmed`` (one source) or ``corroborated``.
+    #: ``unconfirmed``, ``confirmed`` (one modality) or ``corroborated`` (two+).
     state: str = "unconfirmed"
+    #: Confirmed modalities -> strength of their strongest confirmed vote.
+    modalities: dict = field(default_factory=dict)
+    #: The rule that set the score (``single``, ``corroborated``, ``banter``...).
+    rule: str = "none"
 
     def to_dict(self) -> dict[str, Any]:
         return {"score": round(self.score, 4), "confirmed": self.confirmed,
                 "state": self.state, "experimental": self.experimental,
-                "reason": self.reason, "votes": [v.to_dict() for v in self.votes]}
+                "reason": self.reason, "rule": self.rule,
+                "modalities": {m: round(s, 4) for m, s in self.modalities.items()},
+                "votes": [v.to_dict() for v in self.votes]}
 
 
 def strength(vote: Vote) -> float:
@@ -174,23 +237,35 @@ def source_score(vote: Vote, cfg=None) -> float:
     return cfg.unconfirmed_ceiling * min(max(vote.value, 0.0) / threshold, 1.0)
 
 
-def corroborated_score(confirmed: list[Vote], cfg=None) -> float | None:
-    """Score for a classifier *and* a detector both confirming, else None.
+def confirmed_modalities(votes: list[Vote]) -> dict[str, float]:
+    """Modality -> the strength of its strongest confirmed supporting vote."""
+    out: dict[str, float] = {}
+    for vote in votes:
+        if vote.confirmed and vote.valid and vote.role == "for":
+            out[vote.modality] = max(out.get(vote.modality, 0.0), strength(vote))
+    return out
 
-    Two classifiers (scene and violence) are not independent evidence (D3).
-    The weaker side sets the score: ``corroborated_floor`` (L4) at threshold
-    rising to ``corroborated_cap``; L5 (0.85) needs the weaker side about 60 %
-    of the way from its threshold to certainty.
+
+def corroborated_score(confirmed: list[Vote], cfg=None) -> float | None:
+    """Score for two or more independent modalities confirming, else None.
+
+    The second-strongest modality (the weaker side of the best pair) sets the
+    score: ``corroborated_floor`` (L4) at threshold rising to
+    ``corroborated_cap``; L5 (0.85) needs it about 60 % of the way from its
+    threshold to certainty. Two classifiers (scene and violence) are one
+    modality, not corroboration (D3). Audio needs a visual partner: two audio
+    votes never corroborate each other. Three modalities: at least
+    ``three_modality_floor`` (L5).
     """
     cfg = cfg or settings.threat
-    classifier = max((strength(v) for v in confirmed if v.source in CLASSIFIER_SOURCES),
-                     default=None)
-    detector = max((strength(v) for v in confirmed if v.source in DETECTOR_SOURCES),
-                   default=None)
-    if classifier is None or detector is None:
+    modalities = confirmed_modalities(confirmed)
+    if len(modalities) < 2 or not (set(modalities) & VISUAL_MODALITIES):
         return None
-    weaker = min(classifier, detector)
-    return cfg.corroborated_floor + (cfg.corroborated_cap - cfg.corroborated_floor) * weaker
+    ranked = sorted(modalities.values(), reverse=True)
+    score = cfg.corroborated_floor + (cfg.corroborated_cap - cfg.corroborated_floor) * ranked[1]
+    if len(modalities) >= 3:
+        score = max(score, cfg.three_modality_floor)
+    return min(score, cfg.corroborated_cap)
 
 
 def combine(scores: list[float]) -> float:
@@ -232,6 +307,8 @@ class EvidenceAccumulator:
         return self._windows[key]
 
     def _allowed(self, source: str, cls: str) -> bool:
+        if source in AUDIO_SOURCES:
+            return bool(getattr(self.cfg, "audio_votes", True))
         mode = self.cfg.sources
         if mode == "scene":
             return source in CLASSIFIER_SOURCES
@@ -242,12 +319,15 @@ class EvidenceAccumulator:
         return True
 
     def update(self, now: float, sources: dict[str, dict[str, tuple]],
-               person_recent: bool | None) -> dict[str, ClassEvidence]:
+               person_recent: bool | None,
+               context: dict | None = None) -> dict[str, ClassEvidence]:
         """Fold this tick's votes into confirmed per-class evidence.
 
         ``person_recent`` is None when the person detector is unavailable: the
         weapon gate is then skipped (and says so) rather than silencing every
-        weapon alarm.
+        weapon alarm. ``context`` carries what is not a vote but conditions
+        one: ``persons`` (people in view recently, None if unknown) and
+        ``motion`` (0..1, None if unknown) for the fight rule.
         """
         result: dict[str, ClassEvidence] = {}
         for cls in CLASS_ORDER:
@@ -258,7 +338,7 @@ class EvidenceAccumulator:
                 vote = self._vote(now, cls, source, per_class[cls], person_recent)
                 if vote is not None:
                     votes.append(vote)
-            result[cls] = self._score(cls, votes)
+            result[cls] = self._score(cls, votes, context)
             if cls == "weapon" and person_recent is None and votes:
                 result[cls].reason += " [person gate off: person detector unavailable]"
         return result
@@ -283,40 +363,119 @@ class EvidenceAccumulator:
             hits, seen, confirmed = window.peek(now)
             if seen == 0:
                 return None             # nothing recent enough to carry
+        if source in AGAINST_SOURCES:
+            confirmed = window.latest()
         if confirmed and cls == "weapon" and person_recent is False:
             confirmed, gated = False, "no person in view"
         return Vote(source, value, threshold, hits, seen, confirmed, gated, fresh)
 
-    def _score(self, cls: str, votes: list[Vote]) -> ClassEvidence:
+    # ── scoring ───────────────────────────────────────────────────────────────
+    def _gate(self, cls: str, votes: list[Vote], context: dict | None) -> None:
+        """Context gates that apply after confirmation (the fight's people)."""
+        if cls != "assault" or not context:
+            return
+        persons = context.get("persons")
+        need = int(getattr(self.cfg, "fight_min_persons", 2))
+        if persons is not None and persons < need:
+            for vote in votes:
+                if vote.role == "for" and vote.confirmed:
+                    vote.confirmed = False
+                    vote.gated = f"fewer than {need} people in view"
+
+    def _score(self, cls: str, votes: list[Vote],
+               context: dict | None = None) -> ClassEvidence:
         cfg = self.cfg
+        self._gate(cls, votes, context)
         experimental = cls in cfg.experimental_classes
-        confirmed = [v for v in votes if v.confirmed]
+        support = [v for v in votes if v.role == "for"]
+        against = [v for v in votes if v.role == "against"]
+        modalities = confirmed_modalities(support)
+        visual = {m: s for m, s in modalities.items() if m in VISUAL_MODALITIES}
+        base = combine([source_score(v, cfg) for v in support])
+        notes: list[str] = []
 
-        corroborated = corroborated_score(confirmed, cfg)
-        if corroborated is not None:
-            score = corroborated
+        if cls == "assault" and experimental:
+            score, state, rule = self._fight(support, against, modalities, visual, base,
+                                             context, notes)
+        elif experimental:
+            score = min(base, cfg.experimental_cap if modalities else cfg.unconfirmed_ceiling)
+            state = "confirmed" if modalities else "unconfirmed"
+            rule = "experimental" if modalities else "unconfirmed"
+            notes.append("experimental: capped at L2")
         else:
-            score = combine([source_score(v, cfg) for v in votes])
-            score = min(score, cfg.single_source_cap if confirmed else cfg.unconfirmed_ceiling)
-        if experimental:
-            score = min(score, cfg.experimental_cap if confirmed else cfg.unconfirmed_ceiling)
+            corroborated = corroborated_score(support, cfg)
+            if corroborated is not None:
+                score, state, rule = corroborated, "corroborated", (
+                    "three modalities" if len(modalities) >= 3 else "corroborated")
+            elif visual:
+                score, state, rule = min(base, cfg.single_source_cap), "confirmed", "single"
+            elif confirmed_modalities([v for v in support
+                                       if v.source not in CORROBORATE_ONLY]):  # audio only
+                score, state, rule = (min(base, getattr(cfg, "audio_only_cap", 0.35)),
+                                      "confirmed", "audio only")
+                notes.append("audio alone: capped at L2")
+            elif modalities:
+                score, state, rule = (min(base, cfg.unconfirmed_ceiling), "unconfirmed",
+                                      "corroboration only")
+                notes.append("aggression audio only corroborates a visible weapon")
+            else:
+                score, state, rule = min(base, cfg.unconfirmed_ceiling), "unconfirmed", \
+                    "unconfirmed"
 
-        state = ("corroborated" if corroborated is not None
-                 else "confirmed" if confirmed else "unconfirmed")
         detail = "; ".join(v.describe() for v in votes) or "no source"
         reason = f"{cls} {state}: {detail}"
-        if experimental:
-            reason += " [experimental: capped at L2]"
-        return ClassEvidence(cls, score, bool(confirmed), experimental, votes, reason,
-                             state)
+        if notes:
+            reason += "".join(f" [{n}]" for n in notes)
+        return ClassEvidence(cls, score, state != "unconfirmed", experimental, votes,
+                             reason, state, modalities, rule)
+
+    def _fight(self, support, against, modalities, visual, base, context, notes):
+        """The fight rule (D15): video and aligned audio must agree to leave L2;
+        banter (laughter, calm talk) holds it under L2."""
+        cfg = self.cfg
+        benign = any(v.confirmed and v.valid for v in against)
+        aggression = AUDIO in modalities
+        context = context or {}
+        persons, motion = context.get("persons"), context.get("motion")
+        need = int(getattr(cfg, "fight_min_persons", 2))
+        people_ok = persons is not None and persons >= need
+        motion_ok = motion is not None and motion >= float(getattr(cfg, "fight_motion_floor", 0.0))
+        max_level = int(getattr(cfg, "fight_max_level", 3))
+
+        if benign and not aggression:
+            notes.append("banter: aligned laughter/calm talk, no aggression")
+            return min(base, getattr(cfg, "banter_cap", cfg.unconfirmed_ceiling)), \
+                "unconfirmed", "banter"
+        if visual and aggression and max_level >= 3:
+            if not people_ok or not motion_ok:
+                why = (f"needs {need}+ people" if not people_ok else "needs motion")
+                notes.append(f"video + aggression audio, but {why}: capped at L2")
+                return min(base, cfg.experimental_cap), "confirmed", "experimental"
+            weaker = min(max(visual.values()), modalities[AUDIO])
+            visual_sources = {v.source for v in support
+                              if v.confirmed and v.modality in VISUAL_MODALITIES}
+            if max_level >= 4 and len(visual_sources) >= 2:
+                notes.append("fight: two visual sources and aggression audio")
+                return (cfg.corroborated_floor
+                        + (cfg.corroborated_cap - cfg.corroborated_floor) * weaker,
+                        "corroborated", "fight corroborated L4")
+            notes.append("fight: video and aligned aggression audio agree (L3; unvalidated)")
+            return (cfg.confirmed_floor + (cfg.single_source_cap - cfg.confirmed_floor) * weaker,
+                    "corroborated", "fight corroborated")
+        if modalities:
+            notes.append("experimental: capped at L2 (no aligned aggression audio)"
+                         if visual else "audio alone: capped at L2")
+            return min(base, cfg.experimental_cap), "confirmed", "experimental"
+        return min(base, cfg.unconfirmed_ceiling), "unconfirmed", "unconfirmed"
 
     def reset(self) -> None:
         self._windows.clear()
 
 
-__all__ = ["CLASS_ORDER", "ClassEvidence", "ConfirmationWindow", "EvidenceAccumulator",
-           "Vote", "combine", "corroborated_score", "source_score", "strength",
-           "strongest"]
+__all__ = ["AUDIO", "AUDIO_SOURCES", "CLASS_ORDER", "ClassEvidence", "ConfirmationWindow",
+           "EvidenceAccumulator", "MODALITY_NAMES", "VIDEO_CLASSIFIER", "VIDEO_DETECTOR",
+           "Vote", "combine", "confirmed_modalities", "corroborated_score", "modality_of",
+           "source_score", "strength", "strongest"]
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -394,7 +553,11 @@ class ClipConfirmation:
         self.k = max(1, int(k))
         self._scorer = EvidenceAccumulator(self.cfg)
 
-    def update(self, observations) -> dict[str, ClassEvidence]:
+    def update(self, observations, context: dict | None = None) -> dict[str, ClassEvidence]:
+        """``context``: as for :meth:`EvidenceAccumulator.update` (people and
+        motion over the clip). Audio observations (one per clip: the sound
+        model over the clip's own window, so aligned by construction) confirm
+        on one crossing - the 4 s window is itself the temporal evidence."""
         by_source: dict[tuple[str, str], list[ClipObservation]] = {}
         for obs in observations:
             by_source.setdefault((obs.cls, obs.source), []).append(obs)
@@ -408,7 +571,7 @@ class ClipConfirmation:
                 votes.append(self.vote(cls, source, items))
                 gate_off = gate_off or (cls == "weapon" and all(
                     o.person_recent is None for o in items))
-            result[cls] = self._scorer._score(cls, votes)
+            result[cls] = self._scorer._score(cls, votes, context)
             if gate_off:
                 result[cls].reason += " [person gate off: person detector unavailable]"
         return result
@@ -443,17 +606,22 @@ class ClipConfirmation:
                                         max(o.value for o in best_slots.values())):
                 best_group, best_slots = group, slots
         hits = len(best_slots)
-        confirmed = hits >= self.k
+        confirmed = hits >= (1 if source in AUDIO_SOURCES else self.k)
         if best_slots:
             top = max(best_slots.values(), key=lambda o: o.value)
             times = sorted(best_slots)
             span = times[-1] - times[0]
+            if source in AUDIO_SOURCES:
+                # One audio window covers the whole clip (ClipObservation.group
+                # holds its length in seconds).
+                span = float(top.group) if isinstance(top.group, (int, float)) else 0.0
         else:
             top = max(valid, key=lambda o: o.value)
             span = 0.0
         return KeyframeVote(source, top.value, top.threshold, hits=hits, seen=seen,
                             confirmed=confirmed, gated=None if confirmed else gated,
-                            fresh=True, span=span, group=best_group)
+                            fresh=True, span=span, group=best_group,
+                            unit="windows" if source in AUDIO_SOURCES else "keyframes")
 
 
 __all__ += ["ClipConfirmation", "ClipObservation", "KeyframeVote"]

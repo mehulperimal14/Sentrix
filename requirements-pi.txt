@@ -52,10 +52,13 @@ scipy>=1.14.0
 pandas>=2.2.0
 xgboost>=2.1.1
 
-# audio
+# audio (the PANNs CNN10 sound model needs only torch + scipy; weights in
+# models/audio/, tools/fetch_models.py re-downloads them if missing)
 sounddevice>=0.4.7
 soundfile>=0.12.1
 librosa>=0.10.2
+# talk-down speaker (D16): espeak-ng + alsa-utils from apt (install_pi.sh);
+# pyttsx3 is optional on the Pi (it drives espeak-ng too)
 
 # device I/O
 gpiozero>=2.0.1

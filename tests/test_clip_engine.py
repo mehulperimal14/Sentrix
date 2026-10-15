@@ -31,7 +31,7 @@ from sentrix.perception.scene import SCENE_CLASSES, SceneResult, decide_label
 from sentrix.pipeline.clip import (ClipEngine, ClipPolicy, ClipRunner, evidence_span,
                                    read_clip_bundle)
 from sentrix.pipeline.engine import Pipeline
-from sentrix.pipeline.events import EventLog, load_dataset
+from sentrix.pipeline.events import SCHEMA_VERSION, EventLog, load_dataset
 from sentrix.pipeline.incidents import IncidentManager
 from sentrix.sos import NullSosService
 
@@ -565,11 +565,37 @@ class TestAudioStage:
         assert runner.last_scores.audio["label"] == "normal_ambient"
 
     def test_the_audio_engine_window_is_used_when_it_owns_the_microphone(self, tmp_path):
-        engine = SimpleNamespace(result=lambda: SimpleNamespace(score=0.2, label="siren"))
-        runner = ClipRunner(make_pipeline(tmp_path, audio=engine), fast_lane=False)
+        """Only while the engine's window describes the clip end (D15)."""
+        from sentrix.perception.audio import AudioResult, alignment
+
+        class Engine:
+            def result_for(self, at, tolerance=None):
+                result = AudioResult(0.2, "siren", 0.9, cues={"siren": 0.9},
+                                     start=at - 4.0, end=at - 0.2)
+                return result, alignment(result, at)
+
+        runner = ClipRunner(make_pipeline(tmp_path, audio=Engine()), fast_lane=False)
         run(runner, 4.0)
         assert runner.last_scores.audio["source"] == "audio engine"
+        assert runner.last_scores.audio["status"] == "aligned"
         assert runner.last_scores.features.audio_label == "siren"
+
+    def test_a_stale_audio_engine_window_is_unavailable_not_calm(self, tmp_path):
+        from sentrix.perception.audio import AudioResult, alignment
+
+        class Engine:
+            def result_for(self, at, tolerance=None):
+                result = AudioResult(0.0, "Laughter", 0.9, cues={"benign_social": 0.9},
+                                     start=at - 14.0, end=at - 10.0)
+                align = alignment(result, at)
+                return (result if align["status"] == "aligned" else None), align
+
+        runner = ClipRunner(make_pipeline(tmp_path, audio=Engine()), fast_lane=False)
+        run(runner, 4.0)
+        assert runner.last_scores.audio["status"] == "stale"
+        assert runner.last_scores.features.audio_label == "audio unavailable"
+        assert not any(v.source.startswith("audio") for e in runner.last_scores.evidence.values()
+                       for v in e.votes)
 
 
 # ── decisions, records and evidence ───────────────────────────────────────────
@@ -594,7 +620,7 @@ class TestDecisions:
         assert row["schema"] == 4 and "features" not in row
         assert {"gate", "stages", "keyframes", "evidence", "decision"} <= set(row)
         assert row["decision_seq"] == tick_rows[-1]["seq"]
-        assert all(r["schema"] == 3 for r in tick_rows)
+        assert all(r["schema"] == SCHEMA_VERSION for r in tick_rows)
         assert len(load_dataset(tmp_path)) == len(tick_rows)
 
     def test_the_tick_row_carries_the_clip_votes(self, tmp_path):

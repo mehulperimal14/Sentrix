@@ -38,6 +38,15 @@
             : [S.h("tr", {}, S.h("td", { class: "muted", text: "Nothing reported." }))]));
     }
 
+    // The talk-down speaker (D16): backend, whether it makes real sound.
+    function speakerText(speaker) {
+        if (!speaker || typeof speaker !== "object") return null;
+        if (!speaker.enabled) return "off (SENTRIX_SPEAKER_ENABLED=0)";
+        const parts = [String(speaker.backend || "none") + (speaker.real ? "" : " (no sound)")];
+        if (speaker.speaking) parts.push("speaking");
+        return parts.join(", ");
+    }
+
     function renderNode(node) {
         node = node || {};
         fillTable("node-telemetry", [
@@ -59,6 +68,7 @@
             ["Motion (PIR)", gpio.pir !== undefined ? gpio.pir : node.pir],
             ["Door", gpio.door !== undefined ? gpio.door : node.door],
             ["Mains sense", gpio.mains !== undefined ? gpio.mains : node.mains],
+            ["Speaker (talk-down)", speakerText(node.speaker)],
         ]);
         const note = document.getElementById("node-telemetry-note");
         if (note) {

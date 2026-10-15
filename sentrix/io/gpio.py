@@ -213,23 +213,33 @@ class InputSpec:
 
 
 def forward_sensor_event(kind: str, **detail: Any) -> bool:
-    """A PIR trigger or a door change opens the clip engine's S0 gate
-    (``ClipBuffer.add_event``, on the frames' monotonic clock). Only an
-    already-running pipeline is used: this never builds one (which would
-    open the camera). Returns whether an event was delivered."""
+    """A PIR trigger or a door change reaches the pipeline as presence
+    context (``Pipeline.note_sensor``: the TCI's unrecognised-person rule,
+    the event log, the dashboard's contributions - never a threat alone, D15)
+    and opens the clip engine's S0 gate (``ClipBuffer.add_event``), both on
+    the frames' monotonic clock. Only an already-running pipeline is used:
+    this never builds one (which would open the camera). Returns whether an
+    event was delivered."""
     engine = sys.modules.get("sentrix.pipeline.engine")
     pipeline = getattr(engine, "_pipeline", None) if engine is not None else None
-    strategy = getattr(pipeline, "_strategy", None)
-    buffer = getattr(getattr(strategy, "runner", None), "buffer", None)
-    if buffer is None or not hasattr(buffer, "add_event"):
+    if pipeline is None:
         return False
+    at = time.monotonic()
+    clean = {k: v for k, v in detail.items() if v is not None}
+    delivered = False
+    note = getattr(pipeline, "note_sensor", None)
     try:
-        buffer.add_event(kind, time.monotonic(),
-                         **{k: v for k, v in detail.items() if v is not None})
-        return True
+        if callable(note):
+            note(kind, at, **clean)
+            delivered = True
+        strategy = getattr(pipeline, "_strategy", None)
+        buffer = getattr(getattr(strategy, "runner", None), "buffer", None)
+        if buffer is not None and hasattr(buffer, "add_event"):
+            buffer.add_event(kind, at, **clean)
+            delivered = True
     except Exception as exc:                        # the GPIO thread must not die
         log.debug("sensor event %s not delivered: %s", kind, exc)
-        return False
+    return delivered
 
 
 def input_specs(cfg: Any) -> list[InputSpec]:

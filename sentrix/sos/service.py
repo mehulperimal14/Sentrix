@@ -543,6 +543,7 @@ class SosEngine:
                       max(self._levels.get(change.incident_id, 0), int(change.level)))
         now = self._now()
         if (change.incident_type == "intrusion" and change.incident_id
+                and self.rules.intrusion_requests
                 and change.level >= self.rules.min_level):
             from sentrix import mode
             if mode.is_armed() and change.incident_id not in self._held \
@@ -1446,15 +1447,20 @@ class SosEngine:
         if actor.type not in M.HOUSEHOLD_ACTORS + ("cloud",):
             return sos_result("forbidden_role", f"{actor.type} may not start a demo")
         incident_type = str(incident_type or "").lower()
-        if incident_type not in tuple(self.rules.alarm_classes) + ("intrusion",):
-            return sos_result("invalid_args", "incident_type must be weapon, fire or intrusion")
+        allowed = tuple(self.rules.alarm_classes) + (
+            ("intrusion",) if self.rules.intrusion_requests else ())
+        if incident_type not in allowed:
+            return sos_result("invalid_args",
+                              f"incident_type must be one of {', '.join(allowed)}")
         from sentrix import mode
         if incident_type == "intrusion" and not mode.is_armed():
             return sos_result("unprocessable", "an intrusion opens a request in armed mode only")
         reason = f"{T.WORDING_SIMULATED} (test mode, scripted by {actor.ref})"
         incident_id = self._synthetic_incident(incident_type, reason)
+        # A fight only reaches L3 corroborated (video + aligned audio, D15).
+        evidence = "corroborated" if incident_type == "assault" else "confirmed"
         trigger = SosTrigger(incident_id=incident_id, level=3, incident_type=incident_type,
-                             evidence_state="confirmed", tci=0.5, reason=reason,
+                             evidence_state=evidence, tci=0.5, reason=reason,
                              session_id=getattr(self._pipeline(), "session_id", "") or "",
                              armed=mode.is_armed(), at_wall=self._now(), simulated=True)
         self._audit("sos_demo_trigger", incident_id=incident_id, incident_type=incident_type,
@@ -1850,8 +1856,11 @@ def preflight(settings: Any) -> list[dict[str, str]]:
     if not sos.enabled:
         row("ok", "sos", "off (SENTRIX_SOS_ENABLED=0): no assistance requests")
         return rows
+    intrusion = (f"armed intrusion after {int(sos.intrusion_entry_delay_seconds)} s"
+                 if getattr(sos, "intrusion_requests", False)
+                 else "unrecognised people stay at L2 (no request)")
     row("ok", "sos", f"on: requests for {', '.join(sos.alarm_classes)} at L{sos.min_level}+, "
-                     f"armed intrusion after {int(sos.intrusion_entry_delay_seconds)} s")
+                     f"{intrusion}")
     try:
         import argon2  # noqa: F401
     except ImportError:

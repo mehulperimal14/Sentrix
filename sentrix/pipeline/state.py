@@ -85,6 +85,15 @@ _INITIAL: dict[str, Any] = {
     "incident_id": None,
     "features": {},
     "top_factors": [],
+    # D15: what each input did for the leading class, the audio window heard
+    # (and whether it was aligned with the frame), the fusion rule applied.
+    "contributions": [],
+    "audio": {"status": "disabled"},
+    "fusion": {"class": "normal", "state": "none", "rule": None, "modalities": {},
+               "context": {}, "sensors": {}},
+    # D16: the talk-down speaker (sentrix.io.speaker).
+    "speaker": {"enabled": False, "backend": None, "ready": False, "speaking": False,
+                "last": None},
     "uncertainty": 0.0,
     "confidence_band": [0.0, 0.0],
     "fusion_source": "unknown",

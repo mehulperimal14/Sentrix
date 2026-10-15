@@ -288,8 +288,10 @@ class TestEndToEnd:
         for i, sources in enumerate(ticks):
             now = i / hz
             ev = acc.update(now, sources, person_recent=person)
+            # A recognised resident: these tests are about threat blips, not
+            # the unrecognised-person L2 rule (D15; tests/test_multimodal.py).
             features = FeatureVector(weapon=ev["weapon"].score, fire=ev["fire"].score,
-                                     person_present=person,
+                                     person_present=person, authorized=True,
                                      extras={"evidence": {c: e.to_dict()
                                                           for c, e in ev.items()}})
             result = tci.compute(features, now)

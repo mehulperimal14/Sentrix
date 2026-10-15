@@ -336,9 +336,14 @@ def classify(facts: TriggerFacts, rules: Rules) -> str | None:
         return "alarm"
     if facts.level < rules.min_level:
         return None
+    if facts.incident_type == "assault" and facts.evidence_state != "corroborated":
+        # A fight reaches L3 only when video and aligned audio agree (D15);
+        # anything else claiming "assault" at L3 is not that, so no request.
+        return None
     if facts.incident_type in rules.alarm_classes:
         return "alarm"
-    if facts.incident_type == "intrusion" and facts.armed:
+    if facts.incident_type == "intrusion" and facts.armed and rules.intrusion_requests:
+        # Off by default (D15): an unrecognised person is an L2, not an SOS.
         return "intrusion"
     return None
 

@@ -281,8 +281,14 @@ class TestOpening:
     @pytest.mark.parametrize("kind,level", [("assault", 3), ("robbery", 3), ("weapon", 2),
                                             ("intrusion", 3), ("normal", 3)])
     def test_nothing_else_opens_a_request(self, world, kind, level):
-        fire_trigger(world, kind, level)
+        fire_trigger(world, kind, level)            # assault: only "confirmed"
         assert requests.list_requests(5) == []
+
+    def test_a_corroborated_fight_opens_a_request(self, world):
+        """D15: video and aligned aggression audio agreeing is an L3 fight."""
+        fire_trigger(world, "assault", 3, evidence="corroborated")
+        req = the_request()
+        assert req["incident_type"] == "assault" and req["state"] == S.PENDING
 
     def test_one_open_request_later_incidents_attach(self, world):
         first = fire_trigger(world)
@@ -716,8 +722,23 @@ def intrusion_level(w, incident, level=3):
     w.engine.work()
 
 
+def enable_intrusion_requests(w):
+    """The pre-D15 rule (SENTRIX_SOS_INTRUSION=1); off by default."""
+    from dataclasses import replace
+    w.engine.rules = replace(w.engine.rules, intrusion_requests=True)
+
+
 class TestIntrusion:
+    def test_an_armed_intrusion_opens_nothing_by_default(self, world):
+        """D8 as amended by D15: an unrecognised person stays at L2, no SOS."""
+        mode.set_armed(True, by="test")
+        intrusion_level(world, new_incident("intrusion"))
+        advance(world, 31, tick=5)
+        assert requests.list_requests(5) == []
+        assert world.engine.health()["held_intrusions"] == 0
+
     def test_opens_after_the_entry_delay_and_alerts_contacts_at_once(self, world):
+        enable_intrusion_requests(world)
         mode.set_armed(True, by="test")
         incident = new_incident("intrusion")
         intrusion_level(world, incident)
@@ -729,6 +750,7 @@ class TestIntrusion:
         assert "contacts_notified" in event_names(req["id"])
 
     def test_the_sos_pin_disarms_within_the_delay(self, world):
+        enable_intrusion_requests(world)
         mode.set_armed(True, by="test")
         intrusion_level(world, new_incident("intrusion"))
         assert world.engine.set_mode(False, pin="000000", actor=OWNER)["code"] == "pin_invalid"
@@ -739,6 +761,7 @@ class TestIntrusion:
         assert requests.list_requests(5) == []
 
     def test_an_authorised_face_disarms_visibly(self, world):
+        enable_intrusion_requests(world)
         mode.set_armed(True, by="test")
         intrusion_level(world, new_incident("intrusion"))
         world.state.update(authorized=True, identity_degraded=False, person_count=1)
@@ -748,6 +771,7 @@ class TestIntrusion:
         assert not mode.is_armed() and mode.snapshot()["changed_by"] == "face:Riya"
 
     def test_an_alarm_over_before_the_delay_opens_nothing(self, world):
+        enable_intrusion_requests(world)
         mode.set_armed(True, by="test")
         incident = new_incident("intrusion")
         intrusion_level(world, incident)
@@ -1000,7 +1024,10 @@ class TestPackagesAndDemo:
         req = the_request()
         assert req["flags"]["simulated"] and "SIMULATED DETECTION" in req["sos_text_full"]
         assert "sos_demo_trigger" in world.pipeline.events.names()
-        assert world.engine.demo_trigger("assault", actor=OWNER)["code"] == "invalid_args"
+        assert world.engine.demo_trigger("robbery", actor=OWNER)["code"] == "invalid_args"
+        # D15: no intrusion requests unless SENTRIX_SOS_INTRUSION=1.
+        assert world.engine.demo_trigger("intrusion", actor=OWNER)["code"] == "invalid_args"
+        enable_intrusion_requests(world)
         assert world.engine.demo_trigger("intrusion", actor=OWNER)["code"] == "unprocessable"
         closed = world.engine.demo_close_incident(actor=OWNER)
         assert closed["ok"] and "cancelled" in closed["message"]

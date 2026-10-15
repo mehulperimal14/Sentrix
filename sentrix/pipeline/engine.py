@@ -15,7 +15,9 @@ Per-frame order:
 5. per-class threat evidence: every source's votes, k-of-n confirmation, the
    person gate and corroboration caps (fusion/evidence.py, CLAUDE.md M1)
 6. behaviour kinematics from tracked people
-7. audio (read from the capture thread, never blocking)
+7. audio (read from the capture thread, never blocking), used only when its
+   window describes this frame (time-aligned, D15): its cues vote with the
+   video sources; PIR/door events are presence context
 8. assemble the feature vector; TCI, then hysteretic level commit on the raw
    (already confirmed) evidence
 9. incident update, then incident-scoped side effects
@@ -57,7 +59,7 @@ from sentrix.fusion.policy import LevelPolicy
 from sentrix.fusion.tci import TCIEngine, TCIResult
 from sentrix.io.actuators import build_siren
 from sentrix.io.sources import FrameSource, _placeholder, build_source
-from sentrix.perception.audio import AudioEngine
+from sentrix.perception.audio import AudioEngine, AudioResult, audio_votes
 from sentrix.perception.behaviour import BehaviourEngine
 from sentrix.perception.detector import Detector
 from sentrix.perception.identity import (FaceCheck, IdentityEngine, IdentityWorker,
@@ -256,6 +258,12 @@ class Pipeline:
         self._strategy: InferenceStrategy = TickStrategy(self)
         #: Set by request_close_incident (any thread), applied by decide().
         self._close_requested: str | None = None
+        #: (time, people in view) for the fight rule's "2+ people recently".
+        self._persons_seen: deque[tuple[float, int]] = deque(maxlen=64)
+        #: End of the last audio window that voted (a window votes once).
+        self._audio_last_end: float | None = None
+        #: Last PIR trigger / door change on the pipeline clock (gpio).
+        self._sensor_at: dict[str, float] = {}
 
     # ── background side effects ───────────────────────────────────────────────
     def _task_loop(self) -> None:
@@ -305,6 +313,41 @@ class Pipeline:
         }
         return sources
 
+    # ── context inputs ────────────────────────────────────────────────────────
+    def note_sensor(self, kind: str, at: float | None = None, **detail: Any) -> None:
+        """A PIR trigger or door change (``sentrix.io.gpio``), on the
+        monotonic clock. Presence context only: never a threat alone (D15)."""
+        self._sensor_at[str(kind)] = time.monotonic() if at is None else float(at)
+
+    def sensor_context(self, now: float) -> dict:
+        """Seconds since the last PIR trigger / door change."""
+        return {kind: round(now - at, 3) for kind, at in self._sensor_at.items()
+                if now >= at - 1.0}
+
+    def _persons_recent(self, now: float, count: int, known: bool) -> int | None:
+        """Most people in view over the last ``person_memory_seconds``."""
+        self._persons_seen.append((now, count))
+        if not known:
+            return None
+        memory = self.cfg.threat.person_memory_seconds
+        return max((n for t, n in self._persons_seen if 0.0 <= now - t <= memory),
+                   default=count)
+
+    def audio_for(self, now: float) -> tuple[AudioResult | None, dict]:
+        """The audio result describing ``now`` and its alignment record; None
+        when audio is off, stale or not yet classified (unavailable, D15)."""
+        audio = self.audio
+        if audio is None:
+            return None, {"status": "disabled", "lag_s": None}
+        lookup = getattr(audio, "result_for", None)
+        if lookup is None:                      # an untimed stand-in
+            return None, {"status": "untimed", "lag_s": None}
+        try:
+            return lookup(now)
+        except Exception as exc:
+            log.debug("audio lookup failed: %s", exc)
+            return None, {"status": "error", "lag_s": None}
+
     def observe(self, frame: np.ndarray, now: float) -> FeatureVector:
         """Perception for one frame (steps 2-7): detections, scene, identity,
         per-class evidence, behaviour, audio -> the feature vector ``decide``
@@ -318,6 +361,9 @@ class Pipeline:
             now - self._last_person_at <= self.cfg.threat.person_memory_seconds)
         if not detections.person_ok:
             person_recent = None        # unknown: the weapon gate cannot apply
+        persons_recent = self._persons_recent(now, len(detections.persons),
+                                              detections.person_ok)
+        motion = self.motion.score(frame)
 
         scene = self.scene.observe(frame, now) if self.scene.available else None
         violence = None
@@ -342,18 +388,28 @@ class Pipeline:
         # Identity never relaxes threat evidence (evidence.py); it only feeds
         # the armed-mode intrusion rule and the dashboard.
         sources = self._sources(detections, scene, violence)
-        evidence = self.evidence.update(now, sources, person_recent=person_recent)
+        # Audio votes only when its window describes this frame (D15); a new
+        # window is a fresh observation, the same window again is not.
+        audio, audio_align = self.audio_for(now)
+        if audio is not None:
+            fresh = audio.end != self._audio_last_end
+            self._audio_last_end = audio.end
+            sources.update(audio_votes(audio, fresh))
+        context = {"persons": persons_recent, "motion": motion}
+        evidence = self.evidence.update(now, sources, person_recent=person_recent,
+                                        context=context)
         assault, robbery = evidence["assault"], evidence["robbery"]
         behaviour_score, behaviour_label = self.behaviour.classify(
             detections.persons, frame.shape,
             (assault.score, "fighting" if assault.confirmed else "normal"), now,
             robbery=(robbery.score, "robbery" if robbery.confirmed else "normal"))
 
-        if self.audio is not None:
-            audio = self.audio.result()
+        if audio is not None:
             audio_score, audio_label = audio.score, audio.label
-        else:
+        elif self.audio is None:
             audio_score, audio_label = 0.0, "disabled"
+        else:
+            audio_score, audio_label = 0.0, "audio unavailable"
 
         # Global ids for the dashboard; cheap, and only for tracked people.
         for person in detections.persons:
@@ -365,7 +421,7 @@ class Pipeline:
         return FeatureVector(
             vision=detections.person_score,
             audio=audio_score,
-            motion=self.motion.score(frame),
+            motion=motion,
             behaviour=behaviour_score,
             identity=identity_score,
             weapon=evidence["weapon"].score,
@@ -385,7 +441,11 @@ class Pipeline:
                     "sources": sources,
                     "person_recent": person_recent,
                     "faces": identity.faces,
-                    "faces_matched": identity.matched},
+                    "faces_matched": identity.matched,
+                    "audio": audio_block(audio, audio_align, self.audio),
+                    "fusion_context": {"persons_recent": persons_recent,
+                                       "motion": round(motion, 4)},
+                    "sensors": self.sensor_context(now)},
         )
 
     # ── side effects ──────────────────────────────────────────────────────────
@@ -602,6 +662,9 @@ class Pipeline:
             reason=result.reason, incident_type=result.incident_type,
             incident_id=incident.id if incident else None,
             features=features.model_features(), top_factors=result.top_factors,
+            contributions=result.contributions,
+            audio=features.extras.get("audio") or {"status": "disabled"},
+            fusion=_fusion_block(features, result),
             uncertainty=result.uncertainty,
             confidence_band=list(result.confidence_band),
             fusion_source=result.source, audio_label=features.audio_label,
@@ -847,6 +910,9 @@ class Pipeline:
         self.track_identity.reset()
         self._settled = False
         self._last_person_at = None
+        self._persons_seen.clear()
+        self._audio_last_end = None
+        self._sensor_at.clear()
         if self.violence is not None:
             self.violence.reset()
         self.behaviour.reset()
@@ -979,6 +1045,27 @@ def _rate(times: deque, now: float, window: float = 3.0) -> float:
     if len(recent) < 2:
         return 0.0
     return (len(recent) - 1) / max(recent[-1] - recent[0], 1e-6)
+
+
+def _fusion_block(features: FeatureVector, result: TCIResult) -> dict:
+    """The leading class's evidence state, rule and modalities (D15)."""
+    evidence = (features.extras or {}).get("evidence") or {}
+    leading = evidence.get(result.incident_type) or {}
+    return {"class": result.incident_type, "state": leading.get("state", "none"),
+            "rule": leading.get("rule"), "modalities": leading.get("modalities") or {},
+            "context": (features.extras or {}).get("fusion_context") or {},
+            "sensors": (features.extras or {}).get("sensors") or {}}
+
+
+def audio_block(result: AudioResult | None, align: dict, engine: Any = None) -> dict:
+    """The ``audio`` record of a tick (state, event log): what was heard, the
+    window it covers and whether it was aligned with the frame (D15)."""
+    block = {"status": align.get("status"), "lag_s": align.get("lag_s"),
+             "tolerance_s": align.get("tolerance_s"),
+             "model": getattr(engine, "model_name", None) if engine is not None else None}
+    if result is not None:
+        block.update(result.to_dict())
+    return block
 
 
 _pipeline: Pipeline | None = None

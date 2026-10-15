@@ -18,7 +18,8 @@ household's CONFIRMED contacts while the owner is still being asked:
 ==============================  ==========================================
 Corroborated L4 / L5            at once (``contacts_immediate_levels``)
 Confirmed fire                  T+2 min (``fire_contacts_after_seconds``)
-Armed intrusion                 at once
+Armed intrusion                 at once (only with ``intrusion_requests``;
+                                off by default since D15)
 Duress                          at once (it is a silent "yes")
 Single-source weapon L3         owner only, until gate P8 enables
                                 ``contacts_for_single_source_l3`` (T+5 min)
@@ -41,7 +42,9 @@ class Rules:
     test mode, so the machine never reads configuration itself."""
 
     min_level: int = 3
-    alarm_classes: tuple = ("weapon", "fire")
+    alarm_classes: tuple = ("weapon", "fire", "assault")
+    #: D8 as amended by D15: an unrecognised person opens no request.
+    intrusion_requests: bool = False
     intrusion_entry_delay: float = 30.0
     reminder_offsets: tuple = (120, 300, 600, 1200)
     lapse_warning: float = 300.0
@@ -68,6 +71,7 @@ class Rules:
         backoff = tuple(getattr(settings.channels, "retry_backoff_seconds", (30.0, 90.0)))
         return cls(
             min_level=int(sos.min_level), alarm_classes=tuple(sos.alarm_classes),
+            intrusion_requests=bool(getattr(sos, "intrusion_requests", False)),
             intrusion_entry_delay=float(sos.intrusion_entry_delay_seconds),
             reminder_offsets=tuple(int(o) for o in sos.reminder_offsets_seconds),
             lapse_warning=float(sos.lapse_warning_seconds),

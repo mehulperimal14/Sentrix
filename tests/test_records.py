@@ -19,7 +19,7 @@ from sqlalchemy.orm import sessionmaker
 from sentrix.config import settings
 from sentrix.fusion.policy import LevelState
 from sentrix.pipeline.engine import Pipeline
-from sentrix.pipeline.events import EventLog
+from sentrix.pipeline.events import SCHEMA_VERSION, EventLog
 from sentrix.pipeline.incidents import IncidentManager
 from sentrix.storage import database
 from sentrix.storage.models import Base, IncidentRecord
@@ -159,7 +159,7 @@ class TestEventLog:
                                      extras={}))
         log.write(result, 1, "SECURE")
         rows = log.path.read_text(encoding="utf-8").splitlines()
-        assert len(rows) == 1 and json.loads(rows[0])["schema"] == 3
+        assert len(rows) == 1 and json.loads(rows[0])["schema"] == SCHEMA_VERSION
 
 
 class TestAlarmBlock:

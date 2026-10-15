@@ -13,6 +13,10 @@ measurement:
   be enrolled on this machine would floor the TCI and hide the threat signal
   being measured, so every person is scored as a non-degraded unknown.
 * **No microphone.** Live room audio is uncorrelated with a replayed clip.
+  A replay may instead hear the video's *own* soundtrack (``audio=`` on
+  :func:`replay_video` / ``replay_video_clip``: :func:`soundtrack` decodes it
+  with ffmpeg, :class:`~sentrix.perception.audio.FileAudio` classifies it on
+  the live engine's 4 s / 1 s grid, time-aligned with each frame, D15).
 * **No SOS, link or channels.** The pipeline keeps ``NullSosService`` and the
   harness refuses to run while any background service is running
   (``sentrix.services.assert_measurement_safe``; decision D13).
@@ -157,19 +161,45 @@ def still_record(still: StillResult) -> dict[str, Any]:
 
 #: Raw per-source values recorded on every replayed row (gate G1 AUROC).
 SOURCE_COLUMNS = ("scene_weapon", "scene_fire", "scene_assault", "scene_robbery",
-                  "detector_weapon", "detector_fire", "violence_assault")
+                  "detector_weapon", "detector_fire", "violence_assault",
+                  "audio_weapon", "audio_fire", "audio_assault",
+                  "audio_aggression_weapon", "audio_benign_assault")
+
+
+_CLASSIFIER = None
+
+
+def audio_classifier():
+    """One microphone-less :class:`AudioEngine` for every replayed soundtrack."""
+    global _CLASSIFIER
+    if _CLASSIFIER is None:
+        from sentrix.perception.audio import AudioEngine
+        _CLASSIFIER = AudioEngine(capture=False)
+    return _CLASSIFIER
+
+
+def soundtrack(path, classifier=None):
+    """The video's own audio as a :class:`FileAudio` (None: no audio stream or
+    no ffmpeg). Never opens a microphone."""
+    from sentrix.perception.audio import FileAudio, decode_audio_file
+    rate = settings.windows.audio_sample_rate
+    samples = decode_audio_file(path, rate)
+    if samples is None or samples.size < rate:
+        return None
+    return FileAudio(samples, rate, classifier or audio_classifier())
 
 
 def replay_video(pipeline, path, fps: float | None = None,
                  on_frame: Callable[[float, dict], dict] | None = None,
                  max_seconds: float | None = None,
-                 period: float | None = None) -> list[dict]:
+                 period: float | None = None, audio=None) -> list[dict]:
     """Replay one video at the pipeline inference rate with true timestamps.
 
     Frames between inference ticks are decoded and discarded, exactly as the
     live loop discards frames that arrive faster than ``inference_fps``.
     ``period`` overrides the inference period (multi-rate replay: the first
-    live test ran at 0.5 Hz, not 6).
+    live test ran at 0.5 Hz, not 6). ``audio`` (a ``FileAudio``) is heard as
+    the pipeline's microphone for this replay only.
     """
     import cv2
 
@@ -179,6 +209,8 @@ def replay_video(pipeline, path, fps: float | None = None,
     native = fps or float(cap.get(cv2.CAP_PROP_FPS) or 25.0)
     period = period or settings.pipeline.inference_period
 
+    previous_audio = pipeline.audio
+    pipeline.audio = audio
     pipeline.reset()
     rows: list[dict] = []
     index, next_tick = 0, 0.0
@@ -212,8 +244,9 @@ def replay_video(pipeline, path, fps: float | None = None,
             rows.append(row)
     finally:
         cap.release()
+        pipeline.audio = previous_audio
     return rows
 
 
 __all__ = ["build_eval_pipeline", "score_still", "still_record", "StillResult",
-           "replay_video"]
+           "replay_video", "soundtrack", "audio_classifier"]

@@ -74,9 +74,11 @@ from typing import Any, Callable
 import numpy as np
 
 from sentrix.config import settings
-from sentrix.fusion.evidence import (CLASSIFIER_SOURCES, DETECTOR_SOURCES, ClassEvidence,
+from sentrix.fusion.evidence import (AUDIO_SOURCES, CLASSIFIER_SOURCES, DETECTOR_SOURCES,
+                                     ClassEvidence,
                                      ClipConfirmation, ClipObservation, strongest)
 from sentrix.fusion.features import FeatureVector
+from sentrix.perception.audio import AudioResult, alignment, audio_votes
 from sentrix.fusion.policy import LevelPolicy, LevelState, _per_threshold
 from sentrix.perception.detector import Detection, DetectionResult
 from sentrix.perception.identity import FaceCheck, IdentityResult
@@ -573,8 +575,8 @@ def evidence_span(evidence: ClassEvidence) -> float:
                    default=None)
 
     if evidence.state == "corroborated":
-        sides = [s for s in (longest(CLASSIFIER_SOURCES), longest(DETECTOR_SOURCES))
-                 if s is not None]
+        sides = [s for s in (longest(CLASSIFIER_SOURCES), longest(DETECTOR_SOURCES),
+                             longest(AUDIO_SOURCES)) if s is not None]
         return min(sides) if sides else 0.0
     return max((float(getattr(v, "span", 0.0)) for v in confirmed), default=0.0)
 
@@ -668,7 +670,15 @@ class ClipEngine:
             reasons.append("audio")
         elif rms is None:
             audio = getattr(self.pipeline, "audio", None)
-            if audio is not None and audio.result().score > 0:
+            lookup = getattr(audio, "result_for", None)
+            if lookup is not None:
+                result, _ = lookup(clip.end)        # only a window about this clip
+                bars = settings.audio.cue_thresholds
+                if result is not None and (result.score > 0 or any(
+                        v >= 0.5 * bars.get(k, 0.3) for k, v in (result.cues or {}).items()
+                        if k != "benign_social")):
+                    reasons.append("audio")
+            elif audio is not None and hasattr(audio, "result") and audio.result().score > 0:
                 reasons.append("audio")
         if any(e.kind in SENSOR_KINDS for e in clip.events):
             reasons.append("sensor")
@@ -838,33 +848,70 @@ class ClipEngine:
         return observations, best
 
     # ── S5 ────────────────────────────────────────────────────────────────────
-    def _audio(self, clip: Clip, stages: _Stages) -> dict:
+    def _audio(self, clip: Clip, stages: _Stages) -> tuple[dict, AudioResult | None]:
+        """S5: the sound over the clip's own window (aligned by construction),
+        else the audio engine's newest window *if* it describes the clip end
+        (D15), else unavailable. Returns the record and the aligned result."""
         token = stages.start("S5_audio")
         engine = getattr(self.pipeline, "audio", None)
         rms = clip.audio_rms
+        result: AudioResult | None = None
         if rms is not None:
             if rms < settings.windows.audio_rms_floor:
-                out = {"score": 0.0, "label": "normal_ambient", "rms": round(rms, 5),
-                       "source": "clip (quiet)"}
+                result = AudioResult(0.0, "normal_ambient", 1.0, cues={
+                    c: 0.0 for c in ("aggression", "weapon_sound", "fire_sound",
+                                     "benign_social", "siren")}, rms=rms, model="quiet")
+                source = "clip (quiet)"
             else:
                 classify = (getattr(engine, "classify_window", None)
                             or getattr(engine, "_classify", None))
-                if classify is None:
-                    out = {"score": 0.0, "label": "unclassified", "rms": round(rms, 5),
-                           "source": "clip"}
-                else:
-                    result = classify(clip.audio, rms)
-                    out = {"score": float(result.score), "label": result.label,
-                           "rms": round(rms, 5), "source": "clip"}
-        elif engine is not None:
+                if classify is not None:
+                    raw = classify(clip.audio, rms)
+                    result = raw if isinstance(raw, AudioResult) else AudioResult(
+                        float(getattr(raw, "score", 0.0)), str(getattr(raw, "label", "")),
+                        float(getattr(raw, "confidence", 0.0)),
+                        cues=dict(getattr(raw, "cues", None) or {}), rms=rms,
+                        model=str(getattr(raw, "model", "cnn")))
+                source = "clip"
+            if result is not None:
+                result.start, result.end = clip.start, clip.end
+            align = alignment(result, clip.end) if result is not None else {
+                "status": "unclassified", "lag_s": None}
+        elif engine is not None and hasattr(engine, "result_for"):
             # The audio engine owns the microphone and classifies its own 4 s
-            # window every second: the same window length as the clip.
-            result = engine.result()
-            out = {"score": float(result.score), "label": result.label, "rms": None,
-                   "source": "audio engine"}
+            # window every second: usable only if it describes this clip.
+            result, align = engine.result_for(clip.end)
+            source = "audio engine"
         else:
-            out = {"score": 0.0, "label": "disabled", "rms": None, "source": None}
-        stages.done(token, 1 if out["source"] == "clip" else 0)
+            align = {"status": "disabled" if engine is None else "untimed", "lag_s": None}
+            source = None
+        if result is not None and align.get("status") == "aligned":
+            out = {"score": float(result.score), "label": result.label,
+                   "rms": None if rms is None else round(rms, 5), "source": source,
+                   "model": result.model,
+                   "cues": {k: round(float(v), 4) for k, v in (result.cues or {}).items()},
+                   "start": result.start, "end": result.end}
+        else:
+            result = None
+            out = {"score": 0.0, "label": "disabled" if engine is None else "audio unavailable",
+                   "rms": None if rms is None else round(rms, 5), "source": source}
+        out["alignment"] = align
+        out["status"] = align.get("status")
+        stages.done(token, 1 if source == "clip" else 0)
+        return out, result
+
+    def _audio_observations(self, result: AudioResult | None, clip: Clip,
+                            person_recent) -> list[ClipObservation]:
+        """One observation per class for the clip's aligned audio window; the
+        group holds the window length (the vote's span)."""
+        if result is None:
+            return []
+        span = max(0.0, float((result.end or clip.end) - (result.start or clip.start)))
+        out = []
+        for source, per_class in audio_votes(result).items():
+            for cls, (value, threshold, _fresh) in per_class.items():
+                out.append(ClipObservation(source, cls, float(value), float(threshold),
+                                           clip.end, span, person_recent(clip.end)))
         return out
 
     # ── votes ─────────────────────────────────────────────────────────────────
@@ -958,11 +1005,17 @@ class ClipEngine:
             violence_obs, violence_score = self._action(clip, keyframes, person_recent, stages)
         else:
             stages.skip("S4_action", "gate closed")
-        audio = self._audio(clip, stages)
+        audio, audio_result = self._audio(clip, stages)
 
         token = stages.start("S6_fusion")
-        observations = self._observations(keyframes, person_recent) + violence_obs
-        evidence = self.confirmation.update(observations)
+        observations = (self._observations(keyframes, person_recent) + violence_obs
+                        + self._audio_observations(audio_result, clip, person_recent))
+        analysed_now = [k for k in keyframes if k.analysis is not None]
+        known = bool(analysed_now) and all(k.analysis.detections.person_ok for k in analysed_now)
+        context = {"persons": (max((len(k.analysis.persons) for k in analysed_now), default=0)
+                               if known else None),
+                   "motion": clip.motion_peak}
+        evidence = self.confirmation.update(observations, context)
         scores.evidence = evidence
         scores.spans = {c: evidence_span(e) for c, e in evidence.items()}
         scores.keyframes = keyframes
@@ -1052,6 +1105,11 @@ class ClipEngine:
                     "evidence": {c: e.to_dict() for c, e in evidence.items()},
                     "sources": sources, "person_recent": person_recent(clip.end),
                     "faces": identity.faces, "faces_matched": identity.matched,
+                    "audio": dict(audio),
+                    "fusion_context": {"persons_recent": scores.persons,
+                                       "motion": round(clip.motion_peak, 4)},
+                    "sensors": {e.kind: round(clip.end - e.at, 3) for e in clip.events
+                                if e.kind in SENSOR_KINDS},
                     "clip": {"seq": clip.seq, "start": round(clip.start, 3),
                              "end": round(clip.end, 3), "keyframes": len(keyframes),
                              "spans": {c: round(s, 3) for c, s in scores.spans.items()}}})
@@ -1562,7 +1620,8 @@ def replay_video_clip(pipeline, path, fps: float | None = None,
                       on_frame: Callable[[float, dict], dict] | None = None,
                       max_seconds: float | None = None, period: float | None = None,
                       fast_lane: bool | None = None,
-                      on_decision: Callable[[dict], None] | None = None) -> list[dict]:
+                      on_decision: Callable[[dict], None] | None = None,
+                      audio=None) -> list[dict]:
     """Replay one video in clip mode; rows on the tick grid, like ``replay_video``.
 
     Every decoded frame goes to the clip buffer at its true timestamp (the
@@ -1572,6 +1631,8 @@ def replay_video_clip(pipeline, path, fps: float | None = None,
     before it - so episode, latency and false-onset metrics compare directly
     with the per-frame replay. A decision is stamped at its clip's end:
     compute time is not added (``tools/bench_clip.py`` measures it).
+    ``audio`` (a ``FileAudio``: the video's own soundtrack) is fed into the
+    clip buffer as the frames advance, like the microphone's hops live.
     """
     import cv2 as _cv2
 
@@ -1586,12 +1647,15 @@ def replay_video_clip(pipeline, path, fps: float | None = None,
     native = fps or float(cap.get(_cv2.CAP_PROP_FPS) or 25.0)
     period = period or settings.pipeline.inference_period
 
+    previous_audio = pipeline.audio
+    pipeline.audio = audio
     pipeline.reset()
     runner.reset()
     rows: list[dict] = []
     latest: dict | None = None
     pending: deque[dict] = deque()
     index, next_tick, t = 0, 0.0, 0.0
+    heard_to = 0.0
 
     def emit(upto: float) -> None:
         nonlocal next_tick, latest
@@ -1613,6 +1677,11 @@ def replay_video_clip(pipeline, path, fps: float | None = None,
             index += 1
             if max_seconds is not None and t > max_seconds:
                 break
+            if audio is not None and t > heard_to:
+                chunk = audio.samples_between(heard_to, t)
+                if chunk.size:
+                    runner.buffer.add_audio(chunk, end_at=t, rate=audio.rate)
+                heard_to = t
             for decision in runner.feed(frame, t):
                 if on_decision is not None:
                     on_decision(decision)
@@ -1622,6 +1691,7 @@ def replay_video_clip(pipeline, path, fps: float | None = None,
     finally:
         cap.release()
         runner.run_flush()
+        pipeline.audio = previous_audio
     return rows
 
 

@@ -59,6 +59,8 @@ from tools.eval_custom_frames import OUT_ROOT, git_describe, model_inventory  # 
 
 #: Extra replay CSV columns in clip mode: the decision a row shows, and its kind.
 CLIP_COLUMNS = ("decision_t", "kind")
+#: video id -> the soundtrack heard during its replay (None: no audio), D15.
+AUDIO_USED: dict[str, dict | None] = {}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -90,6 +92,9 @@ def main(argv: list[str] | None = None) -> int:
                              "SENTRIX_CLIP_THREADS)")
     parser.add_argument("--compare", type=Path, default=None,
                         help="a previous replay JSON to compare committed levels with")
+    parser.add_argument("--audio", choices=("auto", "off"), default="auto",
+                        help="auto: hear each video's own soundtrack, time-aligned "
+                             "(ffmpeg; D15); off: no audio, as before D15")
     args = parser.parse_args(argv)
 
     from sentrix.config import settings
@@ -119,6 +124,8 @@ def main(argv: list[str] | None = None) -> int:
         suffix += f"_{args.hz:g}hz"
     if args.mode == "clip" and args.fast_lane:
         suffix += "_fastlane"
+    if args.audio == "off":
+        suffix += "_noaudio"
     rows_by_video: dict[str, list[dict]] = {}
     clip_stats: dict | None = None
     started = time.time()
@@ -138,6 +145,12 @@ def main(argv: list[str] | None = None) -> int:
         "inference_hz": args.hz or settings.pipeline.inference_fps,
         "tolerance_s": args.tolerance, "grace_s": args.grace,
         "models": inventory, "splits": {},
+        "audio": {"mode": args.audio, "per_video": dict(AUDIO_USED),
+                  "align_tolerance_s": settings.audio.align_tolerance_seconds,
+                  "cue_thresholds": dict(settings.audio.cue_thresholds),
+                  "audio_votes": settings.threat.audio_votes},
+        "identity": {"unknown_alert_home": settings.threat.unknown_alert_home,
+                     "note": "the harness scores everyone as an unrecognised person"},
     }
     if args.mode == "clip":
         report["clip"] = clip_stats
@@ -274,7 +287,7 @@ class ClipStats:
 def replay_all(videos, args, timeline, rows_by_video) -> tuple[dict, dict | None]:
     """Replay every video through one eval pipeline; returns the model
     inventory and, in clip mode, the clip timings."""
-    from sentrix.evaluation.harness import build_eval_pipeline, replay_video
+    from sentrix.evaluation.harness import build_eval_pipeline, replay_video, soundtrack
 
     pipeline = build_eval_pipeline(mode=args.mode)
     period = 1.0 / args.hz if args.hz else None
@@ -292,14 +305,18 @@ def replay_all(videos, args, timeline, rows_by_video) -> tuple[dict, dict | None
                 row["gt"] = timeline.label_at(vid, t, args.tolerance)
                 return row
 
+            track = (soundtrack(v.path(args.videos_dir)) if args.audio == "auto" else None)
+            AUDIO_USED[v.video_id] = (None if track is None else
+                                      {"seconds": round(track.duration, 2),
+                                       "model": track.model_name})
             if args.mode == "clip":
                 rows = replay_video_clip(pipeline, v.path(args.videos_dir), v.fps,
                                          on_frame=label, max_seconds=args.max_seconds,
-                                         period=period, on_decision=stats)
+                                         period=period, on_decision=stats, audio=track)
             else:
                 rows = replay_video(pipeline, v.path(args.videos_dir), v.fps,
                                     on_frame=label, max_seconds=args.max_seconds,
-                                    period=period)
+                                    period=period, audio=track)
             rows_by_video[v.video_id] = rows
             flagged = sum(r["pred"] != "normal" for r in rows)
             print(f"  {v.video_id:6} [{v.split:5}] {len(rows):4} ticks  "

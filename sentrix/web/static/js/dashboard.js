@@ -152,6 +152,29 @@
                            S.h("span", { class: "factor-pct", text: pct + "%" }));
             }));
         }
+        // What each input did for the leading class (D15): video detector,
+        // scene model, audio (or why it was unavailable), motion, people,
+        // identity, sensors.
+        const rule = data.fusion || {};
+        const modalities = Object.keys(rule.modalities || {});
+        S.setText("fusion-rule", rule.class && rule.class !== "normal"
+            ? `${rule.class}: ${rule.rule || rule.state || "—"}` +
+              (modalities.length ? ` · ${modalities.join(" + ")}` : "")
+            : "no threat class leading");
+        const list = document.getElementById("contributions-list");
+        if (list && Array.isArray(data.contributions)) {
+            list.replaceChildren(...data.contributions.map(row => {
+                const effect = String(row.effect || "");
+                const cls = effect.startsWith("raises") ? "contrib-raises"
+                    : effect === "lowers" ? "contrib-lowers"
+                    : effect === "gate failed" || effect === "gated" ? "contrib-gated"
+                    : effect === "unavailable" ? "contrib-off" : "contrib-context";
+                return S.h("div", { class: "contrib-row " + cls },
+                           S.h("span", { class: "contrib-input", text: row.input }),
+                           S.h("span", { class: "contrib-effect", text: effect }),
+                           S.h("span", { class: "contrib-detail", text: row.detail || "" }));
+            }));
+        }
         // Evidence state of the typed class: the TCI is a transparent rule, so
         // what matters is how many independent sources back it (CLAUDE.md M1).
         const badge = document.getElementById("uncertainty-badge");

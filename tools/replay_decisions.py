@@ -134,12 +134,18 @@ def main(argv: list[str] | None = None) -> int:
         person_recent = last_person is not None and t - last_person <= threat.person_memory_seconds
         if "person_recent" in context:
             person_recent = context["person_recent"]        # schema 3: as decided live
-        evidence = acc.update(t, sources, person_recent=person_recent)
+        # Schema 5 logs the fight rule's context (people recently, motion);
+        # older logs fall back to this tick's person count and motion feature.
+        persons = context.get("persons_recent", context.get("person_count"))
+        motion = context.get("motion", (row.get("features") or {}).get("motion"))
+        evidence = acc.update(t, sources, person_recent=person_recent,
+                              context={"persons": persons, "motion": motion})
         features = FeatureVector(
             weapon=evidence["weapon"].score, fire=evidence["fire"].score,
             person_present=person, authorized=bool(context.get("authorized")),
             identity_degraded=bool(context.get("identity_degraded")),
-            extras={"evidence": {c: e.to_dict() for c, e in evidence.items()}})
+            extras={"evidence": {c: e.to_dict() for c, e in evidence.items()},
+                    "sensors": context.get("sensors") or {}})
         result = tci.compute(features, t)
         level = policy.update(result.raw_tci, t).level
         _, done = incidents.update(level, result.tci, result.incident_type, t,

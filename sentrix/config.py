@@ -223,9 +223,23 @@ class ThreatConfig:
       reach L4, and at full strength L5.
     * **Experimental classes never escalate past L2** (assault, robbery — they
       exist in 1-3 clips and cannot be validated; D1).
-    * **Presence is context, not threat** (D2). In home mode an unknown person
-      is logged only; in armed mode a person not recognised for
-      ``intrusion_dwell_seconds`` opens an intrusion at ``intrusion_level`` (L3).
+    * **Presence is context, not threat** (D2 as amended by D15). A person who
+      stays unrecognised for the dwell (``intrusion_dwell_seconds`` armed,
+      ``intrusion_home_dwell_seconds`` at home) raises an "unrecognised
+      person" at ``intrusion_level`` - the L2 band in **both** modes, never L3:
+      levels 3-5 need a real threat. ``unknown_alert_home=False`` keeps the
+      pre-D15 home rule (logged only).
+    * **Modalities corroborate** (D15). Video detector, video classifier
+      (scene, violence: one modality) and *time-aligned* audio are independent
+      modalities. One visual source confirmed: L3. Two modalities confirmed for
+      the same class: L4 (the weaker sets the value); three: L5 at least. Audio
+      alone is capped at L2 (``audio_only_cap``).
+    * **Fight vs banter** (D15). A fight (``assault``) stays experimental
+      (L2) unless the video fight *and* aligned aggression audio are both
+      confirmed with ``fight_min_persons`` people and motion over
+      ``fight_motion_floor``: then L3 (``fight_max_level``). Aligned laughter
+      or calm talk (``benign_social``) with no aggression caps it at
+      ``banter_cap`` (L1). Unvalidated until room recordings exist (M6).
 
     Scene thresholds are the checkpoint's, raised to at least
     ``scene_threshold_floor`` (the checkpoint's were tuned for macro-F1 at 41 %
@@ -271,7 +285,85 @@ class ThreatConfig:
 
     armed: bool = _env_bool("SENTRIX_ARMED", False)
     intrusion_dwell_seconds: float = 3.0
-    intrusion_level: float = 0.45
+    #: L2 band (0.20-0.40): an unknown person is never a critical level (D15).
+    intrusion_level: float = 0.30
+    #: Home mode raises the same L2 after a longer dwell (residents walk past).
+    unknown_alert_home: bool = _env_bool("SENTRIX_UNKNOWN_ALERT_HOME", True)
+    intrusion_home_dwell_seconds: float = _env_float("SENTRIX_UNKNOWN_HOME_DWELL", 10.0)
+    #: A PIR trigger or door change this recent counts as presence (context:
+    #: armed mode only, and never above ``intrusion_level``).
+    sensor_memory_seconds: float = 10.0
+
+    #: Aligned audio votes in the per-class evidence (D15). Off: audio is shown
+    #: and logged but never changes a score.
+    audio_votes: bool = _env_bool("SENTRIX_AUDIO_VOTES", True)
+    #: Audio confirmed with no visual source of that class: L2 at most.
+    audio_only_cap: float = 0.35
+    #: Three independent modalities confirmed for one class: at least L5.
+    three_modality_floor: float = 0.86
+    #: Highest level a fight may reach: 2 = always experimental, 3 = with
+    #: aligned aggression audio, 4 = also with a second visual source.
+    fight_max_level: int = _env_int("SENTRIX_FIGHT_MAX_LEVEL", 3)
+    fight_min_persons: int = 2
+    #: Motion (``MotionEngine.score``, 0..1) a fight needs to leave L2.
+    fight_motion_floor: float = _env_float("SENTRIX_FIGHT_MOTION_FLOOR", 0.02)
+    #: Aligned laughter / calm talk with no aggression: the fight stays here.
+    banter_cap: float = 0.19
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Audio: the sound model, its cues and time alignment (D15)
+# ──────────────────────────────────────────────────────────────────────────────
+@dataclass(frozen=True)
+class AudioConfig:
+    """Which sound model runs, what its cues mean, and when audio is "now".
+
+    ``model``: ``auto`` (PANNs CNN10 AudioSet tagger if its weights are in
+    ``models/audio/``, else the 4-class CNN), ``panns``, ``cnn`` or ``off``.
+
+    **Alignment.** Every audio result carries its window (monotonic start and
+    end on the pipeline clock, and wall time). Fusion uses a result for a frame
+    or clip at time ``t`` only if the window overlaps ``[t - tolerance, t +
+    tolerance]``; otherwise audio is *unavailable* - never "calm". A stale
+    "calm" would let yesterday's silence lower today's fight.
+
+    Cue thresholds are a priori values (AudioSet sigmoid scores), not fitted on
+    any SENTRIX recording; M6 records the data to check them.
+    """
+
+    model: str = _env_str("SENTRIX_AUDIO_MODEL", "auto").lower()
+    align_tolerance_seconds: float = _env_float("SENTRIX_AUDIO_ALIGN_TOLERANCE", 1.5)
+    threads: int = _env_int("SENTRIX_AUDIO_THREADS", 2)
+    cue_thresholds: dict = field(default_factory=lambda: {
+        "aggression": 0.30, "weapon_sound": 0.30, "fire_sound": 0.30,
+        "benign_social": 0.40, "siren": 0.30,
+    })
+    #: Calm talk (speech with no aggression) counts as benign_social.
+    calm_talk_is_benign: bool = _env_bool("SENTRIX_AUDIO_CALM_TALK_BENIGN", True)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Talk-down speaker (D16)
+# ──────────────────────────────────────────────────────────────────────────────
+@dataclass(frozen=True)
+class SpeakerConfig:
+    """Offline text-to-speech to a speaker at the device (D16).
+
+    Off by default (it makes sound in the room). ``backend``: ``auto``
+    (pyttsx3 - SAPI5 on Windows, espeak-ng on Linux - else the ``espeak-ng``
+    command), ``pyttsx3``, ``espeak`` or ``console`` (logs only).
+    """
+
+    enabled: bool = _env_bool("SENTRIX_SPEAKER_ENABLED", False)
+    backend: str = _env_str("SENTRIX_SPEAKER_BACKEND", "auto").lower()
+    #: ALSA/PortAudio device name for espeak-ng (``-d``); empty = default.
+    device: str = _env_str("SENTRIX_SPEAKER_DEVICE", "")
+    volume: float = _env_float("SENTRIX_SPEAKER_VOLUME", 0.9)
+    rate_wpm: int = _env_int("SENTRIX_SPEAKER_RATE", 150)
+    max_chars: int = 200
+    #: Messages per minute for the whole device.
+    per_minute: int = _env_int("SENTRIX_SPEAKER_PER_MINUTE", 3)
+    repeat: int = 1
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -540,8 +632,12 @@ class AlertConfig:
 class SosConfig:
     """Assistance requests opened at a confirmed L3 commit (decisions D8, D9).
 
-    A request opens only for the D1 alarm classes (``alarm_classes``) and, in
-    armed mode, for an intrusion that outlives the SIA-style entry delay. The
+    A request opens only for the alarm classes (``alarm_classes``: weapon,
+    fire, and a fight corroborated by video and aligned audio - the only way a
+    fight reaches L3, D15). An unrecognised person is an L2 in both modes and
+    opens no request (D8 as amended by D15); ``intrusion_requests=True``
+    (``SENTRIX_SOS_INTRUSION=1``) restores the pre-D15 armed-intrusion request
+    after the SIA-style entry delay, should a later level rule produce one. The
     household's window (30/45/60 min) bounds the *outside-help question*; the
     safety defaults alert confirmed contacts without waiting for it when the
     evidence is strong (corroborated L4/L5), the class is fire, the intrusion
@@ -552,7 +648,10 @@ class SosConfig:
 
     enabled: bool = _env_bool("SENTRIX_SOS_ENABLED", False)
     min_level: int = 3
-    alarm_classes: tuple = ("weapon", "fire")
+    alarm_classes: tuple = ("weapon", "fire", "assault")
+    #: Pre-D15 rule: an armed intrusion at L3+ opens a request (after the entry
+    #: delay). Off: the pipeline caps unknown people at L2 anyway.
+    intrusion_requests: bool = _env_bool("SENTRIX_SOS_INTRUSION", False)
     #: Armed-mode intrusion opens a request only after this entry delay, unless
     #: disarmed by the SOS PIN or an authorised face in the meantime.
     intrusion_entry_delay_seconds: float = 30.0
@@ -825,6 +924,8 @@ class Config:
     windows: WindowConfig = field(default_factory=WindowConfig)
     scene: SceneConfig = field(default_factory=SceneConfig)
     threat: ThreatConfig = field(default_factory=ThreatConfig)
+    audio: AudioConfig = field(default_factory=AudioConfig)
+    speaker: SpeakerConfig = field(default_factory=SpeakerConfig)
     behaviour: BehaviourConfig = field(default_factory=BehaviourConfig)
     identity: IdentityConfig = field(default_factory=IdentityConfig)
     reid: ReIDConfig = field(default_factory=ReIDConfig)

@@ -197,26 +197,44 @@ def facts(kind="weapon", level=3, state="confirmed", armed=False, at=T0, inciden
 
 class TestEligibility:
     def test_only_alarm_classes_at_l3_are_wanted(self):
+        """D8 as amended by D15: weapon, fire and a corroborated fight."""
         assert M.wants("weapon", 3, RULES) and M.wants("fire", 5, RULES)
-        for kind in ("assault", "robbery", "stick", "smoke", "intrusion", "normal"):
+        assert M.wants("assault", 3, RULES)
+        for kind in ("robbery", "stick", "smoke", "intrusion", "normal"):
             assert not M.wants(kind, 3, RULES), kind
         assert not M.wants("weapon", 2, RULES)
 
     def test_experimental_classes_and_l2_never_open(self):
-        for kind in ("assault", "robbery", "normal"):
+        for kind in ("robbery", "normal"):
             assert M.on_trigger(facts(kind), open_request=None, history=[],
                                 rules=RULES).action == "ignore"
         assert M.on_trigger(facts(level=2), open_request=None, history=[],
                             rules=RULES).action == "ignore"
 
-    def test_armed_intrusion_is_held_for_the_entry_delay(self):
+    def test_a_fight_opens_only_when_corroborated(self):
+        """A fight reaches L3 only with video and aligned aggression audio."""
+        assert M.on_trigger(facts("assault", state="confirmed"), open_request=None,
+                            history=[], rules=RULES).action == "ignore"
+        assert M.on_trigger(facts("assault", state="corroborated"), open_request=None,
+                            history=[], rules=RULES).action == "open"
+
+    def test_an_unknown_person_never_opens_a_request_by_default(self):
+        """D15: an unrecognised person is an L2 in both modes, no SOS."""
+        for armed in (True, False):
+            for level in (2, 3):
+                assert M.on_trigger(facts("intrusion", level=level, armed=armed),
+                                    open_request=None, history=[], rules=RULES,
+                                    entry_delay_over=True).action == "ignore"
+
+    def test_armed_intrusion_is_held_for_the_entry_delay_when_enabled(self):
+        rules = replace(RULES, intrusion_requests=True)
         held = M.on_trigger(facts("intrusion", armed=True), open_request=None,
-                            history=[], rules=RULES)
+                            history=[], rules=rules)
         assert held.action == "hold" and held.hold_until == T0 + 30
         assert M.on_trigger(facts("intrusion", armed=False), open_request=None,
-                            history=[], rules=RULES).action == "ignore"
+                            history=[], rules=rules).action == "ignore"
         assert M.on_trigger(facts("intrusion", armed=True), open_request=None, history=[],
-                            rules=RULES, entry_delay_over=True).action == "open"
+                            rules=rules, entry_delay_over=True).action == "open"
 
     def test_one_open_request_per_device_later_incidents_attach(self):
         decision = M.on_trigger(facts(incident="i2"), open_request=snap(), history=[],

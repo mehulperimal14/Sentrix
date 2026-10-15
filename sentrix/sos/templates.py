@@ -64,7 +64,7 @@ BUTTONS = {
     "help_now": "Request help now",
 }
 AUTHORITY_LABELS = {"POLICE": "Police", "FIRE": "Fire", "MEDICAL": "Medical"}
-EVENT_NAMES = {"weapon": "WEAPON", "fire": "FIRE", "intrusion": "INTRUDER",
+EVENT_NAMES = {"weapon": "WEAPON", "fire": "FIRE", "assault": "FIGHT", "intrusion": "INTRUDER",
                "duress": "DURESS ALERT"}
 LEVEL_NAMES = {1: "SECURE", 2: "SUSPICIOUS", 3: "ELEVATED", 4: "HIGH", 5: "CRITICAL"}
 

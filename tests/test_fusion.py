@@ -65,18 +65,32 @@ class TestPresenceIsContext:
     presence added +0.15, and one saturated motion frame fired the intrusion
     override (CLAUDE.md §5, D2)."""
 
-    def test_presence_alone_does_not_raise_the_score_at_home(self):
-        person = steady(FeatureVector(vision=0.85, motion=1.0, identity=0.6,
-                                      person_present=True))
-        assert person.tci < settings.policy.thresholds[0]
-        assert person.incident_type == "normal"
+    def test_presence_at_home_is_l2_at_most_and_only_after_the_home_dwell(self):
+        """D15: an unrecognised person reaches L2 in both modes, never L3."""
+        engine = TCIEngine()
+        person = FeatureVector(vision=0.85, motion=1.0, identity=0.6, person_present=True)
+        dwell = settings.threat.intrusion_home_dwell_seconds
+        early = engine.compute(person, now=0.0)
+        early = engine.compute(person, now=dwell / 2)
+        assert early.incident_type == "normal" and early.tci < settings.policy.thresholds[0]
+        late = steady(person, seconds=dwell + 2)
+        assert late.incident_type == "intrusion" and level_for(late.raw_tci) == 2
 
-    def test_armed_mode_raises_a_sustained_stranger(self):
+    def test_presence_at_home_can_stay_logged_only(self):
+        engine = TCIEngine()
+        engine.threat = dataclasses.replace(settings.threat, unknown_alert_home=False)
+        person = FeatureVector(vision=0.85, motion=1.0, identity=0.6, person_present=True)
+        result = None
+        for i in range(120):
+            result = engine.compute(person, now=i / 6)
+        assert result.incident_type == "normal" and result.tci < settings.policy.thresholds[0]
+
+    def test_armed_mode_raises_a_sustained_stranger_to_l2_only(self):
         result = steady(FeatureVector(vision=0.85, identity=0.6, person_present=True),
                         armed=True)
         assert result.incident_type == "intrusion"
         assert result.raw_tci == pytest.approx(settings.threat.intrusion_level)
-        assert level_for(result.raw_tci) == 3
+        assert level_for(result.raw_tci) == 2
 
     def test_armed_mode_waits_for_the_dwell(self):
         engine = TCIEngine()
