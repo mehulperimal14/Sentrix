@@ -44,7 +44,7 @@ class ManualTimer:
 @pytest.fixture(autouse=True)
 def _clean(monkeypatch):
     for name in ("SENTRIX_SIREN_ARM_PIN", "SENTRIX_TAMPER_PIN", "SENTRIX_SIREN_ARMED",
-                 "SENTRIX_BUZZER_ENABLED"):
+                 "SENTRIX_BUZZER_ENABLED", "SENTRIX_GPIO_INPUTS"):
         monkeypatch.delenv(name, raising=False)
     ManualTimer.created = []
     actuators.clear_arming_source()
@@ -97,8 +97,8 @@ class Recorder:
         return [p["kind"] for k, p in self.published if k == "node.alert"]
 
 
-def _ctx(state=None, *, bounce=0.0, setup_mode=False):
-    cfg = replace(settings.gpio, input_bounce_seconds=bounce)
+def _ctx(state=None, *, bounce=0.0, setup_mode=False, **gpio_fields):
+    cfg = replace(settings.gpio, input_bounce_seconds=bounce, **gpio_fields)
     web = replace(settings.web, setup_mode=setup_mode)
     fake_settings = SimpleNamespace(gpio=cfg, web=web, node=settings.node)
     return SimpleNamespace(settings=fake_settings, state=state or SystemState(),
@@ -289,6 +289,13 @@ class TestInputSpecs:
         monkeypatch.setenv("SENTRIX_TAMPER_PIN", "x")
         assert {s.name for s in gpio.input_specs(settings.gpio)} == {"pir", "door", "mains"}
 
+    @pytest.mark.parametrize("value, names", [
+        ("none", set()), ("", {"pir", "door", "mains"}), ("pir", {"pir"}),
+        ("door, PIR;bogus", {"pir", "door"})])
+    def test_only_the_wired_inputs(self, monkeypatch, value, names):
+        monkeypatch.setenv("SENTRIX_GPIO_INPUTS", value)
+        assert {s.name for s in gpio.input_specs(settings.gpio)} == names
+
     def test_pin_conflicts(self, monkeypatch):
         assert gpio.pin_conflicts(settings.gpio) == []
         monkeypatch.setenv("SENTRIX_SIREN_ARM_PIN", str(settings.gpio.buzzer_pin))
@@ -375,6 +382,23 @@ class TestGpioService:
         finally:
             service.stop()
 
+    def test_unwired_mains_and_door_are_not_faults(self, factory, monkeypatch):
+        """A box without the PC817 or the door contact (the demo unit): no
+        "mains lost" at boot, no amber fault, no fixed "open" door."""
+        monkeypatch.setenv("SENTRIX_GPIO_INPUTS", "none")
+        live = SystemState()
+        live.update(camera_online=True)
+        service = _service(factory, _ctx(live))      # mains pin idles high
+        service.start()
+        try:
+            service.poll_once()
+            node = live.get()["node"]
+            assert service.recorder.alerts() == []
+            assert node["mains"] is None and node["door"] is None and node["pir"] is None
+            assert service.patterns["amber"] == OFF
+        finally:
+            service.stop()
+
     def test_tamper_and_arming_key(self, factory, monkeypatch):
         monkeypatch.setenv("SENTRIX_SIREN_ARM_PIN", "25")
         monkeypatch.setenv("SENTRIX_TAMPER_PIN", "22")
@@ -457,6 +481,29 @@ class TestGpioService:
             time.sleep(0.05)
             assert factory.pin(settings.gpio.buzzer_pin).state is False
             assert len(factory.pin(settings.gpio.buzzer_pin).states) == 1
+        finally:
+            service.stop()
+
+    def test_low_level_trigger_buzzer_module(self, factory):
+        """SENTRIX_BUZZER_ACTIVE_HIGH=0: the pin idles high (silent) and goes
+        low to sound, as a "low-level trigger" 3-pin module needs."""
+        live = SystemState()
+        live.update(camera_online=True)
+        _mains_on(factory)
+        service = _service(factory, _ctx(live, buzzer_active_high=False))
+        service.start()
+        try:
+            buzzer = factory.pin(settings.gpio.buzzer_pin)
+            service.poll_once()
+            assert buzzer.state is True, "silent = pin high"
+            live.update(level=3)
+            service.poll_once()
+            deadline = time.monotonic() + 3.0
+            while len(buzzer.states) < 6 and time.monotonic() < deadline:
+                time.sleep(0.02)
+            # the mock pin's own initial low, then silent high and two low chirps
+            assert [st.state for st in buzzer.states[:6]] == [False, True, False, True, False,
+                                                              True]
         finally:
             service.stop()
 

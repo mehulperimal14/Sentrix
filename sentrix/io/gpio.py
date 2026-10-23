@@ -243,7 +243,9 @@ def forward_sensor_event(kind: str, **detail: Any) -> bool:
 
 
 def input_specs(cfg: Any) -> list[InputSpec]:
-    """Every configured input. ``cfg`` is ``settings.gpio``."""
+    """Every configured input. ``cfg`` is ``settings.gpio``; pir, door and
+    mains only when wired (``SENTRIX_GPIO_INPUTS``)."""
+    fitted = tunables.fitted_inputs()
     specs = [
         InputSpec("pir", cfg.pir_pin, False, lambda active: bool(active)),
         # Contact closed (magnet near) pulls the pin to its active level.
@@ -253,6 +255,7 @@ def input_specs(cfg: Any) -> list[InputSpec]:
         InputSpec("mains", cfg.mains_sense_pin, bool(cfg.mains_present_low),
                   lambda active: bool(active)),
     ]
+    specs = [spec for spec in specs if spec.name in fitted]
     arm = tunables.siren_arm_pin()
     if arm is not None:
         specs.append(InputSpec("siren_armed", arm, True, lambda active: bool(active)))
@@ -504,7 +507,8 @@ class GpioService:
             except Exception as exc:
                 self.errors[f"led_{colour}"] = f"GPIO{pin}: {exc}"
         try:
-            self.buzzer = Buzzer(self.cfg.buzzer_pin, active_high=True, initial_value=False,
+            self.buzzer = Buzzer(self.cfg.buzzer_pin, active_high=self.cfg.buzzer_active_high,
+                                 initial_value=False,
                                  pin_factory=factory)
         except Exception as exc:
             self.errors["buzzer"] = f"GPIO{self.cfg.buzzer_pin}: {exc}"

@@ -16,6 +16,8 @@ Defaults and why:
   ``siren_armed`` (default on) states the switch position for the software.
 * ``tamper_pin`` none — an enclosure lid switch (closed to GND = lid shut).
 * ``buzzer_enabled`` on — the local chirps for L2/L3 (docs/8_RASPBERRY_PI5_INTEGRATION.md §6).
+* ``inputs`` pir, door, mains — the inputs wired; an unwired one would read a
+  fixed level (door "open", mains "lost") and is left out instead.
 * ``bme280`` / ``dht22`` off — room sensors through the kernel IIO drivers.
 * ``picamera_main`` 1280x720, ``picamera_lores`` 640x480 — the Picamera2
   streams (docs/8_RASPBERRY_PI5_INTEGRATION.md §4: evidence/preview and analysis).
@@ -117,6 +119,19 @@ def tamper_pin() -> int | None:
 
 def buzzer_enabled() -> bool:
     return _bool("gpio", "buzzer_enabled", "SENTRIX_BUZZER_ENABLED", True)
+
+
+INPUT_NAMES = ("pir", "door", "mains")
+
+
+def fitted_inputs() -> frozenset[str]:
+    """``SENTRIX_GPIO_INPUTS`` / ``settings.gpio.inputs``: the wired inputs of
+    pir, door, mains ("none" or "" = none); unknown names are ignored."""
+    value = _field("gpio", "inputs", "SENTRIX_GPIO_INPUTS")
+    if value is _MISSING:
+        value = _env("SENTRIX_GPIO_INPUTS") or ",".join(INPUT_NAMES)
+    names = {part.strip().lower() for part in str(value or "").replace(";", ",").split(",")}
+    return frozenset(names & set(INPUT_NAMES))
 
 
 def bme280_enabled() -> bool:

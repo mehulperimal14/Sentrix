@@ -825,6 +825,14 @@ class GpioConfig:
     tamper_pin: int | None = _env_pin("SENTRIX_TAMPER_PIN")
     #: Local buzzer chirps on level rises (docs/8_RASPBERRY_PI5_INTEGRATION.md §6).
     buzzer_enabled: bool = _env_bool("SENTRIX_BUZZER_ENABLED", True)
+    #: True for a buzzer through an NPN transistor and for "high-level trigger"
+    #: modules (pin HIGH = sound). Many 3-pin buzzer modules are "low-level
+    #: trigger" (pin LOW = sound): set 0 for those, or they sound non-stop.
+    buzzer_active_high: bool = _env_bool("SENTRIX_BUZZER_ACTIVE_HIGH", True)
+    #: Inputs actually wired, of ``pir``, ``door``, ``mains`` ("none" = none).
+    #: An unwired door contact reads "open" and an unwired PC817 reads "mains
+    #: lost" (a fault on the amber LED and a node alert), so leave those out.
+    inputs: str = _env_str("SENTRIX_GPIO_INPUTS", "pir,door,mains")
 
 
 @dataclass(frozen=True)

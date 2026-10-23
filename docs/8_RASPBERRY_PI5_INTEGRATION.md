@@ -296,9 +296,9 @@ factory uses the same map, so a laptop run and the tests exercise it.
 | 11 | 17 | Siren relay through an NPN transistor (1 kΩ base, 4.7 kΩ base pull-down to GND, 1N4007 across the coil) | **Active-high** (`SENTRIX_SIREN_ACTIVE_HIGH=1`, default). `gpio=17=op,dl` holds it off from power-on |
 | 16 | 23 | PIR output (HC-SR505 or HC-SR501) | PIR powered from 5 V; its output is 3.3 V [57]. High = motion |
 | 18 | 24 | Door reed switch (MC-38) → GND | Internal pull-up; contact closed = door closed |
-| 36 | 16 | Mains sense: PC817 output → GND | Internal pull-up; low while mains is present |
+| 36 | 16 | Mains sense: PC817 output → GND | Internal pull-up; low while mains is present. List only the wired inputs in `SENTRIX_GPIO_INPUTS` (default `pir,door,mains`; `none` on a box without them): unwired, this pin reads "mains lost" and the door pin reads "open" |
 | 29 / 32 / 33 | 5 / 12 / 13 | Green / amber / red LEDs, 330 Ω each | Amber kept off GPIO6 so a UPS HAT stays possible |
-| 37 | 26 | Active buzzer through an NPN transistor | Chirps on level rises; `SENTRIX_BUZZER_ENABLED` |
+| 37 | 26 | Active buzzer through an NPN transistor, or a 3-pin buzzer module's I/O pin (VCC → pin 2, GND → pin 39) | Chirps on level rises; `SENTRIX_BUZZER_ENABLED`; `SENTRIX_BUZZER_ACTIVE_HIGH=0` for a low-level-trigger module |
 | free pin | `SENTRIX_SIREN_ARM_PIN` | Arming key's second contact → GND (optional) | Closed = armed; a siren test is refused (409) while it is off |
 | free pin | `SENTRIX_TAMPER_PIN` | Enclosure lid switch → GND (optional) | Open = tamper alert |
 | 3 / 5 | 2 / 3 (I2C1) | BME280 (optional) | Kernel IIO driver; `SENTRIX_SENSOR_BME280=1` |
