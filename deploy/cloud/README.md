@@ -27,7 +27,8 @@ Test mode stays on (D13): WhatsApp messages go only to the numbers in
 
 Render's pricing page lists *workspace* plans (Hobby $0, Pro $25 …). The
 **Hobby** workspace is enough; what costs money is the *instance* the
-service runs on: **Starter** plus the 1 GB disk (about $7 and $0.25 a month
+service runs on: **Starter** (0.5 CPU, 512 MB; `0.5c-512mb` in
+`render.yaml`) plus the 1 GB disk (about $7 and $0.25 a month
 when this was written; Render shows the exact price before you apply). A disk needs a paid instance, and without a disk every
 restart would forget the accounts and the device. Cancel after the demo by
 deleting the service.
@@ -37,7 +38,7 @@ deleting the service.
    it).
 2. **New → Blueprint** → connect `mehulperimal14/Sentrix` → Render reads
    `render.yaml` at the repository root: one web service `sentrix-portal`,
-   Docker (`deploy/portal/Dockerfile`), **Starter**, **Singapore**, a 1 GB
+   Docker (`deploy/portal/Dockerfile`), **Starter** (`0.5c-512mb`), **Singapore**, a 1 GB
    disk on `/data`, health check `/healthz`. The two Portal keys and the
    WhatsApp verify token are generated for you.
 3. Render asks for the values marked `sync: false`. Fill in what you have

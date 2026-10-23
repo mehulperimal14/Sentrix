@@ -137,10 +137,11 @@ class TestDeployFiles:
         import yaml
         (service,) = yaml.safe_load((ROOT / "render.yaml").read_text(encoding="utf-8"))[
             "services"]
-        assert service["runtime"] == "docker" and service["plan"] == "starter"
+        assert service["runtime"] == "docker" and service["plan"] == "0.5c-512mb"
         assert (ROOT / service["dockerfilePath"]).is_file()
         assert service["disk"]["mountPath"] == "/data" and service["healthCheckPath"] == "/healthz"
         assert service.get("numInstances", 1) == 1
+        assert "autoDeploy" not in service, "deprecated: autoDeployTrigger"
         env = {e["key"]: e for e in service["envVars"]}
         assert env["PORTAL_TEST_MODE"]["value"] == "1" and env["SENTRIX_TEST_MODE"]["value"] == "1"
         for key in ("PORTAL_SECRET_KEY", "PORTAL_DATA_KEY", "WHATSAPP_VERIFY_TOKEN"):

@@ -1,8 +1,9 @@
 # Render Blueprint: the SENTRIX Portal (D18). Render -> New -> Blueprint ->
 # this repository. Steps and the WhatsApp set-up: deploy/cloud/README.md.
 #
-# One Starter instance in Singapore with a 1 GB disk on /data (SQLite and the
-# Portal's files survive deploys); the image is deploy/portal/Dockerfile.
+# One 0.5 CPU / 512 MB instance (`0.5c-512mb`, once called Starter) in
+# Singapore with a 1 GB disk on /data (SQLite and the Portal's files survive
+# deploys); the image is deploy/portal/Dockerfile.
 # Values marked "sync: false" are asked for once, in Render's dashboard: the
 # secrets, and the switches that let messages leave (test mode stays on, D13;
 # only SENTRIX_TEST_RECIPIENTS can receive anything, D17).
@@ -10,13 +11,13 @@ services:
   - type: web
     name: sentrix-portal
     runtime: docker
-    plan: starter
+    plan: 0.5c-512mb
     region: singapore
     dockerfilePath: ./deploy/portal/Dockerfile
     dockerContext: .
     healthCheckPath: /healthz
     numInstances: 1
-    autoDeploy: true
+    autoDeployTrigger: commit
     disk:
       name: sentrix-data
       mountPath: /data
