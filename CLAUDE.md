@@ -211,14 +211,38 @@ inputs (`8526815`); a Node-page buzzer test (`a892d24`); the clip object stage
 at 320 px on the Pi (`4503b0d` + results, section 4.3). Microphone and buzzer
 arrive on 2026-10-30; nothing has been heard or chirped on the Pi yet.
 
-### Online Portal and WhatsApp for the demo (2026-10-24, D17, D18)
+### Online Portal and phone alerts for the evaluations (2026-10-24, D17, D18)
 
 The owner's demo: the Portal online (sign-in, the owner's details in the
 wizard, the Pi's live dashboard, "offline" while the Pi is off), the Level 3
 question on the owner's phone without signing in, and a second phone playing
-the authorities. Hosting: Render (Starter instance + disk; Railway had
-closed its sign-ups); messaging: Meta's WhatsApp Cloud API test number. The talk-down speaker is dropped from the hardware for
-now; its code stays, off by default.
+the authorities. Evaluations: **2026-11-30** and the final panel on
+**2026-12-05**. The talk-down speaker is dropped from the hardware for now;
+its code stays, off by default.
+
+* **Live**: the Portal runs on Render (`https://sentrix-portal.onrender.com`,
+  `render.yaml`, Starter-size instance + 1 GB disk, Singapore; Railway had
+  closed its sign-ups); first admin from `PORTAL_BOOTSTRAP_ADMIN`; the Pi was
+  provisioned (`SX5-000001`), linked (`SENTRIX_LINK_ENABLED=1`,
+  `SENTRIX_PORTAL_URL`, identity in `~/Sentrix/var/link/`) and claimed by the
+  owner on 2026-10-24; a hotspot drop was ridden out by the link's own
+  reconnect. Plan: suspend the Render service between sessions (~$3-4 in all
+  instead of ~$10), delete it after 2026-12-05.
+* **Phone alerts by Telegram**, not WhatsApp: Meta's WhatsApp set-up was out
+  of the team's reach, so the already-built Telegram channel carries the
+  owner's prompt and the contact's SOS (bot from @BotFather, polling mode,
+  `SENTRIX_TEST_RECIPIENTS` = the two `tg:<id>` chats). The WhatsApp channel
+  (D17) stays in the code, unused.
+* **False weapon L3s in the demo room**: in ~10 h after the bring-up the Pi
+  raised 16 weapon Level 3s, every one from the DINOv2 scene classifier alone
+  (e.g. scene p(weapon) 0.62 vs the 0.50 floor, weapon detector 0.00); of the
+  8 SOS requests they opened, 5 were declined on the Pi's screen as false
+  alarms, 2 expired unanswered, 1 was acknowledged during the Portal set-up -
+  the out-of-room problem of section 5. The room's
+  own clips set a per-deployment threshold (M1 mechanism): weapon 0.75 in
+  the Pi's `var/calibration/scene.json` (section 4.3). Still to check with
+  the replica gun in that room before 2026-11-30: whether it reaches 0.75 or
+  the detector; else lower toward 0.65.
 
 ---
 
@@ -370,6 +394,7 @@ validated** (2 videos / 1 event). Only two rooms are represented.
 | M11b clip mode + fast lane, same videos with audio | = clip baseline `575e463` at L3+: L3 weapon 9/12, fire 3/3; L4 weapon 6/12; L5 weapon 5/12, fire 2/3; 0 false onsets at L3+; L2 0 → 3 (unknown-person L2) | `training/runs/custom_eval/m11b/replay_all_fastlane.json` (`ba0bf17`) |
 | M11 live session `c27258a25457` re-decided (no audio in that log) | home: L2+/L3+/L4+ onsets 30/9/6 as logged → **5/0/0** (5 = unknown-person L2, D15); armed: → **9/0/0** (M1 had 9 L3 intrusions); unchanged by the review fixes | `training/runs/custom_eval/m11b/live_session_{home,armed}.json` (`ba0bf17`) |
 | Sound model | PANNs CNN10 (AudioSet, 527 classes, 25 MB) on its own onnxruntime session: **40.1 ms p50 / 42.3 ms p95** per 4 s window, laptop CPU, 2 intra-op threads; torch's threads untouched (DINOv2 97.9 → 96.4 ms/frame after building the audio engine; the first M11 version's `set_num_threads(2)` doubled it) | `AudioEngine.classify_window`, `SceneEngine.score_frames` (`ba0bf17`) |
+| Pi 5 live in the demo room (clip mode, 320 px, ONNX; 2026-10-23/24, ~10 h; no simulated alerts) | 8077 clips: scene p(weapon) per scored keyframe median 0.19, p99 0.53, p99.9 0.65, max 0.742; at the 0.50 floor **16 clips confirmed = the 16 weapon L3s** (scene alone; the weapon detector never confirmed; 5 of their SOS requests declined as false alarms on the Pi); at >= 0.60 none. Per-deployment threshold set to weapon 0.75 on the Pi (`var/calibration/scene.json`). Not yet measured: a replica gun in that room | the Pi's own event log (`var/events/`, private), read-only analysis 2026-10-24 |
 | Pi 5 clip engine (ONNX, fast lane, `buffalo_s`; `gun.mov` as a 30 fps camera) | clip compute p50 **8.0 s** at 640 px objects (74 % of clips dropped, decisions 9.3 s old) → **3.9 s at 320 px** (48 %, 4.3 s), 2.2 s at 320 px + 1 scene frame (10 %, 3.2 s); budget 1.6 s. Clip replay of the 9 train + val videos (`wa02` not replayed, partly in-sample): 640 / 320 / 320 + 1 scene frame → L3 weapon 9/9, 9/9, 8/9; fire 3/3, 3/3, 2/3; L4 weapon 6/8, 5/8, 3/8; 0 false onsets at L3+. The Pi profile uses 320 px (`SENTRIX_CLIP_IMGSZ=320`) | `training/runs/custom_eval/pi5/REPORT.md` (knobs `4503b0d`) |
 
 ---
@@ -448,7 +473,7 @@ video/session is never used for tuning.
 | D14 | Accounts by username + single-use activation code; admin/Desk TOTP; the LC keeps `SENTRIX_PASSWORD`; Portal password hashes never reach the device. | No admin takeover, no hashes on the SD card. |
 | D15 | **Multimodal, time-aligned fusion** (transparent rules, D6 stays). Modalities: *video detector* (YOLO heads, fast lane), *video classifier* (scene, violence: one modality), *audio* (PANNs CNN10 AudioSet tagger on its own onnxruntime session - never touching torch's threads - → cues aggression / weapon_sound / fire_sound / benign_social (laughter) / calm_talk / background (TV, music, radio) / siren; the 4-class CNN is the fallback). Every audio result carries its window (monotonic start/end, wall end); it votes for a frame/clip only if the window overlaps it within `SENTRIX_AUDIO_ALIGN_TOLERANCE` (1.5 s) - else audio is *unavailable*, never "calm"; unclassified windows and windows over the device's own speaker/siren/buzzer (`io/self_output.py`) never vote; a window dominated by background (TV/music) is neutral. A window is a new observation only if it does not overlap the last one counted (clip mode: two non-overlapping halves), so one impulse never confirms audio. Per class: one visual modality confirmed → L3; two modalities → L4 (weaker sets it), three → ≥ L5 only if the audio is ≥ 0.3 over its bar; audio alone ≤ L2; aggression corroborates a visible weapon but is never a weapon alone. Fight: experimental L2 unless video fight **and** aligned aggression audio confirm with ≥ 2 people and motion ≥ 0.02 → L3; `SENTRIX_FIGHT_MAX_LEVEL` is a hard cap, and 4 also needs a second visual *modality*; banter (laughter, or calm talk ≥ 0.85) or aggression mixed with laughter holds the fight **at** L2 (shown, never lower). People count, motion, identity, PIR/door are gates/context, each recorded in `contributions` (state, event log schema 5, dashboard). Unknown person: D2. **Unvalidated** until room recordings with sound exist (M6, ROADMAP §15.1). | The owner's requirement: one decision from every input, audio in sync with video, fight vs banter, unknown people never critical; the review (M11b) closed the ways one sound, a TV or the device's own voice could move a level. |
 | D16 | **Talk-down speaker**: the owner (tunnel, step-up ≤ 300 s; members and the Desk refused by the path table) or the device admin sends a preset or ≤ 200 characters (control characters and `<`/`>` stripped: SAPI5 parses XML); offline TTS (pyttsx3 SAPI5/espeak-ng, or the `espeak-ng` command → `aplay -D`); off by default (`SENTRIX_SPEAKER_ENABLED`), 3 messages/min, one at a time with a 30 s playback watchdog, audited as `speaker_say` and mirrored to the Portal as `speaker.audit` (who, preset, length, backend - never the text); playback is marked as the device's own sound so the microphone ignores it. Pi hardware: USB audio adapter + PAM8403 + 3 W speaker, or a USB speakerphone (docs/8 §6.6). | Let the owner deter or reassure without a siren; no cloud TTS, no audio leaves the house. |
-| D17 | **WhatsApp alerts through Meta's Cloud API** (no Twilio or reseller): the Portal's `whatsapp` channel (`sentrix/alerting/channels/whatsapp.py`) sends the owner's L3 prompt (quick replies Alert contacts / I'm checking / False alarm), the contacts' alerts (I'm handling it / Open the SOS page), notices and the contact consent link, from Meta's free test number (up to 5 allowlisted recipients). Conversations start with three approved UTILITY templates (`tools/whatsapp_templates.py`), each beginning with the test banner; `WHATSAPP_MODE=auto` falls back to session messages (24 h window) while templates are in review. Quick replies carry Telegram's `<nonce>:<letter>` and get the same checks, the sender's number standing in for the linked chat; a link button is answered with its URL; delivery statuses confirm or fail the message; `POST /hooks/whatsapp` is HMAC-signed (`WHATSAPP_APP_SECRET`). Guard switch `SENTRIX_WHATSAPP_LIVE`, phone rules as SMS. **Exception to "a demo never sends"**: for the team's demo, test-marked messages to the two team phones in `SENTRIX_TEST_RECIPIENTS` (owner, "authorities" contact), switched on by the team on the Portal only. | The owner asked for alerts on a phone without being signed in, and a second phone playing the authorities; WhatsApp needs no SIM or modem, and the sandbox's 3-day re-join is avoided. |
+| D17 | **WhatsApp alerts through Meta's Cloud API** (no Twilio or reseller): the Portal's `whatsapp` channel (`sentrix/alerting/channels/whatsapp.py`) sends the owner's L3 prompt (quick replies Alert contacts / I'm checking / False alarm), the contacts' alerts (I'm handling it / Open the SOS page), notices and the contact consent link, from Meta's free test number (up to 5 allowlisted recipients). Conversations start with three approved UTILITY templates (`tools/whatsapp_templates.py`), each beginning with the test banner; `WHATSAPP_MODE=auto` falls back to session messages (24 h window) while templates are in review. Quick replies carry Telegram's `<nonce>:<letter>` and get the same checks, the sender's number standing in for the linked chat; a link button is answered with its URL; delivery statuses confirm or fail the message; `POST /hooks/whatsapp` is HMAC-signed (`WHATSAPP_APP_SECRET`). Guard switch `SENTRIX_WHATSAPP_LIVE`, phone rules as SMS. **Exception to "a demo never sends"**: for the team's demo, test-marked messages to the two team phones in `SENTRIX_TEST_RECIPIENTS` (owner, "authorities" contact), switched on by the team on the Portal only. *Built and tested, but not used for the demo: Meta's set-up was out of the team's reach, so the demo uses the Telegram channel (section 2).* | The owner asked for alerts on a phone without being signed in, and a second phone playing the authorities; WhatsApp needs no SIM or modem, and the sandbox's 3-day re-join is avoided. |
 | D18 | **Demo Portal on Render** (amends D11 for the demo; Railway closed its sign-ups): `render.yaml` Blueprint - one **Starter** instance in Singapore (Hobby workspace), a 1 GB disk on `/data` for SQLite and the Portal's files, `deploy/portal/Dockerfile`, health check `/healthz`, keys generated by Render, the secrets and the sending switches typed in by the team (`sync: false`). The image starts as root only to hand the root-owned volume to `sentrix`, then `deploy/portal/start.py` drops root for good; `PORT` and `RENDER_EXTERNAL_URL` (or `RAILWAY_PUBLIC_DOMAIN`) are honoured, the client address comes from `X-Real-IP` (`PORTAL_TRUSTED_PROXIES=*`), the first admin from `PORTAL_BOOTSTRAP_ADMIN` (link in the log); the dashboard reopens the MJPEG stream every 10 min. `railway.json` keeps Railway as the alternative. Steps: `deploy/cloud/README.md`. About $7 + $0.25 a month. | A host with a disk keeps the tested SQLite path, never sleeps and needs no shell; Oracle stays the long-term option. |
 
 ### Milestones
@@ -577,7 +602,7 @@ log-only, gunshot/glass-break data track (non-gating).
 
 **Owner decisions surfaced by M11:** (5) Home mode now raises an L2 "unrecognised person" after 10 s (D2 as amended, owner requirement 4): every unenrolled guest becomes an L2 incident on the dashboard - keep it, lengthen `SENTRIX_UNKNOWN_HOME_DWELL`, or set `SENTRIX_UNKNOWN_ALERT_HOME=0` (logged only). (6) Talk-down speaker hardware: USB adapter + PAM8403 + 3 W speaker (≈ ₹450) or a USB speakerphone (≈ ₹1,500–2,500, also the microphone). (7) Record the audio sessions of ROADMAP §15.1 (play-fighting vs staged fights with sound, laughter, shouting, TV, alarm beeps, gunshot/glass sounds from a speaker) before any fight or audio claim is made.
 
-Demo date and room; which camera (laptop webcam vs a mounted USB camera — data
+Demo dates: **2026-11-30** and **2026-12-05** (final panel). Room; which camera (laptop webcam vs a mounted USB camera — data
 must be recorded with it); permission for replica weapons and flames on campus;
 whether darkness is a requirement (needs IR); ~34 person-hours of recording,
 correction and QC in weeks 1–3; who deleted `Kartik.jpg` during the run.

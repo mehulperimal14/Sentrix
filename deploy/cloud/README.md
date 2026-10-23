@@ -1,4 +1,4 @@
-# SENTRIX Portal online, with WhatsApp alerts
+# SENTRIX Portal online, with phone alerts (Telegram or WhatsApp)
 
 The demo set-up (decisions D17, D18 in `CLAUDE.md`):
 
@@ -17,9 +17,11 @@ The Pi connects **out** to the Portal; nothing connects into the Pi. While the
 Pi is off the Portal shows the device offline; when it powers up it links
 again by itself and the dashboard (`/d/<device id>/dashboard`) is live.
 
-Test mode stays on (D13): WhatsApp messages go only to the numbers in
-`SENTRIX_TEST_RECIPIENTS`, and every one starts with
-`[SENTRIX DEMO – TEST, NOT A REAL EMERGENCY]`.
+Test mode stays on (D13): messages go only to the addresses in
+`SENTRIX_TEST_RECIPIENTS` (phone numbers, `tg:<chat id>`), and every one starts
+with `[SENTRIX DEMO – TEST, NOT A REAL EMERGENCY]`. The demo of 2026-11-30 and
+2026-12-05 uses **Telegram** (section 2A); WhatsApp (section 2B) is built but
+needs Meta's business set-up.
 
 ---
 
@@ -78,7 +80,31 @@ image; add a volume on `/data`, generate a domain and set the same variables
 and sending variables above). `PORTAL_BASE_URL` comes from
 `RAILWAY_PUBLIC_DOMAIN`.
 
-## 2. WhatsApp: Meta's Cloud API (about 20 minutes)
+## 2A. Telegram (about 5 minutes; what the demo uses)
+
+1. In Telegram open **@BotFather** → `/newbot` → a name (`SENTRIX Alerts`) and
+   a username ending in `bot` → BotFather answers with the bot **token**
+   (keep it private).
+2. On each phone (owner, authorities) open **@userinfobot** → Start → note
+   the **Id** it shows (not the phone number).
+3. Render → `sentrix-portal` → **Environment** → add, then **Save changes**:
+
+| Variable | Value |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` | the token |
+| `PORTAL_TELEGRAM_BOT_NAME` | the bot's username without `@` |
+| `SENTRIX_TELEGRAM_LIVE` | `1` |
+| `SENTRIX_LIVE_ALERTS` | `1` |
+| `SENTRIX_TEST_RECIPIENTS` | `tg:<owner Id>,tg:<authorities Id>` |
+
+   `SENTRIX_TELEGRAM_MODE` defaults to `polling` (the Portal asks Telegram for
+   updates; no webhook needed).
+4. Check: `/start` to the bot from an allowlisted account answers "This is
+   the SENTRIX alert bot…".
+5. Linking happens in the owner's wizard: step 6 **Link Telegram** (owner);
+   the contact's consent page **Get alerts on Telegram** (authorities).
+
+## 2B. WhatsApp: Meta's Cloud API (about 20 minutes; optional)
 
 1. <https://developers.facebook.com> → **My Apps → Create App** → use case
    *Other* → type **Business** → create. In the app: **Add product →
@@ -138,26 +164,30 @@ and sending variables above). `PORTAL_BASE_URL` comes from
 ## 4. The owner's flow (what the professors see)
 
 1. The owner opens the activation link → sets a password → the **7-step
-   wizard**: name and **mobile number** (WhatsApp goes there), address,
-   household, **emergency contacts** (add the authorities phone: it gets the
-   consent link on WhatsApp and must tap *Confirm*), **claim the device**
-   with the claim code, alerts (**WhatsApp** ticked, SOS PIN, duress PIN),
-   consent.
+   wizard**: name and **mobile number**, address (the nearest police, fire
+   station and hospital are optional and only appear in the SOS text),
+   household, **emergency contacts** (add the authorities phone; send it the
+   consent link the page shows - on WhatsApp it arrives by itself - and it
+   taps *Confirm*, then *Get alerts on Telegram*), **claim the device** with
+   the serial and claim code, alerts (**Telegram** linked, or **WhatsApp**
+   ticked; SOS PIN, duress PIN), consent.
 2. **Home** shows the device and its live dashboard through the Portal.
-3. A confirmed Level 3 (weapon or fire) → the owner gets a WhatsApp message
-   with **Alert contacts / I'm checking / False alarm**, no sign-in needed.
-   *Alert contacts* → the authorities phone gets the SOS on WhatsApp with
-   **I'm handling it / Open the SOS page**. *False alarm* answers with the
+3. A confirmed Level 3 (weapon or fire) → the owner gets a Telegram (or
+   WhatsApp) message with **Alert my contacts / I'm checking / False alarm**,
+   no sign-in needed. *Alert contacts* → the authorities phone gets the SOS
+   with **I'm handling it / Open**. *False alarm* answers with the
    PIN page link (a PIN typed into a chat would stay in its history).
 4. Pi switched off → the Portal shows **offline** within about a minute;
    switched on → online again and the dashboard is live.
 
 ## 5. Demo-morning checklist
 
-- [ ] Hotspot on; the Pi and the laptop on it; `…/healthz` is ok.
-- [ ] Both phones sent "hi" to the WhatsApp test number (opens 24 h).
-- [ ] `python tools/whatsapp_templates.py status` → all APPROVED (else
-      `WHATSAPP_MODE=auto` and the "hi" above carry the demo).
+- [ ] Render service **resumed** (Settings → Resume) if it was suspended;
+      `…/healthz` is ok.
+- [ ] Hotspot on and the Pi on it (powered about 2 minutes before).
+- [ ] Telegram: `/start` to the bot answers (WhatsApp instead: both phones
+      sent "hi" to the test number, templates APPROVED).
 - [ ] Portal home shows the device **online**; the dashboard video moves.
-- [ ] `SENTRIX_LIVE_ALERTS=1` and `SENTRIX_WHATSAPP_LIVE=1` on Render; after
-      the demo set them back to `0`.
+- [ ] `SENTRIX_LIVE_ALERTS=1` and the channel's switch on Render; after the
+      demo set them back to `0`, suspend the service, and delete it after
+      2026-12-05.
