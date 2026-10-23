@@ -46,12 +46,16 @@ CHANNEL_SWITCHES: dict[str, str] = {
     "twilio_sms": "SENTRIX_TWILIO_ENABLED",
     "twilio_call": "SENTRIX_TWILIO_ENABLED",
     "telegram": "SENTRIX_TELEGRAM_LIVE",
+    "whatsapp": "SENTRIX_WHATSAPP_LIVE",
     "email": "SENTRIX_EMAIL_LIVE",
     "webpush": "SENTRIX_WEBPUSH_LIVE",
 }
 #: Channels whose text travels as SMS (GSM-7 banner).
 SMS_CHANNELS = frozenset({"modem_sms", "twilio_sms"})
-PHONE_CHANNELS = frozenset({"modem_sms", "modem_call", "twilio_sms", "twilio_call"})
+#: Channels addressed by an E.164 phone number (WhatsApp included: the same
+#: normalisation, allowlist and emergency-number refusal).
+PHONE_CHANNELS = frozenset({"modem_sms", "modem_call", "twilio_sms", "twilio_call",
+                            "whatsapp"})
 
 #: Indian emergency and helpline short codes; never a SENTRIX recipient.
 EMERGENCY_NUMBERS = frozenset({"112", "100", "101", "102", "108", "1091", "1098",

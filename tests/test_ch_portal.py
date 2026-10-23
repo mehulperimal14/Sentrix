@@ -186,7 +186,7 @@ class TestPortalOutbox:
     def test_channels_and_status(self, portal_app, monkeypatch):
         monkeypatch.delenv("TWILIO_ACCOUNT_SID", raising=False)
         names = set(notify.build_channels())
-        assert names == {"telegram", "email"}
+        assert names == {"telegram", "whatsapp", "email"}
         for name, value in (("TWILIO_ACCOUNT_SID", "AC1"), ("TWILIO_AUTH_TOKEN", "t"),
                             ("TWILIO_PHONE_NUMBER", "+15550000000")):
             monkeypatch.setenv(name, value)

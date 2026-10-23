@@ -46,6 +46,7 @@ _FORCED_ENV = {
     # channel switches (sentrix.alerting.guard.CHANNEL_SWITCHES)
     "SENTRIX_MODEM_LIVE": "0", "SENTRIX_TWILIO_ENABLED": "0",
     "SENTRIX_TELEGRAM_LIVE": "0", "SENTRIX_EMAIL_LIVE": "0", "SENTRIX_WEBPUSH_LIVE": "0",
+    "SENTRIX_WHATSAPP_LIVE": "0",
     # services
     "SENTRIX_SOS_ENABLED": "0", "SENTRIX_LINK_ENABLED": "0",
     "SENTRIX_CHANNELS_ENABLED": "0", "SENTRIX_MODEM_ENABLED": "0",
@@ -54,6 +55,8 @@ _FORCED_ENV = {
     "TWILIO_ACCOUNT_SID": "", "TWILIO_AUTH_TOKEN": "", "TWILIO_PHONE_NUMBER": "",
     "TELEGRAM_BOT_TOKEN": "", "TELEGRAM_WEBHOOK_SECRET": "", "BREVO_API_KEY": "",
     "RESEND_API_KEY": "", "SENTRIX_PORTAL_URL": "",
+    "WHATSAPP_ACCESS_TOKEN": "", "WHATSAPP_PHONE_NUMBER_ID": "", "WHATSAPP_APP_SECRET": "",
+    "WHATSAPP_VERIFY_TOKEN": "", "WHATSAPP_MODE": "", "PORTAL_BOOTSTRAP_ADMIN": "",
     # runtime files: the whole device var/ tree (database, events, evidence,
     # snapshots, faces, calibration, mode) in the session dir, never var/
     "SENTRIX_VAR_DIR": str(_SESSION_DIR / "var"),

@@ -97,8 +97,10 @@ AGE_BANDS = ("adult", "minor", "senior")
 #: Hindi templates are Tier 2; the wizard offers English only.
 LANGUAGES = {"en": "English"}
 HOUSEHOLD_STATUSES = ("active", "disabled", "erasing", "closed")
-CHANNEL_KEYS = ("email", "telegram", "sms")
-DEFAULT_CHANNELS = {"email": True, "telegram": False, "sms": True}
+CHANNEL_KEYS = ("email", "telegram", "whatsapp", "sms")
+#: WhatsApp reaches the owner's mobile number once the Cloud API is
+#: configured on the Portal (D17); on by default like e-mail.
+DEFAULT_CHANNELS = {"email": True, "telegram": False, "whatsapp": True, "sms": True}
 STAFF_ROLES = ("company_admin", "operator")
 INDIAN_STATES = (
     "Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam",
@@ -729,6 +731,32 @@ def create_staff_user(db: Session, *, role: str, username: str, display_name: st
     return user
 
 
+def bootstrap_admin(db: Session, username: str | None) -> str | None:
+    """``PORTAL_BOOTSTRAP_ADMIN=<username>``: the first company admin of a
+    Portal that has no shell to run ``tools/provision_device.py admin`` on (a
+    Railway or Render deploy). While no company admin is active it creates
+    that admin, or re-issues its code (the old one stops working), and returns
+    the single-use activation link for the start-up log; once any company
+    admin is active it does nothing. TOTP is set up at the first sign-in."""
+    errors = FormErrors()
+    name = clean_username(errors, "username", username) if username else None
+    if not name:
+        if username:
+            log.error("PORTAL_BOOTSTRAP_ADMIN=%r is not a valid username", username)
+        return None
+    if db.query(User).filter_by(role="company_admin", status="active").first() is not None:
+        return None
+    user = db.query(User).filter_by(username=name).first()
+    if user is None:
+        user = create_staff_user(db, role="company_admin", username=name, display_name=name,
+                                 email=None, created_by=None)
+    elif user.role != "company_admin":
+        log.error("PORTAL_BOOTSTRAP_ADMIN: %s exists and is not a company admin", name)
+        return None
+    code, _ = issue_activation_code(db, user, actor_type="system")
+    return activation_url(code)
+
+
 def set_household_status(db: Session, household: Household, status: str, *,
                          actor_id: str | None, ip: str | None = None) -> None:
     """Admin deactivate / reactivate. Deactivating ends every session and
@@ -1294,11 +1322,27 @@ def consent_url(raw: str) -> str:
 
 def request_contact_consent(db: Session, contact: EmergencyContact, *,
                             owner_name: str) -> tuple[str, str | None]:
-    """New link token, e-mailed when the contact has an address. Returns
-    (link to show the owner once, outbox id or None)."""
+    """New link token, e-mailed when the contact has an address and sent on
+    WhatsApp when the Cloud API is configured (D17). Returns (link to show
+    the owner once, e-mail outbox id or None)."""
     raw, row = mint_consent_token(db, contact)
     url = consent_url(raw)
     queued = None
+    from sentrix.alerting.channels import whatsapp
+    phone = contact_phone(contact)
+    if phone and whatsapp.configured():
+        from sentrix_portal.services import notify
+        try:
+            notify.enqueue(db, Recipient(ref=f"contact:{contact.id}", name=contact.name,
+                                         channel="whatsapp", address=phone, role="contact"),
+                           Message(template="contact.consent", step=f"consent:{row.id}",
+                                   text=(f"{owner_name} added you as an emergency contact for "
+                                         f"their SENTRIX home alarm. If you agree, SENTRIX may "
+                                         f"send you SOS alerts about their home. Confirm or "
+                                         f"opt out here: {url} - nothing is sent to you "
+                                         f"unless you confirm.")))
+        except Exception as exc:                      # never break the page
+            log.error("could not queue the consent request on WhatsApp: %s", exc)
     if contact.email:
         recipient = Recipient(ref=f"contact:{contact.id}", name=contact.name,
                               channel="email", address=contact.email, role="contact")

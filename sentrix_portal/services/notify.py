@@ -8,9 +8,10 @@ inbound bot (docs/7 §4.2, §7.11, §8). Owner: track T-CH.
   addresses are sealed (``address_enc``).
 * :func:`enqueue` (``enqueue(db, recipient, message)``) -> outbox id, or None
   (duplicate ``request|recipient|channel|step``, or no such channel).
-* Channels: ``telegram`` and ``email`` always (the send guard decides, so a
-  dry run still records what would have gone out), ``twilio_sms`` as a
-  backup when ``TWILIO_*`` are set. The guard is
+* Channels: ``telegram``, ``whatsapp`` and ``email`` always (the send guard
+  decides, so a dry run still records what would have gone out),
+  ``twilio_sms`` as a backup when ``TWILIO_*`` are set. SOS recipients on
+  WhatsApp exist only when the Cloud API is configured (D17). The guard is
   ``SendPolicy.from_env(test_mode_env="PORTAL_TEST_MODE")``.
 * :func:`start` (``start(app) -> stop``): the delivery worker (an asyncio task
   that pumps on a thread every second, or at once after an enqueue), the
@@ -24,6 +25,12 @@ inbound bot (docs/7 §4.2, §7.11, §8). Owner: track T-CH.
   nonce's token not used, revoked or expired, and goes to
   ``services.sos.respond`` (``channel="telegram"``); the bot leaves any group
   it is added to. Every link and callback is audited.
+* :func:`handle_whatsapp` — one WhatsApp webhook body (``POST
+  /hooks/whatsapp``): a quick reply carrying ``<nonce>:<letter>`` gets the
+  Telegram button's checks with the sender's number as the linked chat and
+  goes to ``services.sos.respond`` (``channel="whatsapp"``); ``open:<n>`` is
+  answered with that button's link; a text gets a short help reply; a
+  delivery status confirms or fails our message (``confirm_delivery``).
 * :func:`add_listener` / :func:`remove_listener` — ``fn(OutboxItem)`` after
   every final status change, on the worker's thread (T-LINK derives
   ``delivered`` / ``undelivered``). SUPPRESSED (dry run) never counts as
@@ -33,6 +40,7 @@ inbound bot (docs/7 §4.2, §7.11, §8). Owner: track T-CH.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import math
 import os
@@ -49,7 +57,7 @@ from sqlalchemy.dialects import sqlite as sqlite_dialect
 from sqlalchemy.exc import IntegrityError
 
 from sentrix.alerting import guard
-from sentrix.alerting.channels import telegram
+from sentrix.alerting.channels import telegram, whatsapp
 from sentrix.alerting.channels.base import (DELIVERED, FAILED, QUEUED, SENDING, SENT,
                                             SUPPRESSED, Channel, Message, OutboxItem,
                                             Recipient, message_meta, parse_callback_data,
@@ -289,13 +297,14 @@ def remove_listener(callback: Callable[[OutboxItem], None]) -> None:
 def build_channels(*, transports: dict[str, Any] | None = None,
                    policy_factory: Callable[[], guard.SendPolicy] = portal_policy
                    ) -> dict[str, Channel]:
-    """Telegram and e-mail, plus Twilio SMS when configured. ``transports``
-    (tests) replaces a transport by name."""
+    """Telegram, WhatsApp and e-mail, plus Twilio SMS when configured.
+    ``transports`` (tests) replaces a transport by name."""
     from sentrix.alerting.channels import email
     from sentrix.alerting.channels.twilio import TwilioCredentials, TwilioSmsTransport
     chosen = dict(transports or {})
     factories: dict[str, Callable[[], Any]] = {
         "telegram": telegram.TelegramTransport,
+        "whatsapp": whatsapp.WhatsAppTransport,
         "email": lambda: email.EmailTransport(),
     }
     if TwilioCredentials.from_env().complete:
@@ -644,6 +653,164 @@ async def _leave(api, chat_id: int) -> None:
         await api.leave_chat(chat_id)
     except telegram.TelegramError as exc:
         log.info("telegram leaveChat failed: %s", exc)
+
+
+# ── WhatsApp inbound (D17) ────────────────────────────────────────────────────
+_WA_HELP = ("SENTRIX alerts for your home arrive in this chat. Answer an alert with its "
+            "buttons; the SENTRIX Portal shows the whole request.")
+
+
+def _whatsapp_numbers(db, subject_type: str | None, subject_id: str | None) -> set[str]:
+    """The E.164 number that may answer for a token's subject."""
+    from sentrix_portal.services import accounts
+    if not subject_type or not subject_id:
+        return set()
+    if subject_type == "contact":
+        contact = db.get(EmergencyContact, subject_id)
+        phone = accounts.contact_phone(contact) if contact is not None else None
+    else:
+        user = db.get(User, subject_id)
+        phone = accounts.user_phone(user) if user is not None else None
+    number = guard.normalize_address("whatsapp", phone)
+    return {number} if number else set()
+
+
+def _wa_reply(db, inbound: whatsapp.Inbound, text: str, *, ref: str = "whatsapp",
+              role: str = "contact") -> str | None:
+    """A session message back to the sender (their message opened the window)."""
+    step = "wa:" + hashlib.sha256((inbound.message_id or "").encode()).hexdigest()[:24]
+    return enqueue(db, Recipient(ref, inbound.name or ref, "whatsapp", inbound.sender, role),
+                   Message(template="whatsapp.reply", step=step, text=text))
+
+
+def _wa_open(db, inbound: whatsapp.Inbound, index: str) -> dict[str, Any]:
+    """``open:<n>``: the link of button n of the message the reply belongs to,
+    for its own recipient only."""
+    row = (db.query(Notification).filter_by(channel="whatsapp",
+                                            provider_id=inbound.context_id).first()
+           if inbound.context_id else None)
+    item = PortalOutbox._item(row) if row is not None else None
+    sender = guard.normalize_address("whatsapp", inbound.sender)
+    if item is None or guard.normalize_address("whatsapp", item.recipient.address) != sender:
+        _wa_reply(db, inbound, "This button is not valid any more; use the SENTRIX Portal.")
+        return {"handled": "refused", "reason": "unknown message or other recipient"}
+    try:
+        button = item.message.buttons[int(index)]
+    except (ValueError, IndexError):
+        button = None
+    if button is None or not button.url:
+        _wa_reply(db, inbound, "This option is not available for this message.")
+        return {"handled": "refused", "reason": "no link"}
+    _wa_reply(db, inbound, f"{button.label}: {button.url}", ref=item.recipient.ref,
+              role=item.recipient.role)
+    return {"handled": "link", "action": button.action}
+
+
+async def _wa_callback(app, inbound: whatsapp.Inbound) -> dict[str, Any]:
+    """A quick reply carrying ``<nonce>:<letter>``: the same checks as a
+    Telegram button, the sender's number standing in for the linked chat."""
+    parsed = parse_callback_data(inbound.payload)
+    with app.state.db.session() as db:
+        if parsed is None:
+            _wa_reply(db, inbound, "This button is not valid.")
+            return {"handled": "refused", "reason": "malformed payload"}
+        nonce, action = parsed
+        from sentrix_portal.services import sos
+        now = datetime.now(timezone.utc)
+        token = (db.query(ActionToken).filter(ActionToken.nonce == nonce,
+                                              ActionToken.purpose.in_(CALLBACK_PURPOSES))
+                 .first())
+        if token is None:
+            _wa_reply(db, inbound, "This button is not valid any more.")
+            return {"handled": "refused", "reason": "unknown nonce"}
+
+        def refuse(reason: str, text: str) -> dict[str, Any]:
+            security.audit(db, "whatsapp.reply", actor_type=token.subject_type or "system",
+                           actor_id=token.subject_id, household_id=token.household_id,
+                           target_type="assistance_request", target_id=token.request_id,
+                           detail={"action": action, "ok": False, "reason": reason,
+                                   "from": mask_recipient(inbound.sender)})
+            return {"handled": "refused", "reason": reason, "text": text}
+
+        sender = guard.normalize_address("whatsapp", inbound.sender)
+        if token.revoked_at is not None or (_aware(token.expires_at) or now) <= now:
+            outcome = refuse("expired or revoked", "This request has closed.")
+        elif sender not in _whatsapp_numbers(db, token.subject_type, token.subject_id):
+            outcome = refuse("sender is not the subject's number",
+                             "This button is not for this WhatsApp number.")
+        elif token.used_at is not None and action in CONSUMING_ACTIONS:
+            outcome = refuse("already used", "Already answered.")
+        else:
+            actor = _actor_for(db, token)
+            if actor is None:
+                outcome = refuse("no active subject", "This account cannot answer.")
+            else:
+                token.opened_count = (token.opened_count or 0) + 1
+                result = await sos.respond(db, token.request_id, action, actor=actor,
+                                           channel="whatsapp")
+                ok = bool(result.get("ok"))
+                if ok and action in CONSUMING_ACTIONS:
+                    token.used_at = now
+                security.audit(db, "whatsapp.reply", actor_type=actor["type"],
+                               actor_id=actor["id"], household_id=token.household_id,
+                               target_type="assistance_request", target_id=token.request_id,
+                               detail={"action": action, "ok": ok, "code": result.get("code"),
+                                       "from": mask_recipient(inbound.sender)})
+                text = (_ANSWERS[action] if ok else
+                        _REFUSALS.get(result.get("code"), result.get("message")
+                                      or "That did not work; use the Portal."))
+                outcome = {"handled": "answered" if ok else "failed", "action": action,
+                           "code": result.get("code"), "text": text}
+        ref = "owner" if token.subject_type == "user" else f"contact:{token.subject_id}"
+        _wa_reply(db, inbound, outcome["text"], ref=ref,
+                  role="owner" if token.subject_type == "user" else "contact")
+    return outcome
+
+
+def _wa_status(app, inbound: whatsapp.Inbound) -> dict[str, Any]:
+    """A delivery report: our SENT message becomes DELIVERED, or FAILED."""
+    if inbound.status not in ("delivered", "read", "failed") or not inbound.message_id:
+        return {"handled": "ignored"}
+    delivered = inbound.status != "failed"
+    item = worker_router(app.state.db).confirm_delivery(
+        "whatsapp", lambda item: item.provider_id == inbound.message_id,
+        delivered=delivered, error=inbound.error)
+    return {"handled": "status" if item is not None else "ignored",
+            "status": inbound.status}
+
+
+async def handle_whatsapp(app, body: dict) -> list[dict[str, Any]]:
+    """Act on every event of one webhook body; returns what happened to each."""
+    outcomes: list[dict[str, Any]] = []
+    own_number = whatsapp.phone_number_id()
+    for inbound in whatsapp.parse_webhook(body):
+        if own_number and inbound.number_id and inbound.number_id != own_number:
+            outcomes.append({"handled": "ignored", "reason": "another sender number"})
+            continue
+        if inbound.kind == "status":
+            outcomes.append(_wa_status(app, inbound))
+            continue
+        if not _first_time(app, f"wa:{inbound.message_id}" if inbound.message_id else None):
+            outcomes.append({"handled": "duplicate"})
+            continue
+        if inbound.kind == "button":
+            payload = inbound.payload or ""
+            if payload.startswith(whatsapp.OPEN_PREFIX):
+                with app.state.db.session() as db:
+                    outcomes.append(_wa_open(db, inbound, payload[len(whatsapp.OPEN_PREFIX):]))
+            elif payload == whatsapp.UNUSED:
+                with app.state.db.session() as db:
+                    _wa_reply(db, inbound, "This option is not available for this message.")
+                outcomes.append({"handled": "refused", "reason": "unused button"})
+            else:
+                outcomes.append(await _wa_callback(app, inbound))
+        elif inbound.kind == "text":
+            with app.state.db.session() as db:
+                _wa_reply(db, inbound, _WA_HELP)
+            outcomes.append({"handled": "help"})
+        else:
+            outcomes.append({"handled": "ignored"})
+    return outcomes
 
 
 # ── worker ────────────────────────────────────────────────────────────────────

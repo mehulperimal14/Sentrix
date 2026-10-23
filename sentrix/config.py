@@ -777,6 +777,7 @@ class ChannelConfig:
     modem_live: bool = _env_bool("SENTRIX_MODEM_LIVE", False)
     twilio_enabled: bool = _env_bool("SENTRIX_TWILIO_ENABLED", False)
     telegram_live: bool = _env_bool("SENTRIX_TELEGRAM_LIVE", False)
+    whatsapp_live: bool = _env_bool("SENTRIX_WHATSAPP_LIVE", False)
     email_live: bool = _env_bool("SENTRIX_EMAIL_LIVE", False)
     #: The USB 4G modem worker (AT commands over pyserial).
     modem_enabled: bool = _env_bool("SENTRIX_MODEM_ENABLED", False)

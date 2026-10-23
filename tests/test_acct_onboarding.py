@@ -228,7 +228,8 @@ class TestWizard:
         assert household.sos_window_s == 2700 and household.safety_defaults
         assert security.verify_pin(household.sos_pin_hash, "482916")
         assert security.verify_pin(household.duress_pin_hash, "482971")
-        assert household.channels == {"email": True, "telegram": False, "sms": True}
+        assert household.channels == {"email": True, "telegram": False, "whatsapp": False,
+                                      "sms": True}
 
         # 7. Consent and review
         review = browser.get("/onboarding/7")

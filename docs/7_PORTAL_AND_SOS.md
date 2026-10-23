@@ -60,7 +60,7 @@ SENTRIX never calls 112 itself. Every SOS text says so. In test mode the
 | Channels | device, same process | `sentrix/alerting/channels/` | Outbox and router; 4G modem SMS; Telegram and e-mail only when no Portal is linked; legacy Twilio (off unless enabled) |
 | Link client | device, same process | `sentrix/link/` | One outbound WebSocket to the Portal: heartbeats, an outbox of events, state and video on demand, the tunnel, and commands that the device checks itself |
 | Hardware I/O | device, same process | `sentrix/io/` | Siren relay, LEDs, buzzer, PIR, door, mains sense, telemetry, Pi camera, Wi-Fi setup (docs/8) |
-| Portal | cloud: `python -m sentrix_portal` | `sentrix_portal/` | Accounts, onboarding, the device hub, the `/d/{device_id}/…` proxy, the SOS mirror (and its timers while a device is offline), Telegram and e-mail, the Desk, contact pages, privacy |
+| Portal | cloud: `python -m sentrix_portal` | `sentrix_portal/` | Accounts, onboarding, the device hub, the `/d/{device_id}/…` proxy, the SOS mirror (and its timers while a device is offline), Telegram, WhatsApp (D17) and e-mail, the Desk, contact pages, privacy |
 
 One device process owns all the device parts (§1.2). On the laptop the device
 runs with a video file or the demo reel as its camera. On a Raspberry Pi 5 the
@@ -1529,7 +1529,9 @@ normalize_address(channel, address); is_emergency_number(address); test_mode()
 ```
 
 Channels: `modem_sms`, `modem_call`, `twilio_sms`, `twilio_call`, `telegram`,
-`email`, `webpush` (`CHANNEL_SWITCHES`). Order of rules (first match decides):
+`whatsapp` (Portal only, Meta's Cloud API, D17; addressed and refused like a
+phone channel), `email`, `webpush` (`CHANNEL_SWITCHES`). Order of rules (first
+match decides):
 
 | # | Condition | Result |
 |---|---|---|

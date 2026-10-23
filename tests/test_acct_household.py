@@ -339,7 +339,7 @@ class TestSettings:
                                               "safety_defaults": "1"})
         assert channels.status_code == 303, "channels alone need no step-up"
         assert query(portal, Household)[0].channels == {"email": False, "telegram": False,
-                                                        "sms": False}
+                                                        "whatsapp": False, "sms": False}
         _step_up(browser)
         assert browser.post("/settings", {"section": "sos", "window": "3600",
                                           "safety_defaults": "1"}).status_code == 303

@@ -1221,10 +1221,27 @@ def _owner_recipients_for(db, household_id: str | None):
         if link is not None and link.chat_id:
             out.append(Recipient("owner", owner.display_name or owner.username, "telegram",
                                  f"tg:{link.chat_id}", "owner"))
+    phone = _whatsapp_phone(owner.phone_enc)
+    if channels.get("whatsapp", True) and phone:
+        out.append(Recipient("owner", owner.display_name or owner.username, "whatsapp",
+                             phone, "owner"))
     if channels.get("email", True) and owner.email:
         out.append(Recipient("owner", owner.display_name or owner.username, "email",
                              owner.email, "owner"))
     return owner, out
+
+
+def _whatsapp_phone(sealed: str | None) -> str | None:
+    """The number for a WhatsApp recipient: only when the Cloud API is
+    configured (D17), so an unconfigured Portal queues nothing there."""
+    from sentrix.alerting.channels import whatsapp
+    from sentrix_portal import security
+    if not sealed or not whatsapp.configured():
+        return None
+    try:
+        return security.unseal(sealed) or None
+    except Exception:                         # a changed data key: no recipient
+        return None
 
 
 def _contact_recipients(db, row: AssistanceRequest):
@@ -1248,6 +1265,10 @@ def _contact_recipients(db, row: AssistanceRequest):
         if chat:
             recipients.append(Recipient(f"contact:{contact.id}", contact.name, "telegram",
                                         f"tg:{chat}", "contact"))
+        phone = _whatsapp_phone(contact.phone_enc)
+        if phone:
+            recipients.append(Recipient(f"contact:{contact.id}", contact.name, "whatsapp",
+                                        phone, "contact"))
         if contact.email:
             recipients.append(Recipient(f"contact:{contact.id}", contact.name, "email",
                                         contact.email, "contact"))
@@ -1277,7 +1298,7 @@ def _send_owner(db, row: AssistanceRequest, *, step: str, template: str, text: s
         buttons: tuple = ()
         body = text
         html_body = None
-        if with_buttons and recipient.channel == "telegram":
+        if with_buttons and recipient.channel in ("telegram", "whatsapp"):
             _, token = mint_token(db, purpose="action_link", row=row, subject_type="user",
                                   subject_id=owner.id, nonce=True)
             buttons = (Button("Alert my contacts and the SENTRIX desk", "approve",
@@ -1313,7 +1334,7 @@ def _send_contacts(db, row: AssistanceRequest, *, step: str, template: str,
             short, full = text_for(contact, page)
             buttons: tuple = ()
             html_body = None
-            if recipient.channel == "telegram":
+            if recipient.channel in ("telegram", "whatsapp"):
                 text = short
                 if token is not None and row.state in DESK_STATES | S.PROMPTING_STATES:
                     buttons = (Button("I'm handling it", "acknowledge",

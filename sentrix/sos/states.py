@@ -145,8 +145,8 @@ FLAGS = ("duress", "device_offline", "contacts_notified", "resident_safe",
          "repeat", "stale", "undelivered", "unacknowledged", "simulated")
 ACTORS = ("system", "owner", "member", "contact", "desk", "device_admin", "cloud")
 #: Where an answer came from (``response_channel``) or a message went.
-CHANNELS = ("lc", "portal", "telegram", "email", "sms", "desk", "contact_page",
-            "system")
+CHANNELS = ("lc", "portal", "telegram", "whatsapp", "email", "sms", "desk",
+            "contact_page", "system")
 AUTHORITIES = ("POLICE", "FIRE", "MEDICAL")
 URGENCIES = ("NORMAL", "HIGH")
 #: Desk resolve outcomes: the verdict they set.

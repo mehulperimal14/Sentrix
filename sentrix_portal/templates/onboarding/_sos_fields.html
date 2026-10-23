@@ -23,5 +23,6 @@
   <p class="help">The Portal and the device's own screen always show the prompt.</p>
   {{ ui.checkbox('channel_email', 'E-mail', values.get('channels', {}).get('email'), disabled=disabled) }}
   {{ ui.checkbox('channel_telegram', 'Telegram (link it below)', values.get('channels', {}).get('telegram'), disabled=disabled) }}
+  {{ ui.checkbox('channel_whatsapp', 'WhatsApp to my mobile number (answer with the buttons, no sign-in)', values.get('channels', {}).get('whatsapp'), disabled=disabled) }}
   {{ ui.checkbox('channel_sms', 'SMS from the device when it is offline or you have not seen the prompt for 10 minutes', values.get('channels', {}).get('sms'), disabled=disabled) }}
 </fieldset>
