@@ -45,6 +45,14 @@ def _siren(factory, clock=None, **kwargs) -> GpioSiren:
     return GpioSiren(pin_factory=factory, clock=clock or Clock(), **kwargs)
 
 
+def _wait_until_off(siren: GpioSiren, seconds: float = 3.0) -> None:
+    """Poll the relay until the real release timer has switched it off."""
+    import time
+    deadline = time.monotonic() + seconds
+    while siren.is_on and time.monotonic() < deadline:
+        time.sleep(0.02)
+
+
 class TestPolarity:
     def test_active_high_npn_driver_starts_low_and_drives_high(self, factory):
         siren = _siren(factory, active_low=False)
@@ -94,14 +102,34 @@ class TestRelease:
         siren.close()
 
     def test_real_timer_switches_it_off(self, factory):
-        import time
         siren = GpioSiren(pin_factory=factory)
         siren.activate(0.15)
         assert siren.is_on
-        deadline = time.monotonic() + 3.0
-        while siren.is_on and time.monotonic() < deadline:
-            time.sleep(0.02)
+        _wait_until_off(siren)
         assert not siren.is_on, "the release timer must turn the relay off"
+        siren.close()
+
+    def test_a_timer_that_wakes_early_tries_again(self, factory):
+        """A wait can end a few ms before time.monotonic() reaches the release
+        time (Windows); the one-shot timer then found nothing overdue and the
+        relay stayed on. The first reading on the timer thread is made 5 ms
+        short here, as measured on the laptop."""
+        import threading
+        import time
+        sirens, early = [], []
+
+        def clock():
+            if isinstance(threading.current_thread(), threading.Timer) and not early:
+                early.append(True)
+                return sirens[0]._release_at - 0.005
+            return time.monotonic()
+
+        siren = GpioSiren(pin_factory=factory, clock=clock)
+        sirens.append(siren)
+        siren.activate(0.1)
+        _wait_until_off(siren)
+        assert early, "the timer woke early once"
+        assert not siren.is_on, "an early wake re-arms and still turns the relay off"
         siren.close()
 
     def test_extensions_never_pass_the_maximum_on_time(self, factory):

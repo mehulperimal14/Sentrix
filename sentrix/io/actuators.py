@@ -294,11 +294,7 @@ class GpioSiren(Actuator):
             self.last_on_at = time.time()
             self.activations += 1
             self._release_at = release_at
-            if self._timer is not None:
-                self._timer.cancel()
-            self._timer = threading.Timer(release_at - now, self.release_if_overdue)
-            self._timer.daemon = True
-            self._timer.start()
+            self._arm(release_at - now)
         log.warning("*** GPIO SIREN ON (GPIO%d, %.1fs%s) ***", self.pin, release_at - now,
                     "" if self._real else ", mock pins: no relay")
 
@@ -307,6 +303,30 @@ class GpioSiren(Actuator):
             return
         with self._lock:
             self._off()
+
+    def _arm(self, delay: float) -> None:
+        """The one release timer, due in ``delay`` seconds (lock held)."""
+        if self._timer is not None:
+            self._timer.cancel()
+        self._timer = threading.Timer(max(0.0, delay), self._on_timer)
+        self._timer.daemon = True
+        self._timer.start()
+
+    def _on_timer(self) -> None:
+        """The release timer fired. Its wait can end a few milliseconds before
+        ``time.monotonic()`` reaches the release time (Windows times waits on
+        its coarser clock tick; up to 7 ms early measured on the laptop), and
+        a one-shot timer that found nothing overdue then left the relay on
+        until the gpio loop's check, or for good without that loop. An early
+        wake re-arms for the rest of the period."""
+        with self._lock:
+            if self._timer is not threading.current_thread():
+                return                          # switched off, or replaced by an extension
+            remaining = 0.0 if self._release_at is None else self._release_at - self._clock()
+            if remaining > 0:
+                self._arm(remaining)
+                return
+        self.release_if_overdue()
 
     def release_if_overdue(self) -> bool:
         """Switch off when the period has run out; True if it did. The
