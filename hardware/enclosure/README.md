@@ -26,8 +26,8 @@ Module 3 standard (RP-008153).
 | `sentrix_base` | floor down | 97 x 73 x 39 | none |
 | `sentrix_lid` | top face down (the SENTRIX lettering is on the bed) | 97 x 73 x 13 | none |
 | `sentrix_bracket` | base plate down | 28 x 38 x 16 | none |
-| `sentrix_pod` | lens face down | 31 x 34 x 15 | none |
-| `sentrix_pod_back` | flat | 31 x 34 x 4 | none |
+| `sentrix_pod` | lens face down | 33 x 30 x 15 | none |
+| `sentrix_pod_back` | flat | 33 x 30 x 4 | none |
 
 Every part fits a 120 x 120 mm bed, so any printer works (Ender 3, Prusa
 MK3/MK4/Mini, Bambu A1/A1 mini/P1/X1, Anycubic, Creality K1 and so on).
