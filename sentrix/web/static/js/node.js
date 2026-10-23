@@ -208,6 +208,21 @@
             : result.detail);
     }
 
+    async function buzzerTest(button) {
+        const status = document.getElementById("buzzer-test-message");
+        button.disabled = true;
+        const result = await S.api("/api/node/buzzer-test", { method: "POST" });
+        setTimeout(() => { button.disabled = false; }, 3000);
+        if (result.ok) {
+            S.message(status, true, (result.data && result.data.message) || "Two chirps.");
+            return;
+        }
+        S.message(status, false,
+            result.status === 404 ? "The buzzer test is not installed on this build."
+            : result.code === "rate_limited" ? "One test every few seconds."
+            : result.detail);
+    }
+
     function renderClip(clip) {
         // state.clip (track T-CLIP): the 4-second clip engine, or the tick loop.
         clip = clip || {};
@@ -246,6 +261,8 @@
             confirm.addEventListener("change", () => { siren.disabled = !confirm.checked; });
             siren.addEventListener("click", () => sirenTest(siren));
         }
+        const buzzer = document.getElementById("buzzer-test-btn");
+        if (buzzer) buzzer.addEventListener("click", () => buzzerTest(buzzer));
         const arm = document.getElementById("mode-arm");
         if (arm) arm.addEventListener("click", () => setMode(true));
         const disarm = document.getElementById("mode-disarm");

@@ -28,6 +28,13 @@
       <div class="sos-message" id="siren-test-message" role="status" aria-live="polite"></div>
     </div>
     {% endif %}
+    {% if 'buzzer_test' in caps %}
+    <div class="mt-2" id="buzzer-test-block">
+      <div><button type="button" class="btn btn-sm btn-outline" id="buzzer-test-btn">Test buzzer (2 chirps)</button></div>
+      <p class="sos-note">Sounding non-stop instead? Set <code>SENTRIX_BUZZER_ACTIVE_HIGH=0</code> in <code>.env</code> and restart.</p>
+      <div class="sos-message" id="buzzer-test-message" role="status" aria-live="polite"></div>
+    </div>
+    {% endif %}
   </div>
 
   <div class="card">

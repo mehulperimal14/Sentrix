@@ -88,7 +88,7 @@ WS_REAUTH_SECONDS = 60.0
 ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
     "device_admin": frozenset({"pages", "media", "gallery_view", "gallery_write",
                                "verdict", "sos", "dispatch", "mode", "siren_test",
-                               "speaker"}),
+                               "buzzer_test", "speaker"}),
     "owner": frozenset({"pages", "media", "gallery_view", "gallery_write",
                         "verdict", "sos", "dispatch", "mode", "siren_test", "speaker"}),
     "member": frozenset({"pages", "media", "gallery_view", "verdict", "sos",

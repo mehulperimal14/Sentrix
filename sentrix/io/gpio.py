@@ -65,6 +65,8 @@ BLINK_TIMES = {SLOW: (1.0, 1.0), FAST: (0.2, 0.2)}
 #: Buzzer patterns: (on seconds, off seconds, repeats).
 CHIRP_SHORT = (0.08, 0.12)
 CHIRP_LONG = (0.5, 0.3)
+#: ``buzzer_test``: at most one test chirp this often.
+BUZZER_TEST_MIN_INTERVAL_SECONDS = 3.0
 #: Committed level -> short chirps when the level rises to it. L5 is the siren.
 LEVEL_CHIRPS = {2: 1, 3: 2, 4: 3}
 #: A PIR motion row in the event log at most this often (a busy room).
@@ -441,6 +443,7 @@ class GpioService:
         self._last_pir_logged: float | None = None
         self._pir_suppressed = 0
         self._last_block: dict[str, Any] | None = None
+        self._last_buzzer_test: float | None = None
         self.buzzer_enabled = tunables.buzzer_enabled()
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
@@ -617,6 +620,33 @@ class GpioService:
             self.buzzer.beep(on_time=on, off_time=off, n=count, background=True)
         except Exception as exc:
             self.errors["buzzer"] = str(exc)
+
+    def buzzer_test(self, actor: str = "") -> dict[str, Any]:
+        """Two short chirps (an L3's), so whoever wires the buzzer hears it at
+        once: ``{"ok", "code", "message"}``. A buzzer that sounds non-stop
+        before the test has the opposite trigger level
+        (``SENTRIX_BUZZER_ACTIVE_HIGH``)."""
+        if self.buzzer is None:
+            reason = self.errors.get("buzzer") or "the GPIO service has no buzzer pin"
+            return {"ok": False, "code": "conflict", "message": f"No buzzer: {reason}."}
+        if not self.buzzer_enabled:
+            return {"ok": False, "code": "conflict",
+                    "message": "The buzzer is switched off (SENTRIX_BUZZER_ENABLED=0)."}
+        now = self._clock()
+        with self._lock:
+            last = self._last_buzzer_test
+            if last is not None and now - last < BUZZER_TEST_MIN_INTERVAL_SECONDS:
+                return {"ok": False, "code": "rate_limited",
+                        "retry_after": BUZZER_TEST_MIN_INTERVAL_SECONDS - (now - last),
+                        "message": "One test every few seconds."}
+            self._last_buzzer_test = now
+        self._beep(*CHIRP_SHORT, 2)
+        self._audit("buzzer_test", by=actor, pin=self.cfg.buzzer_pin,
+                    active_high=bool(self.cfg.buzzer_active_high))
+        return {"ok": True, "code": "ok", "pin": self.cfg.buzzer_pin,
+                "active_high": bool(self.cfg.buzzer_active_high),
+                "real": bool(self.factory_info.real),
+                "message": f"Two chirps on GPIO{self.cfg.buzzer_pin}."}
 
     def lamp_test(self, seconds: float = 0.5) -> None:
         """Every LED on briefly at start-up, so a dead LED shows at once."""

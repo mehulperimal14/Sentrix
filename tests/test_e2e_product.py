@@ -253,9 +253,10 @@ def lc_page_routes(app) -> set[str]:
 
 
 #: Controls only the device admin on the LAN has: signing out of the LC
-#: session, and the disclosed scripted trigger (docs/7 §9.2).
+#: session, the disclosed scripted trigger (docs/7 §9.2) and the buzzer test.
 LAN_ONLY_IDS = frozenset({"logout-link", "sos-demo-trigger", "sos-demo-trigger-box",
-                          "sos-demo-trigger-type"})
+                          "sos-demo-trigger-type", "buzzer-test-block", "buzzer-test-btn",
+                          "buzzer-test-message"})
 
 
 def test_tunnel_parity_on_every_console_page(world):
