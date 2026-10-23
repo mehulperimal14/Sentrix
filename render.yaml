@@ -1,0 +1,58 @@
+# Render Blueprint: the SENTRIX Portal (D18). Render -> New -> Blueprint ->
+# this repository. Steps and the WhatsApp set-up: deploy/cloud/README.md.
+#
+# One Starter instance in Singapore with a 1 GB disk on /data (SQLite and the
+# Portal's files survive deploys); the image is deploy/portal/Dockerfile.
+# Values marked "sync: false" are asked for once, in Render's dashboard: the
+# secrets, and the switches that let messages leave (test mode stays on, D13;
+# only SENTRIX_TEST_RECIPIENTS can receive anything, D17).
+services:
+  - type: web
+    name: sentrix-portal
+    runtime: docker
+    plan: starter
+    region: singapore
+    dockerfilePath: ./deploy/portal/Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    numInstances: 1
+    autoDeploy: true
+    disk:
+      name: sentrix-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: PORTAL_WORKERS
+        value: "1"
+      - key: PORTAL_SECURE_COOKIES
+        value: "1"
+      - key: PORTAL_TRUSTED_PROXIES
+        value: "*"
+      - key: PORTAL_TEST_MODE
+        value: "1"
+      - key: SENTRIX_TEST_MODE
+        value: "1"
+      - key: PORTAL_LOG_LEVEL
+        value: info
+      - key: PORTAL_BOOTSTRAP_ADMIN
+        value: admin
+      - key: PORTAL_SECRET_KEY
+        generateValue: true
+      - key: PORTAL_DATA_KEY
+        generateValue: true
+      - key: WHATSAPP_VERIFY_TOKEN
+        generateValue: true
+      - key: WHATSAPP_MODE
+        value: auto
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_APP_SECRET
+        sync: false
+      - key: SENTRIX_TEST_RECIPIENTS
+        sync: false
+      - key: SENTRIX_LIVE_ALERTS
+        sync: false
+      - key: SENTRIX_WHATSAPP_LIVE
+        sync: false

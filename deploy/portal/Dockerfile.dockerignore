@@ -7,6 +7,7 @@
 !deploy/portal/requirements.txt
 !tools/provision_device.py
 !tools/portal_pg_check.py
+!deploy/portal/start.py
 **/__pycache__
 **/*.pyc
 sentrix/**/*.pt

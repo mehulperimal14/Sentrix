@@ -49,6 +49,16 @@ SECRET_KEY_FILE = "secret_key"
 DATA_KEY_FILE = "data_key"
 
 
+def _platform_url() -> str:
+    """The public URL a hosting platform announces: Render's
+    ``RENDER_EXTERNAL_URL``, else Railway's ``RAILWAY_PUBLIC_DOMAIN``."""
+    render = _str("RENDER_EXTERNAL_URL", "")
+    if render:
+        return render
+    railway = _str("RAILWAY_PUBLIC_DOMAIN", "")
+    return f"https://{railway}" if railway else ""
+
+
 def _default_data_dir() -> str:
     return _str("PORTAL_DATA_DIR", str(PORTAL_VAR_DIR))
 
@@ -124,7 +134,8 @@ class PortalSettings:
             database_url=_str("PORTAL_DATABASE_URL", DEFAULT_DATABASE_URL),
             secret_key=_str("PORTAL_SECRET_KEY", ""),
             data_key=_str("PORTAL_DATA_KEY", ""),
-            base_url=_str("PORTAL_BASE_URL", "http://portal.localhost:8100").rstrip("/"),
+            base_url=_str("PORTAL_BASE_URL", _platform_url()
+                          or "http://portal.localhost:8100").rstrip("/"),
             test_mode=test_mode_flag("PORTAL_TEST_MODE"),
             host=_str("PORTAL_HOST", "127.0.0.1"),
             # A platform that picks the port (Railway, Render) sets PORT.

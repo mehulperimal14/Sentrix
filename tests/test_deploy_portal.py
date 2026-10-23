@@ -76,8 +76,13 @@ class TestImage:
     def test_slim_non_root_portal_only(self):
         text = (DEPLOY / "Dockerfile").read_text(encoding="utf-8")
         assert re.search(r"(?m)^FROM python:3\.\d+-slim$", text)
+        # The container starts as root only to hand the mounted /data volume to
+        # sentrix; start.py then drops root for good and runs CMD (D18).
         users = re.findall(r"(?m)^USER\s+(\S+)", text)
-        assert users and users[-1].split(":")[0] not in ("root", "0")
+        assert not users or users[-1].split(":")[0] not in ("root", "0")
+        assert 'ENTRYPOINT ["python", "/app/start.py"]' in text
+        start = (DEPLOY / "start.py").read_text(encoding="utf-8")
+        assert 'USER = "sentrix"' in start and "os.setuid(" in start
         assert re.search(r"useradd --system --uid (\d+)", text).group(1) != "0"
         copies = re.findall(r"(?m)^COPY\s+(.+)$", text)
         assert not any(re.match(r"\.\s", c) or ".env" in c or "models" in c for c in copies)
@@ -92,7 +97,8 @@ class TestImage:
         assert lines[0] == "*", "deny everything first"
         allowed = {line[1:].rstrip("/") for line in lines if line.startswith("!")}
         assert allowed <= {"sentrix", "sentrix_portal", "deploy/portal/requirements.txt",
-                           "tools/provision_device.py", "tools/portal_pg_check.py"}
+                           "tools/provision_device.py", "tools/portal_pg_check.py",
+                           "deploy/portal/start.py"}
         copied = re.findall(r"(?m)^COPY\s+(.+)\s+/app/", (DEPLOY / "Dockerfile")
                             .read_text(encoding="utf-8"))
         for sources in copied:

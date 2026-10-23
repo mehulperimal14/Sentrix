@@ -1,0 +1,14 @@
+# The same list as deploy/portal/Dockerfile.dockerignore, for a builder that
+# reads only the context root's .dockerignore (Render, Railway): the Portal
+# image is the only one built from the repository root.
+*
+!sentrix/
+!sentrix_portal/
+!deploy/portal/requirements.txt
+!tools/provision_device.py
+!tools/portal_pg_check.py
+!deploy/portal/start.py
+**/__pycache__
+**/*.pyc
+sentrix/**/*.pt
+sentrix/**/*.onnx
