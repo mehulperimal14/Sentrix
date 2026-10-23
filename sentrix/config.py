@@ -347,6 +347,11 @@ class AudioConfig:
     })
     #: Very calm talk (``calm_talk`` over its strict bar) also counts as banter.
     calm_talk_is_benign: bool = _env_bool("SENTRIX_AUDIO_CALM_TALK_BENIGN", True)
+    #: Seconds between looks for a microphone while none is connected, and
+    #: the silence after which a connected one counts as unplugged. A USB
+    #: microphone plugged in (or back in) later is picked up without a restart.
+    mic_retry_seconds: float = _env_float("SENTRIX_MIC_RETRY_SECONDS", 5.0)
+    mic_stall_seconds: float = _env_float("SENTRIX_MIC_STALL_SECONDS", 5.0)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

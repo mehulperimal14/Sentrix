@@ -281,6 +281,10 @@ class AudioEngine:
         self._thread: threading.Thread | None = None
         self._stream = None
         self._blocks: queue.Queue = queue.Queue(maxsize=32)
+        #: Monotonic time of the last block the microphone delivered.
+        self._last_block_at = 0.0
+        self._watcher: threading.Thread | None = None
+        self.microphone: str | None = None
 
         self._model = None
         self._device = None
@@ -371,33 +375,85 @@ class AudioEngine:
     def _start_capture(self) -> None:
         """One persistent ``InputStream`` (no gaps between hops, unlike a
         fresh ``sd.rec`` per hop); its callback only queues the block with its
-        capture time, and a worker thread classifies."""
+        capture time, and a worker thread classifies. A watcher thread keeps
+        looking for a microphone while none is connected and reopens it after
+        an unplug, so a USB microphone plugged in later works without a
+        restart."""
         if not _SD:
-            log.warning("sounddevice not installed — microphone disabled")
+            log.warning("sounddevice not installed — microphone disabled "
+                        "(on a Pi: sudo apt install libportaudio2)")
             return
-        try:
-            info = sd.query_devices(kind="input")
-            log.info("microphone: %s", info.get("name", "default"))
-        except Exception as exc:
-            log.warning("no input device (%s) — microphone disabled", exc)
-            return
-        sr = self.cfg.audio_sample_rate
-        try:
-            self._stream = sd.InputStream(samplerate=sr, channels=1, dtype="float32",
-                                          blocksize=int(sr * self.cfg.audio_hop_seconds),
-                                          callback=self._on_block)
-            self._stream.start()
-        except Exception as exc:
-            log.warning("microphone stream failed (%s) — microphone disabled", exc)
-            self._stream = None
-            return
-        self.available = True
         self._thread = threading.Thread(target=self._loop, daemon=True,
                                         name="sentrix-audio")
         self._thread.start()
+        if not self._open_stream(refresh=False):
+            log.info("no microphone yet — looking for one every %.0f s",
+                     settings.audio.mic_retry_seconds)
+        self._watcher = threading.Thread(target=self._watch, daemon=True,
+                                         name="sentrix-mic-watch")
+        self._watcher.start()
+
+    def _open_stream(self, refresh: bool) -> bool:
+        """Open the default input device. ``refresh`` re-initialises
+        PortAudio first: it lists devices once, when it starts, so a newly
+        plugged microphone is invisible until then."""
+        if refresh:
+            try:
+                sd._terminate()
+                sd._initialize()
+            except Exception as exc:
+                log.debug("PortAudio refresh failed: %s", exc)
+        try:
+            info = sd.query_devices(kind="input")
+        except Exception:
+            return False
+        sr = self.cfg.audio_sample_rate
+        try:
+            stream = sd.InputStream(samplerate=sr, channels=1, dtype="float32",
+                                    blocksize=int(sr * self.cfg.audio_hop_seconds),
+                                    callback=self._on_block)
+            stream.start()
+        except Exception as exc:
+            log.debug("microphone stream failed (%s)", exc)
+            return False
+        self._stream = stream
+        self._ring = np.zeros(0, dtype=np.float32)
+        self._last_block_at = time.monotonic()
+        self.microphone = str(info.get("name", "default")) if isinstance(info, dict) else "default"
+        self.available = True
+        log.info("microphone connected: %s", self.microphone)
+        return True
+
+    def _close_stream(self, reason: str) -> None:
+        stream, self._stream = self._stream, None
+        self.available = False
+        if stream is not None:
+            try:
+                stream.stop()
+                stream.close()
+            except Exception as exc:
+                log.debug("microphone stream close failed: %s", exc)
+            log.warning("microphone lost (%s) — looking for it again", reason)
+        self.microphone = None
+
+    def _watch(self) -> None:
+        """Connect a microphone that appears later; reconnect after an unplug
+        (the stream stops, or delivers nothing for ``mic_stall_seconds``)."""
+        retry = max(0.5, settings.audio.mic_retry_seconds)
+        stall = max(1.0, settings.audio.mic_stall_seconds)
+        while not self._stop.wait(retry):
+            if self._stream is None:
+                self._open_stream(refresh=True)
+                continue
+            active = getattr(self._stream, "active", True)
+            if not active:
+                self._close_stream("stream stopped")
+            elif time.monotonic() - self._last_block_at > stall:
+                self._close_stream(f"no sound data for {stall:.0f} s")
 
     def _on_block(self, indata, frames, time_info, status) -> None:
         """PortAudio callback: copy, stamp, hand over. Never blocks."""
+        self._last_block_at = time.monotonic()
         end_at = block_end_monotonic(time_info, frames, self.cfg.audio_sample_rate)
         item = (np.array(indata[:, 0] if getattr(indata, "ndim", 1) > 1 else indata,
                          dtype=np.float32, copy=True), end_at, time.time())
@@ -614,14 +670,16 @@ class AudioEngine:
     def stop(self) -> None:
         self._stop.set()
         stream = getattr(self, "_stream", None)
+        self._stream = None
         if stream is not None:
             try:
                 stream.stop()
                 stream.close()
             except Exception as exc:
                 log.debug("microphone stream close failed: %s", exc)
-        if self._thread is not None:
-            self._thread.join(timeout=2.0)
+        for thread in (self._thread, getattr(self, "_watcher", None)):
+            if thread is not None:
+                thread.join(timeout=2.0)
 
 
 def block_end_monotonic(time_info, frames: int, rate: int, now: float | None = None) -> float:
