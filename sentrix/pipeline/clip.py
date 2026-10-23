@@ -1583,7 +1583,7 @@ def _runtime_detector():
     if resolve_backend() == "torch":
         return None
     from sentrix.runtime.detector import RuntimeDetector
-    detector = RuntimeDetector.build()
+    detector = RuntimeDetector.build(imgsz=int(settings.clip.imgsz))
     if not detector.available:
         log.error("no runtime person head; clip mode keeps the torch detector")
         return None

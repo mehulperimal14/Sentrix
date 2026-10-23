@@ -158,7 +158,8 @@ def main(argv: list[str] | None = None) -> int:
         report["clip_config"] = {k: getattr(settings.clip, k) for k in (
             "window_seconds", "hop_seconds", "keyframes", "uniform_keyframes",
             "motion_keyframes", "confirm_keyframes", "min_escalate_observations",
-            "fast_lane_imgsz", "fast_lane_every_n", "fast_lane_hits", "runtime")}
+            "fast_lane_imgsz", "fast_lane_every_n", "fast_lane_hits", "runtime", "imgsz",
+            "scene_keyframes")}
         report["clip_config"]["fast_lane"] = bool(args.fast_lane)
     groups = {"all": videos}
     for split in ("val", "test", "train"):

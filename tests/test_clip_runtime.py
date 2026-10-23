@@ -220,6 +220,26 @@ class TestRuntimeDetector:
         assert plausible((0, 0, 100, 100), (480, 640, 3))
         assert not plausible((0, 0, 640, 480), (480, 640, 3))
 
+    @pytest.mark.parametrize("size", [640, 320])
+    def test_clip_object_stage_uses_the_clip_size(self, monkeypatch, size):
+        """SENTRIX_CLIP_IMGSZ picks the exported heads of the clip's S1."""
+        from dataclasses import replace
+
+        import sentrix.runtime as runtime
+        from sentrix.pipeline import clip
+
+        built = []
+
+        def fake_build(cls, imgsz=None, **kwargs):
+            built.append(imgsz)
+            return RuntimeDetector(ScriptHead([]), None, None)
+
+        monkeypatch.setattr(runtime, "resolve_backend", lambda *a: "onnx")
+        monkeypatch.setattr(RuntimeDetector, "build", classmethod(fake_build))
+        monkeypatch.setattr(clip, "settings",
+                            replace(settings, clip=replace(settings.clip, imgsz=size)))
+        assert clip._runtime_detector() is not None and built == [size]
+
 
 # ── ncnn (the package is optional: a fake module stands in) ──────────────────
 class FakeMat:

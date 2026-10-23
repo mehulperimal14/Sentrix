@@ -851,6 +851,10 @@ class ClipConfig:
     budget_fraction: float = 0.8
     fast_lane: bool = _env_bool("SENTRIX_FAST_LANE", False)
     fast_lane_imgsz: int = 320
+    #: Detector input size of the clip's object stage (S1) on exported heads;
+    #: 640 is what the clip replays validated, 320 is ~4x cheaper (a Pi 5 runs
+    #: the three 640 heads at ~0.46 s per keyframe).
+    imgsz: int = _env_int("SENTRIX_CLIP_IMGSZ", 640)
     fast_lane_every_n: int = 4
     fast_lane_hits: int = 2
     #: Model runtime for exported models: torch | onnx | ncnn.
@@ -866,8 +870,8 @@ class ClipConfig:
     buffer_fps: float = 15.0
     #: Frames wider than this are downscaled on capture (640x480 lores).
     analysis_width: int = 640
-    #: New scene-classifier inferences per clip (S2).
-    scene_keyframes: int = 2
+    #: New scene-classifier inferences per clip (S2; DINOv2-B is ~1.2 s a frame on a Pi 5).
+    scene_keyframes: int = _env_int("SENTRIX_CLIP_SCENE_KEYFRAMES", 2)
     #: S0: clip motion peak that opens the cascade (a still, empty room gate).
     gate_motion_floor: float = 0.015
     #: S0 stays open this long after a clip saw a person or a fire candidate.
