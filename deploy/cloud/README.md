@@ -161,6 +161,12 @@ and sending variables above). `PORTAL_BASE_URL` comes from
 3. **Customers → New customer** (the owner) → the welcome letter shows the
    owner's activation link.
 
+**Forgot the admin password?** Render → service → **Environment** → add
+`PORTAL_RESET_ADMIN=admin` → **Save** (the service restarts) → **Logs**:
+`new password for company admin 'admin' - set it once at https://…/activate/…`.
+Open it, choose a new password; the authenticator entry stays the same. Then
+delete `PORTAL_RESET_ADMIN` again.
+
 ## 4. The owner's flow (what the professors see)
 
 1. The owner opens the activation link → sets a password → the **7-step

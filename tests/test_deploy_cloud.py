@@ -113,6 +113,31 @@ class TestBootstrapAdmin:
         out = capsys.readouterr().out
         assert "company admin 'admin'" in out and "/activate/" in out
 
+    def test_reset_link_for_an_existing_admin(self, portal_app, monkeypatch, capsys):
+        from sentrix_portal.models import ActivationCode, User
+        from sentrix_portal.services import accounts
+        with portal_app.state.db.session() as db:
+            assert accounts.bootstrap_admin(db, "admin")
+            user = db.query(User).filter_by(username="admin").one()
+            user.status, user.password_hash, user.totp_enabled = "active", "old-hash", True
+            user.totp_secret_enc = "sealed-secret"
+            db.add(User(username="riya", display_name="Riya", role="owner", status="active"))
+            db.flush()
+            assert accounts.admin_reset_link(db, "riya") is None, "admins only"
+            assert accounts.admin_reset_link(db, "nobody") is None
+            link = accounts.admin_reset_link(db, "Admin")
+            assert link and "/activate/" in link
+            codes = db.query(ActivationCode).filter_by(user_id=user.id, used_at=None).all()
+            assert [c.purpose for c in codes if c.purpose == "reset"]
+            # nothing else changes: the password works until the link is used, TOTP stays
+            assert user.password_hash == "old-hash" and user.totp_enabled
+            assert user.totp_secret_enc == "sealed-secret"
+        monkeypatch.setenv("PORTAL_RESET_ADMIN", "admin")
+        with TestClient(portal_app):
+            pass
+        out = capsys.readouterr().out
+        assert "new password for company admin 'admin'" in out and "/activate/" in out
+
     def test_nothing_without_the_variable(self, portal_app, capsys):
         with TestClient(portal_app):
             pass

@@ -57,6 +57,7 @@ _FORCED_ENV = {
     "RESEND_API_KEY": "", "SENTRIX_PORTAL_URL": "",
     "WHATSAPP_ACCESS_TOKEN": "", "WHATSAPP_PHONE_NUMBER_ID": "", "WHATSAPP_APP_SECRET": "",
     "WHATSAPP_VERIFY_TOKEN": "", "WHATSAPP_MODE": "", "PORTAL_BOOTSTRAP_ADMIN": "",
+    "PORTAL_RESET_ADMIN": "",
     # runtime files: the whole device var/ tree (database, events, evidence,
     # snapshots, faces, calibration, mode) in the session dir, never var/
     "SENTRIX_VAR_DIR": str(_SESSION_DIR / "var"),

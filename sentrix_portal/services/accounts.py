@@ -757,6 +757,25 @@ def bootstrap_admin(db: Session, username: str | None) -> str | None:
     return activation_url(code)
 
 
+def admin_reset_link(db: Session, username: str | None) -> str | None:
+    """``PORTAL_RESET_ADMIN=<username>``: a single-use link (72 h) that sets a
+    new password for that company admin, for a deploy without e-mail or a
+    shell. The old password works until the link is used; the authenticator
+    (TOTP) stays as it is. Each call replaces the previous link."""
+    errors = FormErrors()
+    name = clean_username(errors, "username", username) if username else None
+    if not name:
+        if username:
+            log.error("PORTAL_RESET_ADMIN=%r is not a valid username", username)
+        return None
+    user = db.query(User).filter_by(username=name).first()
+    if user is None or user.role != "company_admin":
+        log.error("PORTAL_RESET_ADMIN: %s is not a company admin", name)
+        return None
+    code, _ = issue_activation_code(db, user, purpose="reset", actor_type="system")
+    return activation_url(code)
+
+
 def set_household_status(db: Session, household: Household, status: str, *,
                          actor_id: str | None, ip: str | None = None) -> None:
     """Admin deactivate / reactivate. Deactivating ends every session and
