@@ -13,7 +13,10 @@
 # plus the system setup (service user, systemd, watchdog, NetworkManager).
 #
 # Same packages as requirements.txt except: headless OpenCV < 5 (no Qt/X11 on
-# the unit; 5.x is untested), no pytest, CPU torch from PyPI's aarch64 wheels.
+# the unit; 5.x is untested), no pytest, CPU torch. Install torch, torchvision
+# and torchaudio from https://download.pytorch.org/whl/cpu FIRST (run.sh and
+# install_pi.sh do): PyPI's aarch64 torch wheels pull several GB of NVIDIA
+# CUDA libraries (nvidia-*-cu13, triton) that a Pi cannot use.
 # ultralytics depends on opencv-python, and both builds provide cv2: run.sh and
 # install_pi.sh uninstall opencv-python after this file and reinstall the
 # headless build, so exactly one cv2 remains. Track T-HW owns this file; keep

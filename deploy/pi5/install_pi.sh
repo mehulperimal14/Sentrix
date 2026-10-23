@@ -140,6 +140,10 @@ if [ ! -x .venv/bin/python ]; then
     run python3 -m venv --system-site-packages .venv
 fi
 run .venv/bin/python -m pip install --upgrade pip --quiet
+# PyPI's aarch64 torch wheels now pull several GB of NVIDIA CUDA libraries
+# (nvidia-*-cu13, triton) the Pi cannot use: install the CPU build first, so
+# requirements-pi.txt finds torch already satisfied.
+run .venv/bin/python -m pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision torchaudio
 run .venv/bin/python -m pip install -r requirements-pi.txt
 # ultralytics depends on opencv-python (Qt/X11 build); both it and the
 # headless build provide cv2, so keep exactly one: the headless one.

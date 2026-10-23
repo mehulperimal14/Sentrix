@@ -73,6 +73,11 @@ STAMP=".venv/.requirements.sha256"
 HASH=$("$PY" -c "import hashlib,pathlib;print(hashlib.sha256(pathlib.Path('$REQUIREMENTS').read_bytes()).hexdigest())")
 if [ ! -f "$STAMP" ] || [ "$(cat "$STAMP")" != "$HASH" ]; then
     "$PY" -m pip install --upgrade pip --quiet
+    if [ "$ON_PI" = 1 ]; then
+        # PyPI's aarch64 torch now pulls GBs of NVIDIA CUDA wheels the Pi cannot
+        # use; the CPU build first keeps requirements-pi.txt from fetching them.
+        "$PY" -m pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision torchaudio --quiet
+    fi
     "$PY" -m pip install -r "$REQUIREMENTS" --quiet
     if [ "$ON_PI" = 1 ] && "$PY" -m pip show opencv-python >/dev/null 2>&1; then
         # ultralytics pulls the Qt build of OpenCV; keep only the headless one.
