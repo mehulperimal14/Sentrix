@@ -53,7 +53,8 @@ onnxruntime>=1.18.0      # aarch64 wheel; the clip profile runs exported models 
 scikit-learn>=1.5.1
 scipy>=1.14.0
 pandas>=2.2.0
-xgboost>=2.1.1
+# xgboost is left out on the Pi: nothing at runtime imports it (the synthetic
+# booster is retired, D6) and its aarch64 wheel pulls nvidia-nccl-cu13 (305 MB).
 
 # audio (the PANNs CNN10 sound model needs only torch + scipy; weights in
 # models/audio/, tools/fetch_models.py re-downloads them if missing)

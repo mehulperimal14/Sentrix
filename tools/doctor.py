@@ -57,9 +57,9 @@ class Report:
 def check_dependencies(report: Report) -> None:
     report.section("dependencies")
     required = ["fastapi", "uvicorn", "jinja2", "sqlalchemy", "dotenv",
-                "cryptography", "cv2", "numpy", "torch", "ultralytics",
-                "xgboost", "scipy"]
+                "cryptography", "cv2", "numpy", "torch", "ultralytics", "scipy"]
     optional = {
+        "xgboost": "only the retired synthetic booster and notebooks use it (D6); not needed at runtime",
         "sounddevice": "microphone capture — audio modality is disabled without it",
         "insightface": "recommended face backend (pip install insightface onnxruntime)",
         "face_recognition": "alternative face backend (needs a C++ compiler)",
