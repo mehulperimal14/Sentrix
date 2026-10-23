@@ -86,6 +86,7 @@ training/runs/custom_eval/*
 !training/runs/custom_eval/m11_homelog/
 !training/runs/custom_eval/m11b/
 !training/runs/custom_eval/m11b_homelog/
+!training/runs/custom_eval/pi5/
 
 # ── stray outputs ─────────────────────────────────────────────────────────────
 # Ultralytics downloads base weights into the working directory and writes runs/

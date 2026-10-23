@@ -196,6 +196,18 @@ levels match the scene; audio in sync with video; fight vs friendly banter
 decided by video + audio; unknown people never above L2; the owner can speak
 to the room. Decisions D15 and D16, D2/D8 amended; milestone M11 (section 6).
 
+### Raspberry Pi 5 bring-up for the demo (2026-10-23, local commits after `48142c0`)
+
+The team's Pi 5 (8 GB, Trixie, Camera Module 3) runs the `pi5-clip` profile
+from `~/Sentrix` as a systemd **user** service (`sentrix.service`, linger on)
+with the dashboard opened at desktop login. Found and fixed on the way: PyPI's
+aarch64 torch and xgboost pull CUDA wheels (CPU torch first, xgboost dropped,
+`fc9cc29`, `adcd718`); a USB microphone plugged in while running is picked up
+(`019854c`); 3-pin low-level-trigger buzzer modules and unwired PIR/door/mains
+inputs (`8526815`); a Node-page buzzer test (`a892d24`); the clip object stage
+at 320 px on the Pi (`4503b0d` + results, section 4.3). Microphone and buzzer
+arrive on 2026-10-30; nothing has been heard or chirped on the Pi yet.
+
 ---
 
 ## 3. Git history
@@ -346,6 +358,7 @@ validated** (2 videos / 1 event). Only two rooms are represented.
 | M11b clip mode + fast lane, same videos with audio | = clip baseline `575e463` at L3+: L3 weapon 9/12, fire 3/3; L4 weapon 6/12; L5 weapon 5/12, fire 2/3; 0 false onsets at L3+; L2 0 → 3 (unknown-person L2) | `training/runs/custom_eval/m11b/replay_all_fastlane.json` (`ba0bf17`) |
 | M11 live session `c27258a25457` re-decided (no audio in that log) | home: L2+/L3+/L4+ onsets 30/9/6 as logged → **5/0/0** (5 = unknown-person L2, D15); armed: → **9/0/0** (M1 had 9 L3 intrusions); unchanged by the review fixes | `training/runs/custom_eval/m11b/live_session_{home,armed}.json` (`ba0bf17`) |
 | Sound model | PANNs CNN10 (AudioSet, 527 classes, 25 MB) on its own onnxruntime session: **40.1 ms p50 / 42.3 ms p95** per 4 s window, laptop CPU, 2 intra-op threads; torch's threads untouched (DINOv2 97.9 → 96.4 ms/frame after building the audio engine; the first M11 version's `set_num_threads(2)` doubled it) | `AudioEngine.classify_window`, `SceneEngine.score_frames` (`ba0bf17`) |
+| Pi 5 clip engine (ONNX, fast lane, `buffalo_s`; `gun.mov` as a 30 fps camera) | clip compute p50 **8.0 s** at 640 px objects (74 % of clips dropped, decisions 9.3 s old) → **3.9 s at 320 px** (48 %, 4.3 s), 2.2 s at 320 px + 1 scene frame (10 %, 3.2 s); budget 1.6 s. Clip replay of the 9 train + val videos (`wa02` not replayed, partly in-sample): 640 / 320 / 320 + 1 scene frame → L3 weapon 9/9, 9/9, 8/9; fire 3/3, 3/3, 2/3; L4 weapon 6/8, 5/8, 3/8; 0 false onsets at L3+. The Pi profile uses 320 px (`SENTRIX_CLIP_IMGSZ=320`) | `training/runs/custom_eval/pi5/REPORT.md` (knobs `4503b0d`) |
 
 ---
 

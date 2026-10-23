@@ -1,0 +1,29 @@
+== imgsz 640 scene_keyframes 2
+18:39:10 INFO    sentrix.clip             clip mode: 4 s window every 2 s, 6 keyframes, threads {'threads': 4, 'torch': 4, 'opencv': 4}, fast lane off
+18:39:10 INFO    sentrix.fastlane         fast lane ready: {'person': 'onnx', 'weapon': 'onnx', 'fire': 'onnx'} at 320 px, every 4 frames, 2 hits
+  clips     8 analysed, 23 dropped (74.2 %)
+  compute   p50 7983.0 ms  p95 8071.2 ms  (budget 1600 ms: OVER)
+  frame age p50 9340.1 ms  p95 9613.8 ms
+    S1_objects   p50  5642.7 ms  p95  5759.0 ms  calls/clip 5.88
+    S2_scene     p50  2330.5 ms  p95  2450.4 ms  calls/clip 2.0
+  fast lane p50 293.1 ms  p95 334.1 ms  3.38 passes/s
+== imgsz 320 scene_keyframes 2
+18:40:25 INFO    sentrix.clip             clip mode: 4 s window every 2 s, 6 keyframes, threads {'threads': 4, 'torch': 4, 'opencv': 4}, fast lane off
+18:40:26 INFO    sentrix.fastlane         fast lane ready: {'person': 'onnx', 'weapon': 'onnx', 'fire': 'onnx'} at 320 px, every 4 frames, 2 hits
+  clips     16 analysed, 15 dropped (48.4 %)
+  compute   p50 3853.3 ms  p95 3940.1 ms  (budget 1600 ms: OVER)
+  frame age p50 4260.4 ms  p95 4641.0 ms
+    S1_objects   p50  1509.9 ms  p95  1620.1 ms  calls/clip 5.75
+    S2_scene     p50  2359.8 ms  p95  2447.2 ms  calls/clip 2.0
+  fast lane p50 286.7 ms  p95 354.3 ms  3.48 passes/s
+== imgsz 320 scene_keyframes 1
+18:41:40 INFO    sentrix.clip             clip mode: 4 s window every 2 s, 6 keyframes, threads {'threads': 4, 'torch': 4, 'opencv': 4}, fast lane off
+18:41:40 INFO    sentrix.fastlane         fast lane ready: {'person': 'onnx', 'weapon': 'onnx', 'fire': 'onnx'} at 320 px, every 4 frames, 2 hits
+  clips     27 analysed, 3 dropped (10.0 %)
+  compute   p50 2176.7 ms  p95 2711.5 ms  (budget 1600 ms: OVER)
+  frame age p50 3234.7 ms  p95 4180.1 ms
+    S1_objects   p50  1009.3 ms  p95  1531.3 ms  calls/clip 4.04
+    S2_scene     p50  1163.6 ms  p95  1205.5 ms  calls/clip 1.0
+  fast lane p50 263.3 ms  p95 316.9 ms  3.7 passes/s
+buffalo_s
+temp=57.1'C
