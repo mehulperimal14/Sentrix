@@ -132,11 +132,18 @@ def ip_digest(ip: str | None) -> str | None:
 
 
 def client_ip(request: Request) -> str | None:
-    """The client address; X-Forwarded-For only from a trusted proxy (Caddy)."""
+    """The client address; from a trusted proxy (Caddy, or any peer with
+    ``PORTAL_TRUSTED_PROXIES=*`` behind Railway's edge) its X-Real-IP, else
+    the first X-Forwarded-For entry."""
     peer = request.client.host if request.client else None
     trusted = portal_settings.current().trusted_proxies
+    if peer not in trusted and "*" not in trusted:
+        return peer
+    real = (request.headers.get("x-real-ip") or "").strip()
+    if real:
+        return real
     forwarded = request.headers.get("x-forwarded-for")
-    if forwarded and peer in trusted:
+    if forwarded:
         return forwarded.split(",")[0].strip() or peer
     return peer
 

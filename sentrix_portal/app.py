@@ -25,6 +25,7 @@ from __future__ import annotations
 import importlib
 import inspect
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -96,8 +97,28 @@ async def _stop_background(stops: list[tuple[str, object]]) -> None:
             log.error("background module %s failed to stop: %s", name, exc)
 
 
+def _bootstrap_admin(app: FastAPI) -> None:
+    """The first company admin of a deploy without a shell (``accounts.bootstrap_admin``):
+    its activation link goes to stdout once, where only the deploy's owner reads it."""
+    username = os.getenv("PORTAL_BOOTSTRAP_ADMIN", "").strip()
+    if not username:
+        return
+    from sentrix_portal.services import accounts
+    try:
+        with app.state.db.session() as db:
+            link = accounts.bootstrap_admin(db, username)
+    except Exception as exc:
+        log.error("PORTAL_BOOTSTRAP_ADMIN failed: %s", exc)
+        return
+    if link:
+        print(f"SENTRIX Portal: company admin '{username.lower()}' - activate it once at "
+              f"{link} (single use, 72 h; TOTP is set up at the first sign-in). "
+              "Remove PORTAL_BOOTSTRAP_ADMIN afterwards.", flush=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _bootstrap_admin(app)
     stops = await _start_background(app) if app.state.settings.workers else []
     app.state.background = [name for name, _ in stops]
     try:

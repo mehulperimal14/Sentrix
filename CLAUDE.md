@@ -96,7 +96,10 @@ custom-data training guide: `ROADMAP.md`; doc index: `docs/README.md`.
 ### Rules for working here
 
 * **Never let a test, evaluation, replay or demo send an alert.** `.env` may hold
-  live Twilio keys. Test mode is on by default (D13); every message passes
+  live Twilio keys. *The one exception is D17: during the team's own demo the
+  Portal may send test-marked WhatsApp messages to the team's allowlisted
+  phones, with switches the team sets on the Portal; no tool, test or script
+  of ours ever turns them on.* Test mode is on by default (D13); every message passes
   `sentrix/alerting/guard.py`. Evaluation goes through
   `sentrix/evaluation/harness.py` (`build_eval_pipeline`: `_act`/`_submit` and the
   shutdown save are no-ops, identity neutral, no mic, `NullSosService`;
@@ -207,6 +210,15 @@ aarch64 torch and xgboost pull CUDA wheels (CPU torch first, xgboost dropped,
 inputs (`8526815`); a Node-page buzzer test (`a892d24`); the clip object stage
 at 320 px on the Pi (`4503b0d` + results, section 4.3). Microphone and buzzer
 arrive on 2026-10-30; nothing has been heard or chirped on the Pi yet.
+
+### Online Portal and WhatsApp for the demo (2026-10-24, D17, D18)
+
+The owner's demo: the Portal online (sign-in, the owner's details in the
+wizard, the Pi's live dashboard, "offline" while the Pi is off), the Level 3
+question on the owner's phone without signing in, and a second phone playing
+the authorities. Hosting chosen: Railway's trial; messaging: Meta's WhatsApp
+Cloud API test number. The talk-down speaker is dropped from the hardware for
+now; its code stays, off by default.
 
 ---
 
@@ -436,6 +448,8 @@ video/session is never used for tuning.
 | D14 | Accounts by username + single-use activation code; admin/Desk TOTP; the LC keeps `SENTRIX_PASSWORD`; Portal password hashes never reach the device. | No admin takeover, no hashes on the SD card. |
 | D15 | **Multimodal, time-aligned fusion** (transparent rules, D6 stays). Modalities: *video detector* (YOLO heads, fast lane), *video classifier* (scene, violence: one modality), *audio* (PANNs CNN10 AudioSet tagger on its own onnxruntime session - never touching torch's threads - → cues aggression / weapon_sound / fire_sound / benign_social (laughter) / calm_talk / background (TV, music, radio) / siren; the 4-class CNN is the fallback). Every audio result carries its window (monotonic start/end, wall end); it votes for a frame/clip only if the window overlaps it within `SENTRIX_AUDIO_ALIGN_TOLERANCE` (1.5 s) - else audio is *unavailable*, never "calm"; unclassified windows and windows over the device's own speaker/siren/buzzer (`io/self_output.py`) never vote; a window dominated by background (TV/music) is neutral. A window is a new observation only if it does not overlap the last one counted (clip mode: two non-overlapping halves), so one impulse never confirms audio. Per class: one visual modality confirmed → L3; two modalities → L4 (weaker sets it), three → ≥ L5 only if the audio is ≥ 0.3 over its bar; audio alone ≤ L2; aggression corroborates a visible weapon but is never a weapon alone. Fight: experimental L2 unless video fight **and** aligned aggression audio confirm with ≥ 2 people and motion ≥ 0.02 → L3; `SENTRIX_FIGHT_MAX_LEVEL` is a hard cap, and 4 also needs a second visual *modality*; banter (laughter, or calm talk ≥ 0.85) or aggression mixed with laughter holds the fight **at** L2 (shown, never lower). People count, motion, identity, PIR/door are gates/context, each recorded in `contributions` (state, event log schema 5, dashboard). Unknown person: D2. **Unvalidated** until room recordings with sound exist (M6, ROADMAP §15.1). | The owner's requirement: one decision from every input, audio in sync with video, fight vs banter, unknown people never critical; the review (M11b) closed the ways one sound, a TV or the device's own voice could move a level. |
 | D16 | **Talk-down speaker**: the owner (tunnel, step-up ≤ 300 s; members and the Desk refused by the path table) or the device admin sends a preset or ≤ 200 characters (control characters and `<`/`>` stripped: SAPI5 parses XML); offline TTS (pyttsx3 SAPI5/espeak-ng, or the `espeak-ng` command → `aplay -D`); off by default (`SENTRIX_SPEAKER_ENABLED`), 3 messages/min, one at a time with a 30 s playback watchdog, audited as `speaker_say` and mirrored to the Portal as `speaker.audit` (who, preset, length, backend - never the text); playback is marked as the device's own sound so the microphone ignores it. Pi hardware: USB audio adapter + PAM8403 + 3 W speaker, or a USB speakerphone (docs/8 §6.6). | Let the owner deter or reassure without a siren; no cloud TTS, no audio leaves the house. |
+| D17 | **WhatsApp alerts through Meta's Cloud API** (no Twilio or reseller): the Portal's `whatsapp` channel (`sentrix/alerting/channels/whatsapp.py`) sends the owner's L3 prompt (quick replies Alert contacts / I'm checking / False alarm), the contacts' alerts (I'm handling it / Open the SOS page), notices and the contact consent link, from Meta's free test number (up to 5 allowlisted recipients). Conversations start with three approved UTILITY templates (`tools/whatsapp_templates.py`), each beginning with the test banner; `WHATSAPP_MODE=auto` falls back to session messages (24 h window) while templates are in review. Quick replies carry Telegram's `<nonce>:<letter>` and get the same checks, the sender's number standing in for the linked chat; a link button is answered with its URL; delivery statuses confirm or fail the message; `POST /hooks/whatsapp` is HMAC-signed (`WHATSAPP_APP_SECRET`). Guard switch `SENTRIX_WHATSAPP_LIVE`, phone rules as SMS. **Exception to "a demo never sends"**: for the team's demo, test-marked messages to the two team phones in `SENTRIX_TEST_RECIPIENTS` (owner, "authorities" contact), switched on by the team on the Portal only. | The owner asked for alerts on a phone without being signed in, and a second phone playing the authorities; WhatsApp needs no SIM or modem, and the sandbox's 3-day re-join is avoided. |
+| D18 | **Demo Portal on Railway** (amends D11 for the demo): `railway.json` builds `deploy/portal/Dockerfile` (SQLite and keys on a `/data` volume, one replica, Singapore), `PORT` honoured, client address from `X-Real-IP` (`PORTAL_TRUSTED_PROXIES=*`), first admin from `PORTAL_BOOTSTRAP_ADMIN` (link in the deploy log); the dashboard reopens the MJPEG stream every 10 min (Railway caps one response at 15 min). Steps: `deploy/railway/README.md`. Trial credit $5 / 30 days. | Same idea as Render with a disk (the tested SQLite path), no sleep, no shell needed; Oracle stays the long-term option. |
 
 ### Milestones
 

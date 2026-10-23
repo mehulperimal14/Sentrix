@@ -97,7 +97,9 @@ class PortalSettings:
     activation_ttl_seconds: int = 72 * 3600
     claim_attempts: int = 5
     claim_window_seconds: int = 900
-    #: X-Forwarded-For is trusted only from these addresses (Caddy).
+    #: X-Real-IP / X-Forwarded-For are trusted only from these addresses
+    #: (Caddy); "*" trusts any peer, for a platform whose edge is the only
+    #: way in (Railway).
     trusted_proxies: tuple = ("127.0.0.1", "::1")
     #: Shown instead of 112 in test mode, and the simulated Desk's number.
     desk_number: str = ""
@@ -125,7 +127,8 @@ class PortalSettings:
             base_url=_str("PORTAL_BASE_URL", "http://portal.localhost:8100").rstrip("/"),
             test_mode=test_mode_flag("PORTAL_TEST_MODE"),
             host=_str("PORTAL_HOST", "127.0.0.1"),
-            port=_int("PORTAL_PORT", 8100),
+            # A platform that picks the port (Railway, Render) sets PORT.
+            port=_int("PORTAL_PORT", _int("PORT", 8100)),
             secure_cookies=_flag("PORTAL_SECURE_COOKIES", False),
             trusted_proxies=tuple(p.strip() for p in _str(
                 "PORTAL_TRUSTED_PROXIES", "127.0.0.1,::1").split(",") if p.strip()),

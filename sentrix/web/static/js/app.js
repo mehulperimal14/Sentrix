@@ -536,8 +536,34 @@ const Sentrix = (() => {
         });
     }
 
+    // ── live video (<img data-stream>, an MJPEG stream) ───────────────────
+    // The stream ends when the device restarts, the Portal relay drops or a
+    // platform caps one HTTP response (Railway: 15 minutes), and the <img>
+    // then freezes on its last frame: reopen it after an error, and every
+    // 10 minutes before such a cap.
+    const STREAM_REFRESH_MS = 10 * 60 * 1000;
+    const STREAM_RETRY_MS = 3000;
+
+    function reopenStream(img) {
+        const src = img.dataset.stream;
+        img.src = src + (src.includes("?") ? "&" : "?") + "r=" + Date.now();
+    }
+
+    function keepStreams() {
+        document.querySelectorAll("img[data-stream]").forEach(img => {
+            let retry = null;
+            img.addEventListener("error", () => {
+                if (retry) return;
+                retry = window.setTimeout(() => { retry = null; reopenStream(img); },
+                                          STREAM_RETRY_MS);
+            });
+            window.setInterval(() => reopenStream(img), STREAM_REFRESH_MS);
+        });
+    }
+
     document.addEventListener("DOMContentLoaded", () => {
         applyLocalTimes(document);
+        keepStreams();
         const minimise = document.getElementById("sos-prompt-minimise");
         if (minimise) minimise.addEventListener("click", minimisePrompt);
         const bannerOpen = document.getElementById("sos-banner-open");
