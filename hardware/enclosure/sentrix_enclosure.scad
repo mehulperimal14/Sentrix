@@ -1,4 +1,7 @@
-// SENTRIX enclosure, rev C (rev B + the status LED windows of rev A)
+// SENTRIX enclosure, rev D: rev B + the status LED windows of rev A (rev C),
+// then the camera ribbon routed for the connector's real position, keyholes on
+// the centre line for the wall, longer screw engagement and gripping LED and
+// buzzer seats
 // Raspberry Pi 5 + Active Cooler + Camera Module 3 (standard) + USB microphone
 // + 3-pin buzzer module + three 5 mm status LEDs.  Open in OpenSCAD (2021.01 or newer), set PART, press
 // F6, then File > Export > STL (or 3MF).  hardware/enclosure/README.md has the
@@ -13,15 +16,20 @@
 // Ethernet ports; y along the 56 mm edge towards the GPIO header.  z = 0 is
 // the underside of the base.
 
-PART = "assembly"; // [assembly, base, lid, bracket, pod, pod_back, coupon, print_plate]
+PART = "assembly"; // [assembly, wall, exploded, base, lid, bracket, pod, pod_back, coupon, print_plate]
 TILT = 45;         // camera tilt in the assembly view: 0 = level, 90 = straight up
 
 /* [Fit] */
 tol      = 0.20;   // added to every clearance hole and slot (raise for printers that print holes small)
 fit      = 0.25;   // sliding fit per side (lid lip, pod cover, pod in the fork)
-pilot_m3  = 2.50;  // M3 thread-forming pilot (use 4.0 for M3 heat-set inserts)
-pilot_m25 = 2.10;  // M2.5 pilot for the Pi screws (3.5 for M2.5 heat-set inserts)
-pilot_m2  = 1.60;  // M2 pilot for the camera and the pod cover
+// Every screw cuts its own thread in a pilot hole (thread-forming), engaged at
+// least 1.8 x its diameter, in a boss with at least 1.2 mm of wall around it.
+// The fit coupon has one pilot of each size: if a screw is too hard to drive or
+// a boss splits, raise pilot_adj by 0.1; if a screw strips, lower it.
+pilot_adj = 0.0;
+pilot_m3  = 2.50 + pilot_adj;  // lid, bracket and pivot screws
+pilot_m25 = 2.10 + pilot_adj;  // Pi screws
+pilot_m2  = 1.60 + pilot_adj;  // camera and pod-cover screws
 clear_m3  = 3.40;  // M3 clearance
 clear_m2  = 2.40;  // M2 clearance
 
@@ -68,11 +76,14 @@ cam_fpc = [[47.2, 0.3], [56.4, 15.9]];        // CAM/DISP 0 and 1 (22-pin, verti
 
 // --------------------------------------------------------- Camera Module 3 data
 // Pod frame: X = optical axis (forward), Z = up, Y = sideways; origin = lens
-// centre on the PCB's front face.  PCB 25 x 23.862 x 1.12, connector at the
-// bottom edge on the back.  Holes dia 2.2 (M2) 2.0 from the sides, 2.0 and
-// 14.5 from the bottom; lens centre 14.4 from the bottom; lens tip 6.98 in
-// front of the PCB.
+// centre on the PCB's front face.  PCB 25 x 23.862 x 1.12.  Holes dia 2.2 (M2)
+// 2.0 from the sides, 2.0 and 14.5 from the bottom; lens centre 14.4 from the
+// bottom; lens tip 6.98 in front of the PCB.  The ribbon connector (19.61 wide,
+// 5.71 tall, 3.2 deep) sits on the back at the TOP edge, the one nearer the
+// lens; the ribbon leaves it upwards, folds back over the camera and runs down
+// behind it to the exit under the pivot.
 cam_w = 25.0;  cam_h = 23.862;  cam_t = 1.12;
+cam_conn_w = 19.61;  cam_conn_h = 5.71;
 cam_lens_z = 14.4;                              // from the PCB bottom edge
 cam_z0 = -cam_lens_z;  cam_z1 = cam_h - cam_lens_z;   // -14.4 .. 9.462
 cam_holes = [[-10.5, 2.0 - cam_lens_z], [10.5, 2.0 - cam_lens_z],
@@ -88,11 +99,16 @@ pod_front_in  = pod_front_out - pod_wall;       // standoffs reach from here to 
 pod_back_out  = -9.5;
 pod_back_in   = pod_back_out + pod_wall;
 pod_y  = cam_w / 2 + 0.6 + pod_wall;            // half width 15.1
-pod_z1 = cam_z1 + 0.6 + pod_wall;               // top 12.06
+pod_z1 = cam_z1 + 3.4 + pod_wall;               // top 14.86: room for the ribbon's fold (inner radius 2) above the camera
 pod_z0 = cam_z0 - 4.5 - pod_wall;               // bottom -20.9 (ribbon bend below the PCB)
 pod_r  = 3.0;
 piv_p  = [-4.5, -18.0];                         // pivot (X, Z) in the pod frame: low, just in front of the back cover
 piv_boss_d = 5.6;                               // fits inside the pod's back-bottom corner
+piv_boss_l = 3.9;                               // bearing boss inside each side wall (5.9 mm of bearing with the wall)
+// the pod turns on one M3 x 45 bolt through both arms and the pod (below the
+// camera, beside the ribbon), with a nylon washer on each side and a nyloc nut:
+// smooth holes only, so tilting never wears a thread or works anything loose
+cover_screws = [[-11.6, -5.0], [11.6, -5.0]];   // pod cover screws (Y, Z): beside the ribbon, below the camera's upper screws
 
 // fork bracket on the lid (board coordinates)
 piv_x = 72.0;  piv_y = 15.0;
@@ -110,22 +126,36 @@ br_screws = [[br_x[0] + 3, br_y[0] + 8], [br_x[1] - 4, br_y[0] + 8],
 cable_slot = [[piv_x - 1.0, piv_y - 9.0], [piv_x + 2.5, piv_y + 9.0]];   // lid + bracket
 
 // buzzer: a cylinder with no screw holes, held in a cup under the lid
-buzz_d = 12.0;  buzz_h = 9.5;  buzz_pcb = 1.6;
+// a standard 12 mm buzzer (body 11.8-12.2, 8.5-9.5 tall): three crush ribs
+// narrow the 12.8 cup to 11.6, so every body is gripped (0.1-0.3 mm per rib)
+// and none sits loose; the module's board stops on the cup's rim.  If the
+// coupon's cup is too tight, raise buzz_grip to 11.7; if loose, 11.5.
+buzz_d = 12.0;  buzz_h = 9.5;  buzz_pcb = 1.6;  buzz_grip = 11.6;
 buzz_c = [76.0, 43.0];
 buzz_cup_wall = 1.6;
 
 // status LEDs (5 mm, pushed into sleeves under the lid from inside; the code
 // drives GPIO 5 / 12 / 13 as green = working, amber = attention, red = alarm)
 leds = [[63.0, 58.5], [69.5, 58.5], [76.0, 58.5]];
-led_d = 5.0;  led_sleeve = 7.4;  led_sleeve_h = 5.0;
+// any standard 5 mm LED (body 4.9-5.2, rim 5.6-6.0, 8.6 tall over the rim):
+// three crush ribs narrow the 5.4 bore to 4.8, so every body is gripped
+// (0.05-0.2 mm per rib); the bore is narrower than the rim, so the rim stops
+// on the sleeve's lower end and the dome sits flush with the lid.  If the
+// coupon's LED is too hard to push in, raise led_grip to 4.9; if loose, 4.7.
+led_d = 5.0;  led_bore = led_d + 0.2 + tol;  led_grip = 4.8;
+led_sleeve = 7.4;  led_sleeve_h = 5.0;
 label_x = 30.5;                                 // SENTRIX lettering centre, left of the LEDs
 
-// lid screws (board coordinates), fused into the corners of the base
-lid_bosses = [[-1.6, -0.7, 5.2], [86.6, -0.6, 5.2], [-0.5, 63.0, 6.0], [85.3, 63.0, 6.0]];
-// wall keyholes: final screw position; the slot runs +x to the entry hole
-keyholes = [[22.0, 61.5], [64.0, 61.5]];
+// lid screws (board coordinates), fused into the corners of the base:
+// [x, y, boss dia, dia of its top 12 mm where the M3 thread is cut]
+lid_bosses = [[-1.6, -0.7, 5.2, 6.2], [86.6, -0.6, 5.2, 6.2], [-0.5, 63.0, 6.0, 7.4], [85.3, 63.0, 6.0, 7.4]];
+// wall keyholes: final screw position; the slot runs +x to the entry hole.
+// On the case's centre line, so it hangs straight; their pads stay under the
+// Pi (pad top 4.8, board underside 7.4, USB stack bottoms 5.5)
+keyholes = [[22.0, 32.0], [64.0, 32.0]];
 key_len = 8.0;
-feet = [[3.0, 3.0], [83.0, 3.0], [3.0, 58.0], [83.0, 58.0]];
+feet = [[12.0, 2.0], [75.0, 2.0], [12.0, 62.0], [75.0, 62.0]];   // clear of the Pi screws' pilots
+pi_pilot_z = 0.6;                               // Pi screw pilots run into the floor: an M2.5 x 8 engages 6.4 mm
 
 // ================================================================== helpers
 module rrect(x0, y0, x1, y1, r, h) {
@@ -197,19 +227,34 @@ module camera3() {   // in the pod frame
     color("seagreen") translate([-cam_t, -cam_w / 2, cam_z0]) cube([cam_t, cam_w, cam_h]);
     color("dimgray") translate([0, -5.4, -5.4]) cube([2.75, 10.8, 10.8]);
     color("black") rotate([0, 90, 0]) cylinder(d = 5.75, h = cam_tip);
-    color("white") translate([-cam_t - cam_back, -10, cam_z0]) cube([cam_back, 20, 5.71]);
+    color("white") translate([-cam_t - cam_back, -cam_conn_w / 2, cam_z1 - cam_conn_h]) cube([cam_back, cam_conn_w, cam_conn_h]);
+}
+
+// the pivot bolt's shank where it crosses the pod (pod frame)
+module pivot_bolt() {
+    translate([piv_p[0], 0, piv_p[1]]) rotate([90, 0, 0]) cylinder(d = 3.0, h = 2 * pod_y, center = true);
+}
+
+// the camera ribbon inside the pod (pod frame): out of the connector at the top
+// edge, folded back over the camera, down behind it and out under the pivot
+module ribbon_envelope() {
+    rb = fpc_w / 2 + 0.3;
+    translate([-7.45, -rb, cam_z1]) cube([7.45 - 1.9, 2 * rb, 2.9]);                       // the fold
+    translate([-7.45, -rb, pod_z0 - 0.5]) cube([1.15, 2 * rb, cam_z1 - pod_z0 + 0.5]);     // the run down
 }
 
 module camera3_envelope() {
     translate([-cam_t + e, -cam_w / 2, cam_z0]) cube([cam_t - 2 * e, cam_w, cam_h]);
     translate([0, -5.4, -5.4]) cube([3.875, 10.8, 10.8]);
     rotate([0, 90, 0]) cylinder(d = 5.75, h = cam_tip);
-    translate([-cam_t - cam_back, -10, cam_z0]) cube([cam_back, 20, 5.71]);
+    translate([-cam_t - cam_back, -cam_conn_w / 2, cam_z1 - cam_conn_h]) cube([cam_back, cam_conn_w, cam_conn_h]);
+    // M2 screw heads on the back of the board
+    for (h = cam_holes) translate([-cam_t - 1.6, h[0], h[1]]) rotate([0, 90, 0]) cylinder(d = 3.8, h = 1.6);
 }
 
-module buzzer() {   // module board + cylinder, as seated in the lid cup
-    color("black") translate([buzz_c[0], buzz_c[1], wall_top - buzz_h]) cylinder(d = buzz_d, h = buzz_h);
-    color("navy") translate([buzz_c[0] - 9.25, buzz_c[1] - 7.5, wall_top - buzz_h - buzz_pcb])
+module buzzer() {   // module board + cylinder, as seated: the board on the cup's rim, the top 0.5 under the sound holes
+    color("black") translate([buzz_c[0], buzz_c[1], wall_top - buzz_h - 0.5]) cylinder(d = buzz_d, h = buzz_h);
+    color("navy") translate([buzz_c[0] - 9.25, buzz_c[1] - 7.5, wall_top - buzz_h - 0.5 - buzz_pcb])
         cube([18.5, 15, buzz_pcb]);
 }
 
@@ -223,6 +268,41 @@ module leds5() {    // 5 mm LEDs (8.6 mm over the flange) seated in their sleeve
         }
         color("silver") for (dx = [-1.27, 1.27]) translate([dx - 0.25, -0.25, -15]) cube([0.5, 0.5, 14]);
     }
+}
+
+// screws, for the pictures: Pi (M2.5 pan), lid (M3 pan in counterbores),
+// bracket (M3 countersunk, flush), pivot (M3 + washer), camera (M2 from behind)
+module screws(a = TILT) {
+    color("silver") {
+        for (h = pi_holes) translate([h[0], h[1], board_top]) cylinder(d = 4.5, h = 1.8);
+        for (b = lid_bosses) translate([b[0], b[1], lid_top - 1.4]) cylinder(d = 5.6, h = 1.4);
+        for (s = br_screws) translate([s[0], s[1], lid_top + base_t - 0.2]) cylinder(d = 6.0, h = 0.25);
+        // pivot bolt (local +z = world +y): washer, head, shank; washer and nyloc nut on the far side
+        translate([piv_x, 0, piv_z]) rotate([-90, 0, 0]) {
+            translate([0, 0, br_y[0] - 3.5]) cylinder(d = 5.5, h = 3.0);
+            translate([0, 0, br_y[0] - 0.5]) cylinder(d = 3.0, h = 45);
+            for (z = [br_y[0] - 0.5, br_y[1]]) translate([0, 0, z]) cylinder(d = 7.0, h = 0.5);
+            translate([0, 0, br_y[1] + 0.5]) cylinder(d = 6.35, h = 4.0, $fn = 6);
+        }
+        pod_placed(a) for (h = cam_holes) translate([-cam_t - 1.4, h[0], h[1]]) rotate([0, 90, 0]) cylinder(d = 3.6, h = 1.4);
+    }
+}
+
+// two wall screws in their keyholes (heads in the channel), for the wall picture
+module wall_screws() {
+    color("silver") for (k = keyholes) translate([k[0], k[1], 0]) {
+        translate([0, 0, 1.7]) cylinder(d = 7.6, h = 2.1);
+        translate([0, 0, -30]) cylinder(d = 3.8, h = 31.7);
+    }
+}
+
+// the case hung on a wall: camera end down, lid facing the room (world z up,
+// the wall is the plane y = 0 and the room is on -y)
+module on_wall() { multmatrix([[0, 1, 0, 0], [0, 0, -1, 0], [-1, 0, 0, 0], [0, 0, 0, 1]]) children(); }
+
+module wall_mounted() {
+    color("tan") translate([-45, 0, -150]) cube([160, 6, 200]);
+    on_wall() { assembly(); screws(); wall_screws(); }
 }
 
 // the space the LEDs and their legs need under the lid (checked against the Pi)
@@ -240,16 +320,20 @@ module base() {
             }
             // Pi standoffs on the board's own holes
             for (h = pi_holes) translate([h[0], h[1], floor_t - e]) cylinder(d = 6.0, h = standoff_h + e);
-            // lid screw bosses fused into the corners
-            for (b = lid_bosses) translate([b[0], b[1], 0]) cylinder(d = b[2], h = wall_top);
-            // keyhole pads (inside, behind the GPIO edge)
+            // lid screw bosses fused into the corners, thicker where the screw grips
+            for (b = lid_bosses) translate([b[0], b[1], 0]) {
+                cylinder(d = b[2], h = wall_top);
+                translate([0, 0, wall_top - 12 - (b[3] - b[2]) / 2]) cylinder(d1 = b[2], d2 = b[3], h = (b[3] - b[2]) / 2 + e);
+                translate([0, 0, wall_top - 12]) cylinder(d = b[3], h = 12);
+            }
+            // keyhole pads (inside, under the Pi)
             for (k = keyholes) translate([k[0] - 6, k[1] - 4.5, floor_t - e]) cube([key_len + 12, 9, 2.4]);
             // ring around the power plunger (outside), so a finger finds it
             translate([ix0 - wall, pwr_y, board_top + 6]) rotate([0, -90, 0])
                 difference() { cylinder(d = 15, h = 0.8); translate([0, 0, -e]) cylinder(d = 12.4, h = 1); }
         }
         // standoff pilots (M2.5)
-        for (h = pi_holes) translate([h[0], h[1], floor_t]) cylinder(d = pilot_m25, h = standoff_h + 1);
+        for (h = pi_holes) translate([h[0], h[1], pi_pilot_z]) cylinder(d = pilot_m25, h = standoff_h + floor_t);
         // lid screw pilots (M3)
         for (b = lid_bosses) translate([b[0], b[1], wall_top - 12]) cylinder(d = pilot_m3, h = 13);
 
@@ -315,9 +399,9 @@ module lid() {
             // LED sleeves: the LED's 5.8 mm flange stops on the sleeve's lower end
             for (l = leds) translate([l[0], l[1], wall_top - led_sleeve_h]) cylinder(d = led_sleeve, h = led_sleeve_h + e);
         }
-        for (l = leds) translate([l[0], l[1], wall_top - led_sleeve_h - 1]) cylinder(d = led_d + tol, h = led_sleeve_h + lid_t + 2);
+        for (l = leds) translate([l[0], l[1], wall_top - led_sleeve_h - 1]) cylinder(d = led_bore, h = led_sleeve_h + lid_t + 2);
         // clear the lid screw bosses of the base
-        for (b = lid_bosses) translate([b[0], b[1], wall_top - 4]) cylinder(d = b[2] + 2 * fit, h = 4 + e);
+        for (b = lid_bosses) translate([b[0], b[1], wall_top - 4]) cylinder(d = b[3] + 2 * fit, h = 4 + e);
         // lid screws: M3 clearance, counterbored for pan heads
         for (b = lid_bosses) translate([b[0], b[1], wall_top - 5]) {
             cylinder(d = clear_m3 + tol, h = 10);
@@ -343,10 +427,19 @@ module lid() {
             text("SENTRIX", size = 8.5, font = "Liberation Sans:style=Bold", halign = "center", valign = "center",
                  spacing = 1.08);
     }
-    // three crush ribs hold the buzzer cylinder without screws
-    for (a = [90, 210, 330]) translate([buzz_c[0] + (buzz_d / 2 + 0.3 + tol / 2) * cos(a),
-                                        buzz_c[1] + (buzz_d / 2 + 0.3 + tol / 2) * sin(a), wall_top - buzz_h - 0.5])
-        rotate(a) translate([-0.55, -0.6, 0]) cube([0.8, 1.2, buzz_h + 0.5]);
+    // three crush ribs hold the buzzer cylinder without screws (0.5 mm lead-in)
+    translate([buzz_c[0], buzz_c[1], wall_top - buzz_h]) buzz_ribs(buzz_h);
+    // three crush ribs in each LED sleeve (0.5 mm lead-in at the bottom)
+    for (l = leds) translate([l[0], l[1], wall_top - led_sleeve_h + 0.5]) led_ribs(led_sleeve_h - 0.5);
+}
+
+module buzz_ribs(h) {
+    bore = buzz_d + 0.6 + tol;
+    for (a = [90, 210, 330]) rotate(a) translate([buzz_grip / 2, -0.4, 0]) cube([(bore - buzz_grip) / 2 + 0.3, 0.8, h]);
+}
+
+module led_ribs(h) {
+    for (a = [90, 210, 330]) rotate(a) translate([led_grip / 2, -0.4, 0]) cube([(led_bore - led_grip) / 2 + 0.3, 0.8, h]);
 }
 
 // ================================================================== fork bracket
@@ -406,9 +499,9 @@ module pod() {
             for (h = cam_holes) translate([0, h[0], h[1]]) rotate([0, 90, 0]) cylinder(d = 4.0, h = pod_front_in + e);
             // pivot bosses inside the side walls
             for (s = [-1, 1]) translate([piv_p[0], s * (pod_y - pod_wall), piv_p[1]])
-                rotate([s < 0 ? -90 : 90, 0, 0]) cylinder(d = piv_boss_d, h = 3.5);
-            // cover screw bosses (top corners)
-            for (s = [-1, 1]) translate([pod_back_in - e, s * 11.6, pod_z1 - pod_wall - 2.2])
+                rotate([s < 0 ? -90 : 90, 0, 0]) cylinder(d = piv_boss_d, h = piv_boss_l);
+            // cover screw bosses, fused into the side walls
+            for (c = cover_screws) translate([pod_back_in - e, c[0], c[1]])
                 rotate([0, 90, 0]) cylinder(d = 4.4, h = 5.0);
         }
         // camera screw pilots (M2, from the back through the PCB)
@@ -418,11 +511,10 @@ module pod() {
         translate([pod_front_out - 1.3, 0, 0]) rotate([0, 90, 0]) cylinder(d1 = 7.0 + tol, d2 = 10.4, h = 1.31);
         // ribbon exit right under the pivot: hardly moves when the pod tilts
         translate([pod_back_in - e, -fpc_w / 2 - 0.8, pod_z0 - 1]) cube([3.0, fpc_w + 1.6, pod_wall + 2]);
-        // pivot pilots (M3)
-        for (s = [-1, 1]) translate([piv_p[0], s * (pod_y + 1), piv_p[1]])
-            rotate([s < 0 ? -90 : 90, 0, 0]) cylinder(d = pilot_m3, h = 7);
+        // pivot: smooth clearance holes for the through-bolt (no thread in the moving joint)
+        translate([piv_p[0], 0, piv_p[1]]) rotate([90, 0, 0]) cylinder(d = clear_m3 + tol, h = 2 * pod_y + 2, center = true);
         // cover screw pilots (M2)
-        for (s = [-1, 1]) translate([pod_back_in - 1, s * 11.6, pod_z1 - pod_wall - 2.2])
+        for (c = cover_screws) translate([pod_back_in - 1, c[0], c[1]])
             rotate([0, 90, 0]) cylinder(d = pilot_m2, h = 6);
         // detent dimple on the +y side, on the same radius as the bracket bumps
         translate([piv_p[0] + 4.6, pod_y + e, piv_p[1]]) rotate([90, 0, 0]) cylinder(d1 = 1.8, d2 = 0.6, h = 0.6, $fn = 16);
@@ -451,22 +543,22 @@ module pod_back() {
                         cube([1.6, 2 * (pod_y - pod_wall - fit), pod_z1 - pod_z0 - 2 * pod_wall - 2 * fit]);
                         translate([-1, 1.2, 1.2]) cube([4, 2 * (pod_y - pod_wall - fit) - 2.4, pod_z1 - pod_z0 - 2 * pod_wall - 2 * fit - 2.4]);
                     }
-                for (s = [-1, 1]) {
-                    translate([piv_p[0], s * (pod_y - pod_wall - 4), piv_p[1]]) rotate([90, 0, 0])
-                        cylinder(d = piv_boss_d + 2 * fit, h = 8, center = true);
-                    translate([pod_back_in - 1, s * 11.6, pod_z1 - pod_wall - 2.2]) rotate([0, 90, 0])
-                        cylinder(d = 4.4 + 2 * fit, h = 4);
-                }
+                for (s = [-1, 1]) translate([piv_p[0], s * (pod_y - pod_wall - 4), piv_p[1]]) rotate([90, 0, 0])
+                    cylinder(d = piv_boss_d + 2 * fit, h = 8, center = true);
+                for (c = cover_screws) translate([pod_back_in - 1, c[0], c[1]]) rotate([0, 90, 0])
+                    cylinder(d = 4.4 + 2 * fit, h = 4);
+                // the ribbon's fold passes over the lip at the top
+                translate([pod_back_in - 1, -fpc_w / 2 - 0.8, cam_z1 - 0.5]) cube([4, fpc_w + 1.6, 10]);
             }
         }
-        for (s = [-1, 1]) translate([pod_back_out - 1, s * 11.6, pod_z1 - pod_wall - 2.2]) rotate([0, 90, 0]) {
+        for (c = cover_screws) translate([pod_back_out - 1, c[0], c[1]]) rotate([0, 90, 0]) {
             cylinder(d = clear_m2 + tol, h = 5);
             cylinder(d = 4.4, h = 1.6);
         }
         // notch so the ribbon passes the cover
-        translate([pod_back_out - 1, -fpc_w / 2 - 0.8, pod_z0 - 1]) cube([pod_wall + 3, fpc_w + 1.6, pod_wall + 2.2]);
-        // ventilation for the sensor
-        for (z = [-6, -2, 2, 6]) translate([pod_back_out - 1, -8, z]) cube([pod_wall + 3, 16, 1.6]);
+        translate([pod_back_out - 1, -fpc_w / 2 - 0.8, pod_z0 - 1]) cube([pod_wall + 3, fpc_w + 1.6, pod_wall + 3.4]);
+        // ventilation for the sensor, beside the ribbon
+        for (s = [-1, 1]) translate([pod_back_out - 1, s * 10.4 - 0.7, 1.0]) cube([pod_wall + 3, 1.4, 7.0]);
     }
 }
 
@@ -487,7 +579,7 @@ module coupon() {
             translate([62, 2, 0]) cube([10, 26, 18]);                                // USB-A window
             translate([40.5, 7.5, 0]) cylinder(d = led_sleeve, h = lid_t + led_sleeve_h);   // LED sleeve
         }
-        translate([40.5, 7.5, -1]) cylinder(d = led_d + tol, h = 20);
+        translate([40.5, 7.5, -1]) cylinder(d = led_bore, h = 20);
         translate([8, 8, 2.4]) cylinder(d = pilot_m25, h = 10);
         translate([20, 8, 2.4]) cylinder(d = pilot_m2, h = 10);
         translate([32, 8, 2.4]) cylinder(d = pilot_m3, h = 10);
@@ -499,8 +591,8 @@ module coupon() {
         translate([36, 24.5, 2.4 - 0.6]) linear_extrude(1) text("SENTRIX fit", size = 3.2,
             font = "Liberation Sans:style=Bold", halign = "center", valign = "center");
     }
-    for (a = [90, 210, 330]) translate([50 + (buzz_d / 2 + 0.3 + tol / 2) * cos(a), 15 + (buzz_d / 2 + 0.3 + tol / 2) * sin(a), 2.4])
-        rotate(a) translate([-0.55, -0.6, 0]) cube([0.8, 1.2, buzz_h]);
+    translate([50, 15, 2.4]) buzz_ribs(buzz_h - 0.5);
+    translate([40.5, 7.5, lid_t]) led_ribs(led_sleeve_h - 0.5);   // as in the lid (printed the other way up)
 }
 
 // ================================================================== print orientations
@@ -522,14 +614,19 @@ module assembly() {
 
 module exploded() {
     color("gainsboro") base();
-    pi5();
-    translate([0, 0, 28]) { color("whitesmoke", 0.9) lid(); buzzer(); leds5(); }
-    translate([0, 0, 50]) color("dimgray") bracket();
-    translate([0, 0, 72]) pod_placed(TILT) { color("dimgray") pod(); camera3(); }
-    translate([-26, 0, 72]) pod_placed(TILT) color("gray") pod_back();
+    translate([0, 0, 48]) pi5();
+    translate([0, 0, 66]) { buzzer(); leds5(); }
+    translate([0, 0, 100]) color("whitesmoke", 0.9) lid();
+    translate([0, 0, 150]) color("dimgray") bracket();
+    translate([0, 0, 215]) pod_placed(TILT) {
+        color("dimgray") pod();
+        translate([-36, 0, 0]) camera3();
+        translate([-72, 0, 0]) color("gray") pod_back();
+    }
 }
 
-if (PART == "assembly")    assembly();
+if (PART == "assembly")    { assembly(); screws(); }
+if (PART == "wall")        wall_mounted();
 if (PART == "exploded")    exploded();
 if (PART == "base")        base_print();
 if (PART == "lid")         lid_print();

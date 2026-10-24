@@ -24,13 +24,14 @@ MODEL = HERE / "sentrix_enclosure.scad"
 PARTS = ("base", "lid", "bracket", "pod", "pod_back", "coupon")
 RENDERS = {   # name: (PART, extra -D, camera eye,centre, image size)
     "1_assembled":   ("assembly", {}, "220,-190,180,45,30,30", "1600,1200"),
-    "2_exploded":    ("exploded", {}, "260,-230,260,45,30,60", "1600,1400"),
+    "2_exploded":    ("exploded", {}, "520,-560,420,44,30,140", "1400,1600"),
     "3_camera_end":  ("assembly", {}, "200,40,70,85,30,30", "1400,1050"),
     "4_button_end":  ("assembly", {"TILT": 0}, "-130,-80,70,10,25,18", "1400,1050"),
     "5_lid_inside":  ("lid", {}, "42,-70,170,42,-32,0", "1400,1050"),
     "6_base_inside": ("base", {}, "42,-60,190,42,32,10", "1400,1050"),
     "7_wall_mount":  ("base", {}, "40,-120,-160,42,32,0", "1400,1050"),
     "8_print_plate": ("print_plate", {}, "40,-40,330,40,90,0", "1600,1200"),
+    "9_wall_mounted": ("wall", {}, "250,-270,90,32,-30,-40", "1400,1200"),
 }
 CHECKS = {   # name: OpenSCAD expression whose result must be empty
     "base_vs_pi": "intersection() { base(); pi5_envelope(); }",
@@ -41,6 +42,11 @@ CHECKS = {   # name: OpenSCAD expression whose result must be empty
     "back_vs_camera": "intersection() { pod_back(); camera3_envelope(); }",
     # mating faces touch on purpose; a 0.02 mm shift keeps a real lip collision visible
     "back_vs_pod": "intersection() { translate([-0.02, 0, 0]) pod_back(); pod(); }",
+    "ribbon_vs_pod": "intersection() { pod(); ribbon_envelope(); }",
+    "ribbon_vs_back": "intersection() { pod_back(); ribbon_envelope(); }",
+    "bolt_vs_ribbon": "intersection() { pivot_bolt(); ribbon_envelope(); }",
+    "bolt_vs_camera": "intersection() { pivot_bolt(); camera3_envelope(); }",
+    "bolt_vs_pod": "intersection() { pivot_bolt(); pod(); }",
     "lid_vs_base": "intersection() { lid(); translate([0, 0, -0.01]) base(); }",
     **{f"tilt_{a}": f"intersection() {{ pod_placed({a}) {{ pod(); pod_back(); }} "
                     f"union() {{ bracket_no_detents(); lid(); }} }}" for a in range(0, 91, 15)},

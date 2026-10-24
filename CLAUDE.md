@@ -244,6 +244,24 @@ its code stays, off by default.
   the replica gun in that room before 2026-11-30: whether it reaches 0.75 or
   the detector; else lower toward 0.65.
 
+### 3D-printed enclosure (2026-10-24, `hardware/enclosure/`)
+
+A parametric OpenSCAD case for the demo unit, **rev D** (README there): base
+with the Pi 5 screwed to standoffs on its own holes, lid with hex grilles over
+the Active Cooler, a crush-rib cup for the 12 mm buzzer and three crush-rib
+sleeves for 5 mm status LEDs (GPIO 5/12/13, the patterns `io/gpio.py` already
+drives), USB/Ethernet at the camera end for the USB microphone, USB-C and HDMI
+on the side, a power-button flexure, microSD slot, wall keyholes (the main
+configuration, camera end down) and table feet; a fork bracket and a camera
+pod for Camera Module 3 on its own M2 holes, tilting 0-90 degrees with
+15-degree clicks on one M3 x 45 bolt + nyloc nut. Dimensions from Raspberry Pi
+Ltd's drawings (RP-008347, RP-008188, RP-008153); the camera's ribbon
+connector is on its top edge, so the ribbon folds back inside the pod.
+`python hardware/enclosure/build.py --check` exports STL + 3MF + renders and
+runs the interference checks (all clear at the commit that added rev D).
+Rev A (the team's earlier zip, `SENTRIX_enclosure.zip`, untracked) gave the
+LED-window idea. Not printed yet: print the fit coupon first.
+
 ---
 
 ## 3. Git history
