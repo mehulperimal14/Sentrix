@@ -246,7 +246,7 @@ its code stays, off by default.
 
 ### 3D-printed enclosure (2026-10-24, `hardware/enclosure/`)
 
-A parametric OpenSCAD case for the demo unit, **rev D** (README there): base
+A parametric OpenSCAD case for the demo unit, **rev E** (README there): base
 with the Pi 5 screwed to standoffs on its own holes, lid with hex grilles over
 the Active Cooler, a crush-rib cup for the 12 mm buzzer and three crush-rib
 sleeves for 5 mm status LEDs (GPIO 5/12/13, the patterns `io/gpio.py` already
@@ -255,10 +255,18 @@ on the side, a power-button flexure, microSD slot, wall keyholes (the main
 configuration, camera end down) and table feet; a fork bracket and a camera
 pod for Camera Module 3 on its own M2 holes, tilting 0-90 degrees with
 15-degree clicks on one M3 x 45 bolt + nyloc nut. Dimensions from Raspberry Pi
-Ltd's drawings (RP-008347, RP-008188, RP-008153); the camera's ribbon
-connector is on its top edge, so the ribbon folds back inside the pod.
-`python hardware/enclosure/build.py --check` exports STL + 3MF + renders and
-runs the interference checks (all clear at the commit that added rev D).
+Ltd's drawings (RP-008347, RP-008188, RP-008153), every bought part re-checked
+against them by an audit with independent verification (rev E). The camera is
+mounted **connector-down**, its upright orientation (IMX708 device-tree
+rotation 180 for a board held connector at the bottom, undone by libcamera's
+default); revs B-D followed the drawing's connector-up view and would have
+given an upside-down picture. `SENTRIX_PICAMERA_ROTATION=180`
+(`sentrix/io/picamera.py`, libcamera `Transform(hflip=1, vflip=1)`, free) is
+there for a module mounted the other way. The 500 mm camera cable the team
+bought leaves ~40 cm spare (rolled up in front of the fan); the 200 mm one is
+neater. `python hardware/enclosure/build.py --check` exports STL + 3MF +
+renders and runs the interference checks (all clear at the commit that added
+rev E).
 Rev A (the team's earlier zip, `SENTRIX_enclosure.zip`, untracked) gave the
 LED-window idea. Not printed yet: print the fit coupon first.
 

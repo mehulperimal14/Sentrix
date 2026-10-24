@@ -47,6 +47,13 @@ CHECKS = {   # name: OpenSCAD expression whose result must be empty
     "bolt_vs_ribbon": "intersection() { pivot_bolt(); ribbon_envelope(); }",
     "bolt_vs_camera": "intersection() { pivot_bolt(); camera3_envelope(); }",
     "bolt_vs_pod": "intersection() { pivot_bolt(); pod(); }",
+    "bolt_vs_back": "intersection() { pivot_bolt(); pod_back(); }",
+    "camera_goes_straight_in": "intersection() { pod(); camera_insertion_path(); }",
+    "wall_screws_vs_base": "intersection() { wall_screws(); base(); }",
+    "case_ribbon_vs_pi": "intersection() { case_ribbon_envelope(); pi5_envelope(); }",
+    "case_ribbon_vs_base": "intersection() { case_ribbon_envelope(); base(); }",
+    "case_ribbon_vs_lid": "intersection() { case_ribbon_envelope(); lid(); }",
+    "case_ribbon_vs_buzzer_leds": "intersection() { case_ribbon_envelope(); union() { buzzer(); leds5_envelope(); } }",
     "lid_vs_base": "intersection() { lid(); translate([0, 0, -0.01]) base(); }",
     **{f"tilt_{a}": f"intersection() {{ pod_placed({a}) {{ pod(); pod_back(); }} "
                     f"union() {{ bracket_no_detents(); lid(); }} }}" for a in range(0, 91, 15)},

@@ -1,7 +1,10 @@
-// SENTRIX enclosure, rev D: rev B + the status LED windows of rev A (rev C),
-// then the camera ribbon routed for the connector's real position, keyholes on
-// the centre line for the wall, longer screw engagement and gripping LED and
-// buzzer seats
+// SENTRIX enclosure, rev E.  Rev C added rev A's status LED windows; rev D the
+// wall keyholes on the centre line, longer screw engagement, gripping LED and
+// buzzer seats and the pivot bolt; rev E mounts the camera connector-down (its
+// upright orientation: every earlier revision gave an upside-down picture), so
+// the ribbon drops straight out of the pod, and takes the parts audit's
+// corrections (lens depth, connector depth, wall clearances, vents, cooler
+// outline, the ribbon's path through the case)
 // Raspberry Pi 5 + Active Cooler + Camera Module 3 (standard) + USB microphone
 // + 3-pin buzzer module + three 5 mm status LEDs.  Open in OpenSCAD (2021.01 or newer), set PART, press
 // F6, then File > Export > STL (or 3MF).  hardware/enclosure/README.md has the
@@ -23,7 +26,8 @@ TILT = 45;         // camera tilt in the assembly view: 0 = level, 90 = straight
 tol      = 0.20;   // added to every clearance hole and slot (raise for printers that print holes small)
 fit      = 0.25;   // sliding fit per side (lid lip, pod cover, pod in the fork)
 // Every screw cuts its own thread in a pilot hole (thread-forming), engaged at
-// least 1.8 x its diameter, in a boss with at least 1.2 mm of wall around it.
+// least 2 x its diameter (every joint has 2.3 x or more), in a boss with at
+// least 1.2 mm of wall around it.
 // The fit coupon has one pilot of each size: if a screw is too hard to drive or
 // a boss splits, raise pilot_adj by 0.1; if a screw strips, lower it.
 pilot_adj = 0.0;
@@ -44,8 +48,8 @@ above   = 30.0;    // board top -> lid underside (cooler 13.7, DuPont plugs ~17,
 
 // interior box in board coordinates
 ix0 = -3.5;        // left: power button (0.45 proud), microSD card, flexure nub
-ix1 = 88.3;        // right: USB/Ethernet jacks end at 88.0 (3.0 past the board)
-iy0 = -1.7;        // front: USB-C / micro-HDMI faces sit 1.3-1.6 past the board
+ix1 = 88.6;        // right: Ethernet face 87.98, USB stacks' tabs 88.30 (0.3 to spare as the Pi drops in)
+iy0 = -2.0;        // front: USB-C face -1.31, micro-HDMI flares -1.68 (0.3 to spare)
 iy1 = 66.0;        // back: room behind the GPIO header for the buzzer wires
 
 board_bot = floor_t + standoff_h;      // 7.4
@@ -59,10 +63,17 @@ e = 0.01;
 // ------------------------------------------------------------------ Pi 5 data
 pi_holes   = [[3.5, 3.5], [61.5, 3.5], [3.5, 52.5], [61.5, 52.5]];  // dia 2.7, M2.5
 cool_pins  = [[3.5, 9.5], [61.5, 46.5]];                             // Active Cooler push pins
-cool_box   = [[0.65, 6.5], [64.15, 49.0]];   // footprint 63.5 x 42.5 (pins 58 x 37 apart)
-cool_h     = 15.5;                            // 13.7 cooler + thermal pad + SoC, rounded up
-fan_c      = [42.0, 33.5];                    // blower intake centre (30 x 30 fan)
-fins_box   = [[1.5, 8.5], [25.0, 47.5]];      // heatsink fins left of the blower
+// Active Cooler (RP-008188): heatsink and push-pin heads x 0.33-64.28,
+// y 6.50-49.66, but open at the front right (x > 44.3, y < 18): the diagonal
+// edge and the fan box start at y 18.0, so the camera connectors and the
+// ribbon riser are clear.  Two boxes cover it with margin.
+// The front strip (x 27.4-44.3, y < 17.9) is only the base plate, about 4 mm
+// above the board top; the fins and the fan box are full height.
+cool_boxes = [[[0.3, 6.5], [27.4, 49.7]], [[27.4, 17.9], [64.3, 49.7]]];
+cool_plate = [[27.4, 6.5], [44.3, 17.9]];  cool_plate_h = 4.5;
+cool_h     = 15.5;    // upper bound above the board top: heatsink body 10.5 above its base + SoC and pad
+fan_c      = [41.8, 33.7];                    // blower intake centre (dia 21.2, housing 30 x 30)
+fins_box   = [[5.0, 9.0], [26.5, 49.0]];      // pin fins x 7.5-26.5, y 9.0-49.0 (lid grille over them)
 // ports: [lo, hi] along the edge, [z lo, z hi] relative to the board top
 eth   = [[2.25, 18.15], [-2.05, 13.70]];      // right edge, centre y 10.2
 usb_a = [[21.70, 36.50], [-3.50, 16.80]];     // right edge, centre y 29.1
@@ -72,24 +83,31 @@ sd_y  = [22.0, 34.0];                         // microSD on the underside, left 
 pwr_y = 18.4;  led_y = 13.3;                  // power button / status LED on the left edge
 pwr_z = 1.6;                                  // button plunger centre above the board top
 gpio  = [[7.1, 49.4], [57.9, 55.6]];          // 2 x 20 header
-cam_fpc = [[47.2, 0.3], [56.4, 15.9]];        // CAM/DISP 0 and 1 (22-pin, vertical)
+cam_fpc = [[47.24, 50.20], [53.45, 56.38]];   // CAM/DISP connector bodies (x), both y 0.68-16.17, 4.1 tall
+cam_fpc_y = [0.68, 16.17];
 
 // --------------------------------------------------------- Camera Module 3 data
 // Pod frame: X = optical axis (forward), Z = up, Y = sideways; origin = lens
-// centre on the PCB's front face.  PCB 25 x 23.862 x 1.12.  Holes dia 2.2 (M2)
-// 2.0 from the sides, 2.0 and 14.5 from the bottom; lens centre 14.4 from the
-// bottom; lens tip 6.98 in front of the PCB.  The ribbon connector (19.61 wide,
-// 5.71 tall, 3.2 deep) sits on the back at the TOP edge, the one nearer the
-// lens; the ribbon leaves it upwards, folds back over the camera and runs down
-// behind it to the exit under the pivot.
+// centre on the PCB's front face.  PCB 25 x 23.862 x 1.12 (RP-008153).
+// Mounted CONNECTOR-DOWN: the picture is upright that way with no software
+// transform (the IMX708's device-tree rotation is 180 for a board held with
+// the connector at the bottom, and libcamera's default undoes it; Raspberry
+// Pi's own photo shows the ribbon leaving the bottom).  The drawing draws the
+// board the other way up.  The ribbon connector (19.61 wide, 5.71 tall, 2.75
+// deep) is on the back at the edge nearer the lens: the lens centre is 9.462
+// above the bottom (connector) edge and 14.4 below the top edge; the M2 holes
+// (dia 2.2) are 2.0 from the sides and 2.0 and 14.5 below the top edge.
 cam_w = 25.0;  cam_h = 23.862;  cam_t = 1.12;
 cam_conn_w = 19.61;  cam_conn_h = 5.71;
-cam_lens_z = 14.4;                              // from the PCB bottom edge
-cam_z0 = -cam_lens_z;  cam_z1 = cam_h - cam_lens_z;   // -14.4 .. 9.462
-cam_holes = [[-10.5, 2.0 - cam_lens_z], [10.5, 2.0 - cam_lens_z],
-             [-10.5, 14.5 - cam_lens_z], [10.5, 14.5 - cam_lens_z]];   // (Y, Z)
-cam_tip  = 6.98;        // lens tip in front of the PCB front face
-cam_back = 3.2;         // connector behind the PCB back face
+cam_z1 = 14.4;                                  // top edge above the lens centre
+cam_z0 = cam_z1 - cam_h;                        // -9.462: the connector edge, at the bottom
+cam_holes = [[-10.5, cam_z1 - 2.0], [10.5, cam_z1 - 2.0],
+             [-10.5, cam_z1 - 14.5], [10.5, cam_z1 - 14.5]];   // (Y, Z): 12.4 and -0.1
+// lens tip in front of the PCB front face: the drawing's 6.98 ends on a 0.40
+// layer and the brief gives 11.5 +-0.2 overall, so 6.98-7.83; sized for 7.63
+// (a 7.83 tip still sits 0.4 behind the pod's face)
+cam_tip  = 7.63;
+cam_back = 2.75;        // connector behind the PCB back face (drawing)
 fpc_w    = 16.0;        // 15-pin ribbon at the camera end (the Pi end is 11.5)
 
 // pod geometry (pod frame)
@@ -99,21 +117,29 @@ pod_front_in  = pod_front_out - pod_wall;       // standoffs reach from here to 
 pod_back_out  = -9.5;
 pod_back_in   = pod_back_out + pod_wall;
 pod_y  = cam_w / 2 + 0.6 + pod_wall;            // half width 15.1
-pod_z1 = cam_z1 + 3.4 + pod_wall;               // top 14.86: room for the ribbon's fold (inner radius 2) above the camera
-pod_z0 = cam_z0 - 4.5 - pod_wall;               // bottom -20.9 (ribbon bend below the PCB)
+pod_z1 = cam_z1 + 0.6 + pod_wall;               // top 17.0
+pod_z0 = -20.9;                                 // bottom: the ribbon's drop and the pivot bolt below the camera
 pod_r  = 3.0;
 piv_p  = [-4.5, -18.0];                         // pivot (X, Z) in the pod frame: low, just in front of the back cover
 piv_boss_d = 5.6;                               // fits inside the pod's back-bottom corner
 piv_boss_l = 3.9;                               // bearing boss inside each side wall (5.9 mm of bearing with the wall)
 // the pod turns on one M3 x 45 bolt through both arms and the pod (below the
-// camera, beside the ribbon), with a nylon washer on each side and a nyloc nut:
+// camera, behind the ribbon), with a nylon washer on each side and a nyloc nut:
 // smooth holes only, so tilting never wears a thread or works anything loose
-cover_screws = [[-11.6, -5.0], [11.6, -5.0]];   // pod cover screws (Y, Z): beside the ribbon, below the camera's upper screws
+// pod cover screws (Y, Z): below the camera board, in full-depth columns from
+// the front wall (they print upright and leave the camera a straight way in)
+cover_screws = [[-11.6, -12.3], [11.6, -12.3]];
+// the ribbon leaves the pod through its floor in front of the pivot bolt; the
+// slot's back wall stays 1 mm in front of the bolt so a taut ribbon cannot
+// reach it (0.9 mm or more at any tilt), and the outer back edge it is pulled
+// over is rounded; 0.86 mm or more of floor stays round the bolt
+pod_exit = [-2.0, 1.1];                         // X range of the floor slot
+pod_exit_round = 1.5;
 
 // fork bracket on the lid (board coordinates)
 piv_x = 72.0;  piv_y = 15.0;
 base_t = 3.0;
-piv_h  = 7.0;                                   // pivot above the bracket base (the pod's back corner swings 5.8 below it)
+piv_h  = 7.0;                                   // pivot above the bracket base (the pod's rounded back corner swings 5.0 below it)
 piv_z  = lid_top + base_t + piv_h;
 arm_t  = 3.5;
 arm_gap = pod_y + fit;                          // inner faces of the arms
@@ -123,7 +149,9 @@ br_y = [piv_y - arm_gap - arm_t, piv_y + arm_gap + arm_t];
 // lid stay clear of the front wall
 br_screws = [[br_x[0] + 3, br_y[0] + 8], [br_x[1] - 4, br_y[0] + 8],
              [br_x[0] + 3, br_y[1] - 6], [br_x[1] - 4, br_y[1] - 6]];
-cable_slot = [[piv_x - 1.0, piv_y - 9.0], [piv_x + 2.5, piv_y + 9.0]];   // lid + bracket
+// lid + bracket slot right under the pod's floor slot (the pod's exit sits
+// 2.5-5.6 in front of the pivot axis); tilting 0-90 degrees draws 4.4 mm of ribbon
+cable_slot = [[piv_x + 1.0, piv_y - 9.0], [piv_x + 6.0, piv_y + 9.0]];
 
 // buzzer: a cylinder with no screw holes, held in a cup under the lid
 // a standard 12 mm buzzer (body 11.8-12.2, 8.5-9.5 tall): three crush ribs
@@ -148,12 +176,17 @@ label_x = 30.5;                                 // SENTRIX lettering centre, lef
 
 // lid screws (board coordinates), fused into the corners of the base:
 // [x, y, boss dia, dia of its top 12 mm where the M3 thread is cut]
-lid_bosses = [[-1.6, -0.7, 5.2, 6.2], [86.6, -0.6, 5.2, 6.2], [-0.5, 63.0, 6.0, 7.4], [85.3, 63.0, 6.0, 7.4]];
-// wall keyholes: final screw position; the slot runs +x to the entry hole.
-// On the case's centre line, so it hangs straight; their pads stay under the
-// Pi (pad top 4.8, board underside 7.4, USB stack bottoms 5.5)
+// (each overlaps both walls by 0.3 mm or more over its full height)
+lid_bosses = [[-1.6, -0.7, 5.2, 6.2], [86.6, -0.6, 5.2, 6.2], [-0.8, 63.3, 6.0, 7.4], [85.9, 63.3, 6.0, 7.4]];
+// wall keyholes: final screw position (the slot's rounded closed end); the
+// slot runs +x to the entry hole.  On the case's centre line, so it hangs
+// straight.  A 1.2 mm lip slides behind the screw head; the head channel is
+// 3.2 mm tall, for pan or round heads up to 2.8 mm tall and 8.4 mm across.
+// Their pads stay under the Pi (pad top 5.2; board underside 7.4, the USB
+// stacks' pegs 5.46)
 keyholes = [[22.0, 32.0], [64.0, 32.0]];
 key_len = 8.0;
+key_lip = 1.2;  key_head = 3.2;
 feet = [[12.0, 2.0], [75.0, 2.0], [12.0, 62.0], [75.0, 62.0]];   // clear of the Pi screws' pilots
 pi_pilot_z = 0.6;                               // Pi screw pilots run into the floor: an M2.5 x 8 engages 6.4 mm
 
@@ -181,7 +214,7 @@ module hex_field(x0, y0, x1, y1, af = 4.0, rib = 1.4, h = 10) {
         union() for (i = [0 : floor((x1 - x0) / (pitch * cos(30))) + 1],
                      j = [0 : floor((y1 - y0) / pitch) + 1])
             translate([x0 + i * pitch * cos(30), y0 + j * pitch + (i % 2) * pitch / 2, 0])
-                rotate(30) hex_hole(af, h);
+                hex_hole(af, h);          // flats face the neighbours: ribs are 'rib' wide
         linear_extrude(h) children();
     }
 }
@@ -190,17 +223,20 @@ module hex_field(x0, y0, x1, y1, af = 4.0, rib = 1.4, h = 10) {
 module pi5() {
     color("seagreen") translate([0, 0, board_bot]) rrect(0, 0, 85, 56, 3, pcb_t);
     // cooler
-    color("silver") translate([0, 0, board_top]) box([cool_box[0][0], cool_box[0][1], 0],
-                                                   [cool_box[1][0], cool_box[1][1], cool_h]);
-    color("dimgray") translate([fan_c[0], fan_c[1], board_top + cool_h - 0.1]) cylinder(d = 26, h = 0.5);
-    // ports
+    color("silver") translate([0, 0, board_top]) {
+        for (b = cool_boxes) box([b[0][0], b[0][1], 0], [b[1][0], b[1][1], cool_h]);
+        box([cool_plate[0][0], cool_plate[0][1], 0], [cool_plate[1][0], cool_plate[1][1], cool_plate_h]);
+    }
+    color("dimgray") translate([fan_c[0], fan_c[1], board_top + cool_h - 0.1]) cylinder(d = 21.2, h = 0.5);
+    // ports (the USB stacks' tabs reach x 88.3, the micro-HDMI flares y -1.7)
     color("lightgray") {
         for (p = [eth, usb_a, usb_b])
-            box([85 - 17, p[0][0], board_top + p[1][0]], [88.0, p[0][1], board_top + p[1][1]]);
-        translate([usbc - 4.47, -1.3, board_top]) cube([8.94, 7.5, 3.2]);
-        for (c = [hdmi0, hdmi1]) translate([c - 3.25, -1.6, board_top]) cube([6.5, 7.5, 3.4]);
+            box([85 - 17, p[0][0], board_top + p[1][0]], [88.3, p[0][1], board_top + p[1][1]]);
+        translate([usbc - 4.47, -1.31, board_top]) cube([8.94, 7.5, 3.2]);
+        for (c = [hdmi0, hdmi1]) translate([c - 3.6, -1.7, board_top]) cube([7.2, 8.56, 3.4]);
     }
     color("black") translate([gpio[0][0], gpio[0][1], board_top]) cube([50.8, 6.2, 8.5]);
+    color("white") for (x = cam_fpc) translate([x[0], cam_fpc_y[0], board_top]) cube([x[1] - x[0], cam_fpc_y[1] - cam_fpc_y[0], 4.1]);
     // microSD card (sticks out 2.5 under the left edge)
     color("royalblue") translate([-2.5, sd_y[0] + 0.5, board_bot - 1.2]) cube([14, 11, 1.0]);
     // power button plunger
@@ -210,24 +246,37 @@ module pi5() {
 // the space the Pi needs (checked against the case: must not intersect)
 module pi5_envelope() {
     translate([0, 0, board_bot + e]) rrect(0, 0, 85, 56, 3, pcb_t - 2 * e);
-    translate([0, 0, board_top]) box([cool_box[0][0], cool_box[0][1], 0], [cool_box[1][0], cool_box[1][1], cool_h]);
+    for (b = cool_boxes) translate([0, 0, board_top]) box([b[0][0], b[0][1], 0], [b[1][0], b[1][1], cool_h]);
+    translate([0, 0, board_top]) box([cool_plate[0][0], cool_plate[0][1], 0], [cool_plate[1][0], cool_plate[1][1], cool_plate_h]);
     for (p = [eth, usb_a, usb_b])
-        box([85 - 17, p[0][0], board_top + p[1][0]], [88.0, p[0][1], board_top + p[1][1]]);
-    translate([usbc - 4.47, -1.3, board_top]) cube([8.94, 7.5, 3.2]);
-    for (c = [hdmi0, hdmi1]) translate([c - 3.25, -1.6, board_top]) cube([6.5, 7.5, 3.4]);
+        box([85 - 17, p[0][0], board_top + p[1][0]], [88.3, p[0][1], board_top + p[1][1]]);
+    translate([usbc - 4.47, -1.31, board_top]) cube([8.94, 7.5, 3.2]);
+    for (c = [hdmi0, hdmi1]) translate([c - 3.6, -1.7, board_top]) cube([7.2, 8.56, 3.4]);
+    for (x = cam_fpc) translate([x[0], cam_fpc_y[0], board_top]) cube([x[1] - x[0], cam_fpc_y[1] - cam_fpc_y[0], 4.1]);
     // GPIO header with DuPont plugs on it (17 mm above the board)
     box([gpio[0][0] - 0.6, gpio[0][1] - 1.2, board_top], [gpio[1][0] + 0.6, gpio[1][1] + 1.2, board_top + 17.0]);
     translate([-2.5, sd_y[0] + 0.5, board_bot - 1.2]) cube([14, 11, 1.0]);
     translate([-0.45, pwr_y - 1.5, board_top]) cube([2, 3, 3.2]);
     // cooler push-pin tips under the board
-    for (p = cool_pins) translate([p[0], p[1], board_bot - 2.5]) cylinder(d = 3.2, h = 2.5);
+    for (p = cool_pins) translate([p[0], p[1], board_bot - 3.2]) cylinder(d = 3.5, h = 3.2);
 }
 
-module camera3() {   // in the pod frame
+module camera3() {   // in the pod frame, connector-down
     color("seagreen") translate([-cam_t, -cam_w / 2, cam_z0]) cube([cam_t, cam_w, cam_h]);
-    color("dimgray") translate([0, -5.4, -5.4]) cube([2.75, 10.8, 10.8]);
+    color("dimgray") translate([0, -5.4, -5.4]) cube([3.875, 10.8, 10.8]);
     color("black") rotate([0, 90, 0]) cylinder(d = 5.75, h = cam_tip);
-    color("white") translate([-cam_t - cam_back, -cam_conn_w / 2, cam_z1 - cam_conn_h]) cube([cam_back, cam_conn_w, cam_conn_h]);
+    color("white") translate([-cam_t - cam_back, -cam_conn_w / 2, cam_z0]) cube([cam_back, cam_conn_w, cam_conn_h]);
+}
+
+// the camera's way in: each part slid straight along the optical axis from
+// 30 mm behind to 0.05 short of its seat (checked against the pod: the
+// module goes onto its posts from the open back without tilting)
+module camera_insertion_path() {
+    module slide() hull() { translate([-30, 0, 0]) children(); translate([-0.05, 0, 0]) children(); }
+    slide() translate([-cam_t, -cam_w / 2, cam_z0]) cube([cam_t, cam_w, cam_h]);
+    slide() translate([-cam_t - cam_back, -cam_conn_w / 2, cam_z0]) cube([cam_back, cam_conn_w, cam_conn_h]);
+    slide() translate([0, -5.4, -5.4]) cube([4.275, 10.8, 10.8]);
+    slide() rotate([0, 90, 0]) cylinder(d = 6.14, h = cam_tip + 0.2);
 }
 
 // the pivot bolt's shank where it crosses the pod (pod frame)
@@ -235,19 +284,23 @@ module pivot_bolt() {
     translate([piv_p[0], 0, piv_p[1]]) rotate([90, 0, 0]) cylinder(d = 3.0, h = 2 * pod_y, center = true);
 }
 
-// the camera ribbon inside the pod (pod frame): out of the connector at the top
-// edge, folded back over the camera, down behind it and out under the pivot
+// the camera ribbon inside the pod (pod frame): straight down out of the
+// connector at the camera's bottom edge, eased forward past the pivot bolt
+// (1.1 mm clear of it), and out through the floor slot - no fold, no twist
 module ribbon_envelope() {
     rb = fpc_w / 2 + 0.3;
-    translate([-7.45, -rb, cam_z1]) cube([7.45 - 1.9, 2 * rb, 2.9]);                       // the fold
-    translate([-7.45, -rb, pod_z0 - 0.5]) cube([1.15, 2 * rb, cam_z1 - pod_z0 + 0.5]);     // the run down
+    hull() {
+        translate([-3.4, -rb, cam_z0 - 3.0]) cube([2.2, 2 * rb, 3.0]);
+        translate([pod_exit[0] + 0.1, -rb, cam_z0 - 5.5]) cube([1.4, 2 * rb, 0.1]);
+    }
+    translate([pod_exit[0] + 0.1, -rb, pod_z0 - 0.5]) cube([1.4, 2 * rb, cam_z0 - 5.4 - pod_z0 + 0.5]);
 }
 
 module camera3_envelope() {
     translate([-cam_t + e, -cam_w / 2, cam_z0]) cube([cam_t - 2 * e, cam_w, cam_h]);
-    translate([0, -5.4, -5.4]) cube([3.875, 10.8, 10.8]);
-    rotate([0, 90, 0]) cylinder(d = 5.75, h = cam_tip);
-    translate([-cam_t - cam_back, -cam_conn_w / 2, cam_z1 - cam_conn_h]) cube([cam_back, cam_conn_w, cam_conn_h]);
+    translate([0, -5.4, -5.4]) cube([4.275, 10.8, 10.8]);          // housing, up to 0.4 deeper than drawn
+    rotate([0, 90, 0]) cylinder(d = 6.14, h = cam_tip + 0.2);      // barrel (6.14 at its base), deepest tip
+    translate([-cam_t - cam_back, -cam_conn_w / 2, cam_z0]) cube([cam_back, cam_conn_w, cam_conn_h]);
     // M2 screw heads on the back of the board
     for (h = cam_holes) translate([-cam_t - 1.6, h[0], h[1]]) rotate([0, 90, 0]) cylinder(d = 3.8, h = 1.6);
 }
@@ -290,9 +343,9 @@ module screws(a = TILT) {
 
 // two wall screws in their keyholes (heads in the channel), for the wall picture
 module wall_screws() {
-    color("silver") for (k = keyholes) translate([k[0], k[1], 0]) {
-        translate([0, 0, 1.7]) cylinder(d = 7.6, h = 2.1);
-        translate([0, 0, -30]) cylinder(d = 3.8, h = 31.7);
+    color("silver") for (k = keyholes) translate([k[0], k[1], 0]) {     // pan head 7.6 x 2.6
+        translate([0, 0, key_lip + 0.2]) cylinder(d = 7.6, h = 2.6);
+        translate([0, 0, -30]) cylinder(d = 3.8, h = 30 + key_lip + 0.2);
     }
 }
 
@@ -303,6 +356,24 @@ module on_wall() { multmatrix([[0, 1, 0, 0], [0, 0, -1, 0], [-1, 0, 0, 0], [0, 0
 module wall_mounted() {
     color("tan") translate([-45, 0, -150]) cube([160, 6, 200]);
     on_wall() { assembly(); screws(); wall_screws(); }
+}
+
+// the camera ribbon inside the case (board coordinates): up from the CAM/DISP
+// connector nearer the HDMI ports, across above the Ethernet jack, up through
+// the lid slot.  The spare length goes in the pocket over the cooler's low
+// front plate, between the micro-HDMI connectors and the fan - never over
+// the lid's intake grille or the fins grille: a 200 mm cable's ~12 cm as a
+// serpentine of three upright legs with bends no tighter than r 4 (a pencil),
+// or a 500 mm cable's ~40 cm folded in half and rolled loosely around a
+// pencil (about 14 mm across, 11.5 wide).  Leave 5 mm or more of free ribbon
+// between the pocket and the lid slot: the 0-90 degree tilt draws 4.4 mm.
+module case_ribbon_envelope() {
+    translate([47.7, 2.0, board_top + 4.15]) cube([2.1, 13.4, 31.0 - board_top - 4.15]);   // riser
+    translate([47.7, 2.0, 28.0]) cube([78.0 - 47.7, 22.0, 3.5]);                           // across
+    translate([cable_slot[0][0] + 0.4, cable_slot[0][1] + 0.4, 28.0])                       // up through the lid
+        cube([cable_slot[1][0] - cable_slot[0][0] - 0.8, cable_slot[1][1] - cable_slot[0][1] - 0.8, lid_top - 28.0]);
+    translate([27.7, 0.0, board_top + cool_plate_h + 0.5])                                   // spare length
+        cube([46.9 - 27.7, 17.4, wall_top - 0.5 - (board_top + cool_plate_h + 0.5)]);
 }
 
 // the space the LEDs and their legs need under the lid (checked against the Pi)
@@ -326,8 +397,9 @@ module base() {
                 translate([0, 0, wall_top - 12 - (b[3] - b[2]) / 2]) cylinder(d1 = b[2], d2 = b[3], h = (b[3] - b[2]) / 2 + e);
                 translate([0, 0, wall_top - 12]) cylinder(d = b[3], h = 12);
             }
-            // keyhole pads (inside, under the Pi)
-            for (k = keyholes) translate([k[0] - 6, k[1] - 4.5, floor_t - e]) cube([key_len + 12, 9, 2.4]);
+            // keyhole pads (inside, under the Pi): 1.6 mm side walls, 0.8 mm roof
+            for (k = keyholes) translate([k[0] - 6, k[1] - 6, floor_t - e])
+                cube([key_len + 12, 12, key_lip + key_head + 0.8 - floor_t + e]);
             // ring around the power plunger (outside), so a finger finds it
             translate([ix0 - wall, pwr_y, board_top + 6]) rotate([0, -90, 0])
                 difference() { cylinder(d = 15, h = 0.8); translate([0, 0, -e]) cylinder(d = 12.4, h = 1); }
@@ -361,18 +433,20 @@ module base() {
         // the tab is thinned to 1.6 so it flexes
         translate([ix0 - wall - 1, pwr_y - 3.8, board_top - 2.3]) cube([1.8, 7.6, 14.0]);
         // status LED shows through a window
-        translate([ix0 - wall - 1, led_y, board_top + 0.8]) rotate([0, 90, 0]) cylinder(d = 2.4, h = wall + 2);
-        // exhaust slots (vertical: no bridges)
-        for (j = [0 : 5]) translate([ix0 - wall - 1, 37.0 + j * 4.0, board_top + 4.0])
+        translate([ix0 - wall - 1, led_y, board_top + 0.5]) rotate([0, 90, 0]) cylinder(d = 2.4, h = wall + 2);
+        // exhaust slots facing the cooler's fins (they blow towards this end;
+        // vertical slots need no bridges); the top end when on the wall
+        for (j = [0 : 5]) translate([ix0 - wall - 1, 26.0 + j * 4.0, board_top + 4.0])
             cube([wall + 2, 2.0, 21.0]);
         // ---- back wall: exhaust slots behind the heatsink fins
         for (i = [0 : 6]) translate([4.0 + i * 4.0, iy1 - 1, board_top + 4.0]) cube([2.0, wall + 2, 21.0]);
 
         // ---- underside: keyholes (closed on the inside) and foot recesses
         for (k = keyholes) translate([k[0], k[1], -e]) {
-            translate([key_len, 0, 0]) cylinder(d = 8.6 + tol, h = 4.0);            // head entry
-            translate([0, -2.1 - tol / 2, 0]) cube([key_len, 4.2 + tol, 1.6]);      // shank slot
-            hull() for (x = [0, key_len]) translate([x, 0, 1.6]) cylinder(d = 8.6 + tol, h = 2.4);
+            translate([key_len, 0, 0]) cylinder(d = 8.6 + tol, h = key_lip + key_head);   // head entry
+            hull() for (x = [0, key_len]) translate([x, 0, 0])                           // shank slot, round end
+                cylinder(d = 4.2 + tol, h = key_lip + e);
+            hull() for (x = [0, key_len]) translate([x, 0, key_lip]) cylinder(d = 8.6 + tol, h = key_head);
         }
         for (f = feet) translate([f[0], f[1], -e]) cylinder(d = 10.4, h = 0.8);
     }
@@ -497,20 +571,32 @@ module pod() {
             }
             // camera standoffs on the module's own holes (front wall -> PCB front face)
             for (h = cam_holes) translate([0, h[0], h[1]]) rotate([0, 90, 0]) cylinder(d = 4.0, h = pod_front_in + e);
-            // pivot bosses inside the side walls
+            // pivot bosses inside the side walls, with a 45 degree keel towards
+            // +X (down when the pod prints lens-face down: no overhang)
             for (s = [-1, 1]) translate([piv_p[0], s * (pod_y - pod_wall), piv_p[1]])
-                rotate([s < 0 ? -90 : 90, 0, 0]) cylinder(d = piv_boss_d, h = piv_boss_l);
-            // cover screw bosses, fused into the side walls
+                rotate([s < 0 ? -90 : 90, 0, 0]) hull() {
+                    cylinder(d = piv_boss_d, h = piv_boss_l);
+                    translate([piv_boss_d / 2 * sqrt(2), 0, 0]) cylinder(d = 0.2, h = piv_boss_l);
+                }
+            // cover screw columns below the camera, full depth from the front
+            // wall (upright in print), fused into the side walls
             for (c = cover_screws) translate([pod_back_in - e, c[0], c[1]])
-                rotate([0, 90, 0]) cylinder(d = 4.4, h = 5.0);
+                rotate([0, 90, 0]) cylinder(d = 4.4, h = pod_front_in - pod_back_in + 2 * e);
         }
         // camera screw pilots (M2, from the back through the PCB)
         for (h = cam_holes) translate([-1, h[0], h[1]]) rotate([0, 90, 0]) cylinder(d = pilot_m2, h = 6.5);
         // lens window, widening outwards for the 66 x 41 degree field of view
         rotate([0, 90, 0]) translate([0, 0, pod_front_in - 1]) cylinder(d = 7.0 + tol, h = 4);
         translate([pod_front_out - 1.3, 0, 0]) rotate([0, 90, 0]) cylinder(d1 = 7.0 + tol, d2 = 10.4, h = 1.31);
-        // ribbon exit right under the pivot: hardly moves when the pod tilts
-        translate([pod_back_in - e, -fpc_w / 2 - 0.8, pod_z0 - 1]) cube([3.0, fpc_w + 1.6, pod_wall + 2]);
+        // ribbon exit in the floor just in front of the pivot
+        translate([pod_exit[0], -fpc_w / 2 - 0.8, pod_z0 - 1]) cube([pod_exit[1] - pod_exit[0], fpc_w + 1.6, pod_wall + 2]);
+        // its outer back edge rounded (R 1.5): above 0 degrees of tilt the lid
+        // slot pulls the ribbon backwards over that edge
+        translate([pod_exit[0], 0, pod_z0]) rotate([90, 0, 0]) linear_extrude(fpc_w + 1.6, center = true)
+            difference() {
+                translate([-pod_exit_round, -1]) square([pod_exit_round + e, pod_exit_round + 1]);
+                translate([-pod_exit_round, pod_exit_round]) circle(r = pod_exit_round, $fn = 64);
+            }
         // pivot: smooth clearance holes for the through-bolt (no thread in the moving joint)
         translate([piv_p[0], 0, piv_p[1]]) rotate([90, 0, 0]) cylinder(d = clear_m3 + tol, h = 2 * pod_y + 2, center = true);
         // cover screw pilots (M2)
@@ -543,22 +629,19 @@ module pod_back() {
                         cube([1.6, 2 * (pod_y - pod_wall - fit), pod_z1 - pod_z0 - 2 * pod_wall - 2 * fit]);
                         translate([-1, 1.2, 1.2]) cube([4, 2 * (pod_y - pod_wall - fit) - 2.4, pod_z1 - pod_z0 - 2 * pod_wall - 2 * fit - 2.4]);
                     }
-                for (s = [-1, 1]) translate([piv_p[0], s * (pod_y - pod_wall - 4), piv_p[1]]) rotate([90, 0, 0])
-                    cylinder(d = piv_boss_d + 2 * fit, h = 8, center = true);
+                // clear of the pivot bosses and the bolt across the whole width
+                translate([piv_p[0], 0, piv_p[1]]) rotate([90, 0, 0])
+                    cylinder(d = piv_boss_d + 2 * fit, h = 2 * pod_y, center = true);
                 for (c = cover_screws) translate([pod_back_in - 1, c[0], c[1]]) rotate([0, 90, 0])
                     cylinder(d = 4.4 + 2 * fit, h = 4);
-                // the ribbon's fold passes over the lip at the top
-                translate([pod_back_in - 1, -fpc_w / 2 - 0.8, cam_z1 - 0.5]) cube([4, fpc_w + 1.6, 10]);
             }
         }
         for (c = cover_screws) translate([pod_back_out - 1, c[0], c[1]]) rotate([0, 90, 0]) {
             cylinder(d = clear_m2 + tol, h = 5);
             cylinder(d = 4.4, h = 1.6);
         }
-        // notch so the ribbon passes the cover
-        translate([pod_back_out - 1, -fpc_w / 2 - 0.8, pod_z0 - 1]) cube([pod_wall + 3, fpc_w + 1.6, pod_wall + 3.4]);
-        // ventilation for the sensor, beside the ribbon
-        for (s = [-1, 1]) translate([pod_back_out - 1, s * 10.4 - 0.7, 1.0]) cube([pod_wall + 3, 1.4, 7.0]);
+        // ventilation for the sensor
+        for (z = [1.0, 5.0, 9.0]) translate([pod_back_out - 1, -7.0, z]) cube([pod_wall + 3, 14.0, 1.6]);
     }
 }
 
@@ -571,23 +654,29 @@ module pod_placed(a) {
 module coupon() {
     difference() {
         union() {
-            translate([0, 0, 0]) rrect(0, 0, 74, 30, 3, 2.4);
+            translate([0, 0, 0]) rrect(0, 0, 92, 30, 3, 2.4);
+            translate([75, 27.6, 0]) cube([16, wall, 15.5]);                         // USB-C test wall
+            // the same pilot depths as in the case, so the real screws fit
             translate([8, 8, 0]) cylinder(d = 6.0, h = 2.4 + standoff_h);            // Pi standoff
-            translate([20, 8, 0]) cylinder(d = 4.0, h = 2.4 + 5.0);                  // camera standoff
-            translate([32, 8, 0]) cylinder(d = 6.0, h = 2.4 + 8.0);                  // M3 boss
+            translate([20, 8, 0]) cylinder(d = 4.0, h = 2.4 + pod_front_in);         // camera post
+            translate([32, 8, 0]) cylinder(d = 6.2, h = 2.4 + 10.0);                 // M3 boss (thinnest lid boss)
             translate([50, 15, 0]) cylinder(d = buzz_d + 2 * buzz_cup_wall, h = 2.4 + buzz_h);
             translate([62, 2, 0]) cube([10, 26, 18]);                                // USB-A window
             translate([40.5, 7.5, 0]) cylinder(d = led_sleeve, h = lid_t + led_sleeve_h);   // LED sleeve
         }
         translate([40.5, 7.5, -1]) cylinder(d = led_bore, h = 20);
-        translate([8, 8, 2.4]) cylinder(d = pilot_m25, h = 10);
-        translate([20, 8, 2.4]) cylinder(d = pilot_m2, h = 10);
-        translate([32, 8, 2.4]) cylinder(d = pilot_m3, h = 10);
+        translate([8, 8, pi_pilot_z]) cylinder(d = pilot_m25, h = 10);           // 6.8 deep, as in the base
+        translate([20, 8, 2.4 + pod_front_in - 5.5]) cylinder(d = pilot_m2, h = 10);   // 5.5 deep, as in the pod
+        translate([32, 8, 1.6]) cylinder(d = pilot_m3, h = 12);                  // 10.8 deep (a lid screw engages 8.8)
         translate([8, 22, -1]) cylinder(d = 2.7 + tol, h = 5);       // Pi board hole size
         translate([20, 22, -1]) cylinder(d = 2.2 + tol, h = 5);      // camera board hole size
         translate([32, 22, -1]) cylinder(d = clear_m3 + tol, h = 5);
         translate([50, 15, 2.4]) cylinder(d = buzz_d + 0.6 + tol, h = 20);
         translate([61, 7.5, 3.0]) cube([12, 14.8 + tol, 7.0 + tol]);   // one USB-A port + plug body
+        // the base's USB-C opening, printed upright like the base (same bridge on top):
+        // the 27 W supply's plug body must slide through
+        translate([83, 27.6 - 1, 2.4 + 6.0]) rotate([-90, 0, 0])
+            linear_extrude(wall + 2) offset(r = 2.5) square([13.5 + tol - 5, 8.5 + tol - 5], center = true);
         translate([36, 24.5, 2.4 - 0.6]) linear_extrude(1) text("SENTRIX fit", size = 3.2,
             font = "Liberation Sans:style=Bold", halign = "center", valign = "center");
     }
