@@ -6,6 +6,7 @@ the Pi 4 YUV fallback, reconnects, ``build_source`` specs and ``run_live``.
 
 from __future__ import annotations
 
+import sys
 import threading
 import time
 from types import SimpleNamespace
@@ -263,6 +264,76 @@ class TestSpecs:
         monkeypatch.setenv("SENTRIX_PICAMERA_LORES", "bogus")
         source = PiCameraSource(start=False)
         assert source.main_size == (1536, 864) and source.lores_size == (640, 480)
+
+
+class FakeTransform:
+    def __init__(self, hflip: int = 0, vflip: int = 0) -> None:
+        self.hflip, self.vflip = hflip, vflip
+
+
+class FakePicamera2Rotating(FakePicamera2):
+    def create_video_configuration(self, main, lores, controls, transform=None):
+        config = super().create_video_configuration(main, lores, controls)
+        config["transform"] = transform
+        return config
+
+
+class TestRotation:
+    """Upright with the ribbon connector at the bottom (the enclosure's way);
+    180 flips the sensor's readout for a module mounted connector-up."""
+
+    def test_default_passes_no_transform(self, fake_module, monkeypatch):
+        monkeypatch.delenv("SENTRIX_PICAMERA_ROTATION", raising=False)
+        source = _source(fake_module, start=False)
+        try:
+            assert source.rotation == 0 and source._open()
+            assert "transform" not in FakePicamera2.instances[0].config
+        finally:
+            source.release()
+
+    def test_rotation_180_flips_the_sensor_readout(self, fake_module, monkeypatch):
+        # like the real package: picamera2 binds no Transform, libcamera has it
+        monkeypatch.setitem(sys.modules, "libcamera", SimpleNamespace(Transform=FakeTransform))
+        module = SimpleNamespace(Picamera2=FakePicamera2Rotating)
+        source = _source(module, rotation=180, start=False)
+        try:
+            assert source._open()
+            transform = FakePicamera2.instances[0].config["transform"]
+            assert (transform.hflip, transform.vflip) == (1, 1)
+            status = source.status()
+            assert status["rotation"] == 180 and status["rotation_requested"] == 180
+        finally:
+            source.release()
+
+    @pytest.mark.parametrize("raw,expected", [("180", 180), ("-180", 180), ("540", 180),
+                                              ("180.0", 180), ("90", 0), ("0", 0),
+                                              ("bogus", 0), ("nan", 0), ("inf", 0), ("1e400", 0)])
+    def test_rotation_from_the_environment(self, monkeypatch, raw, expected):
+        monkeypatch.setenv("SENTRIX_PICAMERA_ROTATION", raw)
+        assert PiCameraSource(start=False).rotation == expected
+
+    def test_without_libcamera_the_camera_still_starts(self, fake_module, monkeypatch):
+        real_import = picamera.importlib.import_module
+        tries = []
+
+        def no_libcamera(name, *args, **kwargs):
+            if name == "libcamera":
+                tries.append(name)
+                raise ImportError("No module named 'libcamera'")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(picamera.importlib, "import_module", no_libcamera)
+        source = _source(fake_module, rotation=180, start=False)
+        try:
+            assert source._open(), "an upside-down picture beats no picture"
+            assert "transform" not in FakePicamera2.instances[0].config
+            assert source.errors == 0, "a missing Transform is a warning, not a camera error"
+            assert source.status()["rotation"] == 0 and source.status()["rotation_requested"] == 180
+            source._close_camera(source._camera)
+            source._camera = None
+            assert source._open() and tries == ["libcamera"], "looked up once per source"
+        finally:
+            source.release()
 
 
 class TestRunLive:

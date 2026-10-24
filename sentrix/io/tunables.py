@@ -21,6 +21,9 @@ Defaults and why:
 * ``bme280`` / ``dht22`` off — room sensors through the kernel IIO drivers.
 * ``picamera_main`` 1280x720, ``picamera_lores`` 640x480 — the Picamera2
   streams (docs/8_RASPBERRY_PI5_INTEGRATION.md §4: evidence/preview and analysis).
+* ``picamera_rotation`` 0 — a Camera Module's picture is upright with its
+  ribbon connector at the bottom (the enclosure mounts it so); 180 for one
+  mounted connector-up. Any other value is 0.
 """
 
 from __future__ import annotations
@@ -150,6 +153,21 @@ def picamera_lores_size() -> tuple[int, int]:
     return _size("node", "picamera_lores", "SENTRIX_PICAMERA_LORES", (640, 480))
 
 
+def parse_rotation(value: Any) -> int:
+    """``180`` for 180 (or -180, 540, "180.0"); ``0`` for anything else,
+    including bad input ("inf", "nan", "bogus")."""
+    try:
+        rotation = int(float(str(value).strip() or 0))
+    except (TypeError, ValueError, OverflowError):
+        return 0
+    return 180 if rotation % 360 == 180 else 0
+
+
+def picamera_rotation() -> int:
+    value = _field("node", "picamera_rotation", "SENTRIX_PICAMERA_ROTATION")
+    return parse_rotation(_env("SENTRIX_PICAMERA_ROTATION") if value is _MISSING else value)
+
+
 __all__ = ["parse_size", "siren_max_on_seconds", "siren_arm_pin", "siren_armed_flag",
            "tamper_pin", "buzzer_enabled", "bme280_enabled", "dht22_enabled",
-           "picamera_main_size", "picamera_lores_size"]
+           "picamera_main_size", "picamera_lores_size", "parse_rotation", "picamera_rotation"]

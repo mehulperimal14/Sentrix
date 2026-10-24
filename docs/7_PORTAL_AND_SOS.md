@@ -444,6 +444,7 @@ Secrets (env names only, read at use time): `TELEGRAM_BOT_TOKEN`,
 | `node.interval_seconds` / `temp_warn_c` / `temp_critical_c` | — | 5 / 80 / 85 | |
 | `node.bme280` / `dht22` | `SENTRIX_SENSOR_BME280` / `SENTRIX_SENSOR_DHT22` | False / False | Room sensors |
 | `node.picamera_main` / `picamera_lores` | `SENTRIX_PICAMERA_MAIN` / `SENTRIX_PICAMERA_LORES` | 1280x720 / 640x480 | Picamera2 streams |
+| `node.picamera_rotation` | `SENTRIX_PICAMERA_ROTATION` | 0 | 0 or 180 (anything else reads as 0); 180 passes libcamera `Transform(hflip=1, vflip=1)` for a Camera Module mounted connector-up |
 | `clip.mode` | `SENTRIX_PIPELINE_MODE` | tick | `clip` → `Pipeline.run_live` runs `sentrix.pipeline.clip.build_strategy(pipeline)` on the inference thread (§2.4) |
 | `clip.min_escalate_observations` | — | 1 | One clip is one observation for L4/L5 (the tick loop needs 2 ticks) |
 | `clip.window_seconds` / `hop_seconds` | — | 4 / 2 | |

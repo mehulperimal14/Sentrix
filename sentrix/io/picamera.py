@@ -31,6 +31,13 @@ this module imports anywhere. Tests pass a fake module as ``picamera2_module``.
 Source spec (``CAMERA_SOURCES``): ``picamera`` or ``picamera:<n>``, optionally
 ``?fps=15&main=1280x720&lores=640x480``. Defaults: ``SENTRIX_CAPTURE_FPS`` and
 ``SENTRIX_PICAMERA_MAIN`` / ``SENTRIX_PICAMERA_LORES``.
+
+Orientation: a Camera Module's picture is upright with its ribbon connector at
+the bottom (the IMX708's device tree rotation is 180 and libcamera's default
+undoes it), which is how the SENTRIX enclosure mounts it. A module mounted
+connector-up needs ``SENTRIX_PICAMERA_ROTATION=180``: libcamera then flips the
+sensor's readout (``Transform(hflip=1, vflip=1)``), so every stream comes out
+upright at no cost.
 """
 
 from __future__ import annotations
@@ -65,6 +72,16 @@ def _import_picamera2() -> Any:
     return importlib.import_module("picamera2")
 
 
+def _transform_180() -> Any:
+    """libcamera's 180 degree transform (``libcamera.Transform``: picamera2
+    imports libcamera itself but does not re-export the class); ``None`` when
+    it cannot be made. Never raises."""
+    try:
+        return importlib.import_module("libcamera").Transform(hflip=1, vflip=1)
+    except Exception:
+        return None
+
+
 def parse_spec(spec: str) -> dict[str, Any]:
     """``"picamera:1?fps=15&main=1920x1080"`` -> ``{"camera_num": 1, "fps": 15.0,
     "main_size": (1920, 1080)}``. Raises ``ValueError`` on a bad spec."""
@@ -96,10 +113,15 @@ class PiCameraSource(FrameSource):
 
     def __init__(self, camera_num: int = 0, *, main_size: tuple[int, int] | None = None,
                  lores_size: tuple[int, int] | None = None, fps: float | None = None,
-                 reconnect_seconds: float = 2.0, picamera2_module: Any = None,
-                 start: bool = True) -> None:
+                 rotation: int | None = None, reconnect_seconds: float = 2.0,
+                 picamera2_module: Any = None, start: bool = True) -> None:
         self.camera_num = int(camera_num)
         self.name = f"picamera:{self.camera_num}"
+        self.rotation = tunables.picamera_rotation() if rotation is None \
+            else tunables.parse_rotation(rotation)
+        self.applied_rotation = 0          # what the running camera really got
+        self._transform: Any = None
+        self._transform_checked = False
         self.main_size = tuple(main_size or tunables.picamera_main_size())
         lores = tuple(lores_size or tunables.picamera_lores_size())
         # libcamera: the lores stream may not be larger than the main one.
@@ -153,13 +175,24 @@ class PiCameraSource(FrameSource):
             self._note_error(f"open failed: {exc}")
             return False
         frame_us = int(round(1_000_000 / self.fps))
+        extra: dict[str, Any] = {}
+        if self.rotation == 180:
+            if not self._transform_checked:       # once per source, not per reopen
+                self._transform_checked = True
+                self._transform = _transform_180()
+                if self._transform is None:
+                    log.warning("camera %s: rotation 180 asked for, but libcamera's Transform "
+                                "is not available: the picture stays as the sensor gives it",
+                                self.name)
+            if self._transform is not None:
+                extra["transform"] = self._transform
         last: Exception | None = None
         for lores_format in ("RGB888", "YUV420"):          # Pi 5, then Pi 4 and earlier
             try:
                 config = camera.create_video_configuration(
                     main={"size": self.main_size, "format": "RGB888"},
                     lores={"size": self.lores_size, "format": lores_format},
-                    controls={"FrameDurationLimits": (frame_us, frame_us)})
+                    controls={"FrameDurationLimits": (frame_us, frame_us)}, **extra)
                 camera.configure(config)
                 camera.start()
             except Exception as exc:
@@ -171,8 +204,10 @@ class PiCameraSource(FrameSource):
                 continue
             self._camera, self.lores_format = camera, lores_format
             self.last_error = None
-            log.info("camera %s started: main %dx%d, lores %dx%d %s, %.0f fps", self.name,
-                     *self.main_size, *self.lores_size, lores_format, self.fps)
+            self.applied_rotation = 180 if "transform" in extra else 0
+            log.info("camera %s started: main %dx%d, lores %dx%d %s, %.0f fps, rotation %d",
+                     self.name, *self.main_size, *self.lores_size, lores_format, self.fps,
+                     self.applied_rotation)
             return True
         self._note_error(f"configure failed: {last}")
         self._close_camera(camera)
@@ -276,6 +311,7 @@ class PiCameraSource(FrameSource):
                 "errors": self.errors, "last_error": self.last_error,
                 "main": list(self.main_size), "lores": list(self.lores_size),
                 "lores_format": self.lores_format, "fps": self.fps,
+                "rotation": self.applied_rotation, "rotation_requested": self.rotation,
                 "exposure_us": meta.get("ExposureTime"), "lux": meta.get("Lux")}
 
     def release(self) -> None:

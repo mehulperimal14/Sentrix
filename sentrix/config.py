@@ -907,6 +907,10 @@ class NodeConfig:
     #: Picamera2 streams: main (evidence/preview) and lores (analysis).
     picamera_main: str = _env_str("SENTRIX_PICAMERA_MAIN", "1280x720")
     picamera_lores: str = _env_str("SENTRIX_PICAMERA_LORES", "640x480")
+    #: 0 or 180. A Camera Module gives an upright picture with its ribbon
+    #: connector at the bottom; 180 is for one mounted connector-up (libcamera
+    #: flips the sensor's readout, so it costs nothing).
+    picamera_rotation: int = _env_int("SENTRIX_PICAMERA_ROTATION", 0)
 
 
 @dataclass(frozen=True)
