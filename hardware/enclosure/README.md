@@ -61,14 +61,18 @@ its official drawing (each finding re-checked by an independent reviewer):
   (the power button's ring had been a loose 9 mm3 piece touching the wall
   only along its edges, and the back lid-screw bosses left two sealed 5 mm3
   slivers against the rounded corners). No size or hole position changed;
-  every STL now has every edge shared by exactly two faces.
+  every STL now has every edge shared by exactly two faces;
+* lettering on the base's long sides (below): the institute's mark and
+  T.I.E.T on the front, the project team on the back. The back wall's seven
+  exhaust slots moved to the front wall over the ports (eight 2.2 x 17 mm
+  slots, the same open area), so the team's names have the whole back wall.
 
 ## The parts
 
 | Part | Print orientation | Size (mm) | PETG, solid | Supports |
 |---|---|---|---|---|
 | `sentrix_coupon` | flat | 92 x 30 x 18 | 14 g | none - **print this first** (about 30 min) |
-| `sentrix_base` | floor down | 98 x 73 x 39 | 56 g | none |
+| `sentrix_base` | floor down | 98 x 74 x 39 (with the lettering) | 57 g | none |
 | `sentrix_lid` | top face down (the SENTRIX lettering is on the bed) | 97 x 73 x 13 | 23 g | none |
 | `sentrix_bracket` | base plate down | 28 x 38 x 16 | 5 g | none |
 | `sentrix_pod` | lens face down | 38 x 30 x 16 | 8 g | none |
@@ -78,6 +82,32 @@ Weights are for solid parts at 1.27 g/cm3; at 20 % infill and 3 walls expect
 roughly half. Every part fits a 120 x 120 mm bed, so any printer works
 (Ender 3, Prusa MK3/MK4/Mini, Bambu A1/A1 mini/P1/X1, Anycubic, Creality K1
 and so on).
+
+## Lettering
+
+Both long sides of the base carry raised lettering, 0.6 mm proud, printed in
+the case's own white and coloured by hand afterwards:
+
+* **front** (the side with USB-C and HDMI), right of the ports: the Thapar
+  Institute of Engineering and Technology "ti" mark (the institute's logo,
+  traced from its flat version into `thapar_ti_mark.scad`) over **T.I.E.T**,
+  in a rounded frame (39 x 36 mm);
+* **back**: "Mentor : Dr. Ashutosh Mishra", then the five names on the left
+  and their roll numbers on the right, 3.4 mm capitals, in a rounded frame
+  (88 x 36 mm).
+
+Raised rather than engraved, because the letters' 0.5 mm strokes print
+cleanly standing proud of a vertical wall, while an engraved groove that
+narrow closes up. Colour them with a fine paint marker (acrylic, 0.7 mm tip)
+or a brush, wiping slips off the flat wall with a damp cloth; a light pass of
+fine sandpaper over the letter tops first gives crisper edges. For the
+sharpest letters print the base at 0.12-0.16 mm layers, and paint the seam
+onto a corner (most slicers have a seam-painting tool) so it does not run
+through a name.
+
+The text is data at the top of `sentrix_enclosure.scad` (`mentor`, `team`), so
+a name can be corrected there and the base re-exported; `lettering = false` leaves
+both walls plain.
 
 ## Print settings (any printer)
 
@@ -112,7 +142,7 @@ then File > Export.
 | Component | Placement |
 |---|---|
 | Raspberry Pi 5 | screwed down with 4 x M2.5 on four standoffs at its own holes (58 x 49 mm grid), 5 mm above the floor; the cooler clips into its own two holes |
-| Active Cooler | hex intake in the lid right over the blower, hex exhaust over the fins, slots in the end and back walls |
+| Active Cooler | hex intake in the lid right over the blower, hex exhaust over the fins, slots in the end wall and in the front wall over the ports |
 | USB ports + Ethernet | the camera end of the case; the wall there is only 1 mm thick, so the USB microphone plugs in fully and faces outwards |
 | USB-C power, 2 x micro-HDMI | three openings in the long side: USB-C 13.5 x 8.5 mm, each micro-HDMI 11.6 x 7.6 mm, sized for the plug bodies |
 | Power button | the end opposite the camera: a round flexure in the wall with a 3 mm nub 0.3 mm from the Pi's button. Press once to switch on; while it runs, press twice for a clean shutdown; hold it to force the Pi off |

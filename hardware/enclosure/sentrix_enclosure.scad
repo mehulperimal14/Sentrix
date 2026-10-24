@@ -19,6 +19,8 @@
 // Ethernet ports; y along the 56 mm edge towards the GPIO header.  z = 0 is
 // the underside of the base.
 
+include <thapar_ti_mark.scad>
+
 PART = "assembly"; // [assembly, wall, exploded, base, lid, bracket, pod, pod_back, coupon, print_plate]
 TILT = 45;         // camera tilt in the assembly view: 0 = level, 90 = straight up
 
@@ -173,6 +175,18 @@ leds = [[63.0, 58.5], [69.5, 58.5], [76.0, 58.5]];
 led_d = 5.0;  led_bore = led_d + 0.2 + tol;  led_grip = 4.8;
 led_sleeve = 7.4;  led_sleeve_h = 5.0;
 label_x = 30.5;                                 // SENTRIX lettering centre, left of the LEDs
+
+/* [Lettering] */
+// Raised lettering on the base's long sides, printed white and coloured by
+// hand: the institute's mark and name on the front (right of the ports), the
+// project team on the back.  Raised, not engraved: 0.5 mm strokes print
+// cleanly on a vertical wall and a paint marker colours just the letters.
+lettering = true;
+letter_h  = 0.6;                                // proud of the wall
+letter_font = "Liberation Sans:style=Bold";     // bundled with OpenSCAD
+mentor = "Mentor : Dr. Ashutosh Mishra";
+team = [["KARTIK GARG", "102303478"], ["MEHUL PERIMAL", "102315144"], ["HARSHIT MISHRA", "102319039"],
+        ["PRASHANT GAGNEJA", "102353011"], ["AKSHAY RANVEER", "102303453"]];
 
 // lid screws (board coordinates), fused into the corners of the base:
 // [x, y, boss dia, dia of its top 12 mm where the M3 thread is cut]
@@ -381,6 +395,38 @@ module leds5_envelope() {
     for (l = leds) translate([l[0], l[1], wall_top - led_sleeve_h - 15]) cylinder(d = 5.8, h = 15);
 }
 
+// ================================================================== lettering
+// 2D panels in wall coordinates: u along the wall as read from outside, v = z.
+module rr2(w, h, r) translate([r, r]) offset(r = r) square([w - 2 * r, h - 2 * r]);
+module frame2(w, h, r = 2.5, t = 0.8) difference() { rr2(w, h, r); translate([t, t]) rr2(w - 2 * t, h - 2 * t, r - t); }
+
+// front, right of the ports: the "ti" mark over T.I.E.T, in a frame (u = 0 at x = 47.5)
+module tiet_panel() {
+    w = 39.0; v0 = 1.5; v1 = 37.5; mark_h = 17.0;
+    translate([0, v0]) frame2(w, v1 - v0);
+    translate([w / 2 - mark_h * ti_mark_aspect / 2, 15.9]) scale(mark_h) thapar_ti_mark();
+    translate([w / 2, 6.2]) text("T.I.E.T", size = 6.5, font = letter_font, halign = "center");
+}
+
+// back: the mentor, then the team, names left and roll numbers right, in a
+// frame (u = 0 at x = 86.5, read towards -x)
+module team_panel() {
+    w = 88.0; v0 = 1.5; v1 = 37.5; s = 3.6; pitch = 5.31; after = 1.2;   // capitals 3.44 tall
+    translate([0, v0]) frame2(w, v1 - v0);
+    top = v1 - 0.8 - 1.6 - 3.44;                                          // mentor's baseline
+    translate([3.4, top]) text(mentor, size = s, font = letter_font);
+    for (i = [0 : len(team) - 1]) translate([0, top - after - (i + 1) * pitch]) {
+        translate([3.4, 0]) text(team[i][0], size = s, font = letter_font);
+        translate([w - 3.4, 0]) text(team[i][1], size = s, font = letter_font, halign = "right");
+    }
+}
+
+// raised on the walls' outer faces, 0.2 mm into the wall so they fuse into one solid
+module lettering() {
+    translate([47.5, iy0 - wall + 0.2, 0]) rotate([90, 0, 0]) linear_extrude(letter_h + 0.2) tiet_panel();
+    translate([86.5, iy1 + wall - 0.2, 0]) rotate([90, 0, 180]) linear_extrude(letter_h + 0.2) team_panel();
+}
+
 // ================================================================== base
 module base() {
     difference() {
@@ -410,6 +456,7 @@ module base() {
             // 0.2 inside the wall, so it overlaps the wall instead of only touching it
             translate([ix0 - wall + 0.2, pwr_y, board_top + 6]) rotate([0, -90, 0])
                 difference() { cylinder(d = 15, h = 1.0); translate([0, 0, -e]) cylinder(d = 12.4, h = 1.2); }
+            if (lettering) lettering();
         }
         // standoff pilots (M2.5)
         for (h = pi_holes) translate([h[0], h[1], pi_pilot_z]) cylinder(d = pilot_m25, h = standoff_h + floor_t);
@@ -445,8 +492,10 @@ module base() {
         // vertical slots need no bridges); the top end when on the wall
         for (j = [0 : 5]) translate([ix0 - wall - 1, 26.0 + j * 4.0, board_top + 4.0])
             cube([wall + 2, 2.0, 21.0]);
-        // ---- back wall: exhaust slots behind the heatsink fins
-        for (i = [0 : 6]) translate([4.0 + i * 4.0, iy1 - 1, board_top + 4.0]) cube([2.0, wall + 2, 21.0]);
+        // ---- front wall, over the ports: exhaust slots facing the heatsink fins'
+        // front end (they were on the back wall until the team's names went
+        // there; 8 x 2.2 x 17 mm, the same open area as the old 7 x 2 x 21)
+        for (i = [0 : 7]) translate([4.0 + i * 3.6, iy0 - wall - 1, board_top + 8.0]) cube([2.2, wall + 2, 17.0]);
 
         // ---- underside: keyholes (closed on the inside) and foot recesses
         for (k = keyholes) translate([k[0], k[1], -e]) {
