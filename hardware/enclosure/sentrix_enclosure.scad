@@ -392,17 +392,24 @@ module base() {
             // Pi standoffs on the board's own holes
             for (h = pi_holes) translate([h[0], h[1], floor_t - e]) cylinder(d = 6.0, h = standoff_h + e);
             // lid screw bosses fused into the corners, thicker where the screw grips
-            for (b = lid_bosses) translate([b[0], b[1], 0]) {
+            // (turned half a facet, so no facet corner lands on a wall face: a clean mesh)
+            for (b = lid_bosses) translate([b[0], b[1], 0]) rotate(180 / $fn) {
                 cylinder(d = b[2], h = wall_top);
                 translate([0, 0, wall_top - 12 - (b[3] - b[2]) / 2]) cylinder(d1 = b[2], d2 = b[3], h = (b[3] - b[2]) / 2 + e);
                 translate([0, 0, wall_top - 12]) cylinder(d = b[3], h = 12);
             }
+            // the back bosses sit off the rounded inner corners: fill the sliver
+            // between boss and corner, else it is a sealed void in the print
+            for (b = lid_bosses) if (b[1] > 32)
+                translate([b[0] < 40 ? ix0 - e : b[0], b[1], floor_t - e])
+                    cube([b[0] < 40 ? b[0] - ix0 + e : ix1 - b[0] + e, iy1 - b[1] + e, wall_top - 12 - floor_t + 2 * e]);
             // keyhole pads (inside, under the Pi): 1.6 mm side walls, 0.8 mm roof
             for (k = keyholes) translate([k[0] - 6, k[1] - 6, floor_t - e])
                 cube([key_len + 12, 12, key_lip + key_head + 0.8 - floor_t + e]);
-            // ring around the power plunger (outside), so a finger finds it
-            translate([ix0 - wall, pwr_y, board_top + 6]) rotate([0, -90, 0])
-                difference() { cylinder(d = 15, h = 0.8); translate([0, 0, -e]) cylinder(d = 12.4, h = 1); }
+            // ring around the power plunger (outside), so a finger finds it; it starts
+            // 0.2 inside the wall, so it overlaps the wall instead of only touching it
+            translate([ix0 - wall + 0.2, pwr_y, board_top + 6]) rotate([0, -90, 0])
+                difference() { cylinder(d = 15, h = 1.0); translate([0, 0, -e]) cylinder(d = 12.4, h = 1.2); }
         }
         // standoff pilots (M2.5)
         for (h = pi_holes) translate([h[0], h[1], pi_pilot_z]) cylinder(d = pilot_m25, h = standoff_h + floor_t);

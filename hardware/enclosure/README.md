@@ -56,7 +56,12 @@ its official drawing (each finding re-checked by an independent reviewer):
   the bolt or a sharp corner; the keyholes take ordinary pan-head screws (3.2 mm head
   channel, 1.6 mm side walls, rounded slot ends); the back lid-screw bosses
   overlap the walls over their full height; the lid's grille ribs are the
-  intended 1.4 mm.
+  intended 1.4 mm;
+* mesh clean-up, measured on the exported STLs: the base is one closed solid
+  (the power button's ring had been a loose 9 mm3 piece touching the wall
+  only along its edges, and the back lid-screw bosses left two sealed 5 mm3
+  slivers against the rounded corners). No size or hole position changed;
+  every STL now has every edge shared by exactly two faces.
 
 ## The parts
 
