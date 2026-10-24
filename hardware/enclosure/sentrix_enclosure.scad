@@ -1,6 +1,6 @@
-// SENTRIX enclosure, rev B
+// SENTRIX enclosure, rev C (rev B + the status LED windows of rev A)
 // Raspberry Pi 5 + Active Cooler + Camera Module 3 (standard) + USB microphone
-// + 3-pin buzzer module.  Open in OpenSCAD (2021.01 or newer), set PART, press
+// + 3-pin buzzer module + three 5 mm status LEDs.  Open in OpenSCAD (2021.01 or newer), set PART, press
 // F6, then File > Export > STL (or 3MF).  hardware/enclosure/README.md has the
 // print settings, the screw list and the assembly order.
 //
@@ -114,6 +114,12 @@ buzz_d = 12.0;  buzz_h = 9.5;  buzz_pcb = 1.6;
 buzz_c = [76.0, 43.0];
 buzz_cup_wall = 1.6;
 
+// status LEDs (5 mm, pushed into sleeves under the lid from inside; the code
+// drives GPIO 5 / 12 / 13 as green = working, amber = attention, red = alarm)
+leds = [[63.0, 58.5], [69.5, 58.5], [76.0, 58.5]];
+led_d = 5.0;  led_sleeve = 7.4;  led_sleeve_h = 5.0;
+label_x = 30.5;                                 // SENTRIX lettering centre, left of the LEDs
+
 // lid screws (board coordinates), fused into the corners of the base
 lid_bosses = [[-1.6, -0.7, 5.2], [86.6, -0.6, 5.2], [-0.5, 63.0, 6.0], [85.3, 63.0, 6.0]];
 // wall keyholes: final screw position; the slot runs +x to the entry hole
@@ -207,6 +213,23 @@ module buzzer() {   // module board + cylinder, as seated in the lid cup
         cube([18.5, 15, buzz_pcb]);
 }
 
+module leds5() {    // 5 mm LEDs (8.6 mm over the flange) seated in their sleeves: dome flush with the lid
+    body = lid_top - led_d / 2 - (wall_top - led_sleeve_h);
+    for (i = [0 : 2]) translate([leds[i][0], leds[i][1], wall_top - led_sleeve_h]) {
+        color(["limegreen", "orange", "red"][i]) {
+            translate([0, 0, -1.0]) cylinder(d = 5.8, h = 1.0);
+            cylinder(d = led_d, h = body);
+            translate([0, 0, body]) sphere(d = led_d);
+        }
+        color("silver") for (dx = [-1.27, 1.27]) translate([dx - 0.25, -0.25, -15]) cube([0.5, 0.5, 14]);
+    }
+}
+
+// the space the LEDs and their legs need under the lid (checked against the Pi)
+module leds5_envelope() {
+    for (l = leds) translate([l[0], l[1], wall_top - led_sleeve_h - 15]) cylinder(d = 5.8, h = 15);
+}
+
 // ================================================================== base
 module base() {
     difference() {
@@ -289,7 +312,10 @@ module lid() {
                 cylinder(d = buzz_d + 2 * buzz_cup_wall, h = buzz_h + 0.5 + e);
             // bracket screw bosses
             for (s = br_screws) translate([s[0], s[1], wall_top - 6]) cylinder(d = 6.5, h = 6 + e);
+            // LED sleeves: the LED's 5.8 mm flange stops on the sleeve's lower end
+            for (l = leds) translate([l[0], l[1], wall_top - led_sleeve_h]) cylinder(d = led_sleeve, h = led_sleeve_h + e);
         }
+        for (l = leds) translate([l[0], l[1], wall_top - led_sleeve_h - 1]) cylinder(d = led_d + tol, h = led_sleeve_h + lid_t + 2);
         // clear the lid screw bosses of the base
         for (b = lid_bosses) translate([b[0], b[1], wall_top - 4]) cylinder(d = b[2] + 2 * fit, h = 4 + e);
         // lid screws: M3 clearance, counterbored for pan heads
@@ -313,7 +339,7 @@ module lid() {
         // bracket screw pilots
         for (s = br_screws) translate([s[0], s[1], wall_top - 6.5]) cylinder(d = pilot_m3, h = 10);
         // SENTRIX, engraved 0.8 deep
-        translate([42.0, 58.5, lid_top - 0.8]) linear_extrude(1)
+        translate([label_x, 58.5, lid_top - 0.8]) linear_extrude(1)
             text("SENTRIX", size = 8.5, font = "Liberation Sans:style=Bold", halign = "center", valign = "center",
                  spacing = 1.08);
     }
@@ -459,7 +485,9 @@ module coupon() {
             translate([32, 8, 0]) cylinder(d = 6.0, h = 2.4 + 8.0);                  // M3 boss
             translate([50, 15, 0]) cylinder(d = buzz_d + 2 * buzz_cup_wall, h = 2.4 + buzz_h);
             translate([62, 2, 0]) cube([10, 26, 18]);                                // USB-A window
+            translate([40.5, 7.5, 0]) cylinder(d = led_sleeve, h = lid_t + led_sleeve_h);   // LED sleeve
         }
+        translate([40.5, 7.5, -1]) cylinder(d = led_d + tol, h = 20);
         translate([8, 8, 2.4]) cylinder(d = pilot_m25, h = 10);
         translate([20, 8, 2.4]) cylinder(d = pilot_m2, h = 10);
         translate([32, 8, 2.4]) cylinder(d = pilot_m3, h = 10);
@@ -489,12 +517,13 @@ module assembly() {
     pod_placed(TILT) { color("dimgray") pod(); color("gray") pod_back(); camera3(); }
     pi5();
     buzzer();
+    leds5();
 }
 
 module exploded() {
     color("gainsboro") base();
     pi5();
-    translate([0, 0, 28]) { color("whitesmoke", 0.9) lid(); buzzer(); }
+    translate([0, 0, 28]) { color("whitesmoke", 0.9) lid(); buzzer(); leds5(); }
     translate([0, 0, 50]) color("dimgray") bracket();
     translate([0, 0, 72]) pod_placed(TILT) { color("dimgray") pod(); camera3(); }
     translate([-26, 0, 72]) pod_placed(TILT) color("gray") pod_back();

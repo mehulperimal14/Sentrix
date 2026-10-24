@@ -1,8 +1,14 @@
-# SENTRIX enclosure, rev B
+# SENTRIX enclosure, rev C
 
 A 3D-printed case for the SENTRIX device: Raspberry Pi 5 with the Active
-Cooler, Camera Module 3 in a separate tilting pod, a USB microphone and a
-3-pin buzzer module. It stands on a table or hangs on a wall.
+Cooler, Camera Module 3 in a separate tilting pod, a USB microphone, a
+3-pin buzzer module and three status LEDs. It stands on a table or hangs on
+a wall.
+
+Rev C is rev B with the three status LED windows of the earlier rev A
+design: the device code already drives green, amber and red LEDs (GPIO 5,
+12, 13). Rev A's I/O bay, PIR window and speaker grille are left out because
+this build has no relay, PIR or speaker.
 
 ![assembled](renders/1_assembled.png)
 
@@ -20,14 +26,17 @@ Module 3 standard (RP-008153).
 
 ## The parts
 
-| Part | Print orientation | Size (mm) | Supports |
-|---|---|---|---|
-| `sentrix_coupon` | flat | 74 x 30 x 18 | none - **print this first** (about 30 min) |
-| `sentrix_base` | floor down | 97 x 73 x 39 | none |
-| `sentrix_lid` | top face down (the SENTRIX lettering is on the bed) | 97 x 73 x 13 | none |
-| `sentrix_bracket` | base plate down | 28 x 38 x 16 | none |
-| `sentrix_pod` | lens face down | 33 x 30 x 15 | none |
-| `sentrix_pod_back` | flat | 33 x 30 x 4 | none |
+| Part | Print orientation | Size (mm) | PETG, solid | Supports |
+|---|---|---|---|---|
+| `sentrix_coupon` | flat | 74 x 30 x 18 | 12 g | none - **print this first** (about 30 min) |
+| `sentrix_base` | floor down | 97 x 73 x 39 | 55 g | none |
+| `sentrix_lid` | top face down (the SENTRIX lettering is on the bed) | 97 x 73 x 13 | 23 g | none |
+| `sentrix_bracket` | base plate down | 28 x 38 x 16 | 5 g | none |
+| `sentrix_pod` | lens face down | 33 x 30 x 15 | 7 g | none |
+| `sentrix_pod_back` | flat | 33 x 30 x 4 | 2 g | none |
+
+Weights are for solid parts at 1.27 g/cm3; at 20 % infill and 3 walls expect
+roughly half.
 
 Every part fits a 120 x 120 mm bed, so any printer works (Ender 3, Prusa
 MK3/MK4/Mini, Bambu A1/A1 mini/P1/X1, Anycubic, Creality K1 and so on).
@@ -45,8 +54,8 @@ MK3/MK4/Mini, Bambu A1/A1 mini/P1/X1, Anycubic, Creality K1 and so on).
 | Brim | only if your PETG lifts at the corners |
 
 **Fit coupon first.** It has a Pi standoff, a camera standoff, an M3 boss,
-the buzzer cup, a USB-A window and the three board hole sizes. If a screw is
-too tight or the buzzer will not go in, raise `tol` (holes, default 0.20) in
+the buzzer cup, an LED sleeve, a USB-A window and the three board hole sizes. If a screw is
+too tight or the buzzer or an LED will not go in, raise `tol` (holes, default 0.20) in
 `sentrix_enclosure.scad`. If the buzzer is loose, lower `tol`. Then run
 `python build.py`, or export from OpenSCAD: set `PART`, press F6, then File >
 Export.
@@ -63,6 +72,7 @@ Export.
 | Status LED | visible through the slot beside the power button |
 | microSD card | slot under the power button, removable without opening the case |
 | Buzzer (cylindrical, no screw holes) | pushed into a cup under the lid, held by three grip ribs; seven sound holes in the lid face the room |
+| Status LEDs (3 x 5 mm) | pushed into sleeves under the lid from inside, beside the SENTRIX lettering; the 5.8 mm flange stops on the sleeve, the dome sits flush with the lid |
 | Camera Module 3 | inside the pod, on four standoffs on its M2 holes (21 x 12.5 mm grid); the lens sits 0.6 mm behind the window |
 | Camera ribbon | leaves the case through a slot in the lid right under the pivot, then enters the pod through its floor right at the pivot, so tilting barely moves it |
 | SENTRIX | engraved on the lid, and small on the pod's top |
@@ -77,6 +87,7 @@ Export.
 | 4 | M3 x 10 mm, pan head | lid to base |
 | 4 | M3 x 8 mm, countersunk | bracket to lid |
 | 2 | M3 x 8 mm + 2 washers | pod pivot (one each side) |
+| 3 | 5 mm LEDs (green, amber, red) + 330 ohm resistors | status lights |
 | 4 | rubber feet, 10 mm dia | table use (optional) |
 | 2 | wall screws (shank 3.5-4 mm, head 6-8 mm) + plugs | wall use |
 
@@ -104,9 +115,16 @@ path inside is about 100 mm.
 5. **Pod into the bracket.** Set it between the arms and put the two pivot
    screws in (M3 x 8 with washers). Tighten until the pod clicks firmly every
    15 degrees and holds its angle.
-6. **Buzzer.** Wire the module to the GPIO: VCC to pin 2 (5 V), GND to pin 39,
-   I/O to pin 37 (GPIO26). Push the round buzzer up into the cup under the lid
-   until it seats.
+6. **Buzzer and LEDs.** Wire the buzzer module to the GPIO: VCC to pin 2
+   (5 V), GND to pin 39, I/O to pin 37 (GPIO26). Wire each LED's anode through
+   a 330 ohm resistor: green to pin 29 (GPIO5), amber to pin 32 (GPIO12), red
+   to pin 33 (GPIO13); all three cathodes to pin 34 (GND). Push the round
+   buzzer up into the cup under the lid until it seats, and the LEDs into
+   their sleeves from inside.
+
+   The code drives the LEDs on its own: green solid when the unit works and
+   the Portal link is up; amber fast blink on a fault, solid with no network;
+   red slow blink at Level 3 or an open SOS, fast at Level 4, solid at Level 5.
 7. **Close the case** (4 x M3 x 10 through the lid corners).
 8. Plug the USB microphone into a USB port at the camera end, and the USB-C
    power cable into the long side.
@@ -135,7 +153,8 @@ or screw tip reaches the Pi.
 * An exact geometry check (`python build.py --check`) intersects each part
   with the space each component needs: the board, every port, the cooler,
   the GPIO header with DuPont plugs on it, the microSD card, the cooler's push
-  pins, the button, the camera with its lens and connector, and the buzzer.
+  pins, the button, the camera with its lens and connector, the buzzer, and
+  the LEDs with their legs.
   It also checks the lid against the base, the back cover against the pod,
   and the pod against the bracket and lid at every 15 degrees of tilt. The
   click-detent bumps, which press 0.25 mm into the pod on purpose, are left

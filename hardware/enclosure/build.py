@@ -36,7 +36,8 @@ CHECKS = {   # name: OpenSCAD expression whose result must be empty
     "base_vs_pi": "intersection() { base(); pi5_envelope(); }",
     "lid_vs_pi": "intersection() { lid(); pi5_envelope(); }",
     "buzzer_vs_pi": "intersection() { buzzer(); pi5_envelope(); }",
-    "pod_vs_camera": "intersection() { pod(); camera3_envelope(); }",
+    "leds_vs_pi": "intersection() { leds5_envelope(); pi5_envelope(); }",
+    "leds_vs_buzzer": "intersection() { leds5_envelope(); buzzer(); }",    "pod_vs_camera": "intersection() { pod(); camera3_envelope(); }",
     "back_vs_camera": "intersection() { pod_back(); camera3_envelope(); }",
     # mating faces touch on purpose; a 0.02 mm shift keeps a real lip collision visible
     "back_vs_pod": "intersection() { translate([-0.02, 0, 0]) pod_back(); pod(); }",
