@@ -154,7 +154,7 @@ These are small, but each one must be closed or stated in the report.
 | No Alembic baseline; `create_all` does not add columns to an existing Portal database | docs/7 §16 q7; `sentrix_portal/db.py` | Any schema change after the first cloud deploy |
 | No live Postgres run (psycopg not installed) | `CLAUDE.md` M10 | Cloud deploy |
 | `tools/bench_link.py` not written (remote fps, glass-to-glass p95, uplink, CPU) | docs/7 §15 item 3 | C7, P4 |
-| ~~No "record normal session" mode in the app~~ **done** (D20, 2026-10-28: the dashboard's *Record for training*, §15.1); still no `tools/build_custom_dataset.py` | `CLAUDE.md` M6, D20 | P8, G3, model training |
+| ~~No "record normal session" mode in the app~~ **done** (D20, 2026-10-28: the dashboard's *Record video*, §15.1); still no `tools/build_custom_dataset.py` | `CLAUDE.md` M6, D20 | P8, G3, model training |
 | `demo_run.py` always forces every live switch off | `tools/demo_run.py` | Real-channel rehearsals need their own start-up (§8) |
 | An approved request on a device without a Portal never auto-closes | track notes (T-SOS) | Rehearsals: close it from the Desk |
 | PIN failure counts reset on restart (kept in memory) | track notes (T-SOS) | State in the report |
@@ -291,7 +291,7 @@ switches are still **off**.
 | LEDs: lamp test at start; green / amber / red as in the README | matches the README table |
 | Picamera2 checks still open from T-HW: the lores format, the timestamp clock, CPU cost at 15 fps | recorded in `docs/8` |
 | USB microphone plugged in **while SENTRIX runs**, then moved to another port (D21) | the Node page's Microphone row names it within a minute each time; `tools/doctor.py` lists it as the input that would open |
-| A 1-minute *Record for training* with someone talking, downloaded on a laptop on the same Wi-Fi (D20) | VLC plays the `.avi` with sound in sync; the sidecar shows few repeated or dropped frames |
+| A 1-minute *Record video* with someone talking, downloaded on a laptop on the same Wi-Fi (D20) | VLC plays the `.avi` with sound in sync; the sidecar shows few repeated or dropped frames |
 
 ### 6.2 Power test
 
@@ -689,7 +689,7 @@ object is visible. Classes:
 
 **Audio with every clip (D15).** The microphone you will deploy (USB), at
 the device, recorded together with the video so the two stay in sync: the
-dashboard's *Record for training* (D20, below) puts the microphone's 16 kHz
+dashboard's *Record video* (D20, below) puts the microphone's 16 kHz
 track into the same AVI, sample 0 under frame 0. Plan: silent recordings first
 (phase 1, now); with sound once the Scalebee USB microphone is in (arrives
 2026-11-03), for the 2026-11-30 evaluation. For each room and session also record:
@@ -728,7 +728,7 @@ own capture path, so no script and no second program holds the camera:
    on that laptop (the console binds loopback only unless `SENTRIX_HOST` is
    set deliberately, with a firewall rule). The Portal does not offer
    recording, and never carries the files.
-2. On the dashboard, *Record for training*: type a label (e.g.
+2. On the dashboard, *Record video*: type a label (e.g.
    `S1 R1 handgun 001`; it becomes part of the file name), *Start recording*.
    A red **REC mm:ss** shows on the live video for everyone watching; it is
    not in the file.

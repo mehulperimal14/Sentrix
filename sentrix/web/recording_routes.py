@@ -1,7 +1,7 @@
 """/api/recordings and /media/recording/* - training recordings (D20).
 
 The models fail in the deployment room because none of their training footage
-came from it (CLAUDE.md §5, M6). The dashboard's "Record for training" card
+came from it (CLAUDE.md §5, M6). The dashboard's "Record video" card
 records the camera's raw frames (and the microphone, when one is connected)
 through ``Pipeline.start_recording``; the device admin downloads the files on
 the local network and deletes them.

@@ -428,7 +428,7 @@ class TestDashboardCard:
     def test_only_the_device_admin_gets_the_card(self, rec):
         page = rec.client.get("/dashboard").text
         assert 'id="record-card"' in page and "js/recording.js" in page
-        assert "Record for training" in page
+        assert "Record video" in page
         for role in ("owner", "member", "operator"):
             remote = tunnel_client(rec.console, role).get("/dashboard")
             assert remote.status_code == 200

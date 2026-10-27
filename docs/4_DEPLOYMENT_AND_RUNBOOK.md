@@ -165,7 +165,7 @@ timers, notification worker, retention); they are off by default and in tests.
 | URL | Page |
 |---|---|
 | `/login`, `/logout` (POST; GET shows a confirm page) | sign-in |
-| `/dashboard` | TCI gauge, engine scores, scene card, pipeline rates, evidence state, event log, SOS panel; for the device admin signed in on the LAN, the *Record for training* card (start, stop, download, delete; never through the Portal, D20) |
+| `/dashboard` | TCI gauge, engine scores, scene card, pipeline rates, evidence state, event log, SOS panel; for the device admin signed in on the LAN, the *Record video* card (start, stop, download, delete; never through the Portal, D20) |
 | `/live` | full-screen video with the HUD |
 | `/events` | incidents with filters, paging, Real / False verdicts |
 | `/alerts` | snapshot gallery |
@@ -320,7 +320,7 @@ missing, and a `.json` sidecar).
   binds the LAN and `ufw.sh` limits the port to your subnet), on a laptop on
   the laptop itself (`http://127.0.0.1:8000`: the console binds loopback
   only unless `SENTRIX_HOST` is set deliberately, §4.1) → dashboard →
-  *Record for training* → a label → *Start recording*; *Stop recording*, wait
+  *Record video* → a label → *Start recording*; *Stop recording*, wait
   for "Finishing the files…" to clear, then *Download video* (and *Download
   sound* when there is a separate `.wav`) and *Delete*. The Portal never shows
   this card and refuses its routes.
@@ -366,7 +366,7 @@ missing, and a `.json` sidecar).
 | Siren test answers 409 | siren line disarmed (`SENTRIX_SIREN_ARMED=0` or the arming key) | Arm it |
 | Siren does nothing | `ConsoleSiren` selected | `siren_is_real` in `/api/health` |
 | High TCI in an empty room | should not happen | `doctor` asserts empty-scene TCI < 0.10; the TCI leaves 0 only on confirmed evidence, so read the reason on the dashboard |
-| No *Record for training* card | not signed in as the device admin on the LAN (the Portal never shows it) | Sign in on the device's console with the device password (§9 "Recordings and disk") |
+| No *Record video* card | not signed in as the device admin on the LAN (the Portal never shows it) | Sign in on the device's console with the device password (§9 "Recordings and disk") |
 | The card says recording is turned off | `SENTRIX_RECORDING_ENABLED=0` | Set it to `1` and restart |
 | *Start recording* refused | camera offline or no frame yet; already recording or saving; under 2 GB free; recordings over 20 GB | The message names which; download and delete old recordings |
 | A recording has no sound | no microphone delivered sound while it ran, or ffmpeg is missing (the sound is then the separate `.wav`) | Node page "Microphone"; `tools/doctor.py` ffmpeg and microphone rows |

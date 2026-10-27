@@ -267,7 +267,7 @@ will guard it (ROADMAP.md §15). The device records it itself (decision D20):
    (`docs/4_DEPLOYMENT_AND_RUNBOOK.md` §4.1). Recording is for the device
    admin on the local network only; the Portal never offers it or carries
    the files.
-2. Dashboard → **Record for training** → a label (optional) → **Start
+2. Dashboard → **Record video** → a label (optional) → **Start
    recording**. A red **REC** badge shows on the live video for everyone
    watching (it is not in the file). Get the consent of everyone filmed first.
 3. **Stop recording**, wait for "Finishing the files…" to clear, then

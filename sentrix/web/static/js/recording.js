@@ -1,5 +1,5 @@
 // static/js/recording.js
-// The dashboard's "Record for training" card (D20): the device admin on the
+// The dashboard's "Record video" card (D20): the device admin on the
 // LAN records the camera's raw frames, with the microphone's sound while one
 // is connected, then downloads or deletes the finished files. The Portal's
 // tunnel refuses every one of these routes (sentrix/link/policy.py).

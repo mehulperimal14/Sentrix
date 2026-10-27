@@ -1030,7 +1030,7 @@ body.standalone {
 .contrib-lowers .contrib-effect { color: #22c55e; }
 .contrib-gated .contrib-effect { color: #facc15; }
 .contrib-off .contrib-effect, .contrib-context .contrib-effect { color: #8a9bb8; }
-/* Record for training (D20): the device admin's card on the dashboard */
+/* Record video (D20): the device admin's card on the dashboard */
 .record-controls { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
 .record-label { flex: 1 1 12rem; min-width: 0; }
 .btn-record { background: #b91c1c; color: #fff; }
