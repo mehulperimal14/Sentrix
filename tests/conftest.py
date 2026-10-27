@@ -189,8 +189,11 @@ try:
             _block_device(f"sounddevice.{name}")
         return guarded
 
+    # check_input_settings opens the device on ALSA (the microphone chooser
+    # probes rates with it).
     for _name in ("rec", "playrec", "play", "InputStream", "RawInputStream",
-                  "OutputStream", "RawOutputStream", "Stream", "RawStream"):
+                  "OutputStream", "RawOutputStream", "Stream", "RawStream",
+                  "check_input_settings"):
         if hasattr(_sd, _name):
             setattr(_sd, _name, _guarded_audio(_name))
 except (ImportError, OSError):                      # pragma: no cover - no PortAudio

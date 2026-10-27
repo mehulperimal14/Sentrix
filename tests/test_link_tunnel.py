@@ -157,6 +157,26 @@ class TestTunnelExecutor:
         assert result.status == 503 and json.loads(result.body)["code"] == "device_busy"
         assert result.header("retry-after") == "1"
 
+    def test_a_response_over_16_mib_is_refused(self, app):
+        """The tunnel buffers whole responses: anything past
+        ``tunnel_max_response_bytes`` (16 MiB) is refused, never cut short.
+        Training recordings are far larger, which is one reason they are
+        LAN-only (D20)."""
+        from fastapi.responses import Response
+        from sentrix.config import settings
+        limit = settings.link.tunnel_max_response_bytes
+        assert limit == 16 * 1024 * 1024
+
+        @app.get("/api/test-big")
+        async def big(size: int):
+            return Response(b"x" * size, media_type="application/octet-stream")
+
+        fits = run(app, request("/api/test-big", query=f"size={limit}"))
+        assert fits.status == 200 and len(fits.body) == limit
+        over = run(app, request("/api/test-big", query=f"size={limit + 1}"))
+        assert over.status == 413 and over.code == "too_large"
+        assert json.loads(over.body)["code"] == "too_large" and len(over.body) < 1024
+
     def test_timeouts(self, app):
         @app.get("/api/test-slow")
         async def slow():

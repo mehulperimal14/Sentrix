@@ -225,8 +225,12 @@ const Sentrix = (() => {
                    data.camera_online ? "Camera: online" : "Camera: no signal");
         }
         if ("mic_available" in data) {
-            setDot("dot-mic", data.mic_available ? "online" : "",
-                   data.mic_available ? "Microphone: listening" : "Microphone: off");
+            // mic_available: an open microphone delivers sound (recordings
+            // get it); mic_classifying: the sound model also labels it.
+            const label = !data.mic_available ? "Microphone: off"
+                : data.mic_classifying === false ? "Microphone: listening (not classified)"
+                : "Microphone: listening";
+            setDot("dot-mic", data.mic_available ? "online" : "", label);
         }
         const running = (data.ai_hz || 0) > 0;
         setDot("dot-ai", running ? "online" : "", running ? "AI engine: running" : "AI engine: not running");

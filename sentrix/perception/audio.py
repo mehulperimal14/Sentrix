@@ -41,15 +41,47 @@ result_for` hands fusion a result only if that window overlaps the frame time
 within ``settings.audio.align_tolerance_seconds``; otherwise audio is
 *unavailable* for that frame (never "calm"). :class:`FileAudio` does the same
 for a replayed video's own soundtrack (no microphone).
+
+Microphone: any USB port, any time
+----------------------------------
+The engine opens the best input there is *now* (:func:`rank_inputs`): the one
+named in ``SENTRIX_MIC_DEVICE``, else a USB input (one plugged in while
+SENTRIX runs first), else another input plugged in while it runs, else the
+system default; display audio, loopbacks, headsets (Bluetooth hands-free
+included) and virtual microphones only when asked for, since none of them
+hears the room. On Windows and macOS it opens at 16 kHz if the device takes
+it (the OS converts well); on Linux, where ``plughw`` would accept any rate
+and convert with ALSA's linear converter (no anti-alias filter: 8-24 kHz
+would fold into the band), at the device's own rate. :class:`Resampler`
+brings every block to 16 kHz before anything hears it, so listeners (the
+clip buffer, the recorder) always get 16 kHz mono float32.
+
+PortAudio lists devices only when it initialises, and re-initialising closes
+every stream in the process and (inside sounddevice) sends stderr - the log -
+to /dev/null while it runs. So the list is rebuilt only when the system's own
+list changes (:func:`devices_fingerprint`: ``/proc/asound/cards`` on Linux,
+the wave-in count on Windows, both read without opening anything), a few
+times after such a change while no microphone has opened yet (a sound server
+holds a new USB microphone for a few seconds, and PortAudio leaves out what it
+cannot open), and every ``mic_rescan_seconds`` while no microphone is open;
+never on every retry. A microphone counts as connected from its first block,
+not from the open.
 """
 
 from __future__ import annotations
 
+import functools
 import math
+import os
 import queue
+import re
+import sys
 import threading
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
+from datetime import datetime, timezone
+from pathlib import Path
 
 import numpy as np
 
@@ -59,6 +91,20 @@ from sentrix.paths import model_path
 from sentrix.utils.logging import get_logger, timed
 
 log = get_logger("audio")
+
+_LINUX = sys.platform.startswith("linux")
+_WINDOWS = sys.platform == "win32"
+
+#: PortAudio names ALSA devices "plughw" (below): any rate opens, converted by
+#: ALSA. The stream is then opened at the device's own rate first
+#: (:meth:`AudioEngine._open`), so the conversion to 16 kHz is ours, filtered.
+_PLUGHW = _LINUX
+
+if _LINUX:
+    # A USB microphone is a raw ALSA device ("hw:2,0") that opens only at its
+    # own channel count and formats (often mono, s16); "plughw" converts those.
+    # PortAudio reads this when it initialises, which sounddevice does on import.
+    os.environ.setdefault("PA_ALSA_PLUGHW", "1")
 
 try:
     import sounddevice as sd
@@ -265,11 +311,255 @@ def _build_v2(num_classes: int):
     return AudioThreatCNN()
 
 
+# ── microphone: which device, when to look again, 16 kHz from any rate ────────
+#: Inputs never chosen automatically: display audio, and loopbacks or monitors
+#: of what the machine itself plays.
+_NOT_A_MICROPHONE = re.compile(r"hdmi|vc4|monitor|loopback|stereo mix|what u hear", re.I)
+#: Inputs that may not hear the room, chosen automatically only as a last
+#: resort (no other microphone at all): a headset's microphone hears its
+#: wearer (opening a Bluetooth headset's also drops the wearer's audio to its
+#: narrow-band telephone profile), and a virtual microphone carries whatever
+#: a program feeds it. Not left out altogether: some cheap USB microphone
+#: adapters call themselves a "headset", and on a Pi that may be the only one.
+_NOT_THE_ROOM = re.compile(
+    r"headset|hands-?free|bluetooth|bluez|airpods|virtual|vb-audio|voicemeeter|"
+    r"cable output|nvidia broadcast|krisp|microsoft teams|zoomaudiodevice|"
+    r"steam streaming", re.I)
+#: The sound card's number in an ALSA device name: "... (hw:2,0)", "(plughw:2,0)".
+_ALSA_CARD = re.compile(r"\((?:plug)?hw:(\d+),")
+#: Where Linux describes its sound cards (``cards``, ``card<N>/usbid``).
+_ASOUND = Path("/proc/asound")
+#: What each reason adds to a candidate's score (:func:`rank_inputs`). USB
+#: outweighs "plugged in": a USB microphone plugged in later beats one that
+#: was there at start (300 to 200), but no other input ever beats a USB one.
+_SCORES = {"asked for": 1000, "usb": 200, "plugged in": 100, "default": 10,
+           "last resort": -1000}
+#: The rates USB microphones take, tried after the engine's own (16 kHz, no
+#: resampling) and before the device's default; on ``plughw`` (Linux) after
+#: the device's default (its own rate) and before 16 kHz.
+_RATES = (48000, 32000)
+#: Seconds to wait for a closing stream before abandoning it, and for the
+#: PortAudio lock before giving up on this look.
+_CLOSE_TIMEOUT = 2.0
+_LOCK_TIMEOUT = 2.0
+#: Device-list rebuilds after the system's list changed, while no microphone
+#: has opened yet: PortAudio leaves out a device it cannot open while listing,
+#: and the sound server (WirePlumber) holds a new USB microphone for a moment.
+_SETTLE_SCANS = 3
+#: Every PortAudio call that lists, opens or closes devices runs under this
+#: lock: re-initialising frees the streams another thread may be using.
+_PA_LOCK = threading.RLock()
+
+
+class PortAudioBusy(RuntimeError):
+    """The PortAudio lock stayed taken: an old stream is still closing."""
+
+
+@contextmanager
+def _portaudio():
+    """Hold the PortAudio lock, or raise :class:`PortAudioBusy` after
+    ``_LOCK_TIMEOUT`` s rather than hang behind a stream stuck in its driver."""
+    if not _PA_LOCK.acquire(timeout=_LOCK_TIMEOUT):
+        raise PortAudioBusy("PortAudio is busy: an old microphone stream is still closing")
+    try:
+        yield
+    finally:
+        _PA_LOCK.release()
+
+
+def devices_fingerprint() -> str | None:
+    """A cheap summary of the system's sound devices that changes when one is
+    plugged in or out, read without opening anything: ``/proc/asound/cards``
+    on Linux, the wave-in device count on Windows. None elsewhere (or when it
+    cannot be read): the device list is then rebuilt on a timer only."""
+    if _LINUX:
+        try:
+            return (_ASOUND / "cards").read_text()
+        except OSError:
+            return None
+    if _WINDOWS:
+        try:
+            import ctypes
+            return str(ctypes.windll.winmm.waveInGetNumDevs())
+        except Exception:
+            return None
+    return None
+
+
+#: The fingerprint when PortAudio last listed its devices (sounddevice's
+#: import, then every rebuild).
+_listed_fingerprint = devices_fingerprint() if _SD else None
+
+
+def is_usb(name: str) -> bool:
+    """Is this input a USB device? On Linux its ALSA card has a ``usbid``
+    file; Windows and macOS put "USB" in the name."""
+    if _LINUX:
+        match = _ALSA_CARD.search(name)
+        if match and (_ASOUND / f"card{match.group(1)}" / "usbid").exists():
+            return True
+    return "usb" in name.lower()
+
+
+@dataclass(frozen=True)
+class MicCandidate:
+    """One input device worth trying, with why it scored what it did."""
+
+    index: int
+    name: str
+    hostapi: int
+    channels: int
+    default_rate: int
+    score: int
+    reasons: tuple[str, ...] = ()
+
+
+def rank_inputs(devices, *, hostapi: int, default_input: int | None = None,
+                wanted: str = "", known=None) -> list[MicCandidate]:
+    """The input devices worth trying, best first.
+
+    Scores add up: the device asked for (``SENTRIX_MIC_DEVICE``, an index or a
+    name substring) 1000; USB 200; one missing from the first look (``known``
+    names: plugged in while running) 100; PortAudio's default input 10. So a
+    newer USB microphone beats an older one, and nothing but the one asked
+    for beats a USB microphone. Left out: devices with no input channels,
+    devices of another host API (Windows lists the same microphone again
+    under DirectSound, WASAPI and WDM-KS) and inputs named like display audio
+    or a loopback - unless asked for (by index on any host API, by name on the
+    default one). Headsets (Bluetooth hands-free included) and virtual
+    microphones come last ("last resort", -1000): used only when there is no
+    other input.
+    """
+    wanted = (wanted or "").strip()
+    ranked: list[MicCandidate] = []
+    for position, device in enumerate(devices):
+        index = int(device.get("index", position))
+        name = str(device.get("name", f"device {index}"))
+        channels = int(device.get("max_input_channels", 0) or 0)
+        api = int(device.get("hostapi", hostapi))
+        if channels <= 0:
+            continue
+        by_index = wanted.isdigit() and int(wanted) == index
+        if api != hostapi and not by_index:
+            continue
+        asked = by_index or (bool(wanted) and not wanted.isdigit()
+                             and wanted.lower() in name.lower())
+        if not asked and _NOT_A_MICROPHONE.search(name):
+            continue
+        reasons = [reason for reason, applies in (
+            ("asked for", asked),
+            ("plugged in", known is not None and name not in known),
+            ("usb", is_usb(name)),
+            ("default", default_input is not None and index == default_input),
+            ("last resort", not asked and bool(_NOT_THE_ROOM.search(name)))) if applies]
+        ranked.append(MicCandidate(
+            index=index, name=name, hostapi=api, channels=channels,
+            default_rate=int(float(device.get("default_samplerate", 0) or 0)),
+            score=sum(_SCORES[r] for r in reasons), reasons=tuple(reasons)))
+    ranked.sort(key=lambda c: (-c.score, c.index))
+    return ranked
+
+
+class Resampler:
+    """One stream's blocks from the device's rate to ``rate_out``, with the
+    filter state carried from block to block so block edges leave no seams.
+
+    Integer ratios (48 or 32 kHz to 16 kHz): an anti-aliasing FIR low-pass
+    (``resample_poly``'s own design) whose state runs on across blocks, then
+    every ``factor``-th sample, the phase carried too. Other ratios (44.1 kHz):
+    ``resample_poly`` over each block with ``2 * pad`` samples of history in
+    front, keeping only the output whose filter reach lies on real samples,
+    ``pad`` samples late. Calling it returns ``(samples, delay_s)``: how long
+    before the input block's last sample the last output sample lies.
+    """
+
+    def __init__(self, rate_in: int, rate_out: int) -> None:
+        self.rate_in, self.rate_out = int(rate_in), int(rate_out)
+        self.mode = "same"
+        if self.rate_in == self.rate_out:
+            return
+        from scipy.signal import firwin
+        if self.rate_in % self.rate_out == 0:
+            self.mode = "decimate"
+            self.factor = self.rate_in // self.rate_out
+            self.taps = firwin(20 * self.factor + 1, 1.0 / self.factor, window=("kaiser", 5.0))
+            self.state = np.zeros(len(self.taps) - 1)
+            self.phase = 0                    # index in the next block of the next kept sample
+        else:
+            self.mode = "poly"
+            g = math.gcd(self.rate_in, self.rate_out)
+            self.up, self.down = self.rate_out // g, self.rate_in // g
+            # resample_poly's filter reaches 10 * max(up, down) taps at the
+            # upsampled rate; pad is a multiple of down so outputs stay whole.
+            reach = math.ceil(10 * max(self.up, self.down) / self.up) + 1
+            self.pad = self.down * math.ceil(reach / self.down)
+            self.history = np.zeros(2 * self.pad)
+            self.pending = np.zeros(0)        # input left over (not a multiple of down)
+
+    def __call__(self, samples: np.ndarray) -> tuple[np.ndarray, float]:
+        samples = np.asarray(samples, dtype=np.float32).reshape(-1)
+        if self.mode == "same":
+            return samples, 0.0
+        if self.mode == "decimate":
+            return self._decimate(samples)
+        return self._poly(samples)
+
+    def _decimate(self, samples: np.ndarray) -> tuple[np.ndarray, float]:
+        from scipy.signal import lfilter
+        filtered, self.state = lfilter(self.taps, 1.0, samples.astype(np.float64), zi=self.state)
+        out = filtered[self.phase::self.factor]
+        if not out.size:
+            self.phase -= len(samples)
+            return np.zeros(0, np.float32), 0.0
+        last = self.phase + (len(out) - 1) * self.factor
+        self.phase = (self.phase - len(samples)) % self.factor
+        delay = (len(samples) - 1 - last) + (len(self.taps) - 1) / 2.0   # + group delay
+        return out.astype(np.float32), delay / self.rate_in
+
+    def _poly(self, samples: np.ndarray) -> tuple[np.ndarray, float]:
+        from scipy.signal import resample_poly
+        data = np.concatenate([self.pending, samples.astype(np.float64)])
+        usable = len(data) // self.down * self.down
+        self.pending = data[usable:]
+        if usable == 0:
+            return np.zeros(0, np.float32), 0.0
+        segment = np.concatenate([self.history, data[:usable]])
+        resampled = resample_poly(segment, self.up, self.down)
+        lo = self.pad * self.up // self.down
+        out = resampled[lo:lo + usable * self.up // self.down]
+        self.history = segment[-2 * self.pad:]
+        delay = self.pad - 1 + self.down / self.up + len(self.pending)
+        return out.astype(np.float32), delay / self.rate_in
+
+
+class _MicSession:
+    """One open input stream: the device, the format it opened at and the
+    resampler that brings its blocks to the engine's rate. The stream's
+    callback is bound to its session, so a block always travels with the rate
+    it was captured at, even while the engine switches devices."""
+
+    def __init__(self, candidate: MicCandidate, rate: int, channels: int, hostapi: str,
+                 target_rate: int) -> None:
+        self.index, self.name, self.score = candidate.index, candidate.name, candidate.score
+        self.hostapi = hostapi
+        self.rate, self.channels = int(rate), int(channels)
+        self.resampler = Resampler(self.rate, target_rate)
+        self.stream = None
+        self.opened_at = time.monotonic()
+        #: Monotonic time of the newest block (written by PortAudio's thread).
+        self.last_block_at: float | None = None
+        #: ISO time of the first block: the microphone is connected from then.
+        self.connected_since: str | None = None
+
+
 class AudioEngine:
     """Background microphone capture plus windowed acoustic classification.
 
     ``capture=False`` builds the classifier only (no microphone thread): the
     replay tools use it to classify a video's own soundtrack (:class:`FileAudio`).
+    Capture runs whatever the sound model (``off`` included: the recorder and
+    the clip buffer still get the room's sound, nothing is classified).
+    ``available`` is True only while an open microphone is delivering.
     """
 
     def __init__(self, capture: bool = True) -> None:
@@ -279,12 +569,29 @@ class AudioEngine:
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
-        self._stream = None
+        #: (samples at the device's rate, end_at, wall, session) per block.
         self._blocks: queue.Queue = queue.Queue(maxsize=32)
-        #: Monotonic time of the last block the microphone delivered.
-        self._last_block_at = 0.0
         self._watcher: threading.Thread | None = None
         self.microphone: str | None = None
+        # The microphone (see the module notes). ``_mic_lock`` guards the
+        # session swap and the flags read by status(); it is never held while
+        # PortAudio is called, and is taken after _PA_LOCK when both are.
+        self._session: _MicSession | None = None
+        self._mic_lock = threading.Lock()
+        self._closing: list[threading.Thread] = []     # close helpers still running
+        self._fingerprint: str | None = None          # at the last device-list rebuild
+        self._scanned_at = 0.0
+        self._rescan_due = False                      # a connected microphone was lost
+        self._settle = 0
+        self._better_until = 0.0                      # retry better inputs until then
+        self._known: set[str] | None = None           # device names at the first look
+        self._candidates: list[MicCandidate] = []
+        self._warned: set[tuple[str, str]] = set()
+        self._last_error: str | None = None
+        self._absent_logged = False
+        self._block_count = 0
+        self._dropped = 0
+        self._overflows = 0
 
         self._model = None
         self._device = None
@@ -297,11 +604,13 @@ class AudioEngine:
         self._sample_listeners: list = []
 
         choice = settings.audio.model
+        #: Classify captured windows; with the model ``off`` capture only feeds listeners.
+        self._classifying = choice != "off"
         if choice in ("auto", "panns"):
             self._load_tagger()
         if choice == "cnn" or (choice == "auto" and self.tagger is None):
             self._load()
-        if capture and choice != "off":
+        if capture:
             self._start_capture()
 
     @property
@@ -372,13 +681,13 @@ class AudioEngine:
             self._model = None
 
     # ── capture ───────────────────────────────────────────────────────────────
-    def _start_capture(self) -> None:
-        """One persistent ``InputStream`` (no gaps between hops, unlike a
-        fresh ``sd.rec`` per hop); its callback only queues the block with its
-        capture time, and a worker thread classifies. A watcher thread keeps
-        looking for a microphone while none is connected and reopens it after
-        an unplug, so a USB microphone plugged in later works without a
-        restart."""
+    def _start_capture(self, watch: bool = True) -> None:
+        """One persistent ``InputStream`` on the best microphone there is (no
+        gaps between hops, unlike a fresh ``sd.rec`` per hop); its callback
+        only queues the block with its capture time, and a worker thread
+        resamples and classifies. The watcher thread (``watch``) reconnects
+        after an unplug and moves to a better microphone plugged in later, so
+        a USB microphone works in any port, at any time, without a restart."""
         if not _SD:
             log.warning("sounddevice not installed — microphone disabled "
                         "(on a Pi: sudo apt install libportaudio2)")
@@ -386,80 +695,367 @@ class AudioEngine:
         self._thread = threading.Thread(target=self._loop, daemon=True,
                                         name="sentrix-audio")
         self._thread.start()
-        if not self._open_stream(refresh=False):
-            log.info("no microphone yet — looking for one every %.0f s",
-                     settings.audio.mic_retry_seconds)
-        self._watcher = threading.Thread(target=self._watch, daemon=True,
-                                         name="sentrix-mic-watch")
-        self._watcher.start()
-
-    def _open_stream(self, refresh: bool) -> bool:
-        """Open the default input device. ``refresh`` re-initialises
-        PortAudio first: it lists devices once, when it starts, so a newly
-        plugged microphone is invisible until then."""
-        if refresh:
-            try:
-                sd._terminate()
-                sd._initialize()
-            except Exception as exc:
-                log.debug("PortAudio refresh failed: %s", exc)
-        try:
-            info = sd.query_devices(kind="input")
-        except Exception:
-            return False
-        sr = self.cfg.audio_sample_rate
-        try:
-            stream = sd.InputStream(samplerate=sr, channels=1, dtype="float32",
-                                    blocksize=int(sr * self.cfg.audio_hop_seconds),
-                                    callback=self._on_block)
-            stream.start()
-        except Exception as exc:
-            log.debug("microphone stream failed (%s)", exc)
-            return False
-        self._stream = stream
-        self._ring = np.zeros(0, dtype=np.float32)
-        self._last_block_at = time.monotonic()
-        self.microphone = str(info.get("name", "default")) if isinstance(info, dict) else "default"
-        self.available = True
-        log.info("microphone connected: %s", self.microphone)
-        return True
-
-    def _close_stream(self, reason: str) -> None:
-        stream, self._stream = self._stream, None
-        self.available = False
-        if stream is not None:
-            try:
-                stream.stop()
-                stream.close()
-            except Exception as exc:
-                log.debug("microphone stream close failed: %s", exc)
-            log.warning("microphone lost (%s) — looking for it again", reason)
-        self.microphone = None
+        fingerprint = devices_fingerprint()
+        self._fingerprint = fingerprint
+        self._scanned_at = time.monotonic()
+        # PortAudio listed its devices when sounddevice was imported; a USB
+        # microphone still enumerating at boot may have arrived since.
+        self._connect(refresh=fingerprint != _listed_fingerprint, fingerprint=fingerprint)
+        if watch:
+            self._watcher = threading.Thread(target=self._watch, daemon=True,
+                                             name="sentrix-mic-watch")
+            self._watcher.start()
 
     def _watch(self) -> None:
-        """Connect a microphone that appears later; reconnect after an unplug
-        (the stream stops, or delivers nothing for ``mic_stall_seconds``)."""
+        """Look every ``mic_retry_seconds`` (see :meth:`_watch_once`)."""
         retry = max(0.5, settings.audio.mic_retry_seconds)
-        stall = max(1.0, settings.audio.mic_stall_seconds)
         while not self._stop.wait(retry):
-            if self._stream is None:
-                self._open_stream(refresh=True)
-                continue
-            active = getattr(self._stream, "active", True)
-            if not active:
-                self._close_stream("stream stopped")
-            elif time.monotonic() - self._last_block_at > stall:
-                self._close_stream(f"no sound data for {stall:.0f} s")
+            try:
+                self._watch_once()
+            except Exception as exc:                # the watcher outlives one bad look
+                self._warn_once("microphone watcher", f"{type(exc).__name__}: {exc}")
 
-    def _on_block(self, indata, frames, time_info, status) -> None:
-        """PortAudio callback: copy, stamp, hand over. Never blocks."""
-        self._last_block_at = time.monotonic()
-        end_at = block_end_monotonic(time_info, frames, self.cfg.audio_sample_rate)
-        item = (np.array(indata[:, 0] if getattr(indata, "ndim", 1) > 1 else indata,
-                         dtype=np.float32, copy=True), end_at, time.time())
+    def _watch_once(self, now: float | None = None) -> None:
+        """One look: is the open microphone still delivering (else it was
+        unplugged: the stream stops, or sends nothing for
+        ``mic_stall_seconds``), did the system's device list change (a better
+        microphone may be there), is there a microphone to open."""
+        now = time.monotonic() if now is None else now
+        cfg = settings.audio
+        stall = max(1.0, cfg.mic_stall_seconds)
+        fingerprint = devices_fingerprint()
+        changed = fingerprint != self._fingerprint
+        session = self._session
+        if session is not None:
+            heard_at = session.last_block_at or session.opened_at
+            if not getattr(session.stream, "active", True):
+                self._lose("the stream stopped")
+            elif now - heard_at > stall:
+                self._lose(f"no sound for {stall:.0f} s")
+            elif changed:
+                # A better microphone may have been plugged in, but PortAudio
+                # sees it only after re-initialising, which closes every stream.
+                log.info("audio devices changed: listing them again (%s pauses)", session.name)
+                if not self._close_stream(None):
+                    return
+            else:
+                if self._better_until > now:
+                    self._upgrade()
+                return
+        rescan_every = max(cfg.mic_retry_seconds, cfg.mic_rescan_seconds)
+        refresh = (changed or self._rescan_due or self._settle > 0
+                   or now - self._scanned_at >= rescan_every)
+        self._connect(refresh=refresh, fingerprint=fingerprint, changed=changed, now=now)
+
+    def _connect(self, *, refresh: bool, fingerprint: str | None, changed: bool = False,
+                 now: float | None = None) -> bool:
+        """Open the best microphone in PortAudio's list, rebuilding the list
+        first when ``refresh``; True when one is open (it counts as connected
+        from its first block)."""
+        now = time.monotonic() if now is None else now
+        session, candidates = None, []
+        try:
+            with _portaudio():
+                if refresh and self._refresh(fingerprint):
+                    # Every attempt counts, failed or not: a failing PortAudio
+                    # is not re-initialised (and the log muted) every retry.
+                    self._fingerprint, self._scanned_at = fingerprint, now
+                    self._rescan_due = False
+                    self._settle = _SETTLE_SCANS if changed else max(0, self._settle - 1)
+                candidates = self._scan()
+                for candidate in candidates:
+                    if self._stop.is_set():
+                        break
+                    session = self._open(candidate)
+                    if session is not None:
+                        break
+        except PortAudioBusy as exc:
+            self._warn_once("PortAudio", str(exc))
+            return False
+        if session is None:
+            self._report_absent(candidates)
+            return False
+        self._install(session, candidates)
+        return True
+
+    def _refresh(self, fingerprint: str | None) -> bool:
+        """Rebuild PortAudio's device list (the caller holds the lock).
+        ``_terminate`` runs only while PortAudio is initialised, and its
+        failure never skips ``_initialize``: one failed start must not leave
+        the microphone down for good. False when the rebuild must wait: a
+        stream is still closing (re-initialising would free it under the
+        closing thread)."""
+        global _listed_fingerprint
+        if self._stop.is_set() or self._pending_closes():
+            return False
+        if getattr(sd, "_initialized", 1) > 0:
+            try:
+                sd._terminate()
+            except Exception as exc:
+                log.debug("PortAudio terminate failed: %s", exc)
+        try:
+            sd._initialize()
+        except Exception as exc:
+            self._warn_once("PortAudio",
+                            f"failed to initialise ({exc}); no microphone until it does")
+        else:
+            _listed_fingerprint = fingerprint
+        return True
+
+    def _pending_closes(self) -> bool:
+        with self._mic_lock:
+            self._closing = [t for t in self._closing if t.is_alive()]
+            pending = bool(self._closing)
+        if pending:
+            self._warn_once("PortAudio", "an old microphone stream is still closing; "
+                            "devices are listed again once it has")
+        return pending
+
+    def _scan(self) -> list[MicCandidate]:
+        """The candidates in PortAudio's current list, best first (the caller
+        holds the lock). The first list read is what "plugged in while
+        running" is measured against."""
+        try:
+            devices = [dict(d) for d in sd.query_devices()]
+        except Exception as exc:
+            log.debug("PortAudio device list unavailable: %s", exc)
+            devices = []
+        try:
+            hostapi = int(sd.default.hostapi)
+        except Exception:
+            hostapi = 0
+        try:
+            default_input = int(sd.query_hostapis(hostapi)["default_input_device"])
+        except Exception:
+            default_input = -1
+        wanted = settings.audio.mic_device
+        candidates = rank_inputs(devices, hostapi=hostapi, wanted=wanted, known=self._known,
+                                 default_input=default_input if default_input >= 0 else None)
+        if self._known is None:
+            self._known = {str(d.get("name", "")) for d in devices}
+        if wanted.strip() and not any("asked for" in c.reasons for c in candidates):
+            self._warn_once("SENTRIX_MIC_DEVICE",
+                            f"{wanted!r} matches no input now; choosing one automatically")
+        self._candidates = candidates
+        return candidates
+
+    def _open(self, candidate: MicCandidate) -> _MicSession | None:
+        """Open ``candidate`` at the first format it takes (the caller holds
+        the lock): the engine's own rate, then the rates USB microphones use,
+        then its default; mono, then all its channels (downmixed).
+
+        On ``plughw`` (Linux) the device's default comes first and 16 kHz
+        last: plughw accepts every rate, and for one the hardware lacks it
+        converts with ALSA's linear converter (no low-pass filter when the
+        speexrate plugin is missing, as on the demo Pi), folding 8-24 kHz
+        into the band the sound model and the recordings hear. PortAudio
+        probes an ALSA device's default with ALSA's resampling off, so it is
+        a rate the hardware has; :class:`Resampler` filters it to 16 kHz."""
+        target = int(self.cfg.audio_sample_rate)
+        order = ((candidate.default_rate, *_RATES, target) if _PLUGHW
+                 else (target, *_RATES, candidate.default_rate))
+        rates = [r for r in dict.fromkeys(order) if r > 0]
+        layouts = [1] + ([candidate.channels] if candidate.channels > 1 else [])
+        try:
+            hostapi = str(sd.query_hostapis(candidate.hostapi)["name"])
+        except Exception:
+            hostapi = str(candidate.hostapi)
+        error: Exception | None = None
+        for channels in layouts:
+            for rate in rates:
+                try:
+                    # Opens and closes the device on ALSA: a busy or vanished
+                    # device fails here, before a stream exists.
+                    sd.check_input_settings(device=candidate.index, channels=channels,
+                                            dtype="float32", samplerate=rate)
+                except Exception as exc:
+                    error = exc
+                    continue
+                session = _MicSession(candidate, rate, channels, hostapi, target)
+                stream = None
+                try:
+                    stream = sd.InputStream(
+                        device=candidate.index, samplerate=rate, channels=channels,
+                        dtype="float32", blocksize=int(rate * self.cfg.audio_hop_seconds),
+                        callback=functools.partial(self._on_block, session=session))
+                    stream.start()
+                except Exception as exc:
+                    error = exc
+                    if stream is not None:
+                        try:
+                            stream.close()
+                        except Exception:
+                            pass
+                    continue
+                session.stream = stream
+                return session
+        self._note_error(candidate.name, error)
+        return None
+
+    def _install(self, session: _MicSession, candidates: list[MicCandidate]) -> None:
+        """Make ``session`` the microphone; connected once its first block
+        arrives (:meth:`_announce`)."""
+        with self._mic_lock:
+            stopping = self._stop.is_set()
+            if not stopping:
+                self._session = session
+                self.available = False
+        if stopping:
+            self._close_quietly(session.stream, session.name)
+            return
+        self._settle = 0
+        cfg = settings.audio
+        # A better input that failed to open (busy for a moment) is tried
+        # again on each look for a while.
+        better = any(c.score > session.score for c in candidates)
+        self._better_until = (time.monotonic() + max(cfg.mic_retry_seconds, cfg.mic_rescan_seconds)
+                              if better else 0.0)
+        log.debug("microphone opened: %s at %d Hz, %d channel(s); waiting for sound",
+                  session.name, session.rate, session.channels)
+
+    def _upgrade(self) -> None:
+        """Retry the inputs ranked above the open one, which failed to open
+        when it was chosen (a sound server still holding a new USB
+        microphone): switch as soon as one opens."""
+        current = self._session
+        if current is None:
+            return
+        session, candidates = None, []
+        try:
+            with _portaudio():
+                candidates = self._scan()
+                for candidate in candidates:
+                    if candidate.score <= current.score:
+                        break
+                    session = self._open(candidate)
+                    if session is not None:
+                        break
+        except PortAudioBusy:
+            return
+        if session is None:
+            return
+        log.info("switching microphone: %s -> %s", current.name, session.name)
+        self._close_stream(None)
+        self._install(session, candidates)
+
+    def _announce(self, session: _MicSession) -> None:
+        """The first block of a newly opened stream (worker thread): the
+        microphone is connected now, not when it opened."""
+        with self._mic_lock:
+            if session is not self._session or session.connected_since is not None:
+                return
+            session.connected_since = datetime.now(timezone.utc).isoformat()
+            self.available = True
+            self.microphone = session.name
+            self._last_error = None
+        self._absent_logged = False
+        self._ring = np.zeros(0, dtype=np.float32)    # no window across devices or a gap
+        target = int(self.cfg.audio_sample_rate)
+        log.info("microphone connected: %s at %d Hz%s", session.name, session.rate,
+                 "" if session.rate == target else f" (resampled to {target} Hz)")
+
+    def _lose(self, reason: str) -> None:
+        """The open microphone stopped delivering: close it; if it had been
+        connected, list the devices again on the next try (it was probably
+        unplugged, and may come back under another number)."""
+        session = self._session
+        if session is not None and session.connected_since is not None:
+            self._rescan_due = True
+        self._close_stream(reason)
+
+    def _close_stream(self, reason: str | None) -> bool:
+        """Forget the open stream and close it off this thread. ``reason``
+        (None: a planned close) is logged as a state change: "lost" for a
+        connected microphone, once per device and reason for one that never
+        delivered. False when the close hung and was abandoned."""
+        with self._mic_lock:
+            session, self._session = self._session, None
+            self.available = False
+            self.microphone = None
+        if session is None:
+            return True
+        if reason is not None:
+            if session.connected_since is not None:
+                self._last_error = f"{session.name}: {reason}"
+                log.info("microphone lost: %s (%s) - looking for one again", session.name, reason)
+            else:
+                self._note_error(session.name, f"opened but {reason}")
+        return self._close_quietly(session.stream, session.name)
+
+    def _close_quietly(self, stream, name: str) -> bool:
+        """``abort()`` then ``close()`` on a helper thread that holds the
+        PortAudio lock, waited for at most ``_CLOSE_TIMEOUT`` s: a stream on a
+        device that vanished can hang in its driver, and the watcher must not
+        hang with it. Never call this holding the lock (the helper needs it);
+        no device list is rebuilt while the helper runs."""
+        if stream is None:
+            return True
+
+        def close() -> None:
+            with _PA_LOCK:
+                for step in ("abort", "close"):
+                    try:
+                        getattr(stream, step)()
+                    except Exception as exc:
+                        log.debug("microphone stream %s failed: %s", step, exc)
+
+        helper = threading.Thread(target=close, daemon=True, name="sentrix-mic-close")
+        with self._mic_lock:
+            self._closing.append(helper)
+        helper.start()
+        helper.join(_CLOSE_TIMEOUT)
+        if helper.is_alive():
+            self._warn_once(f"microphone {name!r}",
+                            f"its stream did not close within {_CLOSE_TIMEOUT:.0f} s; abandoned")
+            return False
+        return True
+
+    def _report_absent(self, candidates: list[MicCandidate]) -> None:
+        if not candidates:
+            self._last_error = "no input device found"
+        if not self._absent_logged:
+            self._absent_logged = True
+            log.info("no microphone (%s): plug a USB microphone into any port; "
+                     "looking again every %.0f s", self._last_error or "none opened",
+                     settings.audio.mic_retry_seconds)
+
+    def _note_error(self, device: str, error) -> None:
+        text = (str(error) or type(error).__name__) if error is not None else "failed to open"
+        self._last_error = f"{device}: {text}"
+        self._warn_once(f"microphone {device!r}", text)
+
+    def _warn_once(self, what: str, text: str) -> None:
+        """A WARNING the first time ``what`` fails with ``text``: a retry
+        every few seconds must not flood the journal."""
+        key = (what, text)
+        if key in self._warned:
+            return
+        if len(self._warned) >= 256:
+            self._warned.clear()
+        self._warned.add(key)
+        log.warning("%s: %s", what, text)
+
+    def _on_block(self, indata, frames, time_info, status, session=None) -> None:
+        """PortAudio callback: downmix, copy, stamp, hand over. Never blocks.
+        ``session`` (bound per stream) says which device and rate the block
+        was captured at; resampling happens on the worker."""
+        now = time.monotonic()
+        self._block_count += 1
+        if session is not None:
+            session.last_block_at = now
+        if status is not None and getattr(status, "input_overflow", False):
+            self._overflows += 1
+        rate = session.rate if session is not None else self.cfg.audio_sample_rate
+        data = np.asarray(indata, dtype=np.float32)
+        if data.ndim > 1 and data.shape[1] > 1:
+            samples = data.mean(axis=1, dtype=np.float32)
+        else:                                 # PortAudio reuses its buffer: copy
+            samples = np.array(data.reshape(-1), dtype=np.float32, copy=True)
+        item = (samples, block_end_monotonic(time_info, frames, rate, now), time.time(), session)
         try:
             self._blocks.put_nowait(item)
         except queue.Full:                    # the worker fell behind: drop the oldest
+            self._dropped += 1
             try:
                 self._blocks.get_nowait()
                 self._blocks.put_nowait(item)
@@ -469,10 +1065,19 @@ class AudioEngine:
     def _loop(self) -> None:
         while not self._stop.is_set():
             try:
-                samples, end_at, wall = self._blocks.get(timeout=0.5)
+                samples, end_at, wall, session = self._blocks.get(timeout=0.5)
             except queue.Empty:
                 continue
             try:
+                if session is not None:
+                    current = self._session
+                    if current is not None and session is not current:
+                        continue              # one microphone at a time while switching
+                    self._announce(session)
+                    samples, delay = session.resampler(samples)
+                    if not samples.size:
+                        continue
+                    end_at, wall = end_at - delay, wall - delay
                 self.process_block(samples, end_at, wall)
             except Exception as exc:
                 log.debug("audio block failed: %s", exc)
@@ -481,11 +1086,14 @@ class AudioEngine:
                       wall: float | None = None) -> AudioResult | None:
         """One captured hop: listeners (the clip buffer), the ring buffer and,
         once a full window is held, a classification stamped with that
-        window (D15). Public so it can be driven without a microphone."""
+        window (D15). With the sound model ``off`` only the listeners hear it.
+        Public so it can be driven without a microphone."""
         window = self.cfg.audio_window_seconds
         window_samples = int(self.cfg.audio_sample_rate * window)
         samples = np.nan_to_num(np.asarray(samples, dtype=np.float32).reshape(-1))
         self._notify_samples(samples, end_at)
+        if not self._classifying:
+            return None
         self._ring = np.concatenate([self._ring, samples])[-window_samples:]
         if len(self._ring) < window_samples:
             return None
@@ -667,19 +1275,45 @@ class AudioEngine:
         align = alignment(result, at, tolerance)
         return (result if align["status"] == "aligned" else None), align
 
+    def status(self) -> dict:
+        """The microphone for the dashboard, ``/api/health`` and the recorder:
+        which device, the rate and channels its stream opened at (before
+        resampling to 16 kHz), since when, how much has arrived and the last
+        error. Cheap and safe from any thread. ``available`` is True only
+        while the open microphone delivers; ``candidates`` are the inputs of
+        the last look, best first."""
+        with self._mic_lock:
+            session = self._session
+            available = bool(self.available)
+            last_error = self._last_error
+        heard_at = session.last_block_at if session is not None else None
+        return {
+            "available": available,
+            "device": session.name if session else None,
+            "index": session.index if session else None,
+            "hostapi": session.hostapi if session else None,
+            "rate": session.rate if session else None,
+            "channels": session.channels if session else None,
+            "connected_since": session.connected_since if session else None,
+            "last_error": last_error,
+            "blocks": self._block_count,
+            "dropped": self._dropped,
+            "overflows": self._overflows,
+            "last_block_age_s": (None if heard_at is None
+                                 else round(max(0.0, time.monotonic() - heard_at), 3)),
+            "candidates": [c.name for c in self._candidates],
+        }
+
     def stop(self) -> None:
+        """Stop looking, close the microphone (never waiting on a hung driver
+        for more than ``_CLOSE_TIMEOUT``) and stop the worker."""
         self._stop.set()
-        stream = getattr(self, "_stream", None)
-        self._stream = None
-        if stream is not None:
-            try:
-                stream.stop()
-                stream.close()
-            except Exception as exc:
-                log.debug("microphone stream close failed: %s", exc)
-        for thread in (self._thread, getattr(self, "_watcher", None)):
-            if thread is not None:
-                thread.join(timeout=2.0)
+        watcher = getattr(self, "_watcher", None)
+        if watcher is not None:
+            watcher.join(timeout=2.0)
+        self._close_stream(None)
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
 
 
 def block_end_monotonic(time_info, frames: int, rate: int, now: float | None = None) -> float:
@@ -796,5 +1430,6 @@ def decode_audio_file(path, rate: int | None = None) -> np.ndarray | None:
 
 
 __all__ = ["AudioEngine", "AudioResult", "CLASS_CUES", "CNN_CUES", "CUE_NAMES",
-           "FileAudio", "THREAT_WEIGHTS", "alignment", "audio_votes", "block_end_monotonic",
-           "decode_audio_file", "neutral_reason"]
+           "FileAudio", "MicCandidate", "PortAudioBusy", "Resampler", "THREAT_WEIGHTS",
+           "alignment", "audio_votes", "block_end_monotonic", "decode_audio_file",
+           "devices_fingerprint", "is_usb", "neutral_reason", "rank_inputs"]

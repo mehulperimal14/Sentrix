@@ -58,7 +58,7 @@ from sentrix.config import settings
 from sentrix.evidence.vault import vault
 from sentrix.link import tunnel_auth
 from sentrix.paths import FACES_DIR, SNAPSHOT_DIR, STATIC_DIR, TEMPLATES_DIR
-from sentrix.pipeline.engine import get_pipeline
+from sentrix.pipeline.engine import audio_status, get_pipeline
 from sentrix.pipeline.state import state
 from sentrix.storage import database
 from sentrix.utils.logging import get_logger, telemetry
@@ -85,9 +85,12 @@ WS_REAUTH_SECONDS = 60.0
 #: role can use; tunnelled requests are *enforced* by the link's path table
 #: (``sentrix/link/policy.py``) before they reach these routes, and are never
 #: restated here. A Desk operator sees the dashboard and the live view only.
+#: ``record`` (training recordings, D20) is the device admin's alone: the path
+#: table refuses its routes to every tunnelled role.
 ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
     "device_admin": frozenset({"pages", "media", "gallery_view", "gallery_write",
-                               "verdict", "sos", "dispatch", "mode", "siren_test"}),
+                               "verdict", "sos", "dispatch", "mode", "siren_test",
+                               "record"}),
     "owner": frozenset({"pages", "media", "gallery_view", "gallery_write",
                         "verdict", "sos", "dispatch", "mode", "siren_test"}),
     "member": frozenset({"pages", "media", "gallery_view", "verdict", "sos",
@@ -632,6 +635,21 @@ async def api_metrics() -> JSONResponse:
     return JSONResponse(redacted(state.get()))
 
 
+def _recording_brief(pipeline: Any) -> dict:
+    """Is a training recording running (D20)? Read from the recorder only if
+    the dashboard already built it: health never creates one. Never the
+    recording's name: it carries the admin's free-text label, and this
+    payload also goes to the Portal as the link's ``hello.health``."""
+    recorder = getattr(pipeline, "recorder", None)
+    if recorder is None or not hasattr(recorder, "active"):
+        return {"active": False}
+    try:
+        return {"active": bool(recorder.active)}
+    except Exception as exc:
+        log.debug("recorder status failed: %s", exc)
+        return {"active": False}
+
+
 def health_payload() -> dict:
     """The ``/api/health`` fields (also the link's ``hello.health``). Redacted:
     no camera credentials, no addresses."""
@@ -659,6 +677,9 @@ def health_payload() -> dict:
         "identity_failing_closed": pipeline.identity.backend is None,
         "enrolled_faces": len(pipeline.identity.enrolled),
         "audio": bool(pipeline.audio and pipeline.audio.available),
+        # Which microphone, at what native rate (None with audio off).
+        "microphone": audio_status(getattr(pipeline, "audio", None)),
+        "recording": _recording_brief(pipeline),
         "fusion_source": pipeline.tci.model_source,
         "siren_backend": pipeline.siren.name,
         "siren_is_real": pipeline.siren.is_real,

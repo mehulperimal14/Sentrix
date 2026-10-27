@@ -743,6 +743,12 @@ class TestLocalConsoleApp:
         probe = FastAPI()
         assert extensions.install(probe) == [*extensions.ROUTER_MODULES,
                                              *extensions.MIDDLEWARE_MODULES]
+        # The training recordings (D20) load like every other extension.
+        assert "sentrix.web.recording_routes" in extensions.ROUTER_MODULES
+        from sentrix.web import recording_routes
+        assert {route.path for route in recording_routes.router.routes} == {
+            "/api/recordings", "/api/recordings/start", "/api/recordings/stop",
+            "/api/recordings/{name}", "/media/recording/{filename}"}
 
     def test_health_fields(self, clean_switches):
         from sentrix import services

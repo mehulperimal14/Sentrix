@@ -57,6 +57,11 @@ class TestPathTable:
         assert classify("POST", "/api/mode") == "mode"
         assert classify("POST", "/api/node/siren-test") == "siren_test"
         assert classify("POST", "/api/link/reconnect") == "lc_only"
+        assert classify("GET", "/api/recordings") == "lc_only"
+        assert classify("POST", "/api/recordings/start") == "lc_only"
+        assert classify("DELETE", "/api/recordings/rec_20261028_101010") == "lc_only"
+        assert classify("GET", "/media/recording/rec_20261028_101010.avi") == "lc_only"
+        assert classify("HEAD", "/media/recording/rec_20261028_101010.wav") == "lc_only"
         assert classify("GET", "/ws/threat") == "never"
         assert classify("POST", "/api/whatever") == "unknown"
 
@@ -120,6 +125,21 @@ class TestPathTable:
         assert p.check_request("POST", "/api/channels/test", OWNER).code == "forbidden_role"
         assert p.check_request("POST", "/api/config", OWNER).code == "forbidden_role"
         assert p.check_request("TRACE", "/dashboard", OWNER).code == "invalid_args"
+
+    @pytest.mark.parametrize("method, path", [
+        ("GET", "/api/recordings"), ("POST", "/api/recordings/start"),
+        ("POST", "/api/recordings/stop"), ("DELETE", "/api/recordings/rec_20261028_101010"),
+        ("GET", "/media/recording/rec_20261028_101010.avi"),
+        ("HEAD", "/media/recording/rec_20261028_101010.json"),
+        ("GET", "/media/recording/rec%5F20261028%5F101010.avi")])
+    def test_training_recordings_stay_on_the_lan(self, method, path):
+        """D20: neither the read API nor the media class lets a recording out,
+        whatever the role, consent or step-up (D12, the 16 MiB response cap)."""
+        p = policy(ALL, help_path=True)
+        for actor in (OWNER, MEMBER, DESK):
+            decision = p.check_request(method, path, actor)
+            assert not decision and decision.code == "forbidden_role", (actor.type, path)
+            assert decision.path_class == "lc_only" and decision.status == 403
 
     def test_desk_only_on_the_help_path_with_consent(self):
         assert policy(ALL, help_path=False).check_request("GET", "/live", DESK).code == \

@@ -106,6 +106,7 @@ MobileNetV3-L 6.6 / 2.4 ms; EfficientNet-B0 9.5 / 4.3 ms.
 | Throttling at 80–85 °C [11][RPB] | Active Cooler; temperature, throttle flags and EXT5V on the Node page and `/api/health` |
 | GPIO is 3.3 V, not 5 V tolerant [56] | Relay through an NPN driver (§6); never feed 5 V into a GPIO pin |
 | No analogue audio jack [12] | USB microphone in; no sound out (no speaker or buzzer, §6.6, D19) |
+| Trixie's desktop runs PipeWire, but sounddevice's PortAudio talks to ALSA directly | `PA_ALSA_PLUGHW=1` (`sentrix/perception/audio.py`, before sounddevice loads): the USB card opens through ALSA's `plughw` (channels and format converted), PipeWire not in the path, at the card's own rate (often 44.1/48 kHz), and SENTRIX resamples to 16 kHz mono with an anti-alias filter. Not at 16 kHz through plughw: without `libasound2-plugins` (not installed on the demo Pi) ALSA's only rate converter is `linear`, with no low-pass filter, and 8-24 kHz would fold into the band the sound model and the recordings hear; the chooser prefers a card with `/proc/asound/card<N>/usbid` and rebuilds PortAudio's list when `/proc/asound/cards` changes, so the microphone goes into any USB port at any time (D21). WirePlumber may hold a newly plugged card for a few seconds; the engine looks again. Not yet run with a microphone on the Pi |
 | Coral USB TPU (PyCoral ≤ Python 3.9, archived) and Intel NCS2 (discontinued) [47][48][50] | Not options. Accelerator choice is Hailo or the IMX500 AI Camera |
 
 ---
@@ -123,6 +124,8 @@ python -m sentrix  (systemd: Type=notify, Restart=always, WatchdogSec=30)
 │   └─ fast-lane thread   YOLO @320 on every 4th buffered frame, may raise L3
 ├─ identity worker     face recognition off the hot path (M2)
 ├─ preview / MJPEG     every captured frame composited with the latest overlay
+├─ recorder (D20)      only while the device admin records: raw main frames (1280×720, 15 fps)
+│                      + the USB microphone at 16 kHz → var/recordings (MJPEG AVI, ffmpeg mux)
 ├─ decision            evidence → TCI → level policy → incidents → side effects (unchanged)
 ├─ web (FastAPI)       Local Console on the LAN :8000, /api/node, /api/health
 ├─ services            gpio (LEDs, inputs), node (telemetry, watchdog),
@@ -464,7 +467,7 @@ price that could not be confirmed. Re-check before ordering.
 | Camera Module 3 **Wide** (102°) | Robocraze | ₹4,379 |
 | Pi 5 camera cable, 22-pin Standard–Mini | thingbits | ₹117 |
 | RTC cell ML-2020 (rechargeable; never a CR2032) | — | ≈ ₹500 |
-| USB microphone | Robocraze | ₹289 |
+| USB microphone (the demo unit's: a Scalebee USB microphone, arriving 2026-11-03) | Robocraze | ₹289 |
 | 1-channel relay module + 2N2222/BC547 transistors + 1N4007 diodes | Robocraze | ≈ ₹150 |
 | PIR HC-SR505 (or HC-SR501, ₹54–59) | Robocraze / thingbits | ₹73 |
 | MC-38 door reed switch | Robocraze | ₹52 |
@@ -537,6 +540,8 @@ Intel NCS2.
 | Local Console API: `GET /api/node`, `POST /api/node/siren-test`; Node page (telemetry, inputs, relay, clip status, test siren) | `sentrix/web/node_routes.py`, templates | built |
 | Clip engine, fast lane, runtimes, exports, bench | `pipeline/clip.py`, `pipeline/fastlane.py`, `sentrix/runtime/`, `tools/export_models.py`, `tools/bench_clip.py`, `replay_custom_videos.py --mode clip` | built; laptop only; NCNN untested |
 | Modem SMS and ringing call | `sentrix/alerting/channels/modem.py` | built; fake serial port only |
+| Training recordings ("record normal session"): the dashboard's *Record for training* card, raw frames as constant-frame-rate MJPEG AVI + the microphone's 16 kHz track muxed by ffmpeg (installed by `install_pi.sh`), caps 10 min / 2 GB free / 20 GB / 14 days, LAN only (D20) | `sentrix/io/recorder.py`, `web/recording_routes.py`, `static/js/recording.js` | built; laptop and a synthetic camera only. Still to check on the Pi: the MJPEG encode cost at 1280 px next to the clip engine, and the writer's lower priority |
+| USB microphone in any port at any time: ranked inputs, `plughw`, resampling to 16 kHz, rebuilds when `/proc/asound/cards` changes, `microphone` on the Node page and `/api/health` (D21) | `sentrix/perception/audio.py` | built; fake `sounddevice` only |
 | Doctor hardware section (venv, camera enumerated not opened, OpenCV, temperature, throttling, EXT5V, config.txt lines, `PSU_MAX_CURRENT`, unit, network) | `tools/doctor.py`, `node.hardware_report` | built; one "skipped" row on a laptop |
 | Installer, systemd unit, journald caps, watchdog, config.txt snippet, Pi env, NetworkManager, polkit, firewall | `deploy/pi5/`, `run.sh` (Pi path), `requirements-pi.txt` | built; checked by `tests/test_hw_deploy.py` |
 | Profile label `SENTRIX_PROFILE=laptop\|pi5-clip\|pi5-hailo\|pi5-node\|hub` | `sentrix/config.py` (`NodeConfig`) | a label on the Node page and a doctor hint only; it changes no behaviour |
@@ -568,10 +573,10 @@ roadmap v2 (W0–W8).
 | H0 Plan | W0 | this file; decisions D8–D14; order parts incl. 4G modem + SIM | parts ordered | plan done; parts not ordered |
 | H1 Laptop prep | W1 | clip engine + fast lane; ONNX exports; gpiozero with mock pins; `PiCameraSource`; clip replay and bench; modem tested on the laptop with an Airtel/Vi SIM | clip replay ≥ M5 minus one, 0 false onsets; SMS out from the laptop | software done (§9); replay met; budget not met; modem not tested |
 | C Connectivity and cloud | W0–W1 | Oracle VM, `.in` domain, Docker, Caddy HTTPS, backups + tested restore; reachable from 4G and the demo room (`deploy/portal/README.md`) | HTTPS live, restore tested, fallback deploy ≤ 30 min | files written and tested statically; nothing deployed |
-| H2 Bench bring-up | W2 | OS, cooler, RTC; camera, mic, PIR, door, LEDs; relay test with an LED; doctor; "record normal session" | every input and output verified on the bench | not started |
+| H2 Bench bring-up | W2 | OS, cooler, RTC; camera, mic (plugged in while running, D21), PIR, door, LEDs; relay test with an LED; doctor; "record normal session" (built: the dashboard's *Record for training*, D20) | every input and output verified on the bench; a recording downloaded with sound | OS and camera up (2026-10-23); recording mode built, not yet run on the Pi; microphone arrives 2026-11-03 |
 | H3 Gate A | W3 | NCNN/ONNX models on the Pi, clip engine, fast lane, link running; `bench_clip` and a 1 h soak | **Gate A**; go/no-go 1 | not started |
 | H4 Power and alarm | W4 | 12 V UPS path, buck, fuses, siren relay; modem on the Pi; offline SMS path | power pass test (§6.3); offline SMS works on the bench | not started |
-| H5 Data | W3–W5 | M6 sessions recorded **with the Pi camera** | dataset in the `frames.csv` schema | not started |
+| H5 Data | W3–W5 | M6 sessions recorded **with the Pi camera**, from the dashboard's *Record for training* (D20): silent first, with the USB microphone from November | dataset in the `frames.csv` schema | recording mode built; no sessions yet |
 | H6 Upgrade or optimise | after Gate A | fail → T2 (HEFs, Gate B) or T3; pass → M7 single YOLO, T4 for 24/7 | gate passed | — |
 | H7 Deploy | W6–W8 | box and mount at 1.8–2.2 m, burn-in, code freeze end of W6, M9 gates on S4, rehearsals | G0–G5 (clip-mode G4), P1–P8 | — |
 

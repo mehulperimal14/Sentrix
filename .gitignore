@@ -98,6 +98,13 @@ training/runs/custom_eval/*
 *.sqlite
 *.sqlite3
 *.jsonl
+# training recordings (D20) downloaded into the working tree: raw video and
+# sound of real people, never committed. The tracked siren sound stays tracked.
+*.avi
+*.mkv
+*.wav
+!sentrix/web/static/sounds/*.wav
+rec_*.json
 # other local environments and tooling
 .venv*/
 venv*/

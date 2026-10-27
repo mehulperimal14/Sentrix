@@ -1,7 +1,8 @@
 // static/js/node.js
-// The Node page: device telemetry and I/O (GET /api/node, track T-HW), the
-// Portal link and the channels/modem blocks (live state; /api/link and
-// /api/channels when installed), system health (GET /api/health), latency,
+// The Node page: device telemetry and I/O, the microphone included
+// (GET /api/node, track T-HW), the Portal link and the channels/modem blocks
+// (live state; /api/link and /api/channels when installed), system health
+// (GET /api/health), latency,
 // HOME/ARMED (POST /api/mode) and the confirmed 1-second siren test
 // (POST /api/node/siren-test). Read-only configuration from /api/config.
 
@@ -27,6 +28,14 @@
         if (siren.armed !== undefined && siren.armed !== null) parts.push(siren.armed ? "armed" : "disarmed");
         if (siren.on !== undefined) parts.push(siren.on ? "ON" : "off");
         return parts.join(" · ");
+    }
+
+    // The microphone (AudioEngine.status() in /api/node): device and native
+    // rate, or "not connected" (none plugged in, or audio off).
+    function micText(mic) {
+        if (!mic || typeof mic !== "object" || !mic.device) return "not connected";
+        const rate = mic.rate ? ` · ${Math.round(Number(mic.rate))} Hz` : "";
+        return `${mic.device}${rate}${mic.available ? "" : " (not delivering)"}`;
     }
 
     function fillTable(id, rows) {
@@ -58,6 +67,7 @@
             ["Motion (PIR)", gpio.pir !== undefined ? gpio.pir : node.pir],
             ["Door", gpio.door !== undefined ? gpio.door : node.door],
             ["Mains sense", gpio.mains !== undefined ? gpio.mains : node.mains],
+            ["Microphone", micText(node.microphone)],
         ]);
         const note = document.getElementById("node-telemetry-note");
         if (note) {

@@ -95,6 +95,9 @@ _INITIAL: dict[str, Any] = {
     "confidence_band": [0.0, 0.0],
     "fusion_source": "unknown",
     "audio_label": "initializing",
+    # Is an open microphone delivering sound (the live loop writes it once a
+    # second from AudioEngine.available)? None until it has said.
+    "mic_delivering": None,
     "behaviour_label": "normal",
     "person_count": 0,
     "authorized": False,
@@ -124,6 +127,35 @@ _INITIAL: dict[str, Any] = {
 
 #: Committed level changes kept for the dashboard's Event Log (survives a reload).
 LEVEL_HISTORY_MAX = 50
+
+#: ``audio_label`` values that are not a sound result: nothing was heard.
+_NOT_LISTENING = ("disabled", "initializing", "mic_unavailable")
+
+
+def mic_listening(audio_label: Any) -> bool:
+    """Is the microphone producing *classified* results? ``audio_label``
+    names a sound result only then; the pipeline writes "audio unavailable"
+    (nothing plugged in, the sound model off, no full window yet, or no
+    window aligned with the frame), "disabled" or the start-up
+    "initializing" otherwise. ``mic_classifying`` reads this; whether the
+    microphone captures at all is ``mic_delivering``."""
+    if not isinstance(audio_label, str) or not audio_label.strip():
+        return False
+    label = audio_label.strip().lower()
+    return label not in _NOT_LISTENING and not label.startswith("audio unavailable")
+
+
+def mic_state(data: dict[str, Any]) -> tuple[bool, bool]:
+    """``(capturing, classifying)`` for the dashboard's dot and the link's
+    heartbeat. Capturing is the audio engine's own word
+    (``mic_delivering``, the same as ``/api/health`` ``audio``) once the
+    live loop has written it; a microphone that records the room is never
+    reported as off because nothing classified a window (the sound model
+    off, or the first seconds after it connected). Before that, and in a
+    replay, the sound label is all there is."""
+    classifying = mic_listening(data.get("audio_label"))
+    delivering = data.get("mic_delivering")
+    return (bool(delivering) if delivering is not None else classifying), classifying
 
 
 class SystemState:
@@ -181,8 +213,7 @@ class SystemState:
         data["latency_avg"] = round(data.get("latency_ms", 0.0) / 1000.0, 4)
         data["latency_p95"] = round(data.get("latency_p95_ms", 0.0) / 1000.0, 4)
         data["camera_available"] = data.get("camera_online", False)
-        data["mic_available"] = data.get("audio_label") not in (
-            "disabled", "initializing", "mic_unavailable")
+        data["mic_available"], data["mic_classifying"] = mic_state(data)
         # Inference is fully local; "cloud" now means the Portal link, so the
         # legacy keys follow the link block (False while no link runs).
         link = data.get("link") or {}
@@ -220,4 +251,5 @@ class SystemState:
 state = SystemState()
 
 __all__ = ["SystemState", "state", "SOS_IDLE", "LINK_IDLE", "NODE_IDLE",
-           "CHANNELS_IDLE", "CLIP_IDLE", "MODE_IDLE", "LEVEL_HISTORY_MAX"]
+           "CHANNELS_IDLE", "CLIP_IDLE", "MODE_IDLE", "LEVEL_HISTORY_MAX", "mic_listening",
+           "mic_state"]

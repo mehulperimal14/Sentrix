@@ -67,7 +67,8 @@ deployment-room data are what is missing.
 | Demo tools (`demo_reset.py`, `demo_run.py`, demo reel camera) | Done (laptop) | docs/7 §17 |
 | End-to-end product tests | Done | `tests/test_e2e_product.py` (13 scenarios, commit `7aca186`) |
 | Slim scene model for the Pi | Done, **failed its bar** | `training/runs/custom/slim/REPORT.md`: best slim LOVO macro-F1 0.229 vs DINOv2 0.440; DINOv2 stays |
-| Deployment-room data (M6), retrained models (M7), fitted fusion (M8), gates on S4 (M9) | Not started | `CLAUDE.md` M6–M9 |
+| Training recordings from the dashboard (D20: raw video + the microphone's sound, downloaded on the LAN) and a USB microphone in any port (D21) | Done (laptop) | `sentrix/io/recorder.py`, `sentrix/web/recording_routes.py`, `sentrix/perception/audio.py`; `tests/test_recorder.py`, `tests/test_recording_*.py`, `tests/test_mic_hotplug.py`. Not yet run on the Pi or with a real microphone |
+| Deployment-room data (M6), retrained models (M7), fitted fusion (M8), gates on S4 (M9) | Not started (the recording mode exists) | `CLAUDE.md` M6–M9 |
 
 The test suite collects 1,647 tests (`python -m pytest --collect-only -q` on
 `e7ca89e`).
@@ -153,7 +154,7 @@ These are small, but each one must be closed or stated in the report.
 | No Alembic baseline; `create_all` does not add columns to an existing Portal database | docs/7 §16 q7; `sentrix_portal/db.py` | Any schema change after the first cloud deploy |
 | No live Postgres run (psycopg not installed) | `CLAUDE.md` M10 | Cloud deploy |
 | `tools/bench_link.py` not written (remote fps, glass-to-glass p95, uplink, CPU) | docs/7 §15 item 3 | C7, P4 |
-| No "record normal session" mode in the app; no `tools/build_custom_dataset.py` | `CLAUDE.md` M6 | P8, G3, model training |
+| ~~No "record normal session" mode in the app~~ **done** (D20, 2026-10-28: the dashboard's *Record for training*, §15.1); still no `tools/build_custom_dataset.py` | `CLAUDE.md` M6, D20 | P8, G3, model training |
 | `demo_run.py` always forces every live switch off | `tools/demo_run.py` | Real-channel rehearsals need their own start-up (§8) |
 | An approved request on a device without a Portal never auto-closes | track notes (T-SOS) | Rehearsals: close it from the Desk |
 | PIN failure counts reset on restart (kept in memory) | track notes (T-SOS) | State in the report |
@@ -289,6 +290,8 @@ switches are still **off**.
 | Inputs with the siren **not** connected: PIR, door, mains pull, watched on `GET /api/node` | each input changes state once per action; one `node_alert` row per mains pull |
 | LEDs: lamp test at start; green / amber / red as in the README | matches the README table |
 | Picamera2 checks still open from T-HW: the lores format, the timestamp clock, CPU cost at 15 fps | recorded in `docs/8` |
+| USB microphone plugged in **while SENTRIX runs**, then moved to another port (D21) | the Node page's Microphone row names it within a minute each time; `tools/doctor.py` lists it as the input that would open |
+| A 1-minute *Record for training* with someone talking, downloaded on a laptop on the same Wi-Fi (D20) | VLC plays the `.avi` with sound in sync; the sidecar shows few repeated or dropped frames |
 
 ### 6.2 Power test
 
@@ -685,9 +688,11 @@ object is visible. Classes:
 | robbery, stick, smoke | no, experimental (≤ L2) | record a few for later work only |
 
 **Audio with every clip (D15).** The microphone you will deploy (USB), at
-the device, recorded together with the video so the two stay in sync
-(`rpicam-vid` plus `arecord` started by one script, or the app's
-planned "record normal session" mode). For each room and session also record:
+the device, recorded together with the video so the two stay in sync: the
+dashboard's *Record for training* (D20, below) puts the microphone's 16 kHz
+track into the same AVI, sample 0 under frame 0. Plan: silent recordings first
+(phase 1, now); with sound once the Scalebee USB microphone is in (arrives
+2026-11-03), for the 2026-11-30 evaluation. For each room and session also record:
 laughter and calm conversation (5 min), a raised-voice argument without
 contact (2 min), shouting and screaming (staged, 2 min), TV/music in the
 background (5 min), a smoke-alarm test beep, and gunshot / glass-break sounds
@@ -713,13 +718,33 @@ switched on and off). This is what P8 and G3 are measured on. More hours give
 a tighter bound: 0 false onsets in 3 h still allows up to about 1 per hour at
 95 %.
 
-**Tools.** A "record normal session" mode in the app and
-`tools/build_custom_dataset.py` are planned (`CLAUDE.md` M6) but not written.
-Until then record on the Pi with `rpicam-vid` at the analysis settings, for
-example `rpicam-vid -t 20000 --width 1280 --height 720 --framerate 15 --codec
-libav -o S1_R1_handgun_001.mp4` (check the options on your OS image), and
+**Tools: record from the dashboard (D20).** The device records through its
+own capture path, so no script and no second program holds the camera:
+
+1. Open the device's console and sign in with the device password (the
+   device admin): on the Pi from a computer on the **same network**,
+   `http://<device-ip>:8000` (the Pi profile binds the LAN; `ufw.sh` limits
+   the port to the subnet); on a laptop running SENTRIX, `http://127.0.0.1:8000`
+   on that laptop (the console binds loopback only unless `SENTRIX_HOST` is
+   set deliberately, with a firewall rule). The Portal does not offer
+   recording, and never carries the files.
+2. On the dashboard, *Record for training*: type a label (e.g.
+   `S1 R1 handgun 001`; it becomes part of the file name), *Start recording*.
+   A red **REC mm:ss** shows on the live video for everyone watching; it is
+   not in the file.
+3. Act the clip, *Stop recording*, wait until "Finishing the files…" clears.
+4. *Download video* (an MJPEG AVI at the camera's resolution and frame rate,
+   with the microphone's sound when one was connected and ffmpeg is installed;
+   VLC plays it) and, when listed, *Download sound* (the `.wav`, without
+   ffmpeg). Then *Delete* it on the device.
+
+One recording is at most 10 minutes (a long "normal" session is several
+recordings); the device keeps 2 GB free, holds at most 20 GB of recordings
+and deletes them after 14 days. Each recording's `.json` sidecar records the
+time, frame rate, frames repeated or dropped, audio gaps and the camera; still
 write one line per clip into a session sheet: file, session, room, actor id,
-class, scripted onset/offset, lighting, notes.
+class, scripted onset/offset, lighting, notes. `tools/build_custom_dataset.py`
+(sessions → the `frames.csv` schema) is still to write (`CLAUDE.md` M6).
 
 **Safety and permission.**
 
@@ -729,9 +754,12 @@ class, scripted onset/offset, lighting, notes.
 * Flames: an extinguisher at hand, a non-flammable surface, the smallest flame
   that is visible, a second person watching. Never near the Pi box or cables.
   In the demo, fire comes from a video file.
-* Consent: written consent from every person filmed; no minors; volunteers may
-  withdraw and their clips are deleted. Footage stays on team machines, out of
-  git and out of `var/`.
+* Consent: written consent from every person filmed, **before** pressing
+  *Start recording*; no minors; volunteers may withdraw and their clips are
+  deleted. Footage stays on the device only until it is downloaded (delete it
+  there at once), then on team machines, out of git (`.gitignore` ignores
+  `*.avi`, `*.mkv`, `*.wav` and `rec_*.json`) and out of the repository's
+  `var/`.
 
 **Effort.** About 34 person-hours of recording, correction and QC over three
 weeks (`CLAUDE.md` open questions).

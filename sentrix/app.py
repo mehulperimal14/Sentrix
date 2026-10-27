@@ -98,13 +98,40 @@ def _legacy_channels_block(settings, state) -> None:
                            "warn": bool(settings.sos.enabled and not ready)})
 
 
+def _prepare_recordings(pipeline) -> None:
+    """Build the training recorder (D20) off the start-up path: it finishes the
+    recording a crash or power cut left (an ffmpeg remux can take seconds),
+    deletes the ones past ``keep_days`` and from then on does both every hour
+    (``Recorder.start_housekeeping``), so footage never outlives the days the
+    card promises on a device nobody restarts. Nothing records until the
+    device admin presses Record; shutdown saves a recording in progress and
+    stops the timer (``Pipeline.shutdown``)."""
+    prepare = getattr(pipeline, "get_recorder", None)
+    if not callable(prepare):
+        return
+
+    def run() -> None:
+        try:
+            recorder = prepare()
+            housekeeping = getattr(recorder, "start_housekeeping", None)
+            if callable(housekeeping):
+                housekeeping()
+        except Exception as exc:
+            log.error("training recorder not prepared: %s", exc)
+
+    threading.Thread(target=run, daemon=True, name="sentrix-recorder-recover").start()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Start-up: database, pipeline, persisted HOME/ARMED, services, then the
-    interrupted-incident cleanup (so the link mirrors it) and the live loop.
-    Shutdown, in this order: the live loop, the pipeline (its worker drains
-    queued side effects such as an SOS trigger and saves the open incident,
-    while the services still run), then the services in reverse order."""
+    interrupted-incident cleanup (so the link mirrors it), the training
+    recorder's recovery (in the background) and the live loop. Shutdown, in
+    this order: the live loop (as it exits it asks a recording in progress to
+    stop, reason ``shutdown``), the pipeline (that recording is saved, then its
+    worker drains queued side effects such as an SOS trigger and saves the open
+    incident, while the services still run), then the services in reverse
+    order."""
     from sentrix import listeners, services
     from sentrix import mode as runtime_mode
     from sentrix.pipeline.engine import get_pipeline, shutdown_pipeline
@@ -130,6 +157,7 @@ async def lifespan(app: FastAPI):
     _start_services(pipeline, app, asyncio.get_running_loop())
     # After the services, so the link client hears the closures.
     database.close_interrupted(pipeline.session_id)
+    _prepare_recordings(pipeline)
 
     _stop.clear()
     _thread = threading.Thread(target=_loop, daemon=True, name="sentrix-pipeline")

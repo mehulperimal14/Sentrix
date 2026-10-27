@@ -424,7 +424,10 @@ class TestSession:
         import sentrix.web.link_routes as link_routes
         monkeypatch.setattr(link_routes, "state", rig.state)
         client = TestClient(rig.ctx.extras["app"])
-        client.cookies.set("lc_session", generate_token("pw"))
+        # One token for the cookie and the CSRF header: a token carries the
+        # second it was made, so two calls a second apart would not match.
+        session = generate_token("pw")
+        client.cookies.set("lc_session", session)
         body = client.get("/api/link").json()
         assert body["connected"] and body["device_id"] == rig.seeded.device_id
         assert body["service"]["state"] == "connected" and body["remote_viewers"] == 0
@@ -432,7 +435,7 @@ class TestSession:
         assert isinstance(rows, list)
         count = len(rig.network.pipes)
         from sentrix.web import auth
-        csrf = {"X-CSRF-Token": auth.csrf_for_session(generate_token("pw"))}
+        csrf = {"X-CSRF-Token": auth.csrf_for_session(session)}
         assert client.post("/api/link/reconnect", headers=csrf).json() == {"status": "reconnecting"}
         wait_for(lambda: len(rig.network.pipes) > count and online(rig), what="redial")
         from sentrix.link import tunnel_auth

@@ -24,14 +24,20 @@ siren test                 owner             step-up (the 1/min limit is
 Desk view                  operator          only while a request of this device
                                              is on the help path *and* consent
                                              ``desk_live_view``
+training recordings        none (LC only)    ``/api/recordings*``,
+                                             ``/media/recording/*``: the device
+                                             admin on the LAN (D20)
 =========================  ================  =====================================
 
 Never tunnelled (refused even if the Portal forwarded them): ``/login``,
 ``/logout``, ``/setup/*``, ``/docs``, ``/redoc``, ``/openapi.json``, ``/video``
 and ``/ws/*`` (the last two are relayed from frame and state messages). The
-LC-only routes (``/api/link/reconnect``, ``/api/channels/test``) belong to the
-device admin. Anything not in the table is refused. ``company_admin`` never
-reaches the device: it is not a tunnel role and :class:`Actor` refuses it.
+LC-only routes (``/api/link/reconnect``, ``/api/channels/test``, and every
+method on ``/api/recordings*`` and ``/media/recording/*``) belong to the device
+admin. Training recordings stay on the LAN: continuous video never leaves the
+device (D12) and a recording is far over the tunnel's 16 MiB response cap
+(D20). Anything not in the table is refused. ``company_admin`` never reaches
+the device: it is not a tunnel role and :class:`Actor` refuses it.
 
 Consents come from the profile the Portal pushed (``sentrix.link.profile``);
 a device without one (standalone) grants none of them.
@@ -61,6 +67,9 @@ NEVER_EXACT = frozenset({"/login", "/logout", "/docs", "/redoc", "/openapi.json"
 NEVER_PREFIXES = ("/setup/", "/ws/", "/docs/", "/redoc/")
 #: Routes only the device admin (LC password, on the LAN) may use.
 LC_ONLY = frozenset({"/api/link/reconnect", "/api/channels/test"})
+#: Path prefixes only the device admin may use, whatever the method: the
+#: training recordings and their downloads (D20).
+LC_ONLY_PREFIXES = ("/api/recordings", "/media/recording/")
 READ_METHODS = frozenset({"GET", "HEAD"})
 TUNNEL_METHODS = frozenset({"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"})
 
@@ -115,7 +124,7 @@ def classify(method: str, path: str) -> str:
     method = method.upper()
     if path in NEVER_EXACT or path.startswith(NEVER_PREFIXES):
         return NEVER
-    if path in LC_ONLY:
+    if path in LC_ONLY or path.startswith(LC_ONLY_PREFIXES):
         return LC_ADMIN
     if method in READ_METHODS:
         if path.startswith("/static/"):
@@ -284,5 +293,5 @@ class TunnelPolicy:
 
 
 __all__ = ["Decision", "TunnelPolicy", "classify", "normalise_path", "STEP_UP_SECONDS",
-           "PAGES", "DESK_PATHS", "LC_ONLY", "NEVER_EXACT", "NEVER_PREFIXES",
-           "TUNNEL_METHODS"]
+           "PAGES", "DESK_PATHS", "LC_ONLY", "LC_ONLY_PREFIXES", "NEVER_EXACT",
+           "NEVER_PREFIXES", "TUNNEL_METHODS"]

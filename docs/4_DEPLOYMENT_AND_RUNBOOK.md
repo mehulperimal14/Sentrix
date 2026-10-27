@@ -24,7 +24,8 @@ is [doc 7](7_PORTAL_AND_SOS.md); the Raspberry Pi is
 | GPU | none (CPU works; the app environment uses CPU torch) | CUDA moves the scene model to the GPU automatically when torch has it |
 | OS | Windows 10, Ubuntu 22.04, macOS 13 | any; Raspberry Pi OS Trixie for the Pi |
 | Camera | a video file is enough | UVC webcam, RTSP, or the Pi camera |
-| Microphone | optional | USB microphone |
+| Microphone | optional | USB microphone, in any port, plugged in before or after start-up (D21) |
+| ffmpeg | optional | on `PATH`: a training recording keeps its sound inside the video (else a separate `.wav`), and replays hear a video's soundtrack |
 
 Disk: the clone is about 0.8 GB (weights, custom dataset and videos are
 tracked); dependencies take 2–5 GB; the first start downloads about 600 MB of
@@ -106,6 +107,8 @@ reviewable.
 | `SENTRIX_HOST` / `SENTRIX_PORT` | No | Default `127.0.0.1:8000`. Do not bind `0.0.0.0` without a reverse proxy and TLS |
 | `SENTRIX_SECURE_COOKIES` | Behind TLS | `1` sets the `Secure` cookie flag |
 | `SENTRIX_AUDIO` | No | `0` disables the microphone |
+| `SENTRIX_MIC_DEVICE` | No | Which input to open: empty = automatic (USB, a newer one first, then another input plugged in while running, then the default; headsets, Bluetooth hands-free and virtual microphones never), or a PortAudio index or name substring (`python tools/doctor.py` lists them) |
+| `SENTRIX_RECORDING_ENABLED`, `SENTRIX_RECORD_*` | No | Training recordings on the dashboard (§9 "Recordings and disk"; doc 7 §3.4) |
 | `SENTRIX_ARMED` | No | ARMED at first start (later changes persist in `var/mode.json`) |
 | `SENTRIX_SIREN` | No | `auto` \| `gpio` \| `sound` \| `console` |
 | `RETENTION_DAYS` | No | Default 30 (§8) |
@@ -162,7 +165,7 @@ timers, notification worker, retention); they are off by default and in tests.
 | URL | Page |
 |---|---|
 | `/login`, `/logout` (POST; GET shows a confirm page) | sign-in |
-| `/dashboard` | TCI gauge, engine scores, scene card, pipeline rates, evidence state, event log, SOS panel |
+| `/dashboard` | TCI gauge, engine scores, scene card, pipeline rates, evidence state, event log, SOS panel; for the device admin signed in on the LAN, the *Record for training* card (start, stop, download, delete; never through the Portal, D20) |
 | `/live` | full-screen video with the HUD |
 | `/events` | incidents with filters, paging, Real / False verdicts |
 | `/alerts` | snapshot gallery |
@@ -170,13 +173,14 @@ timers, notification worker, retention); they are off by default and in tests.
 | `/dispatch` | "Dispatch & SOS": packages, their requests, "Request help now" on closed ones |
 | `/authorized` | face gallery: capture from the camera, upload, remove |
 | `/sos` | the open assistance request, history, PIN answers; scripted trigger for the device admin in test mode |
-| `/node` | profile, telemetry, GPIO, HOME/ARMED, siren test, link, channels, clip status |
+| `/node` | profile, telemetry, GPIO, HOME/ARMED, siren test, link, channels, clip status, the microphone in use (or "not connected") |
 | `/setup/wifi` | Wi-Fi setup, only while `SENTRIX_SETUP_MODE=1` |
 
 The JSON API, with methods and error codes, is doc 7 §9.2 (new routes) and
 `sentrix/web/routes.py`; the main reads are `GET /api/health`,
 `/api/metrics`, `/api/config`, `/api/incidents`, `/api/evidence/verify`,
-`/api/sos`, `/api/node`, `/api/link`, `/api/channels`. `/docs` exists only with
+`/api/sos`, `/api/node`, `/api/link`, `/api/channels`, and `/api/recordings`
+(the device admin only). `/docs` exists only with
 `SENTRIX_API_DOCS=1`. Every state-changing request needs the
 `X-CSRF-Token` header that the pages send.
 
@@ -292,7 +296,8 @@ run on hardware).
 ### Weekly
 
 - `GET /api/evidence/verify`: the chain must report `ok: true`.
-- Check `var/` growth; snapshots and event logs accumulate.
+- Check `var/` growth; snapshots and event logs accumulate, and training
+  recordings most of all (below).
 - Portal: run `deploy/portal/restore_test.sh` against the latest backup.
 
 ### Retention
@@ -302,6 +307,43 @@ peak level is below 4 **and** they have been reviewed. The hard caps of doc 7
 §3.8 (unreviewed 180 days, TRUE 1 year, SOS snapshot 30 days) are applied by
 the Portal's retention worker to its own tables; on the device they are not
 built yet.
+
+### Recordings and disk
+
+Training recordings (D20) are the largest files the device writes: raw
+MJPEG frames at the camera's resolution, up to 10 minutes each. They live in
+`var/recordings/` (`rec_<date>_<time>[_<label>].avi`, a `.wav` when ffmpeg is
+missing, and a `.json` sidecar).
+
+- **Make one:** sign in to the console with the device password - on the Pi
+  from a computer on the same network (`http://<device-ip>:8000`; `pi.env`
+  binds the LAN and `ufw.sh` limits the port to your subnet), on a laptop on
+  the laptop itself (`http://127.0.0.1:8000`: the console binds loopback
+  only unless `SENTRIX_HOST` is set deliberately, §4.1) → dashboard →
+  *Record for training* → a label → *Start recording*; *Stop recording*, wait
+  for "Finishing the files…" to clear, then *Download video* (and *Download
+  sound* when there is a separate `.wav`) and *Delete*. The Portal never shows
+  this card and refuses its routes.
+- **Limits that stop or refuse a recording** (`SENTRIX_RECORD_*`, doc 7
+  §3.4): 10 min each; 2 GB free kept for evidence, snapshots and logs (no start
+  below it, and a running recording stops at it); 20 GB for all recordings
+  (download and delete before the next start); 1.9 GB per video; a camera gone
+  for 5 s. The ffmpeg mux writes the video a second time, so it runs only
+  when that copy leaves the 2 GB floor intact; otherwise the sound stays a
+  separate `.wav` and the sidecar's `error` says why. Finished recordings are
+  deleted after 14 days, checked every hour whether or not anyone opens the
+  dashboard.
+- **Check:** `python tools/doctor.py` prints ffmpeg, the recordings' count and
+  size against the 20 GB cap, and free space against the 2 GB floor.
+- **After a crash, a power cut or a failed save** (on Windows a virus scanner
+  can hold a file just closed) the `.part` files are finished at once, before
+  the next recording, within the hour or at the next start: a save that had
+  written its sidecar keeps its own figures; otherwise the sidecar says
+  `interrupted` and, with ffmpeg, the video is remuxed and the sound put back
+  in. No action is needed.
+- **Never commit a recording.** `.gitignore` ignores `*.avi`, `*.mkv`, `*.wav`
+  and `rec_*.json` outside the tracked siren sound; keep downloads on team
+  machines, with the consent forms of everyone filmed (ROADMAP §15.1).
 
 ---
 
@@ -324,6 +366,11 @@ built yet.
 | Siren test answers 409 | siren line disarmed (`SENTRIX_SIREN_ARMED=0` or the arming key) | Arm it |
 | Siren does nothing | `ConsoleSiren` selected | `siren_is_real` in `/api/health` |
 | High TCI in an empty room | should not happen | `doctor` asserts empty-scene TCI < 0.10; the TCI leaves 0 only on confirmed evidence, so read the reason on the dashboard |
+| No *Record for training* card | not signed in as the device admin on the LAN (the Portal never shows it) | Sign in on the device's console with the device password (§9 "Recordings and disk") |
+| The card says recording is turned off | `SENTRIX_RECORDING_ENABLED=0` | Set it to `1` and restart |
+| *Start recording* refused | camera offline or no frame yet; already recording or saving; under 2 GB free; recordings over 20 GB | The message names which; download and delete old recordings |
+| A recording has no sound | no microphone delivered sound while it ran, or ffmpeg is missing (the sound is then the separate `.wav`) | Node page "Microphone"; `tools/doctor.py` ffmpeg and microphone rows |
+| "Microphone: not connected" with one plugged in | PortAudio has not listed it yet (a new USB microphone is held by the sound server for a few seconds), or it is not an input SENTRIX chooses | Wait up to a minute; `tools/doctor.py` lists the inputs and which one would open; set `SENTRIX_MIC_DEVICE` to its index or name |
 
 ---
 

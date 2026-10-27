@@ -6,7 +6,8 @@ Owner: track T-HW. Included by ``sentrix.web.extensions``.
   write it; ``NODE_IDLE`` while they are off) with ``gpio = {siren, leds:
   {green, amber, red}, pir, door, mains}``, plus the siren as the
   pipeline sees it (backend, real, armed, on), the test limiter, the camera
-  stream's status (Picamera2) and which hardware services run.
+  stream's status (Picamera2), the microphone (``AudioEngine.status()``, None
+  with audio off) and which hardware services run.
 * ``POST /api/node/siren-test`` — 1 s of siren through
   ``actuators.siren_test`` (the limiter is shared with the link's
   ``siren.test`` command: one test per minute for the whole process). 409
@@ -66,6 +67,9 @@ def node_payload() -> dict[str, Any]:
     camera_status = getattr(pipeline.source, "status", None)
     payload["camera"] = (camera_status() if callable(camera_status)
                          else {"name": pipeline.source.name, "online": pipeline.source.online})
+    # Which microphone, at what native rate; None with audio off (SENTRIX_AUDIO=0).
+    from sentrix.pipeline.engine import audio_status
+    payload["microphone"] = audio_status(getattr(pipeline, "audio", None))
     health = services.registry.health()
     payload["services"] = {name: (health.get(name) or {}).get("status", "off")
                            for name in ("node", "gpio")}

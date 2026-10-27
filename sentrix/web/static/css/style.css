@@ -1030,3 +1030,18 @@ body.standalone {
 .contrib-lowers .contrib-effect { color: #22c55e; }
 .contrib-gated .contrib-effect { color: #facc15; }
 .contrib-off .contrib-effect, .contrib-context .contrib-effect { color: #8a9bb8; }
+/* Record for training (D20): the device admin's card on the dashboard */
+.record-controls { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.record-label { flex: 1 1 12rem; min-width: 0; }
+.btn-record { background: #b91c1c; color: #fff; }
+.btn-record:hover { background: #991b1b; }
+.btn-record.recording { background: transparent; border: 1px solid #ef4444; color: #fca5a5; }
+.record-status { margin-top: 0.6rem; font-size: 0.82rem; color: var(--text-muted); overflow-wrap: anywhere; }
+.record-status.recording { color: #fca5a5; font-weight: 600; font-family: var(--font-mono); }
+.record-list { list-style: none; margin-top: 0.6rem; max-height: 320px; overflow-y: auto; }
+.record-item { padding: 0.5rem 0; border-bottom: 1px solid var(--border-light); }
+.record-name { font-family: var(--font-mono); font-size: 0.8rem; overflow-wrap: anywhere; }
+.record-meta { font-size: 0.75rem; color: var(--text-muted); margin: 0.15rem 0 0.35rem; }
+.record-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.record-actions .btn { text-decoration: none; }
+.btn-danger-outline.armed { background: #b91c1c; color: #fff; }

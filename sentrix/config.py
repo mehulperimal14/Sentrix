@@ -352,6 +352,13 @@ class AudioConfig:
     #: microphone plugged in (or back in) later is picked up without a restart.
     mic_retry_seconds: float = _env_float("SENTRIX_MIC_RETRY_SECONDS", 5.0)
     mic_stall_seconds: float = _env_float("SENTRIX_MIC_STALL_SECONDS", 5.0)
+    #: Which input to open: empty = automatic (a microphone plugged in while
+    #: running, then a USB input, then the system default), or a PortAudio
+    #: device index or a name substring.
+    mic_device: str = _env_str("SENTRIX_MIC_DEVICE", "")
+    #: PortAudio's device list is rebuilt when the OS's list of audio devices
+    #: changes, and at least this often (s) while no microphone is open.
+    mic_rescan_seconds: float = _env_float("SENTRIX_MIC_RESCAN_SECONDS", 60.0)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -913,6 +920,42 @@ class RetentionConfig:
     declined_contact_days: int = 7
 
 
+@dataclass(frozen=True)
+class RecordingConfig:
+    """Training recordings from the dashboard (D20): the camera's raw frames
+    (no overlay) and, while a microphone is connected, its sound, written on
+    the device under ``var/recordings/`` for the device admin to download on
+    the local network. Never through the Portal (its tunnel carries at most
+    16 MiB, and continuous video stays on the device, D12)."""
+
+    enabled: bool = _env_bool("SENTRIX_RECORDING_ENABLED", True)
+    #: One recording stops by itself after this many seconds.
+    max_seconds: float = _env_float("SENTRIX_RECORD_MAX_SECONDS", 600.0)
+    #: Free space kept for the alarm's own evidence, snapshots and logs: a
+    #: recording does not start, and stops, below it.
+    min_free_mb: int = _env_int("SENTRIX_RECORD_MIN_FREE_MB", 2048)
+    #: All finished recordings together; a new one does not start above it.
+    max_total_mb: int = _env_int("SENTRIX_RECORD_MAX_TOTAL_MB", 20480)
+    #: Finished recordings are deleted after this many days (0 = kept).
+    keep_days: float = _env_float("SENTRIX_RECORD_KEEP_DAYS", 14.0)
+    #: MJPEG quality of the recorded frames.
+    jpeg_quality: int = _env_int("SENTRIX_RECORD_QUALITY", 90)
+    #: Frames wider than this are scaled down (0 = native size).
+    max_width: int = _env_int("SENTRIX_RECORD_MAX_WIDTH", 1280)
+    #: Frames waiting for the writer, in seconds of video; older ones are
+    #: dropped (and counted) rather than slowing the camera.
+    queue_seconds: float = 3.0
+    #: After Stop, how long to wait for the microphone's last block.
+    audio_tail_seconds: float = 1.5
+    #: No camera frame for this long stops the recording.
+    camera_gap_seconds: float = 5.0
+    #: A download in a browser running on the device itself lands on the
+    #: device's own disk (the Pi's SD card). "auto" refuses it on a Raspberry
+    #: Pi, "1" allows it, "0" refuses it everywhere. Other computers on the
+    #: network can always download.
+    download_on_device: str = _env_str("SENTRIX_RECORD_DOWNLOAD_ON_DEVICE", "auto").lower()
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Root
 # ──────────────────────────────────────────────────────────────────────────────
@@ -940,6 +983,7 @@ class Config:
     node: NodeConfig = field(default_factory=NodeConfig)
     web: WebConfig = field(default_factory=WebConfig)
     retention: RetentionConfig = field(default_factory=RetentionConfig)
+    recording: RecordingConfig = field(default_factory=RecordingConfig)
 
     @property
     def test_mode(self) -> bool:

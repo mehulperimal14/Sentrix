@@ -376,6 +376,140 @@ def check_exports(report: Report, directory=None) -> None:
     report.add(OK, "fallback", "models without an export run on torch")
 
 
+def _size(n: float) -> str:
+    """Bytes as MB below a gigabyte, else GB."""
+    mb = n / (1024 * 1024)
+    return f"{mb:.0f} MB" if mb < 1024 else f"{mb / 1024:.1f} GB"
+
+
+def _shown(path: Path) -> str:
+    """A path relative to the repository when it is inside it."""
+    from sentrix.paths import ROOT_DIR
+    try:
+        return path.resolve().relative_to(ROOT_DIR.resolve()).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def check_recordings(report: Report, directory: Path | None = None, *, cfg=None,
+                     which=None, disk_usage=None) -> None:
+    """Training recordings (D20): ffmpeg, which puts a recording's sound into
+    its video (and lets replays hear a video's soundtrack); the recordings
+    already on the device against their cap; free space against the floor a
+    recording keeps for the alarm's evidence and logs. Reads the directory
+    only: nothing is recorded, created, finished or deleted."""
+    import shutil
+
+    from sentrix import paths
+    from sentrix.config import settings
+    from sentrix.io.recorder import Recorder
+
+    report.section("training recordings (D20)")
+    which = shutil.which if which is None else which
+    disk_usage = shutil.disk_usage if disk_usage is None else disk_usage
+    cfg = settings.recording if cfg is None else cfg
+    directory = Path(paths.RECORDINGS_DIR) if directory is None else Path(directory)
+
+    ffmpeg = which("ffmpeg")
+    if ffmpeg:
+        report.add(OK, "ffmpeg", f"{ffmpeg} (a recording's sound goes inside its video)")
+    else:
+        report.add(WARN, "ffmpeg", "not on PATH: a recording's sound is saved as a separate "
+                                   ".wav, and replays have no soundtrack (Pi: apt install "
+                                   "ffmpeg)")
+
+    if not cfg.enabled:
+        report.add(OK, "recordings", "off (SENTRIX_RECORDING_ENABLED=0)")
+        return
+    where = _shown(directory)
+    if directory.is_dir():
+        items = Recorder(directory, cfg).list()
+        total = sum(int(item.get("bytes") or 0) for item in items)
+        unfinished = len({p.name.split(".part", 1)[0] for p in directory.glob("rec_*.part.*")})
+        cap = int(cfg.max_total_mb) * 1024 * 1024
+        kept = (f"deleted after {cfg.keep_days:g} days" if cfg.keep_days > 0
+                else "kept until deleted")
+        detail = (f"{len(items)} in {where}, {_size(total)}"
+                  + (f" of {_size(cap)} allowed" if cap > 0 else "") + f"; {kept}")
+        if unfinished:
+            detail += f"; {unfinished} left by a crash (finished at the next start)"
+        if cap > 0 and total >= cap:
+            report.add(WARN, "recordings", detail + ": at the cap, no new recording starts "
+                                                    "until some are downloaded and deleted")
+        else:
+            report.add(OK, "recordings", detail)
+    else:
+        report.add(OK, "recordings", f"none yet ({where} is created at the first start)")
+
+    # Free space where the recordings go (the nearest folder that exists).
+    probe = directory
+    while not probe.exists() and probe.parent != probe:
+        probe = probe.parent
+    try:
+        free = int(disk_usage(probe).free)
+    except OSError as exc:
+        report.add(WARN, "free space", f"cannot read: {exc}")
+        return
+    floor = int(cfg.min_free_mb) * 1024 * 1024
+    if floor > 0 and free < floor:
+        report.add(WARN, "free space", f"{_size(free)}, under the {_size(floor)} kept for "
+                                       "evidence and logs: a recording will not start")
+    else:
+        report.add(OK, "free space", f"{_size(free)} (a recording keeps {_size(floor)} free)")
+
+
+def check_microphone(report: Report, sd=None, *, wanted: str | None = None,
+                     enabled: bool | None = None) -> None:
+    """The microphone the device would open (D21), from the inputs PortAudio
+    lists, ranked the way the audio engine ranks them. Never opened: only
+    ``query_devices`` and the host API's default are read, never
+    ``check_input_settings`` or a stream. ``sd`` is the sounddevice module
+    (a test passes a fake)."""
+    from sentrix.config import settings
+
+    report.section("microphone (D21; listed, never opened)")
+    enabled = settings.pipeline.audio_enabled if enabled is None else enabled
+    if not enabled:
+        report.add(OK, "microphone", "off (SENTRIX_AUDIO=0)")
+        return
+    from sentrix.perception import audio
+    sd = audio.sd if sd is None else sd
+    if sd is None:
+        report.add(WARN, "microphone", "sounddevice not installed: no microphone "
+                                       "(on a Pi: sudo apt install libportaudio2)")
+        return
+    try:
+        devices = [dict(d) for d in sd.query_devices()]
+    except Exception as exc:
+        report.add(WARN, "microphone", f"PortAudio cannot list devices: {exc}")
+        return
+    try:
+        hostapi = int(sd.default.hostapi)
+    except Exception:
+        hostapi = 0
+    try:
+        default_input = int(sd.query_hostapis(hostapi)["default_input_device"])
+    except Exception:
+        default_input = -1
+    wanted = settings.audio.mic_device if wanted is None else wanted
+    candidates = audio.rank_inputs(devices, hostapi=hostapi, wanted=wanted,
+                                   default_input=default_input if default_input >= 0 else None)
+    if not candidates:
+        report.add(WARN, "microphone", "no input device: plug a USB microphone into any "
+                                       "port; SENTRIX picks it up while running")
+        return
+    best = candidates[0]
+    why = ", ".join(best.reasons) or "the only input"
+    others = len(candidates) - 1
+    report.add(OK, "microphone",
+               f"would open [{best.index}] {best.name} ({why}; native "
+               f"{best.default_rate} Hz, resampled to 16 kHz if needed)"
+               + (f"; {others} other input(s)" if others else ""))
+    if wanted.strip() and "asked for" not in best.reasons:
+        report.add(WARN, "SENTRIX_MIC_DEVICE", f"{wanted!r} matches no input: the choice "
+                                                "is automatic")
+
+
 def main(argv: list[str] | None = None) -> int:
     import argparse
 
@@ -390,12 +524,18 @@ def main(argv: list[str] | None = None) -> int:
                              "(off by default: the doctor never opens a device)")
     args = parser.parse_args(argv)
     load_dotenv(ROOT_DIR / ".env")
+    if sys.platform.startswith("linux"):
+        # The device list the app sees: it sets this before sounddevice loads
+        # (sentrix/perception/audio.py), and the dependency check imports it first.
+        import os
+        os.environ.setdefault("PA_ALSA_PLUGHW", "1")
 
     print("SENTRIX doctor")
     print("=" * 68)
     report = Report()
     checks = [check_dependencies, check_models, check_config, check_services,
-              check_hardware, check_exports, check_engines]
+              check_hardware, check_exports, check_recordings, check_microphone,
+              check_engines]
     if not args.no_camera:
         def camera(report: Report) -> None:
             check_camera(report, probe=args.probe_camera)

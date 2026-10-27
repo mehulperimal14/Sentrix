@@ -50,9 +50,13 @@ DB_PATH = VAR_DIR / "sentrix.db"
 LINK_DIR = VAR_DIR / "link"
 #: The Portal's development SQLite database and files (sentrix_portal).
 PORTAL_VAR_DIR = VAR_DIR / "portal"
+#: Training recordings made from the dashboard (D20); downloaded on the LAN,
+#: then deleted.
+RECORDINGS_DIR = VAR_DIR / "recordings"
 
 _RUNTIME_DIRS = (
     VAR_DIR, EVIDENCE_DIR, SNAPSHOT_DIR, EVENTLOG_DIR, FACES_DIR, LOG_DIR,
+    RECORDINGS_DIR,
 )
 
 
@@ -72,5 +76,5 @@ __all__ = [
     "WEB_DIR", "STATIC_DIR", "TEMPLATES_DIR",
     "VAR_DIR", "EVIDENCE_DIR", "SNAPSHOT_DIR", "EVENTLOG_DIR", "FACES_DIR",
     "LOG_DIR", "CALIBRATION_DIR", "DB_PATH", "LINK_DIR", "PORTAL_VAR_DIR",
-    "ensure_runtime_dirs", "model_path",
+    "RECORDINGS_DIR", "ensure_runtime_dirs", "model_path",
 ]

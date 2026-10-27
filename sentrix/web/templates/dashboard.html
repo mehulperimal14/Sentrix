@@ -47,6 +47,26 @@
       </div>
     </div>
 
+    {% if 'record' in caps %}
+    <!-- Training recordings (D20): the device admin on the LAN only. The
+         Portal's tunnel refuses /api/recordings and /media/recording/
+         (sentrix/link/policy.py); the files stay on the device. -->
+    <div class="card record-card" id="record-card" data-record-root>
+      <div class="card-label">Record for training</div>
+      <div class="record-controls">
+        <input type="text" class="text-input record-label" maxlength="40" autocomplete="off"
+               placeholder="e.g. replica gun, two people" aria-label="What is being recorded"
+               data-record-label>
+        <button type="button" class="btn btn-sm btn-record" data-record-toggle disabled>Start recording</button>
+      </div>
+      <div class="record-status" data-record-status role="status" aria-live="polite">Loading…</div>
+      <div class="sos-message" data-record-message role="status" aria-live="polite"></div>
+      <ul class="record-list" data-record-list aria-label="Finished recordings"></ul>
+      <p class="sos-note mt-1" data-record-note>Download from a computer on the same network as the
+        device; not through the Portal.</p>
+    </div>
+    {% endif %}
+
   </div>
 
   <!-- RIGHT COLUMN: Score bars -->
@@ -186,4 +206,7 @@
 
 {% block scripts %}
 <script src="{{ static_url('js/dashboard.js') }}" nonce="{{ csp_nonce }}"></script>
+{% if 'record' in caps %}
+<script src="{{ static_url('js/recording.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endif %}
 {% endblock %}

@@ -33,6 +33,11 @@ a feature vector) and ``decide`` (steps 8-10) are public so the 4-second clip
 engine (``sentrix/pipeline/clip.py``) can feed its own clip-level features
 into the same decision path; ``run_live`` takes an :class:`InferenceStrategy`
 so clip mode keeps the capture, preview, identity-worker and HUD threads.
+
+Training recordings (D20, ``sentrix/io/recorder.py``) tap the capture thread:
+the camera's own frame goes to the recorder before the HUD is drawn on a copy,
+and the microphone's blocks arrive through the audio engine's sample listener.
+Nothing records until ``start_recording`` is called.
 """
 
 from __future__ import annotations
@@ -58,6 +63,7 @@ from sentrix.fusion.features import FeatureVector
 from sentrix.fusion.policy import LevelPolicy
 from sentrix.fusion.tci import TCIEngine, TCIResult
 from sentrix.io.actuators import build_siren
+from sentrix.io.recorder import Recorder, RecorderError
 from sentrix.io.sources import FrameSource, _placeholder, build_source
 from sentrix.perception.audio import AudioEngine, AudioResult, audio_votes, neutral_reason
 from sentrix.perception.behaviour import BehaviourEngine
@@ -75,6 +81,7 @@ from sentrix.pipeline.state import state
 from sentrix.sos import LevelChange, NullSosService, SosTrigger
 from sentrix.storage import database
 from sentrix.utils.logging import get_logger, telemetry
+from sentrix.utils.redact import redact_url
 
 log = get_logger("engine")
 
@@ -91,6 +98,18 @@ TASK_QUEUE_MAX = 64
 #: Queued behind every pending side effect at shutdown: the worker drains
 #: what is ahead of it (an SOS trigger, the last incident save) and stops.
 _DRAIN = object()
+#: Frame rates a measured camera rate snaps to for a training recording (D20):
+#: dataset tools address a frame as time x fps, so the file's rate should be
+#: the camera's real one, not the 30 a webcam was asked for. Whole numbers
+#: (the AVI header stores the rate rounded): a webcam that falls to 30/4 =
+#: 7.5 fps in a dark room is recorded at 8.
+RECORDING_FPS_STEPS = (5, 8, 10, 12, 15, 20, 24, 25, 30)
+#: A measured rate up to this fraction over a step snaps to that step (the 3 s
+#: window jitters by about a frame); anything faster takes the next step up,
+#: so a near miss repeats a few frames instead of dropping real ones.
+RECORDING_FPS_TOLERANCE = 0.04
+#: How long shutdown waits for a recording in progress to be saved (s).
+RECORDING_CLOSE_SECONDS = 10.0
 
 
 @dataclass(frozen=True)
@@ -268,6 +287,11 @@ class Pipeline:
         #: writes, the inference thread reads: guarded).
         self._sensor_at: dict[str, float] = {}
         self._sensor_lock = threading.Lock()
+        #: The training recorder (D20): built only by get_recorder(), so a
+        #: replay, an evaluation or a bench never records anything.
+        self._recorder: Recorder | None = None
+        self._recorder_lock = threading.Lock()
+        self._recorder_listener = None
 
     # ── background side effects ───────────────────────────────────────────────
     def _task_loop(self) -> None:
@@ -810,6 +834,13 @@ class Pipeline:
                 if not fresh:
                     stop.wait(0.004)
         finally:
+            if stop.is_set():
+                # No frame reaches a recording from here on, and shutdown may
+                # wait up to 5 s for the inference thread (a clip mid-run)
+                # before it closes the recorder: stop it now, as ``shutdown``,
+                # so the writer's camera-gap check does not save it as
+                # ``camera_lost``.
+                self._stop_recording_quietly("shutdown")
             try:
                 self._strategy.wake()
             except Exception as exc:
@@ -852,6 +883,15 @@ class Pipeline:
         self._offline = False
         self._last_seq = seq
         self._raw = frame
+        recorder = getattr(self, "_recorder", None)
+        if recorder is not None and recorder.wants_frames:
+            # The source's own copy, before the HUD is drawn on another copy:
+            # a recording holds the camera's pixels only (D20). The tap is
+            # O(1); it must never cost the camera a frame.
+            try:
+                recorder.on_frame(frame, seq, captured_at)
+            except Exception as exc:
+                log.debug("recorder tap failed: %s", exc)
         self._video_times.append(now)
         self._strategy.on_frame(frame, captured_at)
         self._publish(self._draw(frame.copy(), self._overlay, now))
@@ -861,8 +901,16 @@ class Pipeline:
             self._ai_hz = _rate(self._ai_times, now)
             state.update(video_fps=round(self._video_fps, 1),
                          ai_hz=round(self._ai_hz, 2), fps=round(self._ai_hz, 2),
-                         camera_online=True)
+                         camera_online=True, mic_delivering=self._mic_delivering())
         return True
+
+    def _mic_delivering(self) -> bool:
+        """Is an open microphone delivering sound (``AudioEngine.available``,
+        what ``/api/health`` ``audio`` says)? Whether anything classified it
+        is another matter: with the sound model off, or before the first
+        full window, it records but labels nothing."""
+        audio = getattr(self, "audio", None)
+        return bool(audio is not None and getattr(audio, "available", False))
 
     def _inference_loop(self, stop: threading.Event) -> None:
         """The tick loop's inference thread (kept for callers of the old name)."""
@@ -899,6 +947,158 @@ class Pipeline:
             if self._preview_seq == seq:
                 self._jpeg = encoded
         return encoded
+
+    # ── training recordings (D20) ─────────────────────────────────────────────
+    @property
+    def recorder(self) -> Recorder | None:
+        """The training recorder once :meth:`get_recorder` built it, else None.
+        Status readers (``/api/health``) use this and never build it."""
+        return getattr(self, "_recorder", None)
+
+    def get_recorder(self) -> Recorder:
+        """The training recorder, built on first use (the dashboard, or the
+        app's start-up): frames come from the capture thread (``_capture_step``),
+        sound from the microphone's sample listener. Nothing records until
+        :meth:`start_recording` is called, so the replay, evaluation and bench
+        tools that drive this pipeline never write a file.
+
+        On creation the ``.part`` files a crash left are finished
+        (``recover``) and recordings past ``keep_days`` deleted (``prune``),
+        outside the pipeline's lock: a remux can take seconds, and the
+        recorder's own lock already keeps a ``start`` from racing them."""
+        with self._recorder_lock:
+            recorder = self._recorder
+            if recorder is not None:
+                return recorder
+            events = getattr(self, "events", None)
+            recorder = Recorder(audit=getattr(events, "audit", None))
+            self._recorder = recorder
+            self._listen_for_recording(recorder)
+        for step in (recorder.recover, recorder.prune):
+            try:
+                step()
+            except Exception as exc:
+                log.error("recordings: %s failed: %s", step.__name__, exc)
+        return recorder
+
+    def _listen_for_recording(self, recorder: Recorder) -> None:
+        """Hand every captured microphone block to the recorder. The engine
+        keeps the listener across microphone hot-plugs; a replayed soundtrack
+        (``FileAudio``) has none and the recording is then video only."""
+        add = getattr(getattr(self, "audio", None), "add_sample_listener", None)
+        if not callable(add):
+            return
+        rate = int(self.cfg.windows.audio_sample_rate)
+
+        def listener(samples: np.ndarray, end_at: float) -> None:
+            recorder.on_audio(samples, end_at, rate)
+
+        try:
+            add(listener)
+            self._recorder_listener = listener
+        except Exception as exc:
+            log.error("recordings: the microphone listener was not added: %s", exc)
+
+    def microphone_status(self) -> dict | None:
+        """The microphone as the audio engine reports it, or None when audio
+        is off (``SENTRIX_AUDIO=0``) or the engine cannot say."""
+        return audio_status(getattr(self, "audio", None))
+
+    def recording_fps(self) -> float:
+        """The recording's frame rate: the rate the camera declares
+        (Picamera2's ``status()["fps"]``), else the measured video rate
+        snapped to a common one (a webcam asked for 30 fps delivers 15 in a
+        dark room), else the configured capture rate; within 5-30 fps."""
+        fps = None
+        status = getattr(self.source, "status", None)
+        if callable(status):
+            try:
+                fps = float((status() or {}).get("fps") or 0.0)
+            except Exception as exc:            # a camera that cannot say
+                log.debug("camera status failed: %s", exc)
+                fps = None
+        if not fps or not np.isfinite(fps) or fps <= 0:
+            measured = float(getattr(self, "_video_fps", 0.0) or 0.0)
+            if measured > 0:
+                # The slowest step the camera is not faster than: a slot per
+                # real frame, never two real frames for one slot (one dropped).
+                fps = float(next((step for step in RECORDING_FPS_STEPS
+                                  if measured <= step * (1.0 + RECORDING_FPS_TOLERANCE)),
+                                 RECORDING_FPS_STEPS[-1]))
+            else:
+                fps = float(self.cfg.pipeline.capture_fps)
+        return min(30.0, max(5.0, fps))
+
+    def _recording_context(self, frame: np.ndarray, fps: float) -> dict:
+        """What the sidecar says about where the footage came from."""
+        link = state.get().get("link") or {}
+        return {"camera": redact_url(str(getattr(self.source, "name", "camera"))),
+                "profile": self.cfg.node.profile,
+                "device_id": link.get("device_id"),
+                "frame_size": [int(frame.shape[1]), int(frame.shape[0])],
+                "fps": fps,
+                "video_fps_measured": round(float(getattr(self, "_video_fps", 0.0) or 0.0), 2),
+                "session": getattr(self, "session_id", None)}
+
+    def start_recording(self, *, label: str = "", by: str = "") -> dict:
+        """Start a training recording of the camera's raw frames (and the
+        microphone's sound while one is connected). Raises
+        :class:`RecorderError` (``conflict``) before the camera's first frame,
+        while it is offline, while already recording or saving, and when the
+        disk or the recordings' quota is short. Returns :meth:`recording_status`."""
+        frame = getattr(self, "_raw", None)
+        if frame is None or getattr(self, "_offline", False):
+            raise RecorderError("conflict", "the camera has not delivered a frame: "
+                                            "nothing to record yet")
+        recorder = self.get_recorder()
+        microphone = self.microphone_status()
+        device = microphone.get("device") if microphone and microphone.get("available") else None
+        fps = self.recording_fps()
+        status = recorder.start(label=label, by=by, fps=fps, audio_device=device,
+                                meta=self._recording_context(frame, fps))
+        return dict(status, microphone=microphone)
+
+    def stop_recording(self, *, by: str = "", reason: str = "user") -> dict:
+        """Stop the recording; the files are saved on the recorder's own thread
+        (``finalizing`` until then). ``conflict`` when nothing is recording."""
+        status = self.get_recorder().stop(by=by, reason=reason)
+        return dict(status, microphone=self.microphone_status())
+
+    def recording_status(self) -> dict:
+        """The recorder's status plus ``microphone`` (the audio engine's)."""
+        return dict(self.get_recorder().status(), microphone=self.microphone_status())
+
+    def _stop_recording_quietly(self, reason: str) -> None:
+        """Ask a recording in progress to stop without waiting for its files
+        (never builds the recorder, never raises)."""
+        recorder = getattr(self, "_recorder", None)
+        if recorder is None or not recorder.wants_frames:
+            return
+        try:
+            recorder.stop(reason=reason)
+        except RecorderError:
+            pass                                # it stopped by itself meanwhile
+        except Exception as exc:
+            log.error("stopping the recording failed: %s", exc)
+
+    def _close_recorder(self) -> None:
+        """Finish a recording in progress and stop listening to the microphone."""
+        recorder = getattr(self, "_recorder", None)
+        if recorder is None:
+            return
+        try:
+            if not recorder.close(timeout=RECORDING_CLOSE_SECONDS):
+                log.warning("the recording was still being saved at shutdown; "
+                            "the next start recovers it")
+        except Exception as exc:
+            log.error("recorder close failed: %s", exc)
+        listener, self._recorder_listener = getattr(self, "_recorder_listener", None), None
+        remove = getattr(getattr(self, "audio", None), "remove_sample_listener", None)
+        if listener is not None and callable(remove):
+            try:
+                remove(listener)
+            except Exception as exc:
+                log.debug("recorder listener removal failed: %s", exc)
 
     def replay(self, source: FrameSource, label: str | None = None,
                max_frames: int | None = None) -> list[dict[str, Any]]:
@@ -958,7 +1158,39 @@ class Pipeline:
         return limit
 
     def _draw(self, frame, overlay: "Overlay | None", now: float):
-        """Composite the latest inference overlay onto a captured frame."""
+        """Composite the latest inference overlay, and the REC badge while
+        recording, onto a captured frame (the preview's copy)."""
+        return self._draw_recording(self._draw_hud(frame, overlay, now), now)
+
+    def _draw_recording(self, frame, now: float):
+        """A red dot and ``REC mm:ss`` under the banner while a training
+        recording runs, so whoever watches the dashboard knows. The recorder
+        took the camera's frame before this copy was drawn on: the badge is
+        never in the recording."""
+        elapsed = self._recording_elapsed(now)
+        if cv2 is None or frame is None or elapsed is None:
+            return frame
+        try:
+            x = max(10, frame.shape[1] - 120)
+            cv2.circle(frame, (x, 92), 6, (0, 0, 255), -1)
+            cv2.putText(frame, f"REC {elapsed // 60:02d}:{elapsed % 60:02d}", (x + 12, 97),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+        except Exception as exc:
+            log.debug("REC badge draw failed: %s", exc)
+        return frame
+
+    def _recording_elapsed(self, now: float) -> int | None:
+        """Whole seconds the recording in progress has run (the REC badge),
+        or None while nothing records. Read from the recorder's own session:
+        a second start that is refused must not reset it."""
+        recorder = getattr(self, "_recorder", None)
+        if recorder is None or not recorder.wants_frames:
+            return None
+        since = getattr(recorder, "recording_since", None)
+        return max(0, int(now - since)) if since is not None else 0
+
+    def _draw_hud(self, frame, overlay: "Overlay | None", now: float):
+        """The inference overlay: banner, level, identity, rates and boxes."""
         if cv2 is None or frame is None:
             return frame
         try:
@@ -1034,6 +1266,9 @@ class Pipeline:
     # ── lifecycle ─────────────────────────────────────────────────────────────
     def shutdown(self) -> None:
         log.info("shutting down pipeline")
+        # First, while the microphone still delivers the recording's last
+        # block and before the camera is released: its files must be whole.
+        self._close_recorder()
         self._stop.set()
         try:
             # Behind every queued side effect (an SOS trigger, an incident
@@ -1084,6 +1319,21 @@ def _fusion_block(features: FeatureVector, result: TCIResult) -> dict:
             "sensors": (features.extras or {}).get("sensors") or {}}
 
 
+def audio_status(engine: Any) -> dict | None:
+    """``AudioEngine.status()`` (which microphone, its native rate, ...), or
+    None when there is no engine or it cannot say (an older engine, a replayed
+    soundtrack). For the recorder, ``/api/health`` and ``/api/node``."""
+    status = getattr(engine, "status", None)
+    if not callable(status):
+        return None
+    try:
+        result = status()
+    except Exception as exc:
+        log.debug("audio status failed: %s", exc)
+        return None
+    return dict(result) if isinstance(result, dict) else None
+
+
 def audio_block(result: AudioResult | None, align: dict, engine: Any = None) -> dict:
     """The ``audio`` record of a tick (state, event log): what was heard, the
     window it covers and whether it was aligned with the frame (D15)."""
@@ -1119,4 +1369,4 @@ def shutdown_pipeline() -> None:
 
 
 __all__ = ["Pipeline", "InferenceStrategy", "TickStrategy", "get_pipeline",
-           "shutdown_pipeline"]
+           "shutdown_pipeline", "audio_status", "RECORDING_FPS_STEPS"]

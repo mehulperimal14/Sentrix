@@ -22,7 +22,8 @@ Two programs:
   on `http://127.0.0.1:8000` and runs the SOS engine, the channel router
   (modem SMS, Telegram, e-mail, Twilio — all behind the send guard) and the
   outbound link client. Pi I/O: siren relay, LEDs, PIR, door, mains sense,
-  node telemetry, watchdog (no buzzer and no speaker since D19).
+  node telemetry, watchdog (no buzzer and no speaker since D19). On request
+  the device admin records training videos from the dashboard (D20).
 * **Portal** (`python -m sentrix_portal`, `http://127.0.0.1:8100`; demo on
   `portal.localhost:8100`): accounts with activation codes, TOTP for admin and
   Desk, 7-step onboarding wizard, household and contacts with consent, SOS pages,
@@ -62,11 +63,13 @@ FrameSource (io/sources.py: webcam | file | RTSP | picamera:0 | demo-reel:<json>
   → SOS hook: sos.trigger (idempotent per incident) → sentrix/sos (machine, sweeper, channels)
   → EventLog (var/events/*.jsonl, schema 3, flushed per row), SystemState (websocket), HUD
 Clip mode (SENTRIX_PIPELINE_MODE=clip, pipeline/clip.py): 4 s window, 2 s hop, optional fast lane.
+Training recordings (D20, io/recorder.py): the capture thread's raw frame + the mic's 16 kHz
+  blocks → var/recordings, only while the device admin records; the HUD never reaches the file.
 ```
 
 All tunables: `sentrix/config.py` (seconds, never frames; `SosConfig`,
 `LinkConfig`, `ChannelConfig`, `GpioConfig`, `ClipConfig`, `NodeConfig`,
-`WebConfig`, `RetentionConfig`). Runtime output: `var/` (gitignored, never
+`WebConfig`, `RetentionConfig`, `RecordingConfig`). Runtime output: `var/` (gitignored, never
 web-mounted; `SENTRIX_VAR_DIR` moves the whole tree). Contract for the Portal,
 link, tunnel and SOS: `docs/7_PORTAL_AND_SOS.md`; Pi plan:
 `docs/8_RASPBERRY_PI5_INTEGRATION.md`; remaining work in order and the
@@ -89,6 +92,7 @@ custom-data training guide: `ROADMAP.md`; doc index: `docs/README.md`.
 | Vendored ground truth, boxes, QC rejects | `training/datasets/sentrix_custom/` |
 | Original public corpora (RWF-2000 frames, weapon, fire/smoke, audio, UCF-DVS) | not in git; `data/` or `SENTRIX_VIOLENCE_DATA` / `SENTRIX_WEAPON_DATA` / `SENTRIX_FIRE_DATA` (maintainer PC: `G:\Capstone\data`) |
 | Device runtime (database, events, evidence, snapshots, faces, calibration, `mode.json`) | `var/` (private; never modify `var/sentrix.db` from tools or tests) |
+| Training recordings (D20): `rec_<date>_<time>[_<label>].avi` (+ `.wav` without ffmpeg) + `.json` sidecar | `var/recordings/` on the device until the device admin downloads them on the LAN; deleted after 14 days; never committed (`.gitignore`: `*.avi`, `*.mkv`, `*.wav`, `rec_*.json`) |
 | Portal data (SQLite, `secret_key`, `data_key`) | `var/portal/` by default (`PORTAL_DATA_DIR`) |
 | Device identity (`identity.json`, `profile.key`) | `/etc/sentrix` on a Pi, else `var/link` (`SENTRIX_DEVICE_IDENTITY_DIR`) |
 | Demo world | `var/demo/` by default (`tools/demo_reset.py --dir`; only a marked directory is wiped) |
@@ -111,7 +115,8 @@ custom-data training guide: `ROADMAP.md`; doc index: `docs/README.md`.
   leave-one-video-out CV over the nine train+val videos, confirm on val, report
   test once. The demo reel refuses `wa02`.
 * **Never open a webcam or microphone** in diagnostics or tests
-  (`tools/doctor.py` opens none unless `--probe-camera`).
+  (`tools/doctor.py` opens none unless `--probe-camera`; it lists the
+  microphones PortAudio enumerates without opening one).
 * Quote numbers from generated reports (`tools/custom_eval_table.py`,
   `training/runs/**`, docs/7 §17), with the commit that produced them.
 * Branches carry configurations; commit freely, **never push** unless asked; no
@@ -209,8 +214,9 @@ aarch64 torch and xgboost pull CUDA wheels (CPU torch first, xgboost dropped,
 `fc9cc29`, `adcd718`); a USB microphone plugged in while running is picked up
 (`019854c`); 3-pin low-level-trigger buzzer modules and unwired PIR/door/mains
 inputs (`8526815`); a Node-page buzzer test (`a892d24`); the clip object stage
-at 320 px on the Pi (`4503b0d` + results, section 4.3). The microphone
-arrives on 2026-10-30; nothing has been heard on the Pi yet. The buzzer module
+at 320 px on the Pi (`4503b0d` + results, section 4.3). The microphone, a
+Scalebee USB microphone, arrives on 2026-11-03 (D21); nothing has been heard
+on the Pi yet. The buzzer module
 was wired on 2026-10-27, stayed silent while GPIO26 was driven high (checked
 with `pinctrl` over SSH) and was taken out; the buzzer is gone from the product
 (D19).
@@ -288,6 +294,45 @@ channels are the device's outputs; GPIO26 is free. Docs, env templates, the
 Pi installer and the enclosure follow (rev F: no buzzer cup or sound holes).
 The README's level table, split by the old "Speak to the room" section, is
 whole again.
+
+### Training recordings and a microphone in any USB port (2026-10-28, D20, D21)
+
+The models fail in the demo room because none of their footage came from it
+(section 5), and the team had no way to film that room with the deployed
+camera and microphone. The dashboard now records it (D20): the device admin,
+on a computer on the same network as the device, uses the *Record for
+training* card; the device writes the camera's raw frames as a constant-frame-
+rate MJPEG AVI with the microphone's 16 kHz sound muxed in (ffmpeg), and the
+file is downloaded and deleted from the same card, never through the Portal.
+The microphone may now go into any USB port at any time (D21). Built in three
+tracks:
+
+* **Recorder core** (`sentrix/io/recorder.py`): the frame grid (repeat or drop
+  to keep frame n at t0 + n/fps), audio placed by its capture stamps (sample 0
+  under frame 0, gaps zero-filled, overlaps trimmed), a writer thread at a
+  lower priority, the auto-stops (10 min, disk floor, 1.9 GB video, camera gone,
+  shutdown), the ffmpeg mux with a `.wav` fallback (never into the disk floor),
+  recovery of the `.part` files a crash or a failed save leaves, retention on
+  an hourly timer. `tests/test_recorder.py` (80 tests, real OpenCV and
+  ffmpeg round trips, a real crash by `os._exit`).
+* **Live loop, console and tunnel** (`Pipeline.start_recording`, the capture
+  tap before the HUD, the REC badge on the preview, `sentrix/web/recording_routes.py`,
+  `recording.js`, `/api/health` and `/api/node` `microphone`, the path table's
+  `LC_ONLY_PREFIXES`). `tests/test_recording_live.py`,
+  `tests/test_recording_routes.py`; driven in the browser against a synthetic
+  camera on a temp `var/`.
+* **Microphone chooser** (`sentrix/perception/audio.py`, D21): ranked inputs,
+  `plughw` on ALSA, resampling to 16 kHz, rebuilds only when the OS's device
+  list changes, "connected" from the first block; `state.mic_state`.
+  `tests/test_mic_hotplug.py` against a fake sounddevice.
+
+`tools/doctor.py` reports ffmpeg, the recordings directory against the disk
+floor, and the inputs PortAudio lists (none opened). Nothing has run on the Pi
+or with a real microphone yet. **Plan** (owner): phase 1, from now, the team
+records silent videos with the button on the Pi in the demo room (consent of
+everyone filmed, ROADMAP §15.1), then labels them and fine-tunes on this
+laptop (ROADMAP §15.2-15.5); phase 2, for 2026-11-30, the same with sound
+from the Scalebee USB microphone (arrives 2026-11-03).
 
 ---
 
@@ -521,6 +566,8 @@ video/session is never used for tuning.
 | D17 | **WhatsApp alerts through Meta's Cloud API** (no Twilio or reseller): the Portal's `whatsapp` channel (`sentrix/alerting/channels/whatsapp.py`) sends the owner's L3 prompt (quick replies Alert contacts / I'm checking / False alarm), the contacts' alerts (I'm handling it / Open the SOS page), notices and the contact consent link, from Meta's free test number (up to 5 allowlisted recipients). Conversations start with three approved UTILITY templates (`tools/whatsapp_templates.py`), each beginning with the test banner; `WHATSAPP_MODE=auto` falls back to session messages (24 h window) while templates are in review. Quick replies carry Telegram's `<nonce>:<letter>` and get the same checks, the sender's number standing in for the linked chat; a link button is answered with its URL; delivery statuses confirm or fail the message; `POST /hooks/whatsapp` is HMAC-signed (`WHATSAPP_APP_SECRET`). Guard switch `SENTRIX_WHATSAPP_LIVE`, phone rules as SMS. **Exception to "a demo never sends"**: for the team's demo, test-marked messages to the two team phones in `SENTRIX_TEST_RECIPIENTS` (owner, "authorities" contact), switched on by the team on the Portal only. *Built and tested, but not used for the demo: Meta's set-up was out of the team's reach, so the demo uses the Telegram channel (section 2).* | The owner asked for alerts on a phone without being signed in, and a second phone playing the authorities; WhatsApp needs no SIM or modem, and the sandbox's 3-day re-join is avoided. |
 | D18 | **Demo Portal on Render** (amends D11 for the demo; Railway closed its sign-ups): `render.yaml` Blueprint - one **Starter** instance in Singapore (Hobby workspace), a 1 GB disk on `/data` for SQLite and the Portal's files, `deploy/portal/Dockerfile`, health check `/healthz`, keys generated by Render, the secrets and the sending switches typed in by the team (`sync: false`). The image starts as root only to hand the root-owned volume to `sentrix`, then `deploy/portal/start.py` drops root for good; `PORT` and `RENDER_EXTERNAL_URL` (or `RAILWAY_PUBLIC_DOMAIN`) are honoured, the client address comes from `X-Real-IP` (`PORTAL_TRUSTED_PROXIES=*`), the first admin from `PORTAL_BOOTSTRAP_ADMIN` (link in the log); the dashboard reopens the MJPEG stream every 10 min. `railway.json` keeps Railway as the alternative. Steps: `deploy/cloud/README.md`. About $7 + $0.25 a month. | A host with a disk keeps the tested SQLite path, never sleeps and needs no shell; Oracle stays the long-term option. |
 | D19 | **No buzzer and no talk-down speaker** (2026-10-27; withdraws D16 and the buzzer of the T-HW pin table): both are gone from the hardware, the code, the Local Console, the settings, the installer and the docs. The device's outputs are the three status LEDs (GPIO 5/12/13), the siren relay (GPIO17), the Local Console and Portal, and the alert channels; level rises, a Portal claim, a failed SOS, mains loss and tamper show on the LEDs, the console and the event log (mains and tamper also as `node.alert`). GPIO26 is free. The microphone stays (D15); its self-output filter now covers the siren only. Enclosure rev F has no buzzer cup. | The owner's call: the buzzer module stayed silent in the demo unit and was taken out, and the speaker's hardware was never fitted; nothing is offered that the unit cannot show. |
+| D20 | **Training recordings from the dashboard** (2026-10-28; the "record normal session" mode of M6). The **device admin on the LAN only** starts and stops a recording (optional label) on the dashboard's *Record for training* card and lists, downloads and deletes them (`/api/recordings*`, `/media/recording/*`, `require_lc("device_admin")`, 10 starts/min, a stop never limited); **never through the Portal**: the path table refuses those paths to every tunnelled role (`LC_ONLY_PREFIXES`, `lc_only`), a recording is far over the tunnel's 16 MiB response cap, and continuous video stays on the device (D12). A recording is the camera's **raw frames** (no HUD) at the camera's resolution (Pi: 1280x720 at 15 fps; wider frames scaled to 1280) as **MJPEG AVI at a constant frame rate** (the camera's own rate; frame n is at t0 + n/fps: a missed slot repeats the last frame, a second frame in one slot is dropped, both counted), plus, while a microphone is connected, its **16 kHz mono PCM** track (sample 0 under frame 0, gaps zero-filled) **muxed with ffmpeg** (a separate `.wav` without it), and a JSON sidecar (who, when, frames repeated and dropped, audio gaps, camera, profile, device). **Caps** (`SENTRIX_RECORD_*`): 10 min each; 2 GB free kept for the alarm's evidence and logs (no start below it, a stop at it); 20 GB for all recordings (no new start above it); deleted after 14 days; the video also stops at 1.9 GB (OpenCV's AVI writer is unreadable past 2 GiB), when the camera is gone for 5 s and at shutdown; a crash's or a failed save's `.part` files are finished (at once, before the next take, hourly or at the next start; a save that wrote its sidecar keeps its figures); the mux runs only when its copy leaves the 2 GB floor intact; old recordings are pruned hourly with or without a dashboard open; the rate is a whole number (the AVI header stores it rounded). A red **REC mm:ss** badge on the live preview for everyone watching (LC and Portal viewers alike), never in the file. **Downloads never land on the Pi**: a browser on the device itself (its desktop dashboard on 127.0.0.1, or the Pi opening its own address) is refused (409, `SENTRIX_RECORD_DOWNLOAD_ON_DEVICE=auto` on a Raspberry Pi) and the card names the address to open on a laptop, so gigabytes of video never fill the 128 GB SD card the evidence shares; `/api/health` says only whether a recording runs, never its name (the label would reach the Portal in `hello.health`). **Consent** of everyone filmed (ROADMAP §15.1). **Purpose**: deployment-room training data (M6). Audited in the device log only: `recording_started`, `_stopped`, `_downloaded`, `_deleted`, `_pruned`, `_recovered`. | The models fail in the demo room because none of their footage came from it (section 5); footage from the deployed camera, mount and microphone is the fix, and a button on the dashboard is the cheapest way for the team to collect it. |
+| D21 | **A USB microphone in any port, at any time** (2026-10-28; replaces the default-input retry loop of `019854c`). The engine opens the best input there is now: `SENTRIX_MIC_DEVICE` (an index or a name substring) > a USB input (one plugged in while SENTRIX runs first) > another input plugged in while it runs > the system default; display audio (HDMI, vc4), monitors and loopbacks never, unless asked for; headsets (Bluetooth hands-free included) and virtual microphones only as a last resort, when no other input exists (a cheap USB adapter may call itself a headset, and on the Pi it is the only microphone). On Linux `PA_ALSA_PLUGHW=1`, so PortAudio opens the USB card through ALSA's `plughw` (PipeWire is not in the path) at the card's own rate first (plughw at 16 kHz would convert with ALSA's unfiltered `linear` converter: the demo Pi has no speexrate); elsewhere 16 kHz if the device takes it, else 48, 32 kHz or its own rate (44.1 kHz), resampled to 16 kHz with a filter whose state carries across blocks (multi-channel input downmixed), so listeners (clip buffer, recorder) always get 16 kHz mono. PortAudio's device list is rebuilt **only when the OS's own list changes** (`/proc/asound/cards`, the Windows wave-in count, read without opening anything), a few times after a change, and every `SENTRIX_MIC_RESCAN_SECONDS` (60) while no microphone is open: the old re-initialise every 5 s closed every stream and muted the log (sounddevice sends stderr to /dev/null while PortAudio initialises). A better input appearing (laptop mic → USB) is switched to. A microphone counts as **connected from its first block**, not from the open, and `mic_available` is the engine's own "delivering" (`mic_delivering`, written by the live loop; the same as `/api/health` `audio`), with `mic_classifying` saying whether a window was labelled (`state.mic_state`), so the dashboard neither says "Microphone: listening" with nothing plugged in nor "off" while a recording captures the room with the sound model off; `/api/health` and `/api/node` carry `microphone` (`AudioEngine.status()`: device, host API, native rate, channels, blocks, last error). With `SENTRIX_AUDIO_MODEL=off` the microphone still captures (for recordings) and nothing is classified. | The demo unit's microphone (a Scalebee USB microphone, arriving 2026-11-03) goes into whichever port is free, possibly after start-up; the old loop opened the default input only, at 16 kHz only, and called a stream "connected" before any sound arrived. |
 
 ### Milestones
 
@@ -568,9 +615,14 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done (with commit).
 - [x] **Results** (`training/runs/custom_eval/m5/`, all 10 custom videos — partly in-sample, *not* the S4 gate set): committed-level false onsets **0** at every level over 3.7 normal minutes (95 % bound still ≤ 60/h: far too little normal footage to claim a rate); caught at L3 weapon 9/12, fire 3/3, robbery 0/1 (L2 1/1), assault 0/2; at L5 weapon 2/12, fire 2/3. At **2 Hz** the same episodes are caught (13/18) with 0 false onsets. Gates: G1 PASS (weapon scene AUROC 0.93, fire 0.999), **G2 FAIL** (weapon 8/12 within 2 s), **G4 FAIL** (5.6 Hz OK, but onset → L3 p95 4.0 s), G0/G3/G5 need the S4 recordings. These are the M6–M7 targets.
 - Found by the M5 run and fixed: the eval harness and `bench_live` stubbed `_submit` but the pipeline's *shutdown* save still reached `var/sentrix.db`. It failed on the not-yet-migrated column, so no row was written (verified read-only: newest incident is the user's live run, schema unchanged); the connection close did checkpoint the user's own WAL into the main file. The shutdown save is now a hook both stub.
 
-**M6 — Deployment-room data (team, weeks 1–3)** — `[ ]` not started (no
-recordings, no `tools/build_custom_dataset.py`, no "record normal session"
-mode yet). Protocol in the strategy
+**M6 — Deployment-room data (team, weeks 1–3)** — `[~]` the "record normal
+session" mode exists (D20, 2026-10-28: the dashboard's *Record for training*
+card, raw frames + the microphone's sound, downloaded on the LAN); no
+recordings yet, no `tools/build_custom_dataset.py`. **Phases:** (1) from now,
+the team records silent videos with the button on the Pi in the demo room,
+then labels them and fine-tunes on this laptop (ROADMAP §15.2-15.5); (2) for
+2026-11-30, the same with sound from the Scalebee USB microphone (arrives
+2026-11-03, D21), for the audio sessions of ROADMAP §15.1. Protocol in the strategy
 findings: demo room R1 + one other room R2; camera mounted 1.8–2.2 m, tilted
 down, lit room; sessions S1/S2 train, S3 val, S4 test (≥ day 5, unseen
 volunteers); scripted 20 s clips (12 per class per room per session) with
@@ -578,7 +630,7 @@ volunteers); scripted 20 s clips (12 per class per room per session) with
 unlit lighter, aerosol can, fire video on a screen, orange clothing…);
 ≥ 3 h of "boring" footage in R1 on non-training days; replicas and flames with a
 written safety notice. `tools/build_custom_dataset.py` (sessions → frames.csv
-schema) and a "record normal session" mode in the app.
+schema) is still to write.
 
 **M7 — Models that fit the room (weeks 2–3)**
 - [ ] One **YOLO11n detector** (person, pistol, knife, fire) at 640 from COCO + QC'd teacher boxes + rehearsal (pistol/knife/fire only; smoke dropped) + all hard negatives; held-object association with ByteTrack; k-of-n confirmation; fire flicker check. Replaces 3 YOLO passes.

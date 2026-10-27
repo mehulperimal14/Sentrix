@@ -70,6 +70,15 @@ class TestNodeStatus:
                                       "retry_after": None}
         assert body["camera"]["lores_format"] == "RGB888"
         assert body["services"] == {"node": "off", "gpio": "off"}
+        assert body["microphone"] is None, "no audio engine: no microphone"
+
+    def test_reports_the_microphone(self, admin, fake_pipeline):
+        mic = {"available": True, "device": "USB PnP Sound Device", "rate": 48000,
+               "channels": 1, "last_error": None}
+        fake_pipeline.audio = SimpleNamespace(status=lambda: dict(mic))
+        assert admin.get("/api/node").json()["microphone"] == mic
+        fake_pipeline.audio = SimpleNamespace(status=lambda: 1 / 0)
+        assert admin.get("/api/node").json()["microphone"] is None, "a failing engine"
 
     def test_reports_what_the_services_wrote(self, admin, fake_pipeline):
         from sentrix.io.node import merge_node_block

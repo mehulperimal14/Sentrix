@@ -609,7 +609,7 @@ class TestCapture:
         assert engine._blocks.qsize() == 5
         result = None
         for i in range(5):
-            samples, _, wall = engine._blocks.get_nowait()
+            samples, _, wall, _session = engine._blocks.get_nowait()
             result = engine.process_block(samples, 10.0 + i, wall) or result
         assert result is not None and result.end == 14.0 and result.start == 10.0
 

@@ -178,7 +178,8 @@ The first start downloads about 600 MB of public weights once: the DINOv2 base
 of the scene classifier (Hugging Face cache) and InsightFace `buffalo_l`
 (`~/.insightface`).
 
-* **Linux:** `sudo apt install python3-venv libportaudio2 libgl1 libglib2.0-0`.
+* **Linux:** `sudo apt install python3-venv libportaudio2 libgl1 libglib2.0-0`
+  (and `ffmpeg`, optional on any OS: recordings keep their sound inside the video).
   On a CPU-only machine install the CPU build of PyTorch first
   (`pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu`).
 * **NVIDIA GPU:** install the CUDA build of PyTorch before `requirements.txt`; the
@@ -250,6 +251,52 @@ the Portal's outbox, on the Desk and on the LC; nothing leaves the laptop.
 LC **Access** page → *Capture from camera* (uses the device's own camera frame,
 with quality checks) or *Upload photos*. Until someone is enrolled everyone is
 "unknown"; in home mode that is only logged.
+
+### 7. Record training videos
+
+The models need footage from the room they guard, filmed by the camera that
+will guard it (ROADMAP.md §15). The device records it itself (decision D20):
+
+1. Open the device's console and sign in with the device password
+   (`SENTRIX_PASSWORD`). On the **Pi**, from a computer on the same Wi-Fi:
+   `http://<device-ip>:8000` (the Pi profile binds the LAN, and
+   `deploy/pi5/ufw.sh` limits the port to your subnet). On a **laptop**
+   running SENTRIX, open `http://127.0.0.1:8000` on that laptop: the console
+   binds loopback only by default (`SENTRIX_HOST=127.0.0.1`), and opening it
+   to the network needs `SENTRIX_HOST` set deliberately plus a firewall rule
+   (`docs/4_DEPLOYMENT_AND_RUNBOOK.md` §4.1). Recording is for the device
+   admin on the local network only; the Portal never offers it or carries
+   the files.
+2. Dashboard → **Record for training** → a label (optional) → **Start
+   recording**. A red **REC** badge shows on the live video for everyone
+   watching (it is not in the file). Get the consent of everyone filmed first.
+3. **Stop recording**, wait for "Finishing the files…" to clear, then
+   **Download video** and **Delete**. Download on your laptop: in a browser
+   on the Pi itself the Download buttons are off (the video would land on the
+   Pi's SD card) and the card shows the address to open on the laptop
+   (`SENTRIX_RECORD_DOWNLOAD_ON_DEVICE`).
+
+Files are **MJPEG AVI** at the camera's resolution and frame rate (VLC plays
+them), with the microphone's sound (16 kHz mono) inside when a microphone was
+connected and `ffmpeg` is installed; without ffmpeg the sound is a separate
+`.wav` (**Download sound**). A USB microphone works in any port, plugged in
+before or after start-up. The device stops a recording after 10 minutes,
+keeps 2 GB of disk free, holds at most 20 GB of recordings and deletes them
+after 14 days. Settings (in `.env`, documented in `.env.example`):
+
+```bash
+SENTRIX_RECORDING_ENABLED=1        # 0 turns recording off (the card says so)
+SENTRIX_RECORD_MAX_SECONDS=600     # one recording stops by itself after this
+SENTRIX_RECORD_MIN_FREE_MB=2048    # free space kept for evidence and logs
+SENTRIX_RECORD_MAX_TOTAL_MB=20480  # all recordings together
+SENTRIX_RECORD_KEEP_DAYS=14        # 0 keeps them until deleted
+SENTRIX_RECORD_DOWNLOAD_ON_DEVICE=auto  # a browser on the Pi itself cannot download
+SENTRIX_MIC_DEVICE=                # empty = automatic; or a device index or name part
+```
+
+Recordings live in `var/recordings/` on the device and are never committed
+(`.gitignore`). `python tools/doctor.py` shows ffmpeg, the recordings' size and
+free space, and the microphones the device can see (it opens none).
 
 ---
 
@@ -383,6 +430,7 @@ a real e-mail account or a live Postgres yet.**
 | Telegram, e-mail, modem SMS, Twilio | code and fake-transport tests only | no provider accounts or modem used |
 | Raspberry Pi 5 hardware | code and mock-pin tests only | bench checks still to do (deploy/pi5/README.md) |
 | 4 s clip engine | replay meets Gate A's detection criterion; too slow on the laptop | `training/runs/custom_eval/clip/`: weapon L3 9/12 with the fast lane, fire 3/3, 0 false onsets; ONNX + fast lane compute p95 2145 ms vs a 1.6 s budget |
+| Training recordings on the dashboard (D20), a USB microphone in any port (D21) | working on the laptop | `tests/test_recorder.py` (real OpenCV and ffmpeg round trips), `tests/test_recording_*.py`; the card driven in a browser against a synthetic camera; the microphone chooser against a fake sound library only. Not yet run on the Pi or with a real microphone |
 | Slim scene heads (`models/v5_slim/`) | not usable for alarms | `training/runs/custom/slim/REPORT.md`: LOVO macro-F1 0.229 (MobileNetV3-L) vs 0.440 (DINOv2) |
 | Portal deployment | written, not run | `deploy/portal/` checked by `tests/test_deploy_portal.py`; Docker not run; no Alembic baseline |
 

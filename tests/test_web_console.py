@@ -418,6 +418,17 @@ class TestRoles:
         assert "data-dispatch-authority" not in page.text
         assert 'data-sos-action="approve"' not in page.text
 
+    def test_only_the_device_admin_records_for_training(self, console):
+        """D20: the card and its script are the device admin's; the tunnel's
+        path table refuses the routes to every Portal role anyway."""
+        lan = lc_client(console)[0].get("/dashboard").text
+        assert 'id="record-card"' in lan and "/static/js/recording.js" in lan
+        assert "record" in re.search(r'data-caps="([^"]*)"', lan).group(1).split()
+        for role in ("owner", "member", "operator"):
+            page = tunnel_client(console, role).get("/dashboard").text
+            assert 'id="record-card"' not in page and "recording.js" not in page, role
+            assert "data-record-" not in page, role
+
     def test_portal_users_have_no_console_logout(self, console):
         page = tunnel_client(console).get("/dashboard")
         assert 'id="logout-link"' not in page.text and "Riya Sharma" in page.text
