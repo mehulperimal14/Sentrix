@@ -36,9 +36,8 @@ RENDERS = {   # name: (PART, extra -D, camera eye,centre, image size)
 CHECKS = {   # name: OpenSCAD expression whose result must be empty
     "base_vs_pi": "intersection() { base(); pi5_envelope(); }",
     "lid_vs_pi": "intersection() { lid(); pi5_envelope(); }",
-    "buzzer_vs_pi": "intersection() { buzzer(); pi5_envelope(); }",
     "leds_vs_pi": "intersection() { leds5_envelope(); pi5_envelope(); }",
-    "leds_vs_buzzer": "intersection() { leds5_envelope(); buzzer(); }",    "pod_vs_camera": "intersection() { pod(); camera3_envelope(); }",
+    "pod_vs_camera": "intersection() { pod(); camera3_envelope(); }",
     "back_vs_camera": "intersection() { pod_back(); camera3_envelope(); }",
     # mating faces touch on purpose; a 0.02 mm shift keeps a real lip collision visible
     "back_vs_pod": "intersection() { translate([-0.02, 0, 0]) pod_back(); pod(); }",
@@ -53,7 +52,7 @@ CHECKS = {   # name: OpenSCAD expression whose result must be empty
     "case_ribbon_vs_pi": "intersection() { case_ribbon_envelope(); pi5_envelope(); }",
     "case_ribbon_vs_base": "intersection() { case_ribbon_envelope(); base(); }",
     "case_ribbon_vs_lid": "intersection() { case_ribbon_envelope(); lid(); }",
-    "case_ribbon_vs_buzzer_leds": "intersection() { case_ribbon_envelope(); union() { buzzer(); leds5_envelope(); } }",
+    "case_ribbon_vs_leds": "intersection() { case_ribbon_envelope(); leds5_envelope(); }",
     "lid_vs_base": "intersection() { lid(); translate([0, 0, -0.01]) base(); }",
     **{f"tilt_{a}": f"intersection() {{ pod_placed({a}) {{ pod(); pod_back(); }} "
                     f"union() {{ bracket_no_detents(); lid(); }} }}" for a in range(0, 91, 15)},

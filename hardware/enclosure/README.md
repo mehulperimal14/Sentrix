@@ -1,10 +1,10 @@
-# SENTRIX enclosure, rev E
+# SENTRIX enclosure, rev F
 
 A 3D-printed case for the SENTRIX device: Raspberry Pi 5 with the Active
 Cooler, Camera Module 3 in a separate tilting pod, a USB microphone and
 three status LEDs. It hangs on a wall (the main configuration) or stands on
-a table. The device has no buzzer since 2026-10-27 (D19): rev E's buzzer cup
-under the lid and its seven sound holes stay empty.
+a table. There is no buzzer (D19, 2026-10-27), so rev F has no buzzer cup
+and no sound holes in the lid.
 
 ![on the wall](renders/9_wall_mounted.png)
 
@@ -68,6 +68,10 @@ its official drawing (each finding re-checked by an independent reviewer):
   exhaust slots moved to the front wall over the ports (eight 2.2 x 17 mm
   slots, the same open area), so the team's names have the whole back wall.
 
+Rev F (2026-10-27): the device has no buzzer (D19), so the lid's buzzer cup,
+its three crush ribs and the seven sound holes over it are gone, and so is the
+coupon's buzzer cup. Nothing else moved: every other size and hole is rev E's.
+
 ## The parts
 
 | Part | Print orientation | Size (mm) | PETG, solid | Supports |
@@ -123,7 +127,7 @@ both walls plain.
 | Brim | only if your PETG lifts at the corners |
 
 **Fit coupon first.** It has a Pi standoff, a camera post, an M3 boss (one
-pilot of each size), the buzzer cup, an LED sleeve, a USB-A window, the
+pilot of each size), an LED sleeve, a USB-A window, the
 base's USB-C opening (the 27 W supply's plug body must slide through it) and
 the three board hole sizes. Then adjust in `sentrix_enclosure.scad`:
 
@@ -148,7 +152,6 @@ then File > Export.
 | Power button | the end opposite the camera: a round flexure in the wall with a 3 mm nub 0.3 mm from the Pi's button. Press once to switch on; while it runs, press twice for a clean shutdown; hold it to force the Pi off |
 | Status LED (the Pi's own) | visible through the slot beside the power button |
 | microSD card | a 13 x 3.8 mm slot under the power button: push the card in through it; pull it out with tweezers, or stick a small tape tab on the card |
-| Buzzer cup (empty) | the 12.8 mm cup under the lid and its seven sound holes were made for a 3-pin buzzer module; the device has no buzzer since 2026-10-27 (D19), so nothing goes there |
 | Status LEDs (3 x 5 mm) | pressed into sleeves under the lid from inside; three crush ribs narrow the 5.4 mm bore to 4.8 mm so any 5 mm LED is gripped; the LED's 5.6-6.0 mm rim stops on the sleeve and the dome sits flush |
 | Camera Module 3 | bolted inside the pod with 4 x M2 into four posts on its own holes (21 x 12.5 mm grid), **connector at the bottom** (the way up its picture is upright); the lens sits at least 0.4 mm behind the window |
 | Camera ribbon | straight down out of the camera's connector and through the pod's floor just in front of the pivot bolt (over a rounded edge), then through the bracket and lid slots; tilting the pod from 0 to 90 degrees draws 4.4 mm of it. In the case it rises from the Pi's CAM/DISP connector nearer the HDMI ports, crosses above the Ethernet jack, and its spare length lies in the pocket over the cooler's front plate (clear of both lid grilles) |
@@ -227,7 +230,6 @@ sized for thread-forming screws.
    pin 29 (GPIO5), orange to pin 32 (GPIO12), red to pin 33 (GPIO13); all
    three cathodes to pin 34 (GND), or each to its own ground pin (30, 34,
    25). Press the LEDs into their sleeves from inside until their rims stop.
-   No buzzer (D19): the cup under the lid stays empty.
 
    The code drives the LEDs on its own: green solid when the unit works and
    the Portal link is up; orange fast blink on a fault, solid with no network;
@@ -268,10 +270,10 @@ pod's side, and the notch on the bracket arm points at the current angle.
   with the space each component needs: the board, every port, the cooler,
   the GPIO header with DuPont plugs on it, the microSD card, the cooler's push
   pins, the button, the camera connectors, the camera with its lens (at its
-  deepest), connector and screw heads, the buzzer, and the LEDs with their
+  deepest), connector and screw heads, and the LEDs with their
   legs. It also checks the ribbon's path inside the pod against the pod, the
   cover and the pivot bolt; the ribbon's path through the case and its spare
-  length against the Pi, the base, the lid, the buzzer and the LEDs; the
+  length against the Pi, the base, the lid and the LEDs; the
   pivot bolt against the camera, the pod and the cover; the lid against the
   base; the back cover against the pod; and the pod against the bracket and
   lid at every 15 degrees of tilt. It also checks that the camera slides

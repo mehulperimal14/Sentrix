@@ -1,12 +1,13 @@
-// SENTRIX enclosure, rev E.  Rev C added rev A's status LED windows; rev D the
+// SENTRIX enclosure, rev F.  Rev C added rev A's status LED windows; rev D the
 // wall keyholes on the centre line, longer screw engagement, gripping LED and
 // buzzer seats and the pivot bolt; rev E mounts the camera connector-down (its
 // upright orientation: every earlier revision gave an upside-down picture), so
 // the ribbon drops straight out of the pod, and takes the parts audit's
 // corrections (lens depth, connector depth, wall clearances, vents, cooler
-// outline, the ribbon's path through the case)
+// outline, the ribbon's path through the case); rev F drops the buzzer cup
+// and its sound holes (the device has no buzzer, D19), nothing else moves
 // Raspberry Pi 5 + Active Cooler + Camera Module 3 (standard) + USB microphone
-// + 3-pin buzzer module + three 5 mm status LEDs.  Open in OpenSCAD (2021.01 or newer), set PART, press
+// + three 5 mm status LEDs.  Open in OpenSCAD (2021.01 or newer), set PART, press
 // F6, then File > Export > STL (or 3MF).  hardware/enclosure/README.md has the
 // print settings, the screw list and the assembly order.
 //
@@ -46,13 +47,13 @@ lid_t   = 2.6;
 r_out   = 4.0;     // outer corner radius
 standoff_h = 5.0;  // floor top -> board underside (microSD, cooler push pins)
 pcb_t   = 1.6;
-above   = 30.0;    // board top -> lid underside (cooler 13.7, DuPont plugs ~17, buzzer cup)
+above   = 30.0;    // board top -> lid underside (cooler 13.7, DuPont plugs ~17)
 
 // interior box in board coordinates
 ix0 = -3.5;        // left: power button (0.45 proud), microSD card, flexure nub
 ix1 = 88.6;        // right: Ethernet face 87.98, USB stacks' tabs 88.30 (0.3 to spare as the Pi drops in)
 iy0 = -2.0;        // front: USB-C face -1.31, micro-HDMI flares -1.68 (0.3 to spare)
-iy1 = 66.0;        // back: room behind the GPIO header for the buzzer wires
+iy1 = 66.0;        // back: room behind the GPIO header for the LED wires
 
 board_bot = floor_t + standoff_h;      // 7.4
 board_top = board_bot + pcb_t;         // 9.0
@@ -154,15 +155,6 @@ br_screws = [[br_x[0] + 3, br_y[0] + 8], [br_x[1] - 4, br_y[0] + 8],
 // lid + bracket slot right under the pod's floor slot (the pod's exit sits
 // 2.5-5.6 in front of the pivot axis); tilting 0-90 degrees draws 4.4 mm of ribbon
 cable_slot = [[piv_x + 1.0, piv_y - 9.0], [piv_x + 6.0, piv_y + 9.0]];
-
-// buzzer: a cylinder with no screw holes, held in a cup under the lid
-// a standard 12 mm buzzer (body 11.8-12.2, 8.5-9.5 tall): three crush ribs
-// narrow the 12.8 cup to 11.6, so every body is gripped (0.1-0.3 mm per rib)
-// and none sits loose; the module's board stops on the cup's rim.  If the
-// coupon's cup is too tight, raise buzz_grip to 11.7; if loose, 11.5.
-buzz_d = 12.0;  buzz_h = 9.5;  buzz_pcb = 1.6;  buzz_grip = 11.6;
-buzz_c = [76.0, 43.0];
-buzz_cup_wall = 1.6;
 
 // status LEDs (5 mm, pushed into sleeves under the lid from inside; the code
 // drives GPIO 5 / 12 / 13 as green = working, amber = attention, red = alarm)
@@ -317,12 +309,6 @@ module camera3_envelope() {
     translate([-cam_t - cam_back, -cam_conn_w / 2, cam_z0]) cube([cam_back, cam_conn_w, cam_conn_h]);
     // M2 screw heads on the back of the board
     for (h = cam_holes) translate([-cam_t - 1.6, h[0], h[1]]) rotate([0, 90, 0]) cylinder(d = 3.8, h = 1.6);
-}
-
-module buzzer() {   // module board + cylinder, as seated: the board on the cup's rim, the top 0.5 under the sound holes
-    color("black") translate([buzz_c[0], buzz_c[1], wall_top - buzz_h - 0.5]) cylinder(d = buzz_d, h = buzz_h);
-    color("navy") translate([buzz_c[0] - 9.25, buzz_c[1] - 7.5, wall_top - buzz_h - 0.5 - buzz_pcb])
-        cube([18.5, 15, buzz_pcb]);
 }
 
 module leds5() {    // 5 mm LEDs (8.6 mm over the flange) seated in their sleeves: dome flush with the lid
@@ -521,9 +507,6 @@ module lid() {
                 rrect(ix0 + fit, iy0 + fit, ix1 - fit, iy1 - fit, max(0.6, r_out - wall - fit), 3.0 + e);
                 translate([0, 0, -1]) rrect(ix0 + fit + 1.6, iy0 + fit + 1.6, ix1 - fit - 1.6, iy1 - fit - 1.6, 0.6, 5);
             }
-            // buzzer cup
-            translate([buzz_c[0], buzz_c[1], wall_top - buzz_h - 0.5])
-                cylinder(d = buzz_d + 2 * buzz_cup_wall, h = buzz_h + 0.5 + e);
             // bracket screw bosses
             for (s = br_screws) translate([s[0], s[1], wall_top - 6]) cylinder(d = 6.5, h = 6 + e);
             // LED sleeves: the LED's 5.8 mm flange stops on the sleeve's lower end
@@ -542,11 +525,6 @@ module lid() {
             translate(fan_c) circle(r = 15.5);
         translate([0, 0, wall_top - 1]) hex_field(fins_box[0][0], fins_box[0][1], fins_box[1][0], fins_box[1][1])
             translate(fins_box[0]) square([fins_box[1][0] - fins_box[0][0], fins_box[1][1] - fins_box[0][1]]);
-        // buzzer: the cylinder press-fits between three crush ribs; sound holes above it
-        translate([buzz_c[0], buzz_c[1], wall_top - buzz_h - 1]) cylinder(d = buzz_d + 0.6 + tol, h = buzz_h + 1 + e);
-        for (a = [0 : 60 : 300]) translate([buzz_c[0] + 3.4 * cos(a), buzz_c[1] + 3.4 * sin(a), wall_top - 1])
-            cylinder(d = 2.2, h = lid_t + 2);
-        translate([buzz_c[0], buzz_c[1], wall_top - 1]) cylinder(d = 2.2, h = lid_t + 2);
         // camera ribbon slot under the pod
         translate([cable_slot[0][0], cable_slot[0][1], wall_top - 7])
             cube([cable_slot[1][0] - cable_slot[0][0], cable_slot[1][1] - cable_slot[0][1], 20]);
@@ -557,15 +535,8 @@ module lid() {
             text("SENTRIX", size = 8.5, font = "Liberation Sans:style=Bold", halign = "center", valign = "center",
                  spacing = 1.08);
     }
-    // three crush ribs hold the buzzer cylinder without screws (0.5 mm lead-in)
-    translate([buzz_c[0], buzz_c[1], wall_top - buzz_h]) buzz_ribs(buzz_h);
     // three crush ribs in each LED sleeve (0.5 mm lead-in at the bottom)
     for (l = leds) translate([l[0], l[1], wall_top - led_sleeve_h + 0.5]) led_ribs(led_sleeve_h - 0.5);
-}
-
-module buzz_ribs(h) {
-    bore = buzz_d + 0.6 + tol;
-    for (a = [90, 210, 330]) rotate(a) translate([buzz_grip / 2, -0.4, 0]) cube([(bore - buzz_grip) / 2 + 0.3, 0.8, h]);
 }
 
 module led_ribs(h) {
@@ -716,7 +687,6 @@ module coupon() {
             translate([8, 8, 0]) cylinder(d = 6.0, h = 2.4 + standoff_h);            // Pi standoff
             translate([20, 8, 0]) cylinder(d = 4.0, h = 2.4 + pod_front_in);         // camera post
             translate([32, 8, 0]) cylinder(d = 6.2, h = 2.4 + 10.0);                 // M3 boss (thinnest lid boss)
-            translate([50, 15, 0]) cylinder(d = buzz_d + 2 * buzz_cup_wall, h = 2.4 + buzz_h);
             translate([62, 2, 0]) cube([10, 26, 18]);                                // USB-A window
             translate([40.5, 7.5, 0]) cylinder(d = led_sleeve, h = lid_t + led_sleeve_h);   // LED sleeve
         }
@@ -727,7 +697,6 @@ module coupon() {
         translate([8, 22, -1]) cylinder(d = 2.7 + tol, h = 5);       // Pi board hole size
         translate([20, 22, -1]) cylinder(d = 2.2 + tol, h = 5);      // camera board hole size
         translate([32, 22, -1]) cylinder(d = clear_m3 + tol, h = 5);
-        translate([50, 15, 2.4]) cylinder(d = buzz_d + 0.6 + tol, h = 20);
         translate([61, 7.5, 3.0]) cube([12, 14.8 + tol, 7.0 + tol]);   // one USB-A port + plug body
         // the base's USB-C opening, printed upright like the base (same bridge on top):
         // the 27 W supply's plug body must slide through
@@ -736,7 +705,6 @@ module coupon() {
         translate([36, 24.5, 2.4 - 0.6]) linear_extrude(1) text("SENTRIX fit", size = 3.2,
             font = "Liberation Sans:style=Bold", halign = "center", valign = "center");
     }
-    translate([50, 15, 2.4]) buzz_ribs(buzz_h - 0.5);
     translate([40.5, 7.5, lid_t]) led_ribs(led_sleeve_h - 0.5);   // as in the lid (printed the other way up)
 }
 
@@ -753,14 +721,13 @@ module assembly() {
     color("dimgray") bracket();
     pod_placed(TILT) { color("dimgray") pod(); color("gray") pod_back(); camera3(); }
     pi5();
-    buzzer();
     leds5();
 }
 
 module exploded() {
     color("gainsboro") base();
     translate([0, 0, 48]) pi5();
-    translate([0, 0, 66]) { buzzer(); leds5(); }
+    translate([0, 0, 66]) leds5();
     translate([0, 0, 100]) color("whitesmoke", 0.9) lid();
     translate([0, 0, 150]) color("dimgray") bracket();
     translate([0, 0, 215]) pod_placed(TILT) {
