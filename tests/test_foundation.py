@@ -86,8 +86,8 @@ class TestDefaults:
         from sentrix.config import settings
         g = settings.gpio
         assert (g.siren_pin, g.led_green_pin, g.led_amber_pin, g.led_red_pin,
-                g.buzzer_pin, g.pir_pin, g.door_pin, g.mains_sense_pin) == \
-            (17, 5, 12, 13, 26, 23, 24, 16)
+                g.pir_pin, g.door_pin, g.mains_sense_pin) == (17, 5, 12, 13, 23, 24, 16)
+        assert not hasattr(g, "buzzer_pin"), "no buzzer (D19)"
 
 
 # ── send guard ────────────────────────────────────────────────────────────────

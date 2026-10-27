@@ -119,7 +119,7 @@ Raspberry Pi.
 |---|---|---|---|
 | A | Installer on the Pi (`--system-site-packages`, headless OpenCV, `lgpio`) | Partly | `deploy/pi5/install_pi.sh`, `run.sh`. Never run on a Pi |
 | B | `PiCameraSource` (1280×720 main, 640×480 analysis) | Partly | `sentrix/io/picamera.py`. Needs the real Camera Module 3 |
-| C | GPIO on gpiozero (siren, LEDs, buzzer, PIR, door, mains) | Partly | `sentrix/io/gpio.py`, `actuators.py`. Needs the bench tests (§6) |
+| C | GPIO on gpiozero (siren, LEDs, PIR, door, mains) | Partly | `sentrix/io/gpio.py`, `actuators.py`. Needs the bench tests (§6) |
 | D | Clip engine, fast lane, combined YOLO, small scene model, smaller face model, NCNN | Partly | Clip engine and fast lane done. Combined YOLO not started (M7). Slim scene model failed its bar. `buffalo_s` and NCNN not installed |
 | E | Channel router with outbox and retries | Done (fakes) | `sentrix/alerting/channels/router.py` |
 | F | Network failover (Wi-Fi metric 600, modem 700) | Partly | `deploy/pi5/networkmanager/`. Needs the dongle |
@@ -162,7 +162,6 @@ These are small, but each one must be closed or stated in the report.
 | Template wording nit "near opposite the SBI ATM" | docs/7 §17 | Polish before the demo |
 | The custom weapon detector knows `pistol` and `stick` only; there is no knife footage in the custom dataset | `models/v4_custom/weapon_detector_custom_v4_metadata.json` | D1 promises knife: record knife data (§15) or drop knife from the promise |
 | Fight vs banter (D15) is a published rule over an AudioSet tagger, never measured on room audio; the cue thresholds are a priori | `CLAUDE.md` D15, M11 | Record the audio sessions in §15.1; check the cue thresholds on S3, report S4 once |
-| Talk-down speaker never run on the Pi (USB adapter, espeak-ng, ALSA device) | docs/8 §6.6 | Bench check before the demo |
 
 ---
 
@@ -226,10 +225,10 @@ decisions are written into `CLAUDE.md`.
 
 | Order | Contents | Price |
 |---|---|---|
-| **Order 1: bench kit** | Raspberry Pi 5 8 GB (₹19,852), official 27 W PSU (₹1,255), Active Cooler (₹531), SanDisk High Endurance 128 GB (₹3,699), Camera Module 3 Wide (₹4,379), Pi 5 camera cable 22-pin Standard–Mini (₹117), ML-2020 RTC cell (≈ ₹500), USB microphone (₹289), talk-down speaker: USB audio adapter CM108 + PAM8403 amplifier + 3 W 4 Ω speaker (≈ ₹450, D16; or a USB speakerphone ≈ ₹1,500–2,500 that also replaces the microphone), relay module + transistors + diodes (≈ ₹150), PIR HC-SR505 (₹73), MC-38 door reed switch (₹52), breadboard, jumpers, LEDs, resistors, buzzer (≈ ₹350) | **≈ ₹31,700** |
+| **Order 1: bench kit** | Raspberry Pi 5 8 GB (₹19,852), official 27 W PSU (₹1,255), Active Cooler (₹531), SanDisk High Endurance 128 GB (₹3,699), Camera Module 3 Wide (₹4,379), Pi 5 camera cable 22-pin Standard–Mini (₹117), ML-2020 RTC cell (≈ ₹500), USB microphone (₹289), relay module + transistors + diodes (≈ ₹150), PIR HC-SR505 (₹73), MC-38 door reed switch (₹52), breadboard, jumpers, LEDs, resistors (≈ ₹350); no buzzer or speaker (D19) | **≈ ₹31,250** |
 | **Order 2: integration kit** | BIS-marked 12 V ≥ 4 A adapter (₹566), Resonate router mini UPS 12 V 3 A (₹2,399), XY-3606 step-down 12 V → 5.2 V (₹119), short thick USB-C cable (≈ ₹150), 12 V siren SQR117 (₹194), key/toggle arming switch (≈ ₹50), 3 inline fuses + PC817 optocoupler (≈ ₹80), 7Semi Quectel EC200U-CN 4G modem (₹2,236), Airtel/Vi prepaid SIM (≈ ₹300), IP65 ABS box + label (₹300–899), fan, mesh, cable glands (≈ ₹150), mount, perfboard, terminals (≈ ₹450) | **≈ ₹7,300** |
 | Tools | multimeter, soldering kit, wire stripper, heat-shrink, micro-HDMI cable, card reader, 12 V panel meter, earplugs | ≈ ₹2,000 |
-| **Device total** | Order 1 + Order 2 + tools | **≈ ₹41,000** (cheapest ≈ ₹36,500) |
+| **Device total** | Order 1 + Order 2 + tools | **≈ ₹40,500** (cheapest ≈ ₹36,000) |
 | Running cost | SIM ≈ ₹200/month; demo hotspot data ≈ ₹200–300/month (est.); `.in` domain ≈ ₹500–800/year; Portal on free tiers ₹0 | |
 | Buy only if needed | AI HAT+ 13/26 TOPS (₹9,749 / ₹14,999) if Gate A fails; Camera Module 3 NoIR + 850 nm IR light (₹3,379 + ≈ ₹200–2,000) if night is required; Geekworm X1202 UPS HAT (₹5,299 + cells) if the router UPS fails; MQ-2 + ADS1115 (₹98 + ₹142) for a log-only smoke signal; powered USB hub (≈ ₹800 est.) if the modem browns out | |
 | Do not buy | a Jio SIM for the modem; A7670E modems (no band B40); unbranded 18650 cells; open-frame 230 V supplies; an AI HAT before Gate A; Coral or Intel NCS2 | |
@@ -288,7 +287,7 @@ switches are still **off**.
 | Device identity: `python tools/provision_device.py device --out /etc/sentrix --label label.html` on the VM's Portal database, copied to the card | `/etc/sentrix/identity.json` (mode 0600) on the Pi |
 | Doctor: `sudo -u sentrix /opt/sentrix/.venv/bin/python /opt/sentrix/tools/doctor.py` | every hardware row passes or is explained |
 | Inputs with the siren **not** connected: PIR, door, mains pull, watched on `GET /api/node` | each input changes state once per action; one `node_alert` row per mains pull |
-| LEDs and buzzer: lamp test at start; green / amber / red as in the README | matches the README table |
+| LEDs: lamp test at start; green / amber / red as in the README | matches the README table |
 | Picamera2 checks still open from T-HW: the lores format, the timestamp clock, CPU cost at 15 fps | recorded in `docs/8` |
 
 ### 6.2 Power test
@@ -562,7 +561,7 @@ Tick each line in order. Each one depends on the lines above it.
 **Hardware**
 
 - [ ] Pi boots; cooler, RTC cell; `install_pi.sh` done; doctor passes.
-- [ ] Camera, PIR, door, mains, LEDs, buzzer checked.
+- [ ] Camera, PIR, door, mains, LEDs checked.
 - [ ] Relay test with an LED passed; then the siren with the key switch.
 - [ ] Power test: EXT5V ≥ 4.8 V under load, 10 mains pulls, UPS run time.
 - [ ] Modem: SMS to one team phone; failover to 4G.
@@ -685,9 +684,9 @@ object is visible. Classes:
 | play-fighting / banter | must stay ≤ L2, labelled banter (D15 banter rule) | the same moves as the staged fight, with laughter and calm talk; as many clips as the fight |
 | robbery, stick, smoke | no, experimental (≤ L2) | record a few for later work only |
 
-**Audio with every clip (D15).** The microphone you will deploy (USB, or the
-speakerphone), at the device, recorded together with the video so the two stay
-in sync (`rpicam-vid` plus `arecord` started by one script, or the app's
+**Audio with every clip (D15).** The microphone you will deploy (USB), at
+the device, recorded together with the video so the two stay in sync
+(`rpicam-vid` plus `arecord` started by one script, or the app's
 planned "record normal session" mode). For each room and session also record:
 laughter and calm conversation (5 min), a raised-voice argument without
 contact (2 min), shouting and screaming (staged, 2 min), TV/music in the

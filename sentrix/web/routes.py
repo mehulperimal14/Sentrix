@@ -87,10 +87,9 @@ WS_REAUTH_SECONDS = 60.0
 #: restated here. A Desk operator sees the dashboard and the live view only.
 ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
     "device_admin": frozenset({"pages", "media", "gallery_view", "gallery_write",
-                               "verdict", "sos", "dispatch", "mode", "siren_test",
-                               "buzzer_test", "speaker"}),
+                               "verdict", "sos", "dispatch", "mode", "siren_test"}),
     "owner": frozenset({"pages", "media", "gallery_view", "gallery_write",
-                        "verdict", "sos", "dispatch", "mode", "siren_test", "speaker"}),
+                        "verdict", "sos", "dispatch", "mode", "siren_test"}),
     "member": frozenset({"pages", "media", "gallery_view", "verdict", "sos",
                          "dispatch", "mode"}),
     "operator": frozenset(),

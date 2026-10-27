@@ -61,8 +61,6 @@ pandas>=2.2.0
 sounddevice>=0.4.7
 soundfile>=0.12.1
 librosa>=0.10.2
-# talk-down speaker (D16): espeak-ng + alsa-utils from apt (install_pi.sh);
-# pyttsx3 is optional on the Pi (it drives espeak-ng too)
 
 # device I/O
 gpiozero>=2.0.1

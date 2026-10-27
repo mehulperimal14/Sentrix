@@ -1030,9 +1030,3 @@ body.standalone {
 .contrib-lowers .contrib-effect { color: #22c55e; }
 .contrib-gated .contrib-effect { color: #facc15; }
 .contrib-off .contrib-effect, .contrib-context .contrib-effect { color: #8a9bb8; }
-
-/* Talk-down speaker card (D16) */
-.speaker-card { margin-top: 0.75rem; }
-.speaker-presets { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.5rem 0; }
-.speaker-row { display: flex; gap: 0.4rem; }
-.speaker-row input { flex: 1; min-width: 0; background: #0f1420; color: #f0f4ff; border: 1px solid #2a3449; border-radius: 6px; padding: 0.35rem 0.5rem; }

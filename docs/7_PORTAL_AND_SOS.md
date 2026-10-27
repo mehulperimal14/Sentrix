@@ -59,7 +59,7 @@ SENTRIX never calls 112 itself. Every SOS text says so. In test mode the
 | SOS service | device, same process | `sentrix/sos/` | The assistance-request state machine, timers, PINs, texts, and recovery after a restart |
 | Channels | device, same process | `sentrix/alerting/channels/` | Outbox and router; 4G modem SMS; Telegram and e-mail only when no Portal is linked; legacy Twilio (off unless enabled) |
 | Link client | device, same process | `sentrix/link/` | One outbound WebSocket to the Portal: heartbeats, an outbox of events, state and video on demand, the tunnel, and commands that the device checks itself |
-| Hardware I/O | device, same process | `sentrix/io/` | Siren relay, LEDs, buzzer, PIR, door, mains sense, telemetry, Pi camera, Wi-Fi setup (docs/8) |
+| Hardware I/O | device, same process | `sentrix/io/` | Siren relay, LEDs, PIR, door, mains sense, telemetry, Pi camera, Wi-Fi setup (docs/8); no buzzer or speaker (D19) |
 | Portal | cloud: `python -m sentrix_portal` | `sentrix_portal/` | Accounts, onboarding, the device hub, the `/d/{device_id}/…` proxy, the SOS mirror (and its timers while a device is offline), Telegram, WhatsApp (D17) and e-mail, the Desk, contact pages, privacy |
 
 One device process owns all the device parts (§1.2). On the laptop the device
@@ -249,11 +249,10 @@ Frozen names in other files (keep them working and keep their signatures):
 | Path | Implements |
 |---|---|
 | `sentrix/io/picamera.py` | `PiCameraSource` (guarded `picamera2` import); `latest_lores()`, the low-resolution analysis stream for the clip engine |
-| `sentrix/io/gpio.py`, `node.py`, `sensors.py`, `network.py`, `watchdog.py` | GPIO service (`build_service`, `preflight`: LEDs, buzzer, PIR, door, mains sense, tamper); telemetry; BME280/DHT22; nmcli Wi-Fi (`scan() -> [{ssid, signal, security}]`, `connect(ssid, psk) -> {ok, error}`, `status() -> {connected, ssid, ip, via}`); systemd readiness and watchdog |
+| `sentrix/io/gpio.py`, `node.py`, `sensors.py`, `network.py`, `watchdog.py` | GPIO service (`build_service`, `preflight`: LEDs, PIR, door, mains sense, tamper); telemetry; BME280/DHT22; nmcli Wi-Fi (`scan() -> [{ssid, signal, security}]`, `connect(ssid, psk) -> {ok, error}`, `status() -> {connected, ssid, ip, via}`); systemd readiness and watchdog |
 | `sentrix/io/actuators.py` | The siren on gpiozero behind `build_siren` / `Actuator` / `siren_test` |
 | `sentrix/io/sources.py`, `demo_reel.py` | `picamera:`, `demo-reel:` and the other camera specs; source names are redacted |
 | `sentrix/web/node_routes.py` | `GET /api/node`, `POST /api/node/siren-test` (via `actuators.siren_test`) |
-| `sentrix/web/speaker_routes.py`, `sentrix/io/speaker.py` | `GET /api/speaker`, `POST /api/speaker/say` - the talk-down speaker (D16) |
 | `run.sh` (Pi path), `requirements-pi.txt`, `deploy/pi5/**`, `tools/doctor.py` | Pi install and service; doctor hardware rows; services print through `preflight` |
 | `sentrix/pipeline/clip.py`, `fastlane.py`, `sentrix/runtime/**` | `ClipBuffer`, `ClipScheduler`, `ClipEngine`, `ClipScores`, `build_strategy(pipeline) -> InferenceStrategy`, `prepare_eval_pipeline(pipeline) -> Pipeline`; the fast lane; exported-model backends |
 | `tools/export_models.py`, `tools/bench_clip.py`, `tools/replay_custom_videos.py --mode clip` | Exports with a parity check; the clip bench (calls `services.assert_measurement_safe`); clip-mode replay through `build_eval_pipeline(mode="clip")` |
@@ -427,18 +426,16 @@ Secrets (env names only, read at use time): `TELEGRAM_BOT_TOKEN`,
 
 | Field | Env | Default | Meaning |
 |---|---|---|---|
-| `gpio.enabled` | `SENTRIX_GPIO_ENABLED` | False | GPIO service (LEDs, buzzer, inputs) |
+| `gpio.enabled` | `SENTRIX_GPIO_ENABLED` | False | GPIO service (LEDs, inputs) |
 | `gpio.pin_factory` | `SENTRIX_GPIO_PIN_FACTORY` | "" | "" auto (lgpio on a Pi, mock elsewhere) / lgpio / mock |
 | `gpio.siren_pin` / `siren_active_high` | — / `SENTRIX_SIREN_ACTIVE_HIGH` | 17 / True | NPN driver, `gpio=17=op,dl` keeps it off at boot |
 | `gpio.led_green_pin` / `led_amber_pin` / `led_red_pin` | — | 5 / 12 / 13 | Amber kept off GPIO6 (UPS HAT); docs/8 §6 pin table |
-| `gpio.buzzer_pin` | — | 26 | |
 | `gpio.pir_pin` / `door_pin` / `door_pull_up` | — | 23 / 24 / True | |
 | `gpio.mains_sense_pin` / `mains_present_low` | — | 16 / True | PC817 output low while mains present |
 | `gpio.input_bounce_seconds` | — | 0.05 | |
 | `gpio.siren_max_on_seconds` | `SENTRIX_SIREN_MAX_ON_SECONDS` | 90 | One relay on-period never exceeds this |
 | `gpio.siren_arm_pin` / `siren_armed` | `SENTRIX_SIREN_ARM_PIN` / `SENTRIX_SIREN_ARMED` | None / True | Arming key sense input; `siren_armed=False` refuses siren tests (409) |
 | `gpio.tamper_pin` | `SENTRIX_TAMPER_PIN` | None | Enclosure lid switch |
-| `gpio.buzzer_enabled` | `SENTRIX_BUZZER_ENABLED` | True | Chirps on level rises |
 | `node.enabled` | `SENTRIX_NODE_ENABLED` | False | Telemetry service |
 | `node.profile` | `SENTRIX_PROFILE` | laptop | laptop / pi5-clip / pi5-hailo / pi5-node / hub |
 | `node.interval_seconds` / `temp_warn_c` / `temp_critical_c` | — | 5 / 80 / 85 | |
@@ -814,7 +811,6 @@ a connection that has been silent for `offline_after_seconds` (30 s).
 | `evidence.meta` | bundle_id, incident_id, created_at, level, tci, sha256, camera_id, incident_type, detections [{label, conf}] (no image) | T-LINK on `evidence` (`vault.save`) |
 | `snapshot.meta` | name, incident_id, created_at (no image) | T-LINK on `snapshot` (the pipeline's snapshot capture) |
 | `gallery.audit` | event (gallery_enrolled/removed/rejected), person, file, via, by (no image) | T-LINK on `audit`, gallery events only |
-| `speaker.audit` | event (`speaker_say`), by, preset, chars, backend - never the free text | T-LINK on `audit` (D16); the Portal audits `device.speaker_say` |
 | `mode.changed` | armed, by, at | T-LINK on `mode` (`mode.set_armed`) |
 | `remote.audit` | rows of `remote_audit` (batched) | T-LINK |
 | `notification.status` | id, request_id, channel, recipient_ref, recipient_masked, step, status, error, attempts, sent_at | T-LINK on the channels service's listener |
@@ -925,7 +921,6 @@ call; every request → `remote_audit`):
 | gallery writes (`POST /authorized/upload`, `POST /api/authorized/capture`, `DELETE /api/authorized/*`) | owner | consent `face_recognition`; DELETE needs step-up |
 | `POST /api/incidents/*/verdict`, `POST /api/sos/*`, `POST /api/dispatch/*` | owner, member | |
 | `POST /api/node/siren-test` | owner | step-up; 1/min |
-| `POST /api/speaker/say` (D16) | owner | step-up; 3/min (`io.speaker.Speaker`); members and the Desk refused |
 | Desk view: `GET /dashboard`, `/live`, `/static/*`, `/api/health`, `/api/metrics`, video and state relays | operator | only while a request of this device is on the help path **and** consent `desk_live_view` |
 | anything | company_admin | always refused |
 
@@ -1228,9 +1223,8 @@ four more blocks, each with a safe idle value:
 | Key | Content |
 |---|---|
 | `contributions` | For the leading class: one row per input - `video detector`, `scene model` / `violence model`, `audio` (or `audio (banter)`, `audio (aggression)`), `people`, `motion`, `identity`, `sensors` - with `value`, `detail` and `effect` (`raises`, `holds at L2` - banter -, `gated`, `below confirmation`, `gate ok`/`gate failed`, `context`, `unavailable`); an unknown people count is shown as unknown |
-| `audio` | The audio window heard for this tick: `status` (`aligned`, `stale`, `future`, `untimed`, `unclassified` - no model or failed inference -, `self_output` - the device's own speaker, siren or buzzer -, `disabled`), `lag_s` (frame time minus window end), `tolerance_s`, `model` (`panns_cnn10`, `cnn`, `quiet`), `cues` (aggression, weapon_sound, fire_sound, benign_social = laughter, calm_talk, background = TV/music/radio, siren), `start`/`end` (monotonic), `wall_end`, `counted` (a new, non-overlapping observation), `neutral` (why an aligned window did not vote, e.g. background) |
+| `audio` | The audio window heard for this tick: `status` (`aligned`, `stale`, `future`, `untimed`, `unclassified` - no model or failed inference -, `self_output` - the device's own siren -, `disabled`), `lag_s` (frame time minus window end), `tolerance_s`, `model` (`panns_cnn10`, `cnn`, `quiet`), `cues` (aggression, weapon_sound, fire_sound, benign_social = laughter, calm_talk, background = TV/music/radio, siren), `start`/`end` (monotonic), `wall_end`, `counted` (a new, non-overlapping observation), `neutral` (why an aligned window did not vote, e.g. background) |
 | `fusion` | `class`, `state`, `rule` (`single`, `corroborated`, `three modalities`, `audio only`, `corroboration only`, `fight corroborated`, `banter`, `mixed audio`, `experimental`, `unrecognised person (L2 only)`...), `modalities`, `context` (`persons_recent`, `motion`), `sensors` (seconds since the last PIR/door event) |
-| `speaker` | D16: `enabled`, `backend`, `ready`, `speaking`, `last` |
 
 Event-log tick rows are schema 5: the same `audio` and `fusion` records, the
 audio sources in `votes`, and `context.persons_recent` / `motion` /
@@ -1684,10 +1678,8 @@ leave).
 | POST | `/api/mode` | `routes.py` | JSON `{armed, pin}` → `sos.set_mode`; `{mode}` or `{detail, code}` |
 | POST | `/api/incidents/{id}/verdict` | `routes.py` | form `verdict`, `note`, `pin`; FALSE → `sos.false_verdict` (403 `pin_invalid`, 429 `pin_locked`, 404) |
 | POST | `/api/dispatch/{id}/send/{authority}` | `routes.py` | POLICE / FIRE / MEDICAL → `sos.approve_package`; 409 `conflict` for SENT/CANCELLED/EXPIRED; `{status: sent|failed}` |
-| GET | `/api/node` | T-HW | the `state.node` block; `gpio` = `{siren, leds: {green, amber, red}, buzzer, pir, door, mains}`; also `siren`, `siren_arming`, `siren_test`, `camera`, `services` |
+| GET | `/api/node` | T-HW | the `state.node` block; `gpio` = `{siren, leds: {green, amber, red}, pir, door, mains}`; also `siren`, `siren_arming`, `siren_test`, `camera`, `services` |
 | POST | `/api/node/siren-test` | T-HW | device admin or owner + step-up (policy.py); `actuators.siren_test` (1 s; ≤ 1/min, shared with the command; 429 with `Retry-After`); 409 `conflict` while the siren line is disarmed |
-| GET | `/api/speaker` | D16 | the speaker's status: `enabled`, `backend`, `real`, `ready`, `speaking`, `last`, `max_chars`, `per_minute`, `retry_after`, `presets` |
-| POST | `/api/speaker/say` | D16 | JSON `{text}` (≤ 200 printable characters) or `{preset_id}`; device admin or owner + step-up (policy.py, class `speaker`); ≤ 3/min device-wide (429 with `Retry-After`); 409 `conflict` while the speaker is off (`SENTRIX_SPEAKER_ENABLED=0`) or still talking; 400 `invalid_args`; audited as `speaker_say` (event log, mirrored by the link). `/api/node` adds a `speaker` block |
 | GET | `/api/link` | T-LINK | the `state.link` block + `remote_viewers` |
 | GET | `/api/link/remote-audit?limit` | T-LINK | `remote_audit` rows |
 | POST | `/api/link/reconnect` | T-LINK | device admin |

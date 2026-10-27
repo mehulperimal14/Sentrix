@@ -21,8 +21,6 @@ verdict / SOS / dispatch   owner, member
 HOME/ARMED (``/api/mode``) owner, member     the route checks the SOS PIN
 siren test                 owner             step-up (the 1/min limit is
                                              ``actuators.siren_test``'s)
-talk-down speaker (D16)    owner             step-up (the 3/min limit is
-                                             ``io.speaker.Speaker``'s)
 Desk view                  operator          only while a request of this device
                                              is on the help path *and* consent
                                              ``desk_live_view``
@@ -70,7 +68,6 @@ TUNNEL_METHODS = frozenset({"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"})
 NEVER, PAGE, READ_API, STATIC, MEDIA, FACES = "never", "page", "read_api", "static", "media", "faces"
 GALLERY_WRITE, GALLERY_DELETE = "gallery_write", "gallery_delete"
 SOS_WRITE, MODE, SIREN, LC_ADMIN, UNKNOWN = "sos_write", "mode", "siren_test", "lc_only", "unknown"
-SPEAKER = "speaker"
 
 
 @dataclass(frozen=True)
@@ -144,8 +141,6 @@ def classify(method: str, path: str) -> str:
         return MODE
     if method == "POST" and path == "/api/node/siren-test":
         return SIREN
-    if method == "POST" and path == "/api/speaker/say":
-        return SPEAKER
     return UNKNOWN
 
 
@@ -263,13 +258,6 @@ class TunnelPolicy:
         if path_class == SIREN:
             if actor.type != "owner":
                 return _refuse("forbidden_role", "only the owner may test the siren", path_class)
-            if not actor.stepped_up_within(STEP_UP_SECONDS, self._clock()):
-                return _refuse("step_up_required", "re-enter your password first", path_class)
-            return _allow(path_class)
-        if path_class == SPEAKER:
-            if actor.type != "owner":
-                return _refuse("forbidden_role", "only the owner may speak through the device",
-                               path_class)
             if not actor.stepped_up_within(STEP_UP_SECONDS, self._clock()):
                 return _refuse("step_up_required", "re-enter your password first", path_class)
             return _allow(path_class)

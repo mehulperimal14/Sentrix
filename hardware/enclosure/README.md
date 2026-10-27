@@ -1,9 +1,10 @@
 # SENTRIX enclosure, rev E
 
 A 3D-printed case for the SENTRIX device: Raspberry Pi 5 with the Active
-Cooler, Camera Module 3 in a separate tilting pod, a USB microphone, a
-3-pin buzzer module and three status LEDs. It hangs on a wall (the main
-configuration) or stands on a table.
+Cooler, Camera Module 3 in a separate tilting pod, a USB microphone and
+three status LEDs. It hangs on a wall (the main configuration) or stands on
+a table. The device has no buzzer since 2026-10-27 (D19): rev E's buzzer cup
+under the lid and its seven sound holes stay empty.
 
 ![on the wall](renders/9_wall_mounted.png)
 
@@ -131,7 +132,6 @@ the three board hole sizes. Then adjust in `sentrix_enclosure.scad`:
 | a screw is too hard to drive or a boss splits | `pilot_adj` up by 0.1 |
 | a screw strips | `pilot_adj` down by 0.1 |
 | the LED is too hard to push in / loose | `led_grip` 4.9 / 4.7 (default 4.8) |
-| the buzzer is too hard to push in / loose | `buzz_grip` 11.7 / 11.5 (default 11.6) |
 | holes and slots print small in general | `tol` up (default 0.20) |
 
 Then run `python build.py`, or export from OpenSCAD: set `PART`, press F6,
@@ -148,7 +148,7 @@ then File > Export.
 | Power button | the end opposite the camera: a round flexure in the wall with a 3 mm nub 0.3 mm from the Pi's button. Press once to switch on; while it runs, press twice for a clean shutdown; hold it to force the Pi off |
 | Status LED (the Pi's own) | visible through the slot beside the power button |
 | microSD card | a 13 x 3.8 mm slot under the power button: push the card in through it; pull it out with tweezers, or stick a small tape tab on the card |
-| Buzzer (cylindrical, no screw holes) | pressed into a 12.8 mm cup under the lid; three crush ribs narrow it to 11.6 mm so a standard 12 mm buzzer is gripped; the module's board stops on the rim; seven sound holes in the lid face the room |
+| Buzzer cup (empty) | the 12.8 mm cup under the lid and its seven sound holes were made for a 3-pin buzzer module; the device has no buzzer since 2026-10-27 (D19), so nothing goes there |
 | Status LEDs (3 x 5 mm) | pressed into sleeves under the lid from inside; three crush ribs narrow the 5.4 mm bore to 4.8 mm so any 5 mm LED is gripped; the LED's 5.6-6.0 mm rim stops on the sleeve and the dome sits flush |
 | Camera Module 3 | bolted inside the pod with 4 x M2 into four posts on its own holes (21 x 12.5 mm grid), **connector at the bottom** (the way up its picture is upright); the lens sits at least 0.4 mm behind the window |
 | Camera ribbon | straight down out of the camera's connector and through the pod's floor just in front of the pivot bolt (over a rounded edge), then through the bracket and lid slots; tilting the pod from 0 to 90 degrees draws 4.4 mm of it. In the case it rises from the Pi's CAM/DISP connector nearer the HDMI ports, crosses above the Ethernet jack, and its spare length lies in the pocket over the cooler's front plate (clear of both lid grilles) |
@@ -223,17 +223,11 @@ sized for thread-forming screws.
    other arm, with a nylon washer under the head and under the nut.
    Tighten the nyloc nut until the pod clicks firmly every 15 degrees and
    stays where you set it.
-6. **Buzzer and LEDs.** Wire the buzzer module to the GPIO: VCC to pin 2
-   (5 V), GND to pin 39, I/O to pin 37 (GPIO26). The code drives GPIO26 high
-   to sound (`SENTRIX_BUZZER_ACTIVE_HIGH=1`, the default); many 3-pin modules
-   are "low-level trigger" instead, so if yours sounds non-stop once SENTRIX
-   starts, set `SENTRIX_BUZZER_ACTIVE_HIGH=0` in the Pi's `.env` and restart
-   the service (the Node page's Test buzzer button then gives one short
-   chirp). Wire each LED's anode through
-   a 330 ohm resistor: green to pin 29 (GPIO5), orange to pin 32 (GPIO12),
-   red to pin 33 (GPIO13); all three cathodes to pin 34 (GND). Press the
-   buzzer up into the cup under the lid until its board meets the rim, and
-   the LEDs into their sleeves from inside until their rims stop.
+6. **LEDs.** Wire each LED's anode through a 330 ohm resistor: green to
+   pin 29 (GPIO5), orange to pin 32 (GPIO12), red to pin 33 (GPIO13); all
+   three cathodes to pin 34 (GND), or each to its own ground pin (30, 34,
+   25). Press the LEDs into their sleeves from inside until their rims stop.
+   No buzzer (D19): the cup under the lid stays empty.
 
    The code drives the LEDs on its own: green solid when the unit works and
    the Portal link is up; orange fast blink on a fault, solid with no network;
@@ -285,8 +279,8 @@ pod's side, and the notch on the bracket arm points at the current angle.
   in the keyholes. The click-detent bumps, which press 0.25 mm into the pod
   on purpose, are left out of the tilt check.
 * **Not yet printed.** Print the coupon first: it shows whether the screws,
-  the buzzer, an LED and the USB-C plug fit your printer before the big
-  parts. Two things to measure: the USB microphone's metal plug must be at
+  an LED and the USB-C plug fit your printer before the big parts. Two
+  things to measure: the USB microphone's metal plug must be at
   least 10.8 mm long to seat (a standard plug is 12 mm; its body stays
   outside), and the camera's lens tip should be no more than 7.83 mm in front
   of its board.

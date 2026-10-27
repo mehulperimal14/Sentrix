@@ -2,7 +2,8 @@
 
 The Pi runs the same device process as the laptop (`python -m sentrix`:
 pipeline, Local Console, SOS, channels, Portal link) with the Camera Module 3,
-the siren relay, status LEDs, buzzer, PIR, door contact and mains sensing.
+the siren relay, status LEDs, PIR, door contact and mains sensing (no buzzer
+and no speaker: D19).
 Design, pinout, power and parts: [`docs/8_RASPBERRY_PI5_INTEGRATION.md`](../../docs/8_RASPBERRY_PI5_INTEGRATION.md)
 (§6 for wiring). Pin numbers in code: `settings.gpio` in `sentrix/config.py`.
 
@@ -37,7 +38,7 @@ its own switch, and then only to `SENTRIX_TEST_RECIPIENTS`. Keep it that way.
 
 The bench kit of docs/8 §8 (Pi 5 8 GB, 27 W supply, Active Cooler, High
 Endurance card, Camera Module 3 Wide with the 22-pin Standard–Mini cable,
-ML-2020 cell, USB microphone, relay parts, PIR, reed switch, LEDs, buzzer), an
+ML-2020 cell, USB microphone, relay parts, PIR, reed switch, LEDs), an
 LED + 1 kΩ resistor for the relay test, ear protection, and the laptop with
 the repository (for model exports and provisioning).
 
@@ -126,11 +127,11 @@ Open the Node page (`http://<pi>:8000/node`, or `GET /api/node`):
 |---|---|
 | Wave at the PIR | `pir: true` |
 | Open the door contact | `door: "open"` |
-| Pull mains (once the mains sense is wired) | `mains: false`, amber LED fast blink, one long beep, a `node_alert` row in the event log |
+| Pull mains (once the mains sense is wired) | `mains: false`, amber LED fast blink, a `node_alert` row in the event log |
 
 Debounce is 50 ms in software; check it does not miss or double real edges.
 
-### 7. LEDs and buzzer
+### 7. LEDs
 
 At start the three LEDs light for 0.5 s (lamp test). Then green solid =
 running; amber solid = link enabled but not connected; amber fast = a fault;
@@ -222,8 +223,8 @@ The Portal must be running first ([`deploy/portal/README.md`](../portal/README.m
 3. In `.env`: `SENTRIX_LINK_ENABLED=1` and
    `SENTRIX_PORTAL_URL=https://portal.<yourdomain>.in`. Restart.
 4. Green LED slow blink = connected, not yet claimed. The customer claims the
-   device in onboarding step 5 with the label's code or QR; one chirp and the
-   green LED turns solid.
+   device in onboarding step 5 with the label's code or QR; the green LED
+   turns solid.
 
 **Setup Wi-Fi without a screen (optional).** Fill the `@...@` fields of
 `sentrix-setup-hotspot.nmconnection.in` and install it to

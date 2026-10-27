@@ -28,7 +28,6 @@ other than evaluating or developing SENTRIX.
 |---|---|---|
 | PyTorch, torchvision, torchaudio, timm, OpenCV, onnxruntime, FastAPI, uvicorn, SQLAlchemy, NumPy, scikit-learn and the other packages in `requirements.txt` / `requirements-pi.txt` | the device and the Portal | their own open-source licences |
 | gpiozero, pyserial, argon2-cffi, pyotp, qrcode, httpx | Pi GPIO, the USB modem, passwords and PINs, TOTP, device labels, HTTPS APIs and the tunnel | BSD or MIT |
-| pyttsx3; espeak-ng and alsa-utils (apt, on the Pi; not bundled) | talk-down speaker text-to-speech (D16) | MPL-2.0; GPL-3.0 and GPL-2.0 (installed as system packages, not redistributed) |
 | Caddy, PostgreSQL (the `deploy/portal/` images) | Portal hosting | Apache-2.0; PostgreSQL Licence |
 
 ## Services

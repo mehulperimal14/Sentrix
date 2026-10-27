@@ -21,8 +21,8 @@ Two programs:
   incidents, event log, encrypted evidence. It serves the **Local Console (LC)**
   on `http://127.0.0.1:8000` and runs the SOS engine, the channel router
   (modem SMS, Telegram, e-mail, Twilio — all behind the send guard) and the
-  outbound link client. Pi I/O: siren relay, LEDs, buzzer, PIR, door, mains
-  sense, node telemetry, watchdog.
+  outbound link client. Pi I/O: siren relay, LEDs, PIR, door, mains sense,
+  node telemetry, watchdog (no buzzer and no speaker since D19).
 * **Portal** (`python -m sentrix_portal`, `http://127.0.0.1:8100`; demo on
   `portal.localhost:8100`): accounts with activation codes, TOTP for admin and
   Desk, 7-step onboarding wizard, household and contacts with consent, SOS pages,
@@ -198,6 +198,7 @@ and violence models, motion, people count, identity, audio, PIR/door) and the
 levels match the scene; audio in sync with video; fight vs friendly banter
 decided by video + audio; unknown people never above L2; the owner can speak
 to the room. Decisions D15 and D16, D2/D8 amended; milestone M11 (section 6).
+*The talk-down speaker (D16) was removed on 2026-10-27 (D19).*
 
 ### Raspberry Pi 5 bring-up for the demo (2026-10-23, local commits after `48142c0`)
 
@@ -208,8 +209,11 @@ aarch64 torch and xgboost pull CUDA wheels (CPU torch first, xgboost dropped,
 `fc9cc29`, `adcd718`); a USB microphone plugged in while running is picked up
 (`019854c`); 3-pin low-level-trigger buzzer modules and unwired PIR/door/mains
 inputs (`8526815`); a Node-page buzzer test (`a892d24`); the clip object stage
-at 320 px on the Pi (`4503b0d` + results, section 4.3). Microphone and buzzer
-arrive on 2026-10-30; nothing has been heard or chirped on the Pi yet.
+at 320 px on the Pi (`4503b0d` + results, section 4.3). The microphone
+arrives on 2026-10-30; nothing has been heard on the Pi yet. The buzzer module
+was wired on 2026-10-27, stayed silent while GPIO26 was driven high (checked
+with `pinctrl` over SSH) and was taken out; the buzzer is gone from the product
+(D19).
 
 ### Online Portal and phone alerts for the evaluations (2026-10-24, D17, D18)
 
@@ -217,8 +221,8 @@ The owner's demo: the Portal online (sign-in, the owner's details in the
 wizard, the Pi's live dashboard, "offline" while the Pi is off), the Level 3
 question on the owner's phone without signing in, and a second phone playing
 the authorities. Evaluations: **2026-11-30** and the final panel on
-**2026-12-05**. The talk-down speaker is dropped from the hardware for now;
-its code stays, off by default.
+**2026-12-05**. The talk-down speaker is dropped from the hardware; on
+2026-10-27 its code went too, with the buzzer's (D19).
 
 * **Live**: the Portal runs on Render (`https://sentrix-portal.onrender.com`,
   `render.yaml`, Starter-size instance + 1 GB disk, Singapore; Railway had
@@ -248,7 +252,8 @@ its code stays, off by default.
 
 A parametric OpenSCAD case for the demo unit, **rev E** (README there): base
 with the Pi 5 screwed to standoffs on its own holes, lid with hex grilles over
-the Active Cooler, a crush-rib cup for the 12 mm buzzer and three crush-rib
+the Active Cooler, a crush-rib cup for the 12 mm buzzer (left empty since
+D19) and three crush-rib
 sleeves for 5 mm status LEDs (GPIO 5/12/13, the patterns `io/gpio.py` already
 drives), USB/Ethernet at the camera end for the USB microphone, USB-C and HDMI
 on the side, a power-button flexure, microSD slot, wall keyholes (the main
@@ -269,6 +274,21 @@ renders and runs the interference checks (all clear at the commit that added
 rev E).
 Rev A (the team's earlier zip, `SENTRIX_enclosure.zip`, untracked) gave the
 LED-window idea. Not printed yet: print the fit coupon first.
+
+### No buzzer, no talk-down speaker (2026-10-27, D19)
+
+The owner took the buzzer out of the demo unit (it stayed silent on GPIO26)
+and dropped the talk-down speaker for good. Both left the product: the GPIO
+service claims no buzzer pin and makes no chirps (`gpio.buzzer_*` settings,
+`buzzer_events`, `POST /api/node/buzzer-test` and the Node page's button
+removed); the speaker's module, routes, dashboard card, `state.speaker`, the
+link's `speaker` path class and `speaker.audit` event, the Portal's
+`device.speaker_say` audit, pyttsx3, espeak-ng and the `SENTRIX_SPEAKER_*`
+settings removed. The siren, the LEDs, the Local Console/Portal and the alert
+channels are the device's outputs; GPIO26 is free. Docs, env templates, the
+Pi installer and the enclosure README follow; the enclosure model still has
+the (empty) buzzer cup. The README's level table, split by the old "Speak to
+the room" section, is whole again.
 
 ---
 
@@ -498,9 +518,10 @@ video/session is never used for tuning.
 | D13 | **Test mode is the default and the only mode this semester**; sending needs `SENTRIX_LIVE_ALERTS=1` + the channel switch, and only to `SENTRIX_TEST_RECIPIENTS` in test mode; the legacy Twilio path is a no-op unless enabled; link, modem, SOS sweeper opt-in. | `.env` may hold live keys. |
 | D14 | Accounts by username + single-use activation code; admin/Desk TOTP; the LC keeps `SENTRIX_PASSWORD`; Portal password hashes never reach the device. | No admin takeover, no hashes on the SD card. |
 | D15 | **Multimodal, time-aligned fusion** (transparent rules, D6 stays). Modalities: *video detector* (YOLO heads, fast lane), *video classifier* (scene, violence: one modality), *audio* (PANNs CNN10 AudioSet tagger on its own onnxruntime session - never touching torch's threads - → cues aggression / weapon_sound / fire_sound / benign_social (laughter) / calm_talk / background (TV, music, radio) / siren; the 4-class CNN is the fallback). Every audio result carries its window (monotonic start/end, wall end); it votes for a frame/clip only if the window overlaps it within `SENTRIX_AUDIO_ALIGN_TOLERANCE` (1.5 s) - else audio is *unavailable*, never "calm"; unclassified windows and windows over the device's own speaker/siren/buzzer (`io/self_output.py`) never vote; a window dominated by background (TV/music) is neutral. A window is a new observation only if it does not overlap the last one counted (clip mode: two non-overlapping halves), so one impulse never confirms audio. Per class: one visual modality confirmed → L3; two modalities → L4 (weaker sets it), three → ≥ L5 only if the audio is ≥ 0.3 over its bar; audio alone ≤ L2; aggression corroborates a visible weapon but is never a weapon alone. Fight: experimental L2 unless video fight **and** aligned aggression audio confirm with ≥ 2 people and motion ≥ 0.02 → L3; `SENTRIX_FIGHT_MAX_LEVEL` is a hard cap, and 4 also needs a second visual *modality*; banter (laughter, or calm talk ≥ 0.85) or aggression mixed with laughter holds the fight **at** L2 (shown, never lower). People count, motion, identity, PIR/door are gates/context, each recorded in `contributions` (state, event log schema 5, dashboard). Unknown person: D2. **Unvalidated** until room recordings with sound exist (M6, ROADMAP §15.1). | The owner's requirement: one decision from every input, audio in sync with video, fight vs banter, unknown people never critical; the review (M11b) closed the ways one sound, a TV or the device's own voice could move a level. |
-| D16 | **Talk-down speaker**: the owner (tunnel, step-up ≤ 300 s; members and the Desk refused by the path table) or the device admin sends a preset or ≤ 200 characters (control characters and `<`/`>` stripped: SAPI5 parses XML); offline TTS (pyttsx3 SAPI5/espeak-ng, or the `espeak-ng` command → `aplay -D`); off by default (`SENTRIX_SPEAKER_ENABLED`), 3 messages/min, one at a time with a 30 s playback watchdog, audited as `speaker_say` and mirrored to the Portal as `speaker.audit` (who, preset, length, backend - never the text); playback is marked as the device's own sound so the microphone ignores it. Pi hardware: USB audio adapter + PAM8403 + 3 W speaker, or a USB speakerphone (docs/8 §6.6). | Let the owner deter or reassure without a siren; no cloud TTS, no audio leaves the house. |
+| D16 | *Withdrawn by D19 (2026-10-27): no speaker, code removed.* **Talk-down speaker**: the owner (tunnel, step-up ≤ 300 s; members and the Desk refused by the path table) or the device admin sends a preset or ≤ 200 characters (control characters and `<`/`>` stripped: SAPI5 parses XML); offline TTS (pyttsx3 SAPI5/espeak-ng, or the `espeak-ng` command → `aplay -D`); off by default (`SENTRIX_SPEAKER_ENABLED`), 3 messages/min, one at a time with a 30 s playback watchdog, audited as `speaker_say` and mirrored to the Portal as `speaker.audit` (who, preset, length, backend - never the text); playback is marked as the device's own sound so the microphone ignores it. Pi hardware: USB audio adapter + PAM8403 + 3 W speaker, or a USB speakerphone (docs/8 §6.6). | Let the owner deter or reassure without a siren; no cloud TTS, no audio leaves the house. |
 | D17 | **WhatsApp alerts through Meta's Cloud API** (no Twilio or reseller): the Portal's `whatsapp` channel (`sentrix/alerting/channels/whatsapp.py`) sends the owner's L3 prompt (quick replies Alert contacts / I'm checking / False alarm), the contacts' alerts (I'm handling it / Open the SOS page), notices and the contact consent link, from Meta's free test number (up to 5 allowlisted recipients). Conversations start with three approved UTILITY templates (`tools/whatsapp_templates.py`), each beginning with the test banner; `WHATSAPP_MODE=auto` falls back to session messages (24 h window) while templates are in review. Quick replies carry Telegram's `<nonce>:<letter>` and get the same checks, the sender's number standing in for the linked chat; a link button is answered with its URL; delivery statuses confirm or fail the message; `POST /hooks/whatsapp` is HMAC-signed (`WHATSAPP_APP_SECRET`). Guard switch `SENTRIX_WHATSAPP_LIVE`, phone rules as SMS. **Exception to "a demo never sends"**: for the team's demo, test-marked messages to the two team phones in `SENTRIX_TEST_RECIPIENTS` (owner, "authorities" contact), switched on by the team on the Portal only. *Built and tested, but not used for the demo: Meta's set-up was out of the team's reach, so the demo uses the Telegram channel (section 2).* | The owner asked for alerts on a phone without being signed in, and a second phone playing the authorities; WhatsApp needs no SIM or modem, and the sandbox's 3-day re-join is avoided. |
 | D18 | **Demo Portal on Render** (amends D11 for the demo; Railway closed its sign-ups): `render.yaml` Blueprint - one **Starter** instance in Singapore (Hobby workspace), a 1 GB disk on `/data` for SQLite and the Portal's files, `deploy/portal/Dockerfile`, health check `/healthz`, keys generated by Render, the secrets and the sending switches typed in by the team (`sync: false`). The image starts as root only to hand the root-owned volume to `sentrix`, then `deploy/portal/start.py` drops root for good; `PORT` and `RENDER_EXTERNAL_URL` (or `RAILWAY_PUBLIC_DOMAIN`) are honoured, the client address comes from `X-Real-IP` (`PORTAL_TRUSTED_PROXIES=*`), the first admin from `PORTAL_BOOTSTRAP_ADMIN` (link in the log); the dashboard reopens the MJPEG stream every 10 min. `railway.json` keeps Railway as the alternative. Steps: `deploy/cloud/README.md`. About $7 + $0.25 a month. | A host with a disk keeps the tested SQLite path, never sleeps and needs no shell; Oracle stays the long-term option. |
+| D19 | **No buzzer and no talk-down speaker** (2026-10-27; withdraws D16 and the buzzer of the T-HW pin table): both are gone from the hardware, the code, the Local Console, the settings, the installer and the docs. The device's outputs are the three status LEDs (GPIO 5/12/13), the siren relay (GPIO17), the Local Console and Portal, and the alert channels; level rises, a Portal claim, a failed SOS, mains loss and tamper show on the LEDs, the console and the event log (mains and tamper also as `node.alert`). GPIO26 is free. The microphone stays (D15); its self-output filter now covers the siren only. The enclosure's buzzer cup stays empty. | The owner's call: the buzzer module stayed silent in the demo unit and was taken out, and the speaker's hardware was never fitted; nothing is offered that the unit cannot show. |
 
 ### Milestones
 
@@ -588,7 +609,7 @@ v1, tunnel + auth bridge, SOS state machine, channels, roles, endpoints).
 - [x] **Foundation** (`685df9b`, "feat(foundation): contracts, config, guard, schema, services, portal skeleton"): `SosConfig`/`LinkConfig`/`ChannelConfig`/`GpioConfig`/`ClipConfig`/`NodeConfig`/`WebConfig`; send guard `sentrix/alerting/guard.py` (legacy Twilio SMS/call now a no-op unless `SENTRIX_TWILIO_ENABLED=1` + `SENTRIX_LIVE_ALERTS=1` + allowlist in test mode); additive device tables (assistance_requests, request_events, link_outbox, profile_cache, notifications, remote_audit) and columns; `set_verdict` by request state; services registry + lifespan; pipeline SOS hook (`NullSosService` default, asserted by the eval harness and tools); state blocks (sos, link, node, channels, mode, remote_viewers, test_mode); runtime HOME/ARMED; link protocol + tunnel auth; channel interfaces; LC extension routers; camera-URL redaction; `/docs` off by default; `sentrix_portal` skeleton (all tables, Argon2id, sessions, CSRF, `require_role`, audit chain, `/healthz`). 266 tests pass.
 - [x] **Contract review** (`31c6c50`; 30 integration gaps, docs/7 §16 lists the ones answered differently): full `SosService` interface (`respond`, `cloud_event`, `sync`, `false_verdict`, `set_mode`, `approve_package`, `demo_*`, `current`; `SosResult`; null service keeps the pre-portal console behaviour) and `sentrix/actor.py`; one LC principal `sentrix/web/auth.py` (`require_lc`, 401 JSON for tunnel/API, `rate_key`, fail-closed fallback when hardening cannot load); once SOS owns an incident the legacy L4 SMS, L4 package and L5 call are skipped (siren stays); `REQUEST_LOCK` + `expected_version`, per-(request, origin) hash chains with a unique index, `import_event`, cloud-created requests, (DRAFTED, expire); `sentrix/listeners.py` (incident, dispatch, verdict, evidence, snapshot, audit, mode) and `sentrix.link.publish` (no-op without the link); `ChannelsService` + router listeners + `ready`, outbox meta round-trip, 64-byte Telegram callback data; profile accessor/cache keyed by `<identity_dir>/profile.key`; `Pipeline.observe/decide`, `InferenceStrategy`, `request_close_incident`, draining shutdown, lifespan order (pipeline drains before services stop; `close_interrupted` after services; ARMED persisted in `var/mode.json`); `siren_test` shared limiter; `RetentionConfig`; Portal key files, lifespan + background/middleware modules, CSP not on `/d/*`, `csrf="header"`, service stubs (hub, sos, accounts, notify, retention), `/consent/{token}`; `tests/conftest.py` (forced-off switches before any import, loopback-only socket guard, shared fixtures). 340 tests pass.
 - [x] **Tracks** (parallel worktrees, merged in this order; no file touched by two tracks; nothing has run on real hardware or real provider accounts):
-  - **T-HW**: gpiozero siren (active-high NPN default, 90 s max on-period, arming switch, 409 on a disarmed test, `SENTRIX_SIREN=auto` now honoured), GPIO service (LEDs 5/12/13, buzzer 26, PIR 23, door 24, mains 16, tamper), node telemetry + systemd watchdog, `PiCameraSource` (main 1280×720 + lores 640×480), nmcli Wi-Fi, `/api/node`, doctor hardware rows, `run.sh` Pi path, `deploy/pi5/**`, docs/8_RASPBERRY_PI5_INTEGRATION.md §6 pin table. Bench checks with an LED, real PIR/door/mains, Camera Module 3 and the 4G dongle still to do.
+  - **T-HW**: gpiozero siren (active-high NPN default, 90 s max on-period, arming switch, 409 on a disarmed test, `SENTRIX_SIREN=auto` now honoured), GPIO service (LEDs 5/12/13, buzzer 26 - removed by D19, PIR 23, door 24, mains 16, tamper), node telemetry + systemd watchdog, `PiCameraSource` (main 1280×720 + lores 640×480), nmcli Wi-Fi, `/api/node`, doctor hardware rows, `run.sh` Pi path, `deploy/pi5/**`, docs/8_RASPBERRY_PI5_INTEGRATION.md §6 pin table. Bench checks with an LED, real PIR/door/mains, Camera Module 3 and the 4G dongle still to do.
   - **T-CLIP**: 4 s clip engine (`pipeline/clip.py`), fast lane, torch/onnx/ncnn runtimes, `tools/export_models.py`, `tools/bench_clip.py`, `replay_custom_videos.py --mode clip`, `SENTRIX_FACE_MODEL`. Replay meets Gate A's criterion (weapon L3 9/12 with fast lane, fire 3/3, 0 false onsets); laptop bench p95 2145 ms > 1.6 s budget (docs/8_RASPBERRY_PI5_INTEGRATION.md T1). NCNN and `buffalo_s` untested (not installed).
   - **T-CH**: channel router + persistent outbox (dedupe, 30/90 s back-off, 24 h give-up, crash recovery), modem SMS (PDU, 30 segments/day, profile numbers only), Telegram, Brevo/Resend e-mail, Twilio wrapper, legacy notifier routed through the router, `/api/channels`, Portal outbox/worker/`/hooks/telegram`. Real modem/bot/e-mail accounts untested.
   - **T-SOS**: pure machine, frozen policy, templates (one English source), PINs (Argon2id, 5 / 10 min), sweeper, service, recovery, LC `/api/sos/*`, profile-filled dispatch packages. Live-session replay: home 0 requests, armed 1.
@@ -606,6 +627,7 @@ v1, tunnel + auth bridge, SOS state machine, channels, roles, endpoints).
 - [ ] **Still to do:** Alembic baseline (and the `bootstrap_revoked_at` column it unblocks); a live Postgres run (`tools/portal_pg_check.py` only compiles the DDL; psycopg not installed); `deploy/portal/` on a real VM (Docker not run); hardware bench checks (LED relay test, PIR, door, mains, Camera Module 3, 4G modem); real Telegram bot, e-mail account and modem SMS to allowlisted team phones (both switches); `tools/bench_link.py` (named in docs/7 §15 item 3, not written); Portal SOS texts from the device template module, bundled fonts, NCNN and `buffalo_s` (docs/7 §16 q7–q11); 10 live pre-runs per demo clip; **gates P1–P8** measured once on the final build (P1, P2, P3, P7 have partial evidence in the test suite; P4, P5, P8 need hardware or recordings).
 
 **M11 — Multimodal, time-aligned fusion and the talk-down speaker (D15, D16; `sentrix/portal`, not pushed)**
+- [x] **Talk-down speaker removed (D19, 2026-10-27)**, with the buzzer: the entries below that describe the speaker are history.
 - [x] **Sound model** (`30074ab`): PANNs CNN10 AudioSet tagger (`sentrix/perception/sound_tagger.py`; the published `Cnn10` module with its parameter names, STFT and mel bank from the checkpoint, so only torch + scipy); weights tracked in `models/audio/` (25 MB, SHA-256 checked by `tools/fetch_models.py`); 527 labels → cues aggression, weapon_sound, fire_sound, benign_social (laughter, music, TV, calm talk scaled by 1 − aggression), siren; the 4-class CNN is the fallback (`SENTRIX_AUDIO_MODEL`); 48.9 ms per 4 s window. *(M11b: benign_social = laughter only, new calm_talk and background cues; onnxruntime with its own threads, 40.1 ms.)* Considered: AST (346 MB, needs transformers, 10 s input), CNN14 (327 MB).
 - [x] **Time alignment** (`30074ab`): every `AudioResult` carries its window (monotonic start/end on the pipeline clock, wall end); `AudioEngine.result_for(t)` / `audio.alignment` use it only if it overlaps `t ± 1.5 s`, else *unavailable* (never "calm"); one window votes once (fresh; *M11b: and only if it does not overlap the last counted one*). Clip mode classifies the clip's own buffered window (aligned by construction) or the engine's window if aligned. Replays hear the video's own soundtrack (`FileAudio`, ffmpeg decode, live 4 s / 1 s grid; `replay_custom_videos.py --audio auto|off`). Alignment recorded in state, event log (schema 5) and contributions.
 - [x] **Fusion** (`30074ab`, `fusion/evidence.py`, `tci.py`): modalities video detector / video classifier / audio; one visual modality → L3, two → L4 (weaker sets it), three → ≥ L5 (0.86); audio alone ≤ L2; aggression (`audio_aggression`) corroborates a visible weapon but never stands alone; fight rule and banter rule (D15); weapon person gate applies to audio too; unknown person and armed PIR/door activity → `intrusion_level` 0.30 (clamped under L3) in both modes; every result carries `contributions` (video detector, scene model, audio or why unavailable, people, motion, identity, sensors) shown on the dashboard's Threat Analysis card; gpio PIR/door events reach `Pipeline.note_sensor`. SOS: `assault` joins `alarm_classes` (corroborated only), intrusion requests behind `SENTRIX_SOS_INTRUSION`.
@@ -626,7 +648,7 @@ log-only, gunshot/glass-break data track (non-gating).
 
 **Owner decisions surfaced by M1–M5:** (1) CUDA torch in the app env (Python 3.14 needs a cp314 CUDA wheel, or move the app env to 3.11/3.12) — moves DINOv2 to the RTX 4060; not needed for 5 Hz on CPU. (2) A folder of ≥ 3 h normal footage from the demo room for `--negatives` (G3). (3) Pre-roll evidence clips need a multi-frame vault format (M3 deferral). (4) Re-test live on the real webcam: video should now run at camera rate and the TCI should match the level.
 
-**Owner decisions surfaced by M11:** (5) Home mode now raises an L2 "unrecognised person" after 10 s (D2 as amended, owner requirement 4): every unenrolled guest becomes an L2 incident on the dashboard - keep it, lengthen `SENTRIX_UNKNOWN_HOME_DWELL`, or set `SENTRIX_UNKNOWN_ALERT_HOME=0` (logged only). (6) Talk-down speaker hardware: USB adapter + PAM8403 + 3 W speaker (≈ ₹450) or a USB speakerphone (≈ ₹1,500–2,500, also the microphone). (7) Record the audio sessions of ROADMAP §15.1 (play-fighting vs staged fights with sound, laughter, shouting, TV, alarm beeps, gunshot/glass sounds from a speaker) before any fight or audio claim is made.
+**Owner decisions surfaced by M11:** (5) Home mode now raises an L2 "unrecognised person" after 10 s (D2 as amended, owner requirement 4): every unenrolled guest becomes an L2 incident on the dashboard - keep it, lengthen `SENTRIX_UNKNOWN_HOME_DWELL`, or set `SENTRIX_UNKNOWN_ALERT_HOME=0` (logged only). (6) ~~Talk-down speaker hardware~~ - decided: no speaker and no buzzer (D19). (7) Record the audio sessions of ROADMAP §15.1 (play-fighting vs staged fights with sound, laughter, shouting, TV, alarm beeps, gunshot/glass sounds from a speaker) before any fight or audio claim is made.
 
 Demo dates: **2026-11-30** and **2026-12-05** (final panel). Room; which camera (laptop webcam vs a mounted USB camera — data
 must be recorded with it); permission for replica weapons and flames on campus;

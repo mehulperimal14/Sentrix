@@ -15,7 +15,6 @@ Defaults and why:
   second contact to a GPIO (closed to GND = armed). Without it,
   ``siren_armed`` (default on) states the switch position for the software.
 * ``tamper_pin`` none — an enclosure lid switch (closed to GND = lid shut).
-* ``buzzer_enabled`` on — the local chirps for L2/L3 (docs/8_RASPBERRY_PI5_INTEGRATION.md §6).
 * ``inputs`` pir, door, mains — the inputs wired; an unwired one would read a
   fixed level (door "open", mains "lost") and is left out instead.
 * ``bme280`` / ``dht22`` off — room sensors through the kernel IIO drivers.
@@ -120,10 +119,6 @@ def tamper_pin() -> int | None:
     return _optional_pin("gpio", "tamper_pin", "SENTRIX_TAMPER_PIN")
 
 
-def buzzer_enabled() -> bool:
-    return _bool("gpio", "buzzer_enabled", "SENTRIX_BUZZER_ENABLED", True)
-
-
 INPUT_NAMES = ("pir", "door", "mains")
 
 
@@ -169,5 +164,5 @@ def picamera_rotation() -> int:
 
 
 __all__ = ["parse_size", "siren_max_on_seconds", "siren_arm_pin", "siren_armed_flag",
-           "tamper_pin", "buzzer_enabled", "bme280_enabled", "dht22_enabled",
+           "tamper_pin", "bme280_enabled", "dht22_enabled",
            "picamera_main_size", "picamera_lores_size", "parse_rotation", "picamera_rotation"]

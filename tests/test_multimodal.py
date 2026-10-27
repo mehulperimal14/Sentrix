@@ -324,34 +324,17 @@ class TestSoundModel:
 
 
 class TestSelfOutput:
-    """Review F3: the device's own speaker, siren or buzzer is not the room."""
+    """Review F3: the device's own siren is not the room."""
 
-    def test_a_window_over_the_speaker_does_not_vote(self):
+    def test_a_window_over_the_siren_does_not_vote(self):
         engine = AudioEngine(capture=False)
-        self_output.mark("speaker", 2.0, at=10.0)
+        self_output.mark("siren", 2.0, at=10.0)
         loud = np.random.default_rng(0).normal(0, 0.2, 16000 * 4).astype(np.float32)
         result = engine.classify_window(loud, start=8.0, end=12.0)
         assert result.model == "self"
         assert alignment(result, 12.0)["status"] == "self_output"
         later = engine.classify_window(np.zeros(16000 * 4, np.float32), start=20.0, end=24.0)
         assert later.model == "quiet"
-
-    def test_the_speaker_marks_its_playback(self):
-        from sentrix.io.speaker import Player, Speaker
-        heard_during = []
-
-        class Probe(Player):
-            name, real = "probe", True
-
-            def play(self, text):
-                import time
-                now = time.monotonic()
-                heard_during.append(self_output.overlapping(now - 0.1, now))
-
-        speaker = Speaker(dataclasses.replace(settings.speaker, enabled=True), player=Probe(),
-                          audit=lambda *a, **k: None, background=False)
-        assert speaker.say("hello").ok
-        assert heard_during == ["speaker"]
 
     def test_a_siren_marks_its_sound(self):
         from sentrix.io.actuators import SoundSiren

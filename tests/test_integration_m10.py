@@ -63,7 +63,7 @@ class TestHardwareConfig:
         from sentrix.config import settings
         gpio, node = settings.gpio, settings.node
         assert gpio.siren_max_on_seconds == 90.0 and gpio.siren_arm_pin is None
-        assert gpio.siren_armed is True and gpio.tamper_pin is None and gpio.buzzer_enabled
+        assert gpio.siren_armed is True and gpio.tamper_pin is None
         assert node.bme280 is False and node.dht22 is False
         assert (node.picamera_main, node.picamera_lores) == ("1280x720", "640x480")
 

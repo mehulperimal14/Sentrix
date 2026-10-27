@@ -103,9 +103,10 @@ echo "SENTRIX Pi setup: $MODEL, app in $APP_DIR, service user $SERVICE_USER"
 
 # ── 1. apt ────────────────────────────────────────────────────────────────────
 REQUIRED_PKGS="python3-venv python3-pip python3-picamera2 python3-libcamera python3-lgpio \
-libportaudio2 network-manager ufw espeak-ng alsa-utils ffmpeg"
-# espeak-ng + alsa-utils: the talk-down speaker (D16, offline TTS piped to
-# aplay on the USB audio adapter); ffmpeg: replaying a video's soundtrack.
+libportaudio2 network-manager ufw alsa-utils ffmpeg"
+# alsa-utils: arecord -l to find the USB microphone (and recording sessions),
+# aplay for the sound-file siren; ffmpeg: replaying a video's soundtrack.
+# No espeak-ng: the device has no talk-down speaker (D19).
 OPTIONAL_PKGS="rpicam-apps-lite raspi-utils i2c-tools"
 if [ "$APT" = 1 ]; then
     say "apt packages"

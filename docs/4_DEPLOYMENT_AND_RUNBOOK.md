@@ -128,7 +128,7 @@ field and default, are doc 7 §3.1–§3.4.
 | `SENTRIX_SOS_ENABLED` | SOS assistance requests at a confirmed L3 | a PIN: the Portal profile's, or `SENTRIX_SOS_PIN_HASH` on a standalone device (else the console password is accepted at the PIN prompt) |
 | `SENTRIX_CHANNELS_ENABLED` | channel router and outbox | `SENTRIX_MODEM_ENABLED` (+ `SENTRIX_MODEM_PORT`) for the 4G modem; Telegram / e-mail secrets only for a standalone device |
 | `SENTRIX_LINK_ENABLED` | link to the Portal | `SENTRIX_PORTAL_URL`; an `identity.json` from `tools/provision_device.py` in `SENTRIX_DEVICE_IDENTITY_DIR` (default `/etc/sentrix`, else `var/link`) |
-| `SENTRIX_NODE_ENABLED`, `SENTRIX_GPIO_ENABLED` | telemetry; LEDs, buzzer and inputs | a Pi (mock pins elsewhere) |
+| `SENTRIX_NODE_ENABLED`, `SENTRIX_GPIO_ENABLED` | telemetry; LEDs and inputs | a Pi (mock pins elsewhere) |
 | `SENTRIX_PIPELINE_MODE=clip` | the 4-second clip engine | `SENTRIX_RUNTIME=onnx` and exports from `tools/export_models.py` for speed |
 
 ### 4.3 Sending: test mode and the two switches

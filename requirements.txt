@@ -57,7 +57,6 @@ pandas>=2.2.0                 # event-log tooling and notebooks
 sounddevice>=0.4.7            # microphone capture
 soundfile>=0.12.1
 librosa>=0.10.2               # fallback mel front end
-pyttsx3>=2.90                 # talk-down speaker (D16): SAPI5 / espeak-ng, offline
 
 # ── notifications (optional, degrades to console) ─────────────────────────────
 # Every send passes sentrix/alerting/guard.py: nothing leaves the machine
@@ -72,7 +71,7 @@ pyotp>=2.9.0                  # TOTP for admin and Desk operator accounts
 qrcode[pil]>=7.4.2            # device labels and the claim QR
 
 # ── Raspberry Pi hardware (pure Python; mock pins on a laptop) ───────────────
-gpiozero>=2.0.1               # siren relay, LEDs, buzzer, PIR, door, mains-sense
+gpiozero>=2.0.1               # siren relay, LEDs, PIR, door, mains-sense
 
 # ── development ───────────────────────────────────────────────────────────────
 pytest>=8.0.0

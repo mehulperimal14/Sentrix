@@ -714,15 +714,6 @@ class LinkHub:
                            target_id=device.id,
                            detail={k: _text(payload.get(k), 100) for k in
                                    ("event", "person", "file", "via", "by", "reason")})
-        elif kind == "speaker.audit":
-            chars = payload.get("chars")
-            security.audit(db, "device.speaker_say", actor_type="device", actor_id=device.id,
-                           household_id=household_id, target_type="device",
-                           target_id=device.id,
-                           detail={"by": _text(payload.get("by"), 64),
-                                   "preset": _text(payload.get("preset"), 32),
-                                   "chars": int(chars) if isinstance(chars, int) else None,
-                                   "backend": _text(payload.get("backend"), 32)})
         elif kind == "mode.changed":
             device.armed = bool(payload.get("armed"))
             security.audit(db, "mode.set", actor_type="device", actor_id=device.id,

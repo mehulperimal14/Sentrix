@@ -1,4 +1,4 @@
-"""Pi 5 header I/O on gpiozero: status LEDs, buzzer and the sensor inputs.
+"""Pi 5 header I/O on gpiozero: status LEDs and the sensor inputs.
 
 **RPi.GPIO does not work on a Raspberry Pi 5** (the header sits behind the
 RP1 south bridge); gpiozero drives it through lgpio (docs/8_RASPBERRY_PI5_INTEGRATION.md §3). Off a Pi
@@ -13,7 +13,6 @@ GPIO    Device                     Meaning
 ======  =========================  ===========================================
 17      siren relay (NPN driver)   ``sentrix.io.actuators.GpioSiren``, not here
 5/12/13 green / amber / red LED    see :func:`led_patterns`
-26      active buzzer (NPN)        chirps, see :func:`buzzer_events`
 23      PIR (HC-SR50x, 3.3 V out)  motion: pin high
 24      door reed to GND, pull-up  contact closed = door closed
 16      PC817 mains sense, pull-up output low while mains is present
@@ -21,15 +20,18 @@ opt.    siren arming key, pull-up  closed to GND = siren line armed
 opt.    enclosure lid, pull-up     closed to GND = lid shut (open = tamper)
 ======  =========================  ===========================================
 
+The device has no buzzer and no speaker (removed from the hardware on
+2026-10-27, D19): the LEDs, the Local Console and the siren are its outputs.
+
 The service (``build_service``, flag ``SENTRIX_GPIO_ENABLED``) owns these
 devices. One thread polls the live state five times a second and turns it
-into LED patterns and buzzer chirps; inputs arrive on gpiozero's callbacks,
-are debounced in software (a level must hold for ``input_bounce_seconds``),
-and are re-checked by the same poll in case an edge was missed. Accepted
-input changes update the ``node`` state block, are written to the session
-event log (``node_input`` / ``node_alert`` audit rows) and, for mains loss,
-mains return and tamper, are published to the Portal as ``node.alert``
-(docs/7 §5.5).
+into LED patterns; inputs arrive on gpiozero's callbacks, are debounced in
+software (a level must hold for ``input_bounce_seconds``), and are re-checked
+by the same poll in case an edge was missed. Accepted input changes update
+the ``node`` state block, are written to the session event log
+(``node_input`` / ``node_alert`` audit rows) and, for mains loss, mains
+return and tamper, are published to the Portal as ``node.alert`` (docs/7
+§5.5).
 
 Pin factory (``SENTRIX_GPIO_PIN_FACTORY``): ``""`` auto = lgpio on a
 Raspberry Pi, mock elsewhere; ``lgpio``; ``mock``. One factory instance per
@@ -62,13 +64,6 @@ PATTERN_ORDER = (OFF, SLOW, FAST, SOLID)
 #: (on seconds, off seconds) of the blinking patterns.
 BLINK_TIMES = {SLOW: (1.0, 1.0), FAST: (0.2, 0.2)}
 
-#: Buzzer patterns: (on seconds, off seconds, repeats).
-CHIRP_SHORT = (0.08, 0.12)
-CHIRP_LONG = (0.5, 0.3)
-#: ``buzzer_test``: at most one test chirp this often.
-BUZZER_TEST_MIN_INTERVAL_SECONDS = 3.0
-#: Committed level -> short chirps when the level rises to it. L5 is the siren.
-LEVEL_CHIRPS = {2: 1, 3: 2, 4: 3}
 #: A PIR motion row in the event log at most this often (a busy room).
 PIR_LOG_INTERVAL_SECONDS = 30.0
 
@@ -271,8 +266,7 @@ def pin_conflicts(cfg: Any) -> list[str]:
     """Pins assigned to more than one function (a wiring/config error)."""
     used: dict[int, list[str]] = {}
     outputs = {"siren": cfg.siren_pin, "led_green": cfg.led_green_pin,
-               "led_amber": cfg.led_amber_pin, "led_red": cfg.led_red_pin,
-               "buzzer": cfg.buzzer_pin}
+               "led_amber": cfg.led_amber_pin, "led_red": cfg.led_red_pin}
     for name, pin in outputs.items():
         used.setdefault(int(pin), []).append(name)
     for spec in input_specs(cfg):
@@ -281,7 +275,7 @@ def pin_conflicts(cfg: Any) -> list[str]:
             if len(names) > 1]
 
 
-# ── what the LEDs and the buzzer say ──────────────────────────────────────────
+# ── what the LEDs say ─────────────────────────────────────────────────────────
 def _stronger(a: str, b: str) -> str:
     return a if PATTERN_ORDER.index(a) >= PATTERN_ORDER.index(b) else b
 
@@ -339,29 +333,6 @@ def led_patterns(live: dict[str, Any], *, setup_mode: bool = False) -> dict[str,
     return {"green": green, "amber": amber, "red": red}
 
 
-def buzzer_events(previous: dict[str, Any] | None, live: dict[str, Any]) -> list[tuple]:
-    """Chirps owed for the change from ``previous`` to ``live`` (each
-    ``(on, off, n)``). Nothing on the first snapshot, so a restart is quiet.
-
-    Committed level rises to L2/L3/L4: 1/2/3 short chirps (L5 is the siren's
-    job). The Portal claims the device: one short chirp. An approved SOS turns
-    FAILED (help not delivered): one long tone.
-    """
-    if previous is None:
-        return []
-    events: list[tuple] = []
-    before, now = int(previous.get("level") or 1), int(live.get("level") or 1)
-    if now > before and now in LEVEL_CHIRPS:
-        events.append((*CHIRP_SHORT, LEVEL_CHIRPS[now]))
-    if (live.get("link") or {}).get("claimed") and not (previous.get("link") or {}).get("claimed"):
-        events.append((*CHIRP_SHORT, 1))
-    failed_now = str((live.get("sos") or {}).get("state") or "").upper() == "FAILED"
-    failed_before = str((previous.get("sos") or {}).get("state") or "").upper() == "FAILED"
-    if failed_now and not failed_before:
-        events.append((1.0, 0.0, 1))
-    return events
-
-
 # ── the service ───────────────────────────────────────────────────────────────
 def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -395,7 +366,7 @@ def default_publish(kind: str, payload: dict[str, Any]) -> None:
 
 
 class GpioService:
-    """LEDs, buzzer and inputs (docs/7 §3.6 service; name ``gpio``).
+    """LEDs and inputs (docs/7 §3.6 service; name ``gpio``).
 
     ``pin_factory`` overrides the shared one (tests pass a ``MockFactory``);
     ``audit``/``publish``/``timer_factory``/``siren`` replace the event log,
@@ -432,19 +403,15 @@ class GpioService:
         self._thread: threading.Thread | None = None
         self._started = False
         self.leds: dict[str, Any] = {}
-        self.buzzer: Any = None
         self.inputs: dict[str, Any] = {}
         self._debouncers: dict[str, Debouncer] = {}
         self._specs: dict[str, InputSpec] = {}
         self.values: dict[str, Any] = {}
         self.patterns: dict[str, str] = {}
         self.errors: dict[str, str] = {}
-        self._previous_live: dict[str, Any] | None = None
         self._last_pir_logged: float | None = None
         self._pir_suppressed = 0
         self._last_block: dict[str, Any] | None = None
-        self._last_buzzer_test: float | None = None
-        self.buzzer_enabled = tunables.buzzer_enabled()
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
     def start(self) -> None:
@@ -477,16 +444,14 @@ class GpioService:
             actuators.clear_arming_source(self.siren_armed)
             for debouncer in self._debouncers.values():
                 debouncer.cancel()
-            for device in [*self.leds.values(), self.buzzer, *self.inputs.values()]:
-                if device is None:
-                    continue
+            for device in [*self.leds.values(), *self.inputs.values()]:
                 try:
                     if hasattr(device, "off"):
                         device.off()
                     device.close()
                 except Exception as exc:
                     log.debug("GPIO close: %s", exc)
-            self.leds, self.buzzer, self.inputs = {}, None, {}
+            self.leds, self.inputs = {}, {}
             self._debouncers.clear()
             self.patterns = {}
         log.info("GPIO service stopped")
@@ -499,7 +464,7 @@ class GpioService:
 
     # ── devices ───────────────────────────────────────────────────────────────
     def _open_devices(self) -> None:
-        from gpiozero import LED, Buzzer, DigitalInputDevice
+        from gpiozero import LED, DigitalInputDevice
         factory = self.factory_info.factory
         for colour in ("green", "amber", "red"):
             pin = getattr(self.cfg, f"led_{colour}_pin")
@@ -509,12 +474,6 @@ class GpioService:
                 self.patterns[colour] = OFF
             except Exception as exc:
                 self.errors[f"led_{colour}"] = f"GPIO{pin}: {exc}"
-        try:
-            self.buzzer = Buzzer(self.cfg.buzzer_pin, active_high=self.cfg.buzzer_active_high,
-                                 initial_value=False,
-                                 pin_factory=factory)
-        except Exception as exc:
-            self.errors["buzzer"] = f"GPIO{self.cfg.buzzer_pin}: {exc}"
         for spec in input_specs(self.cfg):
             try:
                 device = DigitalInputDevice(spec.pin, pull_up=spec.pull_up,
@@ -566,11 +525,8 @@ class GpioService:
             forward_sensor_event(name, door=value if name == "door" else None)
         if name == "mains":
             self._alert("mains_restored" if value else "mains_lost", {})
-            if not value:
-                self._beep(*CHIRP_LONG, 1)
         elif name == "tamper" and value:
             self._alert("tamper", {})
-            self._beep(*CHIRP_LONG, 3)
         self._publish_block()
 
     def _log_motion(self, motion: bool) -> None:
@@ -611,43 +567,6 @@ class GpioService:
             except Exception as exc:
                 self.errors[f"led_{colour}"] = str(exc)
 
-    def _beep(self, on: float, off: float, count: int) -> None:
-        if self.buzzer is None or not self.buzzer_enabled:
-            return
-        try:
-            from sentrix.io import self_output
-            self_output.mark("buzzer", (on + off) * max(1, int(count)))
-            self.buzzer.beep(on_time=on, off_time=off, n=count, background=True)
-        except Exception as exc:
-            self.errors["buzzer"] = str(exc)
-
-    def buzzer_test(self, actor: str = "") -> dict[str, Any]:
-        """Two short chirps (an L3's), so whoever wires the buzzer hears it at
-        once: ``{"ok", "code", "message"}``. A buzzer that sounds non-stop
-        before the test has the opposite trigger level
-        (``SENTRIX_BUZZER_ACTIVE_HIGH``)."""
-        if self.buzzer is None:
-            reason = self.errors.get("buzzer") or "the GPIO service has no buzzer pin"
-            return {"ok": False, "code": "conflict", "message": f"No buzzer: {reason}."}
-        if not self.buzzer_enabled:
-            return {"ok": False, "code": "conflict",
-                    "message": "The buzzer is switched off (SENTRIX_BUZZER_ENABLED=0)."}
-        now = self._clock()
-        with self._lock:
-            last = self._last_buzzer_test
-            if last is not None and now - last < BUZZER_TEST_MIN_INTERVAL_SECONDS:
-                return {"ok": False, "code": "rate_limited",
-                        "retry_after": BUZZER_TEST_MIN_INTERVAL_SECONDS - (now - last),
-                        "message": "One test every few seconds."}
-            self._last_buzzer_test = now
-        self._beep(*CHIRP_SHORT, 2)
-        self._audit("buzzer_test", by=actor, pin=self.cfg.buzzer_pin,
-                    active_high=bool(self.cfg.buzzer_active_high))
-        return {"ok": True, "code": "ok", "pin": self.cfg.buzzer_pin,
-                "active_high": bool(self.cfg.buzzer_active_high),
-                "real": bool(self.factory_info.real),
-                "message": f"Two chirps on GPIO{self.cfg.buzzer_pin}."}
-
     def lamp_test(self, seconds: float = 0.5) -> None:
         """Every LED on briefly at start-up, so a dead LED shows at once."""
         with self._lock:
@@ -668,8 +587,8 @@ class GpioService:
 
     # ── the loop ──────────────────────────────────────────────────────────────
     def poll_once(self) -> None:
-        """Re-check the inputs, drive the LEDs and the buzzer from the live
-        state, and publish the gpio block when anything changed."""
+        """Re-check the inputs, drive the LEDs from the live state, and
+        publish the gpio block when anything changed."""
         with self._lock:
             if not self._started:
                 return
@@ -681,9 +600,6 @@ class GpioService:
             if not self._started:
                 return
             self.apply_patterns(led_patterns(live, setup_mode=self.ctx.settings.web.setup_mode))
-            previous, self._previous_live = self._previous_live, _summary(live)
-        for event in buzzer_events(previous, live):
-            self._beep(*event)
         self._release_overdue_siren()
         self._publish_block()
 
@@ -718,7 +634,6 @@ class GpioService:
                 "pin_factory": self.factory_info.kind, "real": self.factory_info.real,
                 "siren": siren_block,
                 "leds": {c: self.patterns.get(c) for c in ("green", "amber", "red")},
-                "buzzer": None if self.buzzer is None else bool(self.buzzer.is_active),
                 "pir": self.values.get("pir"), "door": self.values.get("door"),
                 "mains": self.values.get("mains"),
                 "siren_armed": self.values.get("siren_armed"),
@@ -744,12 +659,6 @@ def _kind_of(factory: Any) -> str:
     if "mock" in name:
         return "mock"
     return "lgpio" if "lgpio" in name else name.replace("factory", "") or "unknown"
-
-
-def _summary(live: dict[str, Any]) -> dict[str, Any]:
-    """The fields :func:`buzzer_events` compares, copied."""
-    return {"level": live.get("level"), "link": dict(live.get("link") or {}),
-            "sos": dict(live.get("sos") or {})}
 
 
 # ── service factory and doctor rows ───────────────────────────────────────────
@@ -786,7 +695,7 @@ def preflight(settings: Any) -> list[dict[str, str]]:
     rows.append({"status": "fail" if conflicts else "ok", "name": "pin map",
                  "detail": "; ".join(conflicts) if conflicts else
                  f"siren {cfg.siren_pin}, LEDs {cfg.led_green_pin}/{cfg.led_amber_pin}/"
-                 f"{cfg.led_red_pin}, buzzer {cfg.buzzer_pin}, PIR {cfg.pir_pin}, door "
+                 f"{cfg.led_red_pin}, PIR {cfg.pir_pin}, door "
                  f"{cfg.door_pin}, mains {cfg.mains_sense_pin}"})
     arm = tunables.siren_arm_pin()
     armed = tunables.siren_armed_flag()
@@ -797,11 +706,11 @@ def preflight(settings: Any) -> list[dict[str, str]]:
                   "SENTRIX_SIREN_ARMED=0: siren tests are refused")})
     if not settings.gpio.enabled:
         rows.append({"status": "ok", "name": "service", "detail":
-                     "off (SENTRIX_GPIO_ENABLED=0): no LEDs, buzzer or inputs"})
+                     "off (SENTRIX_GPIO_ENABLED=0): no LEDs or inputs"})
     return rows
 
 
 __all__ = ["GpioService", "build_service", "preflight", "PinFactoryInfo",
            "resolve_pin_factory", "shared_pin_factory", "Debouncer", "InputSpec",
-           "input_specs", "pin_conflicts", "led_patterns", "buzzer_events",
+           "input_specs", "pin_conflicts", "led_patterns",
            "OFF", "SLOW", "FAST", "SOLID", "MOCK_REVISION"]

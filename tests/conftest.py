@@ -12,10 +12,9 @@ below is in place before anything imports ``sentrix``:
   (the device ``var/`` tree via ``SENTRIX_VAR_DIR``, Portal data dir and
   database, device identity dir).
 * **No webcam, no microphone, no sound.** ``CAMERA_SOURCES`` points at a
-  missing file, ``SENTRIX_AUDIO=0``, the speaker is off on the console
-  backend, and a device guard makes ``cv2.VideoCapture(<index>)``,
-  ``CaptureSource(<index>)``, ``sounddevice`` capture and playback and the
-  speaker's real players raise :class:`DeviceBlocked`.
+  missing file, ``SENTRIX_AUDIO=0``, and a device guard makes
+  ``cv2.VideoCapture(<index>)``, ``CaptureSource(<index>)`` and
+  ``sounddevice`` capture and playback raise :class:`DeviceBlocked`.
 * **No network.** A socket guard allows loopback only; anything else raises
   :class:`NetworkBlocked` (an ``OSError``) and is recorded in
   ``BLOCKED_CONNECTIONS``.
@@ -72,8 +71,6 @@ _FORCED_ENV = {
     # does not exist, and audio is off (the device guard below enforces it)
     "CAMERA_SOURCES": str(_SESSION_DIR / "no-camera-in-tests.mp4"),
     "SENTRIX_AUDIO": "0",
-    # no sound out of the speaker either (D16): off, and logs only
-    "SENTRIX_SPEAKER_ENABLED": "0", "SENTRIX_SPEAKER_BACKEND": "console",
 }
 os.environ.update(_FORCED_ENV)
 
@@ -212,18 +209,8 @@ def _no_capture_devices():
         return real_init(self, source, *args, **kwargs)
 
     sources.CaptureSource.__init__ = guarded_init
-    # The talk-down speaker's real players never run in a test (D16).
-    from sentrix.io import speaker
-    real_players = (speaker.Pyttsx3Player.play, speaker.EspeakPlayer.play)
-
-    def blocked_play(self, text):
-        _block_device(f"speaker {type(self).__name__}.play")
-
-    speaker.Pyttsx3Player.play = blocked_play
-    speaker.EspeakPlayer.play = blocked_play
     yield
     sources.CaptureSource.__init__ = real_init
-    speaker.Pyttsx3Player.play, speaker.EspeakPlayer.play = real_players
 
 
 def pytest_terminal_summary(terminalreporter):
@@ -256,8 +243,6 @@ def _sentrix_isolation(tmp_path, monkeypatch):
         actuators.clear_arming_source()
     if "sentrix.io.gpio" in sys.modules:
         sys.modules["sentrix.io.gpio"]._reset_shared_pin_factory()
-    if "sentrix.io.speaker" in sys.modules:
-        sys.modules["sentrix.io.speaker"]._reset_speaker()
     if "sentrix.io.self_output" in sys.modules:
         sys.modules["sentrix.io.self_output"].clear()
 

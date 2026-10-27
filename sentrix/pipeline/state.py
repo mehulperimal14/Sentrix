@@ -91,9 +91,6 @@ _INITIAL: dict[str, Any] = {
     "audio": {"status": "disabled"},
     "fusion": {"class": "normal", "state": "none", "rule": None, "modalities": {},
                "context": {}, "sensors": {}},
-    # D16: the talk-down speaker (sentrix.io.speaker).
-    "speaker": {"enabled": False, "backend": None, "ready": False, "speaking": False,
-                "last": None},
     "uncertainty": 0.0,
     "confidence_band": [0.0, 0.0],
     "fusion_source": "unknown",

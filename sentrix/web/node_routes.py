@@ -4,7 +4,7 @@ Owner: track T-HW. Included by ``sentrix.web.extensions``.
 
 * ``GET /api/node`` — the ``state.node`` block (the node and gpio services
   write it; ``NODE_IDLE`` while they are off) with ``gpio = {siren, leds:
-  {green, amber, red}, buzzer, pir, door, mains}``, plus the siren as the
+  {green, amber, red}, pir, door, mains}``, plus the siren as the
   pipeline sees it (backend, real, armed, on), the test limiter, the camera
   stream's status (Picamera2) and which hardware services run.
 * ``POST /api/node/siren-test`` — 1 s of siren through
@@ -12,9 +12,6 @@ Owner: track T-HW. Included by ``sentrix.web.extensions``.
   ``siren.test`` command: one test per minute for the whole process). 409
   ``conflict`` while the siren line is disarmed, 429 ``rate_limited`` with
   ``Retry-After``.
-* ``POST /api/node/buzzer-test`` — two short chirps on the local buzzer
-  (``GpioService.buzzer_test``), to check its wiring and trigger level. Device
-  admin on the LAN only: the tunnel path table has no class for it.
 
 Who may test is the tunnel path table's rule (owner + step-up ≤ 300 s,
 ``sentrix/link/policy.py``) and the device admin on the LAN; like every
@@ -72,10 +69,6 @@ def node_payload() -> dict[str, Any]:
     health = services.registry.health()
     payload["services"] = {name: (health.get(name) or {}).get("status", "off")
                            for name in ("node", "gpio")}
-    from sentrix.io.speaker import get_speaker
-    speaker = get_speaker().status()
-    payload["speaker"] = {k: speaker[k] for k in ("enabled", "backend", "real", "ready",
-                                                  "speaking", "last")}
     return payload
 
 
@@ -90,23 +83,6 @@ async def api_siren_test(principal: LcPrincipal = Depends(require_lc())) -> JSON
 
     pipeline = await asyncio.to_thread(_pipeline)
     result = await asyncio.to_thread(siren_test, pipeline.siren, actor=principal.to_actor())
-    if not result["ok"]:
-        headers = None
-        if result.get("retry_after"):
-            headers = {"Retry-After": str(max(1, math.ceil(result["retry_after"])))}
-        raise LcError(result["code"], result["message"], headers=headers)
-    return JSONResponse(result)
-
-
-@router.post("/api/node/buzzer-test")
-async def api_buzzer_test(principal: LcPrincipal = Depends(require_lc("device_admin"))
-                          ) -> JSONResponse:
-    from sentrix import services
-
-    service = services.registry.get("gpio")
-    if service is None or not getattr(service, "_started", False):
-        raise LcError("conflict", "The GPIO service is off (SENTRIX_GPIO_ENABLED=1 on the Pi).")
-    result = await asyncio.to_thread(service.buzzer_test, actor=principal.to_actor().ref)
     if not result["ok"]:
         headers = None
         if result.get("retry_after"):

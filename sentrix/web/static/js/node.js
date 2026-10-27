@@ -38,15 +38,6 @@
             : [S.h("tr", {}, S.h("td", { class: "muted", text: "Nothing reported." }))]));
     }
 
-    // The talk-down speaker (D16): backend, whether it makes real sound.
-    function speakerText(speaker) {
-        if (!speaker || typeof speaker !== "object") return null;
-        if (!speaker.enabled) return "off (SENTRIX_SPEAKER_ENABLED=0)";
-        const parts = [String(speaker.backend || "none") + (speaker.real ? "" : " (no sound)")];
-        if (speaker.speaking) parts.push("speaking");
-        return parts.join(", ");
-    }
-
     function renderNode(node) {
         node = node || {};
         fillTable("node-telemetry", [
@@ -64,11 +55,9 @@
         fillTable("node-gpio", [
             ["Siren", gpio.siren !== undefined ? sirenText(gpio.siren) : node.siren_armed],
             ["LED green / amber / red", gpio.leds ? `${fmt(leds.green)} / ${fmt(leds.amber)} / ${fmt(leds.red)}` : null],
-            ["Buzzer", gpio.buzzer],
             ["Motion (PIR)", gpio.pir !== undefined ? gpio.pir : node.pir],
             ["Door", gpio.door !== undefined ? gpio.door : node.door],
             ["Mains sense", gpio.mains !== undefined ? gpio.mains : node.mains],
-            ["Speaker (talk-down)", speakerText(node.speaker)],
         ]);
         const note = document.getElementById("node-telemetry-note");
         if (note) {
@@ -208,21 +197,6 @@
             : result.detail);
     }
 
-    async function buzzerTest(button) {
-        const status = document.getElementById("buzzer-test-message");
-        button.disabled = true;
-        const result = await S.api("/api/node/buzzer-test", { method: "POST" });
-        setTimeout(() => { button.disabled = false; }, 3000);
-        if (result.ok) {
-            S.message(status, true, (result.data && result.data.message) || "Two chirps.");
-            return;
-        }
-        S.message(status, false,
-            result.status === 404 ? "The buzzer test is not installed on this build."
-            : result.code === "rate_limited" ? "One test every few seconds."
-            : result.detail);
-    }
-
     function renderClip(clip) {
         // state.clip (track T-CLIP): the 4-second clip engine, or the tick loop.
         clip = clip || {};
@@ -261,8 +235,6 @@
             confirm.addEventListener("change", () => { siren.disabled = !confirm.checked; });
             siren.addEventListener("click", () => sirenTest(siren));
         }
-        const buzzer = document.getElementById("buzzer-test-btn");
-        if (buzzer) buzzer.addEventListener("click", () => buzzerTest(buzzer));
         const arm = document.getElementById("mode-arm");
         if (arm) arm.addEventListener("click", () => setMode(true));
         const disarm = document.getElementById("mode-disarm");

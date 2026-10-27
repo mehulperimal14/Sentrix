@@ -122,20 +122,6 @@
       </div>
     </div>
 
-    {% if 'speaker' in caps %}
-    <!-- Talk-down speaker (D16): the owner's words, spoken at the device -->
-    <div class="card speaker-card" id="speaker-card">
-      <div class="card-label">Speak to the room</div>
-      <div class="card-line" id="speaker-status">speaker: checking…</div>
-      <div class="speaker-presets" id="speaker-presets"></div>
-      <div class="speaker-row">
-        <input type="text" id="speaker-text" maxlength="200" placeholder="Type a message (200 characters)" aria-label="Message to speak in the room">
-        <button type="button" class="btn btn-sm" id="speaker-send">Speak</button>
-      </div>
-      <div class="sos-message" id="speaker-message" role="status" aria-live="polite"></div>
-    </div>
-    {% endif %}
-
   </div>
 </div>
 
@@ -200,7 +186,4 @@
 
 {% block scripts %}
 <script src="{{ static_url('js/dashboard.js') }}" nonce="{{ csp_nonce }}"></script>
-{% if 'speaker' in caps %}
-<script src="{{ static_url('js/speaker.js') }}" nonce="{{ csp_nonce }}"></script>
-{% endif %}
 {% endblock %}

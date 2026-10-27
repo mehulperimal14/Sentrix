@@ -218,7 +218,7 @@ logs, link messages).
 | Part | Code | State |
 |---|---|---|
 | Siren relay | `io/actuators.py` | gpiozero, tested on mock pins |
-| Status LEDs (GPIO5/12/13), buzzer (GPIO26) | `io/gpio.py` | tested on mock pins; off unless `SENTRIX_GPIO_ENABLED=1` |
+| Status LEDs (GPIO5/12/13); no buzzer (D19) | `io/gpio.py` | tested on mock pins; off unless `SENTRIX_GPIO_ENABLED=1` |
 | PIR (GPIO23), door contact (GPIO24), mains sense (GPIO16), tamper, arming key | `io/gpio.py` | debounced inputs; mains lost/restored and tamper go to the event log and the Portal |
 | CPU temperature, throttling, 5 V supply, BME280 / DHT22 | `io/node.py`, `io/sensors.py` | tested against a fake `vcgencmd` and `/sys` tree; off unless `SENTRIX_NODE_ENABLED=1` |
 | Pi camera | `io/picamera.py` | tested with a fake `picamera2` |

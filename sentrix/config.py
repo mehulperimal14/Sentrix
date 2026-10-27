@@ -355,30 +355,6 @@ class AudioConfig:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Talk-down speaker (D16)
-# ──────────────────────────────────────────────────────────────────────────────
-@dataclass(frozen=True)
-class SpeakerConfig:
-    """Offline text-to-speech to a speaker at the device (D16).
-
-    Off by default (it makes sound in the room). ``backend``: ``auto``
-    (pyttsx3 - SAPI5 on Windows, espeak-ng on Linux - else the ``espeak-ng``
-    command), ``pyttsx3``, ``espeak`` or ``console`` (logs only).
-    """
-
-    enabled: bool = _env_bool("SENTRIX_SPEAKER_ENABLED", False)
-    backend: str = _env_str("SENTRIX_SPEAKER_BACKEND", "auto").lower()
-    #: ALSA/PortAudio device name for espeak-ng (``-d``); empty = default.
-    device: str = _env_str("SENTRIX_SPEAKER_DEVICE", "")
-    volume: float = _env_float("SENTRIX_SPEAKER_VOLUME", 0.9)
-    rate_wpm: int = _env_int("SENTRIX_SPEAKER_RATE", 150)
-    max_chars: int = 200
-    #: Messages per minute for the whole device.
-    per_minute: int = _env_int("SENTRIX_SPEAKER_PER_MINUTE", 3)
-    repeat: int = 1
-
-
-# ──────────────────────────────────────────────────────────────────────────────
 # Behaviour / kinematics
 # ──────────────────────────────────────────────────────────────────────────────
 @dataclass(frozen=True)
@@ -806,7 +782,6 @@ class GpioConfig:
     led_green_pin: int = 5
     led_amber_pin: int = 12
     led_red_pin: int = 13
-    buzzer_pin: int = 26
     pir_pin: int = 23
     door_pin: int = 24
     door_pull_up: bool = True
@@ -824,12 +799,6 @@ class GpioConfig:
     siren_armed: bool = _env_bool("SENTRIX_SIREN_ARMED", True)
     #: Enclosure lid switch (closed to GND = shut); None = not fitted.
     tamper_pin: int | None = _env_pin("SENTRIX_TAMPER_PIN")
-    #: Local buzzer chirps on level rises (docs/8_RASPBERRY_PI5_INTEGRATION.md §6).
-    buzzer_enabled: bool = _env_bool("SENTRIX_BUZZER_ENABLED", True)
-    #: True for a buzzer through an NPN transistor and for "high-level trigger"
-    #: modules (pin HIGH = sound). Many 3-pin buzzer modules are "low-level
-    #: trigger" (pin LOW = sound): set 0 for those, or they sound non-stop.
-    buzzer_active_high: bool = _env_bool("SENTRIX_BUZZER_ACTIVE_HIGH", True)
     #: Inputs actually wired, of ``pir``, ``door``, ``mains`` ("none" = none).
     #: An unwired door contact reads "open" and an unwired PC817 reads "mains
     #: lost" (a fault on the amber LED and a node alert), so leave those out.
@@ -955,7 +924,6 @@ class Config:
     scene: SceneConfig = field(default_factory=SceneConfig)
     threat: ThreatConfig = field(default_factory=ThreatConfig)
     audio: AudioConfig = field(default_factory=AudioConfig)
-    speaker: SpeakerConfig = field(default_factory=SpeakerConfig)
     behaviour: BehaviourConfig = field(default_factory=BehaviourConfig)
     identity: IdentityConfig = field(default_factory=IdentityConfig)
     reid: ReIDConfig = field(default_factory=ReIDConfig)

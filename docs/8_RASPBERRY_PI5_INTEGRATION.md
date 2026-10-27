@@ -28,13 +28,13 @@ sources at the end; "est." marks our own arithmetic.
 | | |
 |---|---|
 | Core idea | Analyse a **rolling 4-second window** (video + audio + sensors) as one clip every 2 s, instead of running every model on every frame (§5 T1) |
-| Built | Clip engine + fast lane + torch/ONNX/NCNN runtimes; Picamera2 source; gpiozero siren, LEDs, buzzer, PIR, door, mains sense; board telemetry and systemd watchdog; Wi-Fi setup and 4G failover profiles; modem SMS driver; `deploy/pi5/` installer and units (§9) |
+| Built | Clip engine + fast lane + torch/ONNX/NCNN runtimes; Picamera2 source; gpiozero siren, LEDs, PIR, door, mains sense; board telemetry and systemd watchdog; Wi-Fi setup and 4G failover profiles; modem SMS driver; `deploy/pi5/` installer and units (§9) |
 | Measured on the laptop | Clip mode keeps the replay results (weapon at L3 9/12 with the fast lane, fire 3/3, 0 false onsets). Clip compute p95 **2145 ms**, over the 1.6 s budget, already on the laptop's 4 CPUs (§7) |
 | Not yet measured | Anything on a Pi: camera, GPIO, temperature, the clip budget, the modem, power |
 | Slim scene model | Tried and **rejected**: MobileNetV3-L and EfficientNet-B0 reach LOVO macro-F1 0.229 / 0.211 vs DINOv2 0.440. DINOv2-B stays (§5 T1) |
 | Main track | **T1 — clip engine on the Pi 5 CPU**. Fallbacks if Gate A fails: **T2** Hailo AI HAT+, or **T3** the laptop as a local hub (both plans only) |
 | Process layout | **One process** (`python -m sentrix`) owns the pipeline, Local Console, SOS, channels and the Portal link (§4) |
-| Cost | Device ≈ **₹41,000** once (bench kit + integration kit + tools, incl. the talk-down speaker); SIM ≈ ₹200/month; `.in` domain ≈ ₹500–800/year; Portal ₹0 on free tiers (§8) |
+| Cost | Device ≈ **₹40,500** once (bench kit + integration kit + tools); SIM ≈ ₹200/month; `.in` domain ≈ ₹500–800/year; Portal ₹0 on free tiers (§8) |
 
 ---
 
@@ -47,7 +47,7 @@ sources at the end; "est." marks our own arithmetic.
 | Detect → alert (clip mode) | fast-lane L3 p95 ≤ 2 s; a clip decision every ≤ 2 s; L4/L5 p95 ≤ 6 s | CLAUDE.md M9 (G4 for clip mode) |
 | Autonomy | Detection, siren, evidence and SOS creation keep working with no Internet or PC | roadmap v2 §7 |
 | Inputs | Camera (Camera Module 3 Wide), USB microphone, PIR, door contact, mains sense; optional BME280 / DHT22 | roadmap v2 §10 |
-| Outputs | 12 V siren via relay, three status LEDs, buzzer, Local Console, SMS from a 4G modem | roadmap v2 §10, docs/7 §8 |
+| Outputs | 12 V siren via relay, three status LEDs, Local Console, SMS from a 4G modem (no buzzer, no speaker: D19) | roadmap v2 §10, docs/7 §8 |
 | Evidence | AES-256-GCM bundles, with the clip before the trigger; correct time offline (RTC cell) | M3, T1 |
 | Privacy | Faces, evidence and continuous video stay on the device; the Portal sees them only through the tunnel | D12 |
 
@@ -105,7 +105,7 @@ MobileNetV3-L 6.6 / 2.4 ms; EfficientNet-B0 9.5 / 4.3 ms.
 | On a non-PD 5 V supply USB is capped at 600 mA [11] | `PSU_MAX_CURRENT=5000` in the EEPROM, or the 4G modem browns out; doctor and the installer warn |
 | Throttling at 80–85 °C [11][RPB] | Active Cooler; temperature, throttle flags and EXT5V on the Node page and `/api/health` |
 | GPIO is 3.3 V, not 5 V tolerant [56] | Relay through an NPN driver (§6); never feed 5 V into a GPIO pin |
-| No analogue audio jack [12] | USB microphone in; a USB audio adapter (or USB speakerphone) out for the talk-down speaker (§6.6, D16) |
+| No analogue audio jack [12] | USB microphone in; no sound out (no speaker or buzzer, §6.6, D19) |
 | Coral USB TPU (PyCoral ≤ Python 3.9, archived) and Intel NCS2 (discontinued) [47][48][50] | Not options. Accelerator choice is Hailo or the IMX500 AI Camera |
 
 ---
@@ -125,7 +125,7 @@ python -m sentrix  (systemd: Type=notify, Restart=always, WatchdogSec=30)
 ├─ preview / MJPEG     every captured frame composited with the latest overlay
 ├─ decision            evidence → TCI → level policy → incidents → side effects (unchanged)
 ├─ web (FastAPI)       Local Console on the LAN :8000, /api/node, /api/health
-├─ services            gpio (LEDs, buzzer, inputs), node (telemetry, watchdog),
+├─ services            gpio (LEDs, inputs), node (telemetry, watchdog),
 │                      sos, channels (outbox, modem SMS), link (Portal WSS + tunnel)
 └─ siren               GpioSiren on GPIO17 (relay), pin forced low by the unit after any exit
 ```
@@ -298,17 +298,17 @@ factory uses the same map, so a laptop run and the tests exercise it.
 | 18 | 24 | Door reed switch (MC-38) → GND | Internal pull-up; contact closed = door closed |
 | 36 | 16 | Mains sense: PC817 output → GND | Internal pull-up; low while mains is present. List only the wired inputs in `SENTRIX_GPIO_INPUTS` (default `pir,door,mains`; `none` on a box without them): unwired, this pin reads "mains lost" and the door pin reads "open" |
 | 29 / 32 / 33 | 5 / 12 / 13 | Green / amber / red LEDs, 330 Ω each | Amber kept off GPIO6 so a UPS HAT stays possible |
-| 37 | 26 | Active buzzer through an NPN transistor, or a 3-pin buzzer module's I/O pin (VCC → pin 2, GND → pin 39) | Chirps on level rises; `SENTRIX_BUZZER_ENABLED`; `SENTRIX_BUZZER_ACTIVE_HIGH=0` for a low-level-trigger module |
 | free pin | `SENTRIX_SIREN_ARM_PIN` | Arming key's second contact → GND (optional) | Closed = armed; a siren test is refused (409) while it is off |
 | free pin | `SENTRIX_TAMPER_PIN` | Enclosure lid switch → GND (optional) | Open = tamper alert |
 | 3 / 5 | 2 / 3 (I2C1) | BME280 (optional) | Kernel IIO driver; `SENTRIX_SENSOR_BME280=1` |
 | 7 | 4 | DHT22 DATA (optional) | Kernel `dht11` overlay [55]; `SENTRIX_SENSOR_DHT22=1` |
 | 2 / 4, 1, GND | 5 V, 3.3 V | PIR power, relay power | An opto relay board instead of the NPN driver: VCC 3.3 V, JD-VCC 5 V, jumper off |
 | CAM/DISP 0 | — | Camera Module 3 Wide | Needs the **Standard–Mini 22-pin** cable; the camera's own cable does not fit a Pi 5 [24] |
-| USB | — | Microphone, 4G modem, USB audio adapter (speaker) | Modem needs `PSU_MAX_CURRENT=5000` (§6.3) |
+| USB | — | Microphone, 4G modem | Modem needs `PSU_MAX_CURRENT=5000` (§6.3) |
 
 Room sensors are telemetry only (Node page); they are not in the feature
-contract until data exists.
+contract until data exists. There is no buzzer and no speaker (§6.6, D19):
+GPIO26 (pin 37), the buzzer's pin until 2026-10-27, is free.
 
 ### 6.2 Relay polarity and the siren
 
@@ -356,7 +356,7 @@ damages hearing: ear protection for every siren test.
 * **Pass test:** EXT5V (`vcgencmd pmic_read_adc`) ≥ 4.8 V under full load with the
   siren pulsing and the modem sending; `vcgencmd get_throttled` = `0x0`; 10 mains
   pulls with no reboot. UPS runtime ≈ 2 h+ is an estimate, to be measured.
-* Mains loss: amber LED fast blink, one long beep, a `node_alert` event, and
+* Mains loss: amber LED fast blink, a `node_alert` event, and
   `node.alert` to the Portal. Over-temperature and under-voltage raise one alert
   each until they clear.
 
@@ -373,7 +373,7 @@ damages hearing: ear protection for every siren test.
 
 Keep a spare Android phone as a documented fallback SMS sender.
 
-### 6.5 LEDs and buzzer
+### 6.5 LEDs
 
 At start the three LEDs light for 0.5 s (lamp test). Then (`led_patterns`,
 `sentrix/io/gpio.py`):
@@ -384,31 +384,21 @@ At start the three LEDs light for 0.5 s (lamp test). Then (`led_patterns`,
 | Amber | all well | Wi-Fi setup mode | fault: camera offline, critical temperature, under-voltage, on battery, tamper | link enabled but not connected |
 | Red | below L3 | committed L3, or an SOS request open | L4 | L5, or an approved SOS that could not be delivered |
 
-Buzzer: 1/2/3 short chirps on a rise to L2/L3/L4 (L5 is the siren's job), one
-chirp when the Portal claims the device, one long tone when an approved SOS
-fails, one long beep on mains loss, three on tamper. A restart is quiet.
+No buzzer (D19): a level rise, a claim by the Portal, a failed SOS, mains
+loss and tamper show on these LEDs, the Local Console, the event log and (for
+mains and tamper) a `node.alert` to the Portal.
 
 ---
 
-### 6.6 Talk-down speaker (D16)
+### 6.6 No buzzer, no talk-down speaker (D19)
 
-The owner can speak to the room from the dashboard (`POST /api/speaker/say`:
-a preset or ≤ 200 characters; owner + step-up through the Portal, the device
-admin on the LAN; 3 messages a minute). The Pi 5 has no analogue audio out
-[12], so sound leaves through USB:
-
-| Option | Parts | Notes |
-|---|---|---|
-| A (recommended) | USB audio adapter (C-Media CM108, ≈ ₹250) → 3.5 mm → **PAM8403** 2 × 3 W class-D amplifier board (≈ ₹60, 5 V from the Pi's 5 V pin or the 5.2 V rail) → 3 W 4 Ω speaker (≈ ₹120) | Loud enough for a room; amplifier ground to Pi ground; keep the speaker leads away from the camera ribbon |
-| B | USB speakerphone (microphone + speaker in one, ≈ ₹1,500–2,500) | One USB port, echo cancellation in hardware; also replaces the USB microphone |
-
-Software: offline text-to-speech, no cloud. `apt install espeak-ng alsa-utils`
-(`deploy/pi5/install_pi.sh` does it); `SENTRIX_SPEAKER_ENABLED=1`,
-`SENTRIX_SPEAKER_BACKEND=espeak`, `SENTRIX_SPEAKER_DEVICE=plughw:1,0` (the
-adapter's ALSA card; `aplay -l` lists it), `SENTRIX_SPEAKER_VOLUME=0.9`. On the
-laptop `pip install pyttsx3` uses Windows SAPI5. The Node page shows the
-speaker's backend and whether it makes real sound. Bench check still to do:
-`speaker-test -D plughw:1,0 -c 2 -t wav`, then a preset from the dashboard.
+The device makes no sound of its own apart from the siren. The talk-down
+speaker of D16 (the owner's words spoken through a USB audio adapter and an
+amplifier) was dropped from the hardware on 2026-10-24 and never fitted; the
+3-pin buzzer module on GPIO26 stayed silent in the demo unit and was taken
+out on 2026-10-27. Both were then removed from the code, the Local Console,
+the settings and the installer (D19). GPIO26 is free; the Pi 5's missing
+analogue audio out [12] no longer matters.
 
 ## 7. Gates
 
@@ -475,12 +465,11 @@ price that could not be confirmed. Re-check before ordering.
 | Pi 5 camera cable, 22-pin Standard–Mini | thingbits | ₹117 |
 | RTC cell ML-2020 (rechargeable; never a CR2032) | — | ≈ ₹500 |
 | USB microphone | Robocraze | ₹289 |
-| Talk-down speaker: USB audio adapter (CM108) + PAM8403 amplifier + 3 W 4 Ω speaker (§6.6) | Robocraze / local (est.) | ≈ ₹450 |
 | 1-channel relay module + 2N2222/BC547 transistors + 1N4007 diodes | Robocraze | ≈ ₹150 |
 | PIR HC-SR505 (or HC-SR501, ₹54–59) | Robocraze / thingbits | ₹73 |
 | MC-38 door reed switch | Robocraze | ₹52 |
-| Breadboard, jumpers, LEDs, resistors, active buzzer | — | ≈ ₹350 |
-| **Subtotal** | | **≈ ₹31,700** |
+| Breadboard, jumpers, LEDs, resistors | — | ≈ ₹350 |
+| **Subtotal** | | **≈ ₹31,250** |
 
 Cheaper: Camera Module 3 Standard (₹3,245) saves ₹1,134; a 64 GB card (₹2,449)
 saves ₹1,250. A 4 GB Pi 5 at ₹12,000–12,300 (KSP Electronics, unconfirmed) would
@@ -513,7 +502,7 @@ the finished setup.
 
 | Cost | One-time | Per month / year |
 |---|---|---|
-| Device (Order 1 + Order 2 + tools) | **≈ ₹41,000** (cheapest ≈ ₹36,500; ≈ ₹28,800 with a confirmed ₹12,300 4 GB Pi) | — |
+| Device (Order 1 + Order 2 + tools) | **≈ ₹40,500** (cheapest ≈ ₹36,000; ≈ ₹28,350 with a confirmed ₹12,300 4 GB Pi) | — |
 | SIM in the modem | — | ≈ ₹200/month |
 | Demo hotspot phone data (never campus Wi-Fi) | — | ≈ ₹200–300/month (est.) |
 | Portal: Oracle Always Free VM, Postgres, Caddy HTTPS | ₹0 | ₹0 |
@@ -542,7 +531,7 @@ Intel NCS2.
 |---|---|---|
 | Picamera2 source: main 1280×720 + lores 640×480 from one frame, sensor timestamps, reconnect, Pi 4 YUV fallback; `CAMERA_SOURCES=picamera:0` | `sentrix/io/picamera.py`, `io/sources.py` | built; fake `picamera2` only |
 | Siren on gpiozero: polarity, timer release, 90 s cap, arming, `siren_test` | `sentrix/io/actuators.py` | built; mock pins only |
-| GPIO service: LEDs, buzzer, PIR, door, mains, arming key, tamper; 50 ms software debounce; mock pins and a visible error when lgpio fails | `sentrix/io/gpio.py` | built; debounce to check on real inputs |
+| GPIO service: LEDs, PIR, door, mains, arming key, tamper; 50 ms software debounce; mock pins and a visible error when lgpio fails | `sentrix/io/gpio.py` | built; debounce to check on real inputs |
 | Board telemetry: CPU temperature, throttle flags, EXT5V, uptime, BME280/DHT22 (IIO); alerts; systemd ready + watchdog | `sentrix/io/node.py`, `sensors.py`, `watchdog.py` | built; `pmic_read_adc` format to check on the firmware |
 | Wi-Fi scan/connect/status for `/setup/wifi` | `sentrix/io/network.py` | built; fake `nmcli` only |
 | Local Console API: `GET /api/node`, `POST /api/node/siren-test`; Node page (telemetry, inputs, relay, clip status, test siren) | `sentrix/web/node_routes.py`, templates | built |

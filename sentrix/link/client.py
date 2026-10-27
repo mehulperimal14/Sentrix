@@ -62,9 +62,6 @@ _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 CAPABILITIES = ("tunnel", "video", "state", "sms", "siren")
 #: Gallery audit events mirrored as ``gallery.audit`` (no images, ever).
 GALLERY_EVENTS = frozenset({"gallery_enrolled", "gallery_removed", "gallery_rejected"})
-#: Talk-down speaker messages mirrored as ``speaker.audit`` (D16): who, which
-#: preset, how long, which backend - never the free text itself.
-SPEAKER_EVENTS = frozenset({"speaker_say"})
 #: How often the pump looks for new outbox rows (s); producers on other
 #: threads also wake it.
 OUTBOX_POLL_SECONDS = 0.25
@@ -525,10 +522,6 @@ class LinkService:
                       dedupe_key=f"snapshot:{name}" if name else None)
 
     def _on_audit(self, payload: dict) -> None:
-        if payload.get("event") in SPEAKER_EVENTS:
-            self._publish("speaker.audit", {k: payload.get(k) for k in
-                                            ("event", "by", "preset", "chars", "backend")})
-            return
         if payload.get("event") not in GALLERY_EVENTS:
             return
         self._publish("gallery.audit", {k: payload.get(k) for k in

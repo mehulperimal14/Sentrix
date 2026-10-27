@@ -1,9 +1,9 @@
-"""When the device itself is making a sound (D15/D16).
+"""When the device itself is making a sound (D15).
 
-The talk-down speaker, the siren and the buzzer are heard by the device's own
-microphone. A window of that audio must not vote: the owner's "Help is on the
-way" is calm talk, a siren is a siren - neither says anything about the room.
-Every sound source marks the interval it plays (monotonic clock, the same as
+The siren is heard by the device's own microphone. A window of that audio
+must not vote: a siren is a siren and says nothing about the room. (The
+device has no buzzer and no talk-down speaker since D19.) Every sound
+source marks the interval it plays (monotonic clock, the same as
 the audio windows); ``AudioEngine.classify_window`` drops a window that
 overlaps one (``model="self"``, alignment status ``self_output``).
 
@@ -16,7 +16,7 @@ import threading
 import time
 from collections import deque
 
-#: Seconds added on both sides of a marked interval (speaker start-up, the
+#: Seconds added on both sides of a marked interval (player start-up, the
 #: room's echo, timer jitter).
 MARGIN_SECONDS = 0.5
 

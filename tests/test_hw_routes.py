@@ -75,7 +75,7 @@ class TestNodeStatus:
         from sentrix.io.node import merge_node_block
         merge_node_block(state, cpu_temp_c=51.2, mains=False, door="open",
                          gpio={"leds": {"green": "solid", "amber": "fast", "red": "off"},
-                               "buzzer": False, "pir": False, "door": "open", "mains": False,
+                               "pir": False, "door": "open", "mains": False,
                                "siren": {"on": False}})
         body = admin.get("/api/node").json()
         assert body["cpu_temp_c"] == 51.2 and body["mains"] is False
@@ -166,73 +166,12 @@ class TestTunnelledCallers:
         assert response.status_code == 401
         assert fake_pipeline.siren.activations == 0
 
-class TestBuzzerTestRoute:
-    """``POST /api/node/buzzer-test``: two short chirps through the running
-    GPIO service (mock pins), device admin only."""
+class TestRemovedHardware:
+    """D19: no buzzer and no talk-down speaker on the device."""
 
-    @pytest.fixture
-    def gpio_service(self):
-        from sentrix import services
-        from sentrix.config import settings
-        from sentrix.pipeline.state import SystemState
-
-        factory = MockFactory(revision=gpio.MOCK_REVISION)
-        rows = Events()
-        ctx = SimpleNamespace(settings=SimpleNamespace(gpio=settings.gpio, web=settings.web,
-                                                       node=settings.node),
-                              state=SystemState(), registry=None, extras={},
-                              get_pipeline=lambda: pytest.fail("never build a pipeline"))
-        service = gpio.GpioService(ctx, pin_factory=factory, audit=rows.audit,
-                                   publish=lambda kind, payload: None,
-                                   siren=lambda: None, run_thread=False)
-        service.rows = rows
-        services.registry.register(service)
-        service.start()
-        yield service, factory
-        service.stop()
-        services.registry.clear()
-        factory.reset()
-
-    def test_two_chirps_then_a_short_wait(self, admin, gpio_service):
-        import time
-        service, factory = gpio_service
-        first = admin.post("/api/node/buzzer-test")
-        assert first.status_code == 200 and first.json()["ok"] and first.json()["pin"] == 26
-        buzzer = factory.pin(26)
-        deadline = time.monotonic() + 3.0
-        while len(buzzer.states) < 5 and time.monotonic() < deadline:
-            time.sleep(0.02)
-        assert [st.state for st in buzzer.states[:5]] == [False, True, False, True, False]
-        assert ("buzzer_test", {"by": "lc:device_admin", "pin": 26,
-                                "active_high": True}) in service.rows.rows
-        again = admin.post("/api/node/buzzer-test")
-        assert again.status_code == 429 and again.json()["code"] == "rate_limited"
-        assert int(again.headers["Retry-After"]) >= 1
-
-    def test_without_the_gpio_service(self, admin):
-        refused = admin.post("/api/node/buzzer-test")
-        assert refused.status_code == 409 and "GPIO service is off" in refused.json()["detail"]
-
-    def test_not_through_the_tunnel(self, gpio_service, monkeypatch):
-        from fastapi import FastAPI
-        from sentrix.link import tunnel_auth
-        from sentrix.web import extensions
-
-        monkeypatch.setenv("SENTRIX_PASSWORD", PASSWORD)
-        app = FastAPI()
-        app.include_router(node_routes.router)
-
-        @app.middleware("http")
-        async def fake_hardening(request, call_next):
-            identity = tunnel_auth.verify(request.headers)
-            if identity is not None:
-                request.scope[tunnel_auth.SCOPE_KEY] = identity
-            return await call_next(request)
-
-        extensions._install_error_handler(app)
-        headers = tunnel_auth.build_headers(user_id="u7", user_name="Riya", role="owner",
-                                            base="/d/dev-1", step_up_at=None, csrf="c")
-        response = TestClient(app).post("/api/node/buzzer-test", headers=headers)
-        assert response.status_code == 403
-        service, factory = gpio_service
-        assert len(factory.pin(26).states) == 1, "no chirp"
+    def test_no_buzzer_test_and_no_speaker(self, admin, fake_pipeline):
+        assert admin.post("/api/node/buzzer-test").status_code == 404
+        assert admin.get("/api/speaker").status_code == 404
+        assert admin.post("/api/speaker/say", json={"text": "hello"}).status_code == 404
+        body = admin.get("/api/node").json()
+        assert "speaker" not in body and "buzzer" not in (body.get("gpio") or {})

@@ -191,7 +191,7 @@ def alignment(result: AudioResult | None, at: float, tolerance: float | None = N
     unusable = UNUSABLE_MODELS.get(getattr(result, "model", ""))
     if unusable is not None:
         # Nothing classified (no model, inference failed) or the device's own
-        # speaker/siren/buzzer: never "heard, nothing there".
+        # siren: never "heard, nothing there".
         return {"status": unusable, "lag_s": None, "tolerance_s": tolerance}
     if result.end is None:
         return {"status": "untimed", "lag_s": None, "tolerance_s": tolerance}
@@ -625,7 +625,7 @@ class AudioEngine:
         own = (self_output.overlapping(start, end)
                if start is not None and end is not None else None)
         if own is not None:
-            # The device's own speaker, siren or buzzer: not the room.
+            # The device's own siren: not the room.
             result = AudioResult(0.0, f"own {own}", 0.0, rms=rms, model="self")
         elif rms < self.cfg.audio_rms_floor:
             # Energy gate. Skipping inference on a quiet room is both a large

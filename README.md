@@ -95,8 +95,8 @@ D8–D14 in [`CLAUDE.md`](CLAUDE.md) §6 and the state machine in
 |   device-enforced command rules                   |   |                                   |
 | LC web app (FastAPI) on :8000                     |   | SQLite (dev) / Postgres (deploy)  |
 | SQLite var/sentrix.db, vault, faces               |   +-----------------------------------+
-| Pi 5: siren relay, LEDs, buzzer, PIR, door,       |
-|   mains sense, node telemetry, watchdog, 4G modem |
+| Pi 5: siren relay, LEDs, PIR, door, mains sense,  |
+|   node telemetry, watchdog, 4G modem              |
 +--------------------------------------------------+
 ```
 
@@ -122,7 +122,7 @@ a model score and the alarm:
 | One visual modality confirmed | L3 (snapshot and evidence; SOS prompt) |
 | Two modalities confirmed for one class (detector + scene, or video + aligned audio, e.g. a pistol box and a gunshot) | L4; L5 when the weaker is well above threshold, or when all three agree |
 | Audio alone (gunshot, smoke alarm) | at most L2; a scream alone is never a weapon |
-| Fight (assault) | L2 (experimental) unless the video fight **and** aligned aggression audio (shouting, screaming) agree with 2+ people and motion: then L3. Aligned laughter or very calm talk (banter) keeps it at L2 - shown, never hidden; TV, music or radio make the audio neutral; the device's own speaker, siren and buzzer are never heard as the room. Unvalidated until room recordings exist |
+| Fight (assault) | L2 (experimental) unless the video fight **and** aligned aggression audio (shouting, screaming) agree with 2+ people and motion: then L3. Aligned laughter or very calm talk (banter) keeps it at L2 - shown, never hidden; TV, music or radio make the audio neutral; the device's own siren is never heard as the room. Unvalidated until room recordings exist |
 | Robbery, stick, smoke | experimental: logged and shown, never above L2 |
 | Unknown person, PIR, door | presence context: an unrecognised person (3 s armed, 10 s at home), or armed-mode sensor activity with nobody recognised, is an **L2 only** in both modes |
 
@@ -131,17 +131,7 @@ scene model, audio, motion, people, identity, sensors) in the event log and on
 the dashboard's Threat Analysis card (decision D15).
 
 | Level | Side effects |
-|### Speak to the room
-
-The dashboard's "Speak to the room" card lets the owner (through the Portal,
-with a fresh password step-up) or the device admin (on the LAN) send a preset
-("You are being recorded. Leave the premises now.", "Help is on the way.",
-"This is SENTRIX. The owner can hear you." ...) or up to 200 characters to the
-device speaker, spoken with offline text-to-speech (pyttsx3 / espeak-ng; no
-cloud). Off by default (`SENTRIX_SPEAKER_ENABLED=1`), 3 messages a minute,
-every message audited (decision D16; hardware in docs/8 §6.6).
-
----|---|
+|---|---|
 | 1 SECURE | log |
 | 2 SUSPICIOUS | incident opened (log and dashboard) |
 | 3 ELEVATED | snapshot, AES-256-GCM evidence bundle, SOS request for alarm classes |
@@ -294,7 +284,7 @@ same guard with `PORTAL_TEST_MODE`.
 | `SENTRIX_SOS_ENABLED` | SOS engine and sweeper |
 | `SENTRIX_CHANNELS_ENABLED`, `SENTRIX_MODEM_ENABLED` | channel router and outbox; the USB 4G modem |
 | `SENTRIX_LINK_ENABLED` | outbound link to the Portal |
-| `SENTRIX_GPIO_ENABLED`, `SENTRIX_NODE_ENABLED` | Pi GPIO (LEDs, buzzer, PIR, door, mains); node telemetry |
+| `SENTRIX_GPIO_ENABLED`, `SENTRIX_NODE_ENABLED` | Pi GPIO (LEDs, PIR, door, mains); node telemetry |
 | `SENTRIX_ARMED` | armed mode at start (the mode can also be set on the LC) |
 | `SENTRIX_PIPELINE_MODE=clip`, `SENTRIX_FAST_LANE`, `SENTRIX_RUNTIME` | 4 s clip engine, its fast lane, torch/onnx/ncnn runtime |
 | `PORTAL_WORKERS` | the Portal's background workers |

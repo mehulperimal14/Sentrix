@@ -1,5 +1,5 @@
-"""GPIO service (T-HW): pin factory, debounced inputs, LEDs and buzzer from the
-live state, node alerts and the ``node`` state block.
+"""GPIO service (T-HW): pin factory, debounced inputs, LEDs from the live
+state, node alerts and the ``node`` state block. No buzzer (D19).
 
 Every device runs on gpiozero's ``MockFactory`` (a Raspberry Pi 5); inputs are
 driven with ``MockPin.drive_high/low``. The event log, the link outbox and the
@@ -44,7 +44,7 @@ class ManualTimer:
 @pytest.fixture(autouse=True)
 def _clean(monkeypatch):
     for name in ("SENTRIX_SIREN_ARM_PIN", "SENTRIX_TAMPER_PIN", "SENTRIX_SIREN_ARMED",
-                 "SENTRIX_BUZZER_ENABLED", "SENTRIX_GPIO_INPUTS"):
+                 "SENTRIX_GPIO_INPUTS"):
         monkeypatch.delenv(name, raising=False)
     ManualTimer.created = []
     actuators.clear_arming_source()
@@ -248,25 +248,6 @@ class TestLedPatterns:
         assert gpio.led_patterns(_live(camera_online=False), setup_mode=True)["amber"] == FAST
 
 
-class TestBuzzerEvents:
-    def test_quiet_on_the_first_snapshot(self):
-        assert gpio.buzzer_events(None, _live(level=3)) == []
-
-    @pytest.mark.parametrize("before,after,chirps", [(1, 2, 1), (1, 3, 2), (2, 4, 3)])
-    def test_level_rises_chirp(self, before, after, chirps):
-        events = gpio.buzzer_events(_live(level=before), _live(level=after))
-        assert events == [(*gpio.CHIRP_SHORT, chirps)]
-
-    def test_no_chirp_going_down_or_at_l5(self):
-        assert gpio.buzzer_events(_live(level=3), _live(level=1)) == []
-        assert gpio.buzzer_events(_live(level=4), _live(level=5)) == []
-
-    def test_claim_and_failed_sos(self):
-        before = _live(link={"claimed": False})
-        after = _live(link={"claimed": True}, sos={"active": True, "state": "FAILED"})
-        assert gpio.buzzer_events(before, after) == [(*gpio.CHIRP_SHORT, 1), (1.0, 0.0, 1)]
-
-
 # ── inputs and pins ───────────────────────────────────────────────────────────
 class TestInputSpecs:
     def test_meanings(self):
@@ -298,9 +279,9 @@ class TestInputSpecs:
 
     def test_pin_conflicts(self, monkeypatch):
         assert gpio.pin_conflicts(settings.gpio) == []
-        monkeypatch.setenv("SENTRIX_SIREN_ARM_PIN", str(settings.gpio.buzzer_pin))
+        monkeypatch.setenv("SENTRIX_SIREN_ARM_PIN", str(settings.gpio.led_amber_pin))
         assert gpio.pin_conflicts(settings.gpio) == [
-            f"GPIO{settings.gpio.buzzer_pin}: buzzer, siren_armed"]
+            f"GPIO{settings.gpio.led_amber_pin}: led_amber, siren_armed"]
 
 
 # ── the service ───────────────────────────────────────────────────────────────
@@ -436,7 +417,7 @@ class TestGpioService:
         finally:
             service.stop()
 
-    def test_leds_and_buzzer_follow_the_live_state(self, factory):
+    def test_leds_follow_the_live_state(self, factory):
         live = SystemState()
         live.update(camera_online=True)
         _mains_on(factory)
@@ -453,11 +434,6 @@ class TestGpioService:
             live.update(level=3)
             service.poll_once()
             assert service.patterns["red"] == SLOW
-            buzzer = factory.pin(settings.gpio.buzzer_pin)
-            deadline = time.monotonic() + 3.0
-            while len(buzzer.states) < 5 and time.monotonic() < deadline:
-                time.sleep(0.02)
-            assert [st.state for st in buzzer.states[:5]] == [False, True, False, True, False],                 "two chirps for L3"
             live.update(level=5, camera_online=False)
             service.poll_once()
             assert service.patterns == {"green": OFF, "amber": FAST, "red": SOLID}
@@ -467,43 +443,20 @@ class TestGpioService:
             service.stop()
         assert factory.pin(settings.gpio.led_red_pin).state is False, "LEDs off at stop"
 
-    def test_buzzer_can_be_switched_off(self, factory, monkeypatch):
-        monkeypatch.setenv("SENTRIX_BUZZER_ENABLED", "0")
+    def test_no_buzzer_pin_is_claimed(self, factory):
+        """D19: the buzzer is gone. GPIO26 stays free and the block has no
+        buzzer, whatever the level does."""
+        from gpiozero import OutputDevice
         live = SystemState()
         live.update(camera_online=True)
         _mains_on(factory)
         service = _service(factory, _ctx(live))
         service.start()
         try:
-            service.poll_once()
             live.update(level=3)
             service.poll_once()
-            time.sleep(0.05)
-            assert factory.pin(settings.gpio.buzzer_pin).state is False
-            assert len(factory.pin(settings.gpio.buzzer_pin).states) == 1
-        finally:
-            service.stop()
-
-    def test_low_level_trigger_buzzer_module(self, factory):
-        """SENTRIX_BUZZER_ACTIVE_HIGH=0: the pin idles high (silent) and goes
-        low to sound, as a "low-level trigger" 3-pin module needs."""
-        live = SystemState()
-        live.update(camera_online=True)
-        _mains_on(factory)
-        service = _service(factory, _ctx(live, buzzer_active_high=False))
-        service.start()
-        try:
-            buzzer = factory.pin(settings.gpio.buzzer_pin)
-            service.poll_once()
-            assert buzzer.state is True, "silent = pin high"
-            live.update(level=3)
-            service.poll_once()
-            deadline = time.monotonic() + 3.0
-            while len(buzzer.states) < 6 and time.monotonic() < deadline:
-                time.sleep(0.02)
-            # the mock pin's own initial low, then silent high and two low chirps
-            assert [st.state for st in buzzer.states[:6]] == [False, True, False, True, False,
-                                                              True]
+            assert "buzzer" not in live.get()["node"]["gpio"]
+            OutputDevice(26, pin_factory=factory).close()       # not reserved
         finally:
             service.stop()
 
