@@ -348,7 +348,21 @@ def _drain(db, device: Device, request_id: str) -> list[tuple[str, dict]]:
     if row is not None:
         for snapshot in snapshots:
             _store_snapshot(db, row, snapshot)
+        if snapshots:
+            _scrub_raw_snapshots(db, device, request_id)
     return followups
+
+
+def _scrub_raw_snapshots(db, device: Device, request_id: str) -> None:
+    """The raw ``sos.snapshot`` events keep their JPEG only until it is
+    stored (``SosSnapshot``, consent and its 30-day cap) or dropped: the
+    raw copy would otherwise outlive both."""
+    for raw in (db.query(DeviceEvent)
+                .filter(DeviceEvent.device_id == device.id,
+                        DeviceEvent.kind == "sos.snapshot")):
+        payload = raw.payload or {}
+        if _payload_request_id(payload) == request_id and "data_b64" in payload:
+            raw.payload = {k: v for k, v in payload.items() if k != "data_b64"}
 
 
 def _apply_device(db, device: Device, payload: dict) -> list[tuple[str, dict]] | None:

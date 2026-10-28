@@ -611,6 +611,25 @@ class TestRetention:
             counts = retention.prune(db)
         assert counts["sessions"] == 1 and counts["action_tokens"] == 1
 
+    def test_raw_device_events_are_pruned_and_released_with_the_device(self, portal):
+        """device_events hold SOS texts (address), policies (phone numbers)
+        and snapshots: kept 30 days, and gone when the device is released."""
+        from sentrix_portal.models import DeviceEvent
+        home = add_household(portal, complete=True)
+        with portal.state.db.session() as db:
+            device = db.query(Device).filter_by(household_id=home["household_id"]).first()
+            device_id = device.id
+            db.add(DeviceEvent(device_id=device_id, seq=1, kind="sos.created",
+                               received_at=utcnow() - timedelta(days=31), payload={"x": 1}))
+            db.add(DeviceEvent(device_id=device_id, seq=2, kind="sos.created",
+                               received_at=utcnow(), payload={"x": 2}))
+        with portal.state.db.session() as db:
+            assert retention.prune(db)["device_events"] == 1
+        with portal.state.db.session() as db:
+            accounts.release_device(db, db.get(Device, device_id), actor_id=None)
+        with portal.state.db.session() as db:
+            assert db.query(DeviceEvent).filter_by(device_id=device_id).count() == 0
+
     def test_background_module_starts_and_stops(self, portal, monkeypatch):
         calls = []
         monkeypatch.setattr(retention, "FIRST_RUN_DELAY_SECONDS", 0)

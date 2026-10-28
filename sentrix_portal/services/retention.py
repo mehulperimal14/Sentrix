@@ -35,7 +35,7 @@ from sentrix.actor import Actor
 from sentrix.sos import states as sos_states
 from sentrix_portal import security
 from sentrix_portal.models import (ActionToken, ActivationCode, AssistanceRequest,
-                                   ClaimAttempt, DispatchMirror, EmergencyContact,
+                                   ClaimAttempt, DeviceEvent, DispatchMirror, EmergencyContact,
                                    EvidenceMetaMirror, Household, IncidentMirror,
                                    LoginAttempt, Notification, RequestEvent, SnapshotMirror,
                                    SosSnapshot, UserSession, utcnow)
@@ -46,6 +46,8 @@ log = logging.getLogger("sentrix_portal.retention")
 NOTIFICATION_DAYS = 90
 #: Expired or used codes, tokens, sessions and attempt rows kept this long.
 HOUSEKEEPING_DAYS = 30
+#: Raw link events from devices (the window services/sos.py reads back).
+DEVICE_EVENT_DAYS = 30
 PRUNE_INTERVAL_SECONDS = 24 * 3600
 FIRST_RUN_DELAY_SECONDS = 60
 
@@ -117,6 +119,11 @@ def prune(db, now=None) -> dict[str, Any]:
 
     _delete(counts, "notifications", db.query(Notification)
             .filter(Notification.created_at <= now - NOTIFICATION_DAYS * day))
+    # The raw link events (SOS texts with addresses, policies with phone
+    # numbers, snapshots): applied long ago, and read back for 30 days only
+    # (services/sos.py _pending_for).
+    _delete(counts, "device_events", db.query(DeviceEvent)
+            .filter(DeviceEvent.received_at <= now - DEVICE_EVENT_DAYS * day))
 
     for contact in db.query(EmergencyContact).filter(
             EmergencyContact.consent_status.in_(("DECLINED", "REVOKED"))).all():

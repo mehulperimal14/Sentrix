@@ -371,6 +371,10 @@ class TestSosMirror:
         with app.state.db.session() as db:
             assert db.query(SosSnapshot).filter_by(request_id=other["id"]).first() is None, \
                 "withdrawn consent: no image is kept"
+            from sentrix_portal.models import DeviceEvent
+            raws = db.query(DeviceEvent).filter_by(kind="sos.snapshot").all()
+            assert raws and all("data_b64" not in (r.payload or {}) for r in raws), \
+                "nor in the raw link event, once stored or dropped"
 
     def test_online_approve_goes_through_the_device_and_the_desk_delivers(self, rig):
         from sentrix_portal.services import sos as portal_sos

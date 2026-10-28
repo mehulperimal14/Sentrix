@@ -896,6 +896,9 @@ def release_device(db: Session, device: Device, *, actor_id: str | None,
     Returns the new claim code (None when retired)."""
     previous = device.household_id
     db.query(Camera).filter_by(device_id=device.id).delete(synchronize_session=False)
+    # The raw link events carry the old household's SOS texts, phone numbers
+    # and snapshots; an erasure later matches devices still in the household.
+    db.query(DeviceEvent).filter_by(device_id=device.id).delete(synchronize_session=False)
     device.household_id = None
     device.token_hash = None
     device.claimed_at = device.claimed_by = device.assigned_at = None
