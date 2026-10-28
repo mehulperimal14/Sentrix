@@ -194,7 +194,7 @@ class TestActivation:
         browser = Browser(portal)
         assert browser.get(f"/activate/{first.replace('-', '')}").status_code == 404
 
-    def test_wrong_codes_are_rate_limited_and_burn_the_code(self, portal):
+    def test_wrong_codes_are_rate_limited_but_never_kill_the_code(self, portal):
         from sentrix_portal.models import ActivationCode
         admin = staff_browser(portal)
         _, code = _pending_customer(portal, admin)
@@ -207,17 +207,19 @@ class TestActivation:
                 "password_confirm": PASSWORD}).status_code)
         assert statuses == [400, 400, 400, 400, 429]
         assert query(portal, ActivationCode, used_at=None)[0].attempts == 4
-        # Enough wrong guesses from many addresses burn the code itself.
-        for n in range(6):
+        # Wrong guesses from many addresses (anyone who knows the username)
+        # must not break the customer's welcome letter.
+        for n in range(12):
             other = Browser(portal, ip=f"198.51.100.{30 + n}")
             other.get("/activate")
             other.post("/activate", {"username": "riya", "code": "CCCC-CCCC-CCCC",
                                      "password": PASSWORD, "password_confirm": PASSWORD})
         late = Browser(portal, ip="198.51.100.99")
         late.get("/activate")
-        assert late.post("/activate", {"username": "riya", "code": code,
-                                       "password": PASSWORD,
-                                       "password_confirm": PASSWORD}).status_code == 400
+        done = late.post("/activate", {"username": "riya", "code": code,
+                                       "password": PASSWORD, "password_confirm": PASSWORD})
+        assert done.status_code in (200, 303), done.status_code
+        assert query(portal, ActivationCode)[0].used_at is not None, "activated"
 
     def test_password_policy(self, portal):
         admin = staff_browser(portal)

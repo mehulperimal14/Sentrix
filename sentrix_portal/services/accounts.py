@@ -76,8 +76,6 @@ SERIAL_PREFIX = "SX5-"
 #: Activation and reset codes: 12 characters of the RFC 8628 alphabet
 #: (about 52 bits), typed from the letter or carried by the e-mailed link.
 ACTIVATION_CODE_LENGTH = 12
-#: Wrong codes against one account's outstanding code before it is burned.
-ACTIVATION_MAX_ATTEMPTS = 10
 PASSWORD_MIN_LENGTH = 10
 PASSWORD_MAX_LENGTH = 128
 CONSENT_TOKEN_SECONDS = 14 * 86400
@@ -494,8 +492,10 @@ def issue_activation_code(db: Session, user: User, *, purpose: str = "activate",
 
 
 def _usable(row: ActivationCode | None, now: datetime) -> bool:
-    return (row is not None and row.used_at is None and as_utc(row.expires_at) > now
-            and (row.attempts or 0) < ACTIVATION_MAX_ATTEMPTS)
+    # Wrong guesses are counted (``attempts``) but never kill the code: a
+    # 12-character code cannot be guessed past the per-address back-off, and
+    # burning it let anyone who knows a username break a welcome letter.
+    return row is not None and row.used_at is None and as_utc(row.expires_at) > now
 
 
 def activation_for_link(db: Session, code: str) -> tuple[ActivationCode, User] | None:
@@ -519,8 +519,8 @@ def _activatable(user: User, purpose: str) -> bool:
 
 
 def activation_for_typed(db: Session, username: str, code: str) -> tuple[ActivationCode, User] | None:
-    """A typed (username, code). A wrong code counts against the account's
-    outstanding codes (burned after ``ACTIVATION_MAX_ATTEMPTS``)."""
+    """A typed (username, code). A wrong code is counted on the account's
+    outstanding codes (shown to staff), never burns them."""
     user = db.query(User).filter_by(username=security.attempt_key(username)).first()
     if user is None:
         return None
