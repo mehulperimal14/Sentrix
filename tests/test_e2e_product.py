@@ -389,6 +389,9 @@ def test_unanswered_request_expires_and_help_now_opens_a_linked_request(world):
     for minute in (2, 5, 10, 20, 25):               # reminders and the lapse warning
         world.tick(opened + minute * 60 + 1 - world.clock.now)
         assert device_state(world, rid) == "PENDING"
+        # The Portal's worker sends as it goes: whatever is still queued when
+        # the request lapses is withdrawn (a lapse warning after the lapse).
+        world.pump_portal()
     world.tick(opened + window - 5 - world.clock.now)   # 5 s before the end
     assert device_state(world, rid) == "PENDING"
     world.tick(10)

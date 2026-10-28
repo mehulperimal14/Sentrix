@@ -16,8 +16,8 @@ import pytest
 from sentrix import listeners, mode
 from sentrix.actor import Actor
 from sentrix.alerting import guard
-from sentrix.alerting.channels.base import (Channel, ChannelRouter, FakeTransport,
-                                            MemoryOutbox)
+from sentrix.alerting.channels.base import Channel, FakeTransport, MemoryOutbox
+from sentrix.alerting.channels.router import Router
 from sentrix.sos import LevelChange, SosTrigger, pins
 from sentrix.sos import states as S
 from sentrix.sos.policy import Reach
@@ -52,15 +52,18 @@ class Channels:
                                   switches={c: True for c in guard.CHANNEL_SWITCHES},
                                   allowlist=frozenset(allow))
         self.transports = {n: FakeTransport(n) for n in guard.CHANNEL_SWITCHES}
-        self.router = ChannelRouter({n: Channel(n, t, policy_factory=lambda: policy)
-                                     for n, t in self.transports.items()},
-                                    MemoryOutbox(), clock=clock)
+        self.router = Router({n: Channel(n, t, policy_factory=lambda: policy)
+                              for n, t in self.transports.items()},
+                             MemoryOutbox(), clock=clock)
 
     def enqueue(self, recipient, message):
         return self.router.enqueue(recipient, message)
 
     def ready(self, channel):
         return self.router.ready(channel)
+
+    def cancel(self, request_id, reason="request closed", steps=None):
+        return self.router.cancel(request_id, reason, steps)
 
     def add_listener(self, fn):
         self.router.add_listener(fn)
@@ -466,6 +469,32 @@ class TestAnswers:
                     if e["event"] == "notification"}
         assert statuses == {"SUPPRESSED"}
         assert package_of(req["id"])["status"] == "PENDING"
+
+    def test_closing_a_request_withdraws_its_queued_messages(self, world):
+        """A declined request's queued modem SMS used to retry for up to 24 h."""
+        fire_trigger(world, "fire")
+        req = the_request()
+        assert ("owner", "modem_sms", "t0") in world.channels.keys(req["id"])
+        # Nothing pumped yet: the owner's prompt is still queued when they decline.
+        ok = world.engine.respond(req["id"], "decline", actor=OWNER, channel="lc", pin=SOS_PIN)
+        assert ok["ok"] and ok["request"]["state"] == S.DECLINED
+        prompt = [i for i in world.channels.items(req["id"]) if i.message.step == "t0"]
+        assert prompt and all(i.status == "SUPPRESSED" and "cancelled" in (i.error or "")
+                              for i in prompt)
+        world.channels.router.pump()
+        assert not [s for s in world.channels.sent() if s[2] == "t0"]
+
+    def test_answering_withdraws_only_the_owners_prompting_messages(self, world):
+        fire_trigger(world, "fire")
+        req = the_request()
+        result = world.engine.respond(req["id"], "approve", actor=OWNER, channel="lc")
+        assert result["ok"] and result["request"]["state"] not in S.PROMPTING_STATES
+        items = world.channels.items(req["id"])
+        prompt = [i for i in items if i.message.step == "t0"]
+        assert prompt and all(i.status == "SUPPRESSED" for i in prompt)
+        help_path = [i for i in items if i.message.step in ("contacts_t0", "desk_t0")]
+        assert help_path and all(i.status != "SUPPRESSED" for i in help_path), \
+            "the help request's own messages still leave"
 
     def test_decline_needs_the_pin_and_cancels(self, world):
         incident = fire_trigger(world, "fire")

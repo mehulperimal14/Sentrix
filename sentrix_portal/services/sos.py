@@ -1362,6 +1362,31 @@ def _html(text: str, links: list[tuple[str, str]]) -> str:
     return f"<div>{body}</div>"
 
 
+def _withdraw(db, row: AssistanceRequest, ev: dict) -> None:
+    """Before an event's own messages are queued: withdraw the queued and
+    retrying messages that no longer make sense - all of them when the
+    request closes, the owner's prompt, reminders and lapse warning when the
+    prompting phase ends (they used to keep retrying for 24 h). Only on the
+    event that changes the state: later events of a closed request (delivery
+    reports, notifications) must not withdraw the closing messages."""
+    from sentrix_portal.services import notify
+    before, after = ev.get("from_state"), ev.get("to_state")
+    if not after or after == before:
+        return
+    if after in S.TERMINAL_STATES:
+        reason, steps = f"request {after.lower()}", None
+    elif before in S.PROMPTING_STATES and after not in S.PROMPTING_STATES:
+        offsets = ((row.policy or {}).get("reminder_offsets")
+                   or _cfg().sos.reminder_offsets_seconds)
+        reason, steps = f"answered ({after.lower()})", S.owner_prompt_steps(tuple(offsets))
+    else:
+        return
+    try:
+        notify.cancel(db, row.id, reason, steps)
+    except Exception as exc:
+        log.error("SOS %s: withdrawing queued messages failed: %s", row.id[:8], exc)
+
+
 def _after_event(db, row: AssistanceRequest, ev: dict, origin: str) -> list[tuple[str, dict]]:
     """Messages for one applied event, and device commands for the hub."""
     event = ev["event"]
@@ -1374,6 +1399,7 @@ def _after_event(db, row: AssistanceRequest, ev: dict, origin: str) -> list[tupl
     owner = _owner(db, row.household_id)
     owner_name = owner.display_name if owner else "the resident"
     room = _room(db, row)
+    _withdraw(db, row, ev)
 
     def sos_texts(contact, contact_page):
         link = f" Open: {contact_page}." if contact_page else ""

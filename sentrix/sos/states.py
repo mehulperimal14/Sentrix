@@ -175,6 +175,15 @@ def reminder_step(offset_seconds: float) -> str:
     return REMINDER_STEPS.get(int(offset_seconds), f"r{int(offset_seconds)}")
 
 
+def owner_prompt_steps(reminder_offsets=()) -> tuple[str, ...]:
+    """The owner's prompting-phase message steps: the first prompt, every
+    reminder (the defaults and ``reminder_offsets``), the level-rise
+    reminders and the lapse warning. Withdrawn once the owner has answered."""
+    offsets = set(REMINDER_STEPS) | {int(o) for o in reminder_offsets}
+    return (STEP_T0, STEP_LAPSE, *sorted({reminder_step(o) for o in offsets}),
+            *RISE_STEPS.values())
+
+
 def repage_step(n: int) -> str:
     """``repage1`` .. ``repageN`` for the help path's re-pages."""
     return f"repage{int(n)}"
@@ -233,4 +242,4 @@ def owner_view(state: str, flags: dict | None = None) -> dict:
 
 __all__ = [name for name in dir() if name.isupper() and not name.startswith("_")] + [
     "next_state", "is_terminal", "reconcile", "owner_view", "reminder_step",
-    "repage_step"]
+    "repage_step", "owner_prompt_steps"]

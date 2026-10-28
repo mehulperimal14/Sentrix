@@ -435,10 +435,40 @@ class SosEngine:
             if step.verdict:
                 self._verdicts(request, step.verdict, actor, channel or "system",
                                note=step.detail.get("note") or step.detail.get("outcome"))
+            # Before this step's own notices are queued, so they still leave.
+            self._withdraw(request["id"], snap.state, request["state"])
             for notice in step.notices:
                 self._notify(request, notice, now=now)
             self._publish(request)
             return request
+
+    def _withdraw(self, request_id: str, before: str, after: str) -> None:
+        """Withdraw the request's queued and retrying messages that no longer
+        make sense: all of them once it closes (a declined request's modem
+        SMS kept retrying for up to 24 h), and the owner's prompt, reminders
+        and lapse warning once the prompting phase is over. A message already
+        being sent may still leave."""
+        if after == before:
+            return
+        if after in S.TERMINAL_STATES:
+            reason, steps = f"request {after.lower()}", None
+        elif before in S.PROMPTING_STATES and after not in S.PROMPTING_STATES:
+            reason = f"answered ({after.lower()})"
+            steps = S.owner_prompt_steps(getattr(self.rules, "reminder_offsets", ()))
+        else:
+            return
+        channels = self._channels()
+        cancel = getattr(channels, "cancel", None)
+        if cancel is None:
+            return
+        try:
+            withdrawn = cancel(request_id, reason, steps)
+        except Exception as exc:
+            log.error("SOS %s: withdrawing queued messages failed: %s", request_id[:8], exc)
+            return
+        if withdrawn:
+            log.info("SOS %s: %d queued message(s) withdrawn (%s)", request_id[:8],
+                     withdrawn, reason)
 
     def _package(self, request: dict, change: str, actor: Actor) -> None:
         from sentrix.alerting.dispatch import dispatch_service

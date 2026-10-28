@@ -340,6 +340,26 @@ class TestContactPages:
         browser.post(f"/c/{raw}", data={"action": "approve", "csrf_token": csrf})
         assert state_of(app, rid) == "DISPATCHED"
 
+    def test_answering_and_closing_withdraw_queued_messages(self, portal, monkeypatch):
+        """Queued owner reminders stop once the owner answers; everything
+        queued stops once the request closes (before the closing event's
+        own messages are queued)."""
+        from sentrix_portal.services import notify
+        app, seeded, outbox = portal
+        calls = []
+        monkeypatch.setattr(notify, "cancel", lambda db, rid, reason, steps=None:
+                            calls.append((rid, reason, steps)) or 0)
+        rid, _ = open_request(app, seeded, state="DISPATCHED")
+        answered = [c for c in calls if c[0] == rid and c[1].startswith("answered")]
+        assert answered, calls
+        assert {"t0", "lapse", "r120", "rise4"} <= set(answered[0][2])
+        assert "contacts_t0" not in answered[0][2], "the help path's messages stay"
+        desk, dcsrf = client_for(app, seeded.operator_id, totp=True)
+        desk.post(f"/desk/requests/{rid}/resolve", data={"csrf_token": dcsrf,
+                                                         "outcome": "no_action_needed"})
+        closed = [c for c in calls if c[0] == rid and c[1].startswith("request ")]
+        assert closed and closed[-1][2] is None, "a closed request withdraws everything"
+
     def test_decline_revokes_and_close_expires(self, portal):
         from sentrix_portal.models import ActionToken, AssistanceRequest, utcnow
         from sentrix_portal.services import sos as portal_sos
