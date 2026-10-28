@@ -16,7 +16,8 @@ consents, step-up and rate limits of tunnelled requests are enforced in one
 place only: the link's path table (``sentrix/link/policy.py``), before the
 in-process call.** Console routes enforce only their own business rules (the
 SOS PIN, 409 on a sent package, and ``require_lc("device_admin")`` for the
-few LC-only routes: ``/api/link/reconnect``, ``/api/channels/test``); they
+few LC-only routes: ``/api/link/reconnect``, ``/api/channels/test``, the
+device app's admin lists in ``api_routes``); they
 never restate the path table, except the training recordings (D20), whose
 list, start and stop restate their ``record_status`` / ``record`` rows
 (``recording_routes``).

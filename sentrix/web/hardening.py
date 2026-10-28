@@ -51,8 +51,11 @@ log = get_logger("hardening")
 #: Methods that change state and therefore need CSRF protection.
 STATE_CHANGING = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 #: Paths the tunnel never carries (docs/7 §5.7); refused for tunnel identities.
+#: ``/api/login``, ``/api/logout`` and ``/api/setup/`` are the device app's
+#: JSON sign-in and Wi-Fi setup (docs/9).
 NEVER_TUNNELLED = ("/login", "/logout", "/setup/", "/docs", "/redoc",
-                   "/openapi.json", "/video", "/ws/")
+                   "/openapi.json", "/video", "/ws/", "/api/login", "/api/logout",
+                   "/api/setup/")
 #: ``Sec-Fetch-Site`` values of a request the console's own pages made.
 _SAME_ORIGIN_FETCH = frozenset({"same-origin", "none"})
 #: A Host header that is safe to echo into the CSP.

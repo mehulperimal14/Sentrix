@@ -35,14 +35,25 @@ recording files            none (LC only)    ``DELETE /api/recordings/*`` and
                                              every other ``/api/recordings*``
                                              path, ``/media/recording/*``: the
                                              device admin on the LAN (D20)
+device admin lists         none (LC only)    ``/api/snapshots``, ``/api/evidence``,
+                                             ``/api/dispatch``, ``/api/authorized``:
+                                             the device app's admin views (docs/9)
 =========================  ================  =====================================
 
+The device app's JSON API (docs/9, ``sentrix.web.api_routes``) adds
+``GET /api/session``, ``GET /api/state`` and ``GET /api/activity``: read APIs
+like the rest (owner, member; not the Desk, whose view is the relayed video and
+state plus ``DESK_PATHS``). ``/api/state`` is the websocket's message, the
+data ``/api/metrics`` already gives; ``/api/activity`` is ``/api/incidents``
+with each incident's request in the owner view.
+
 Never tunnelled (refused even if the Portal forwarded them): ``/login``,
-``/logout``, ``/setup/*``, ``/docs``, ``/redoc``, ``/openapi.json``, ``/video``
-and ``/ws/*`` (the last two are relayed from frame and state messages). The
-LC-only routes (``/api/link/reconnect``, ``/api/channels/test``, and every
-``/api/recordings*`` and ``/media/recording/*`` path the two recording rows do
-not name) belong to the device admin. The owner may start, stop and list
+``/logout``, ``/api/login``, ``/api/logout``, ``/setup/*``, ``/api/setup/*``,
+``/docs``, ``/redoc``, ``/openapi.json``, ``/video`` and ``/ws/*`` (the last
+two are relayed from frame and state messages). The LC-only routes
+(``/api/link/reconnect``, ``/api/channels/test``, the device admin lists, and
+every ``/api/recordings*`` and ``/media/recording/*`` path the two recording
+rows do not name) belong to the device admin. The owner may start, stop and list
 training recordings through the Portal, but the files stay on the LAN:
 continuous video never leaves the device (D12) and a recording is far over the
 tunnel's 16 MiB response cap (D20). Anything not in the table is refused.
@@ -71,12 +82,14 @@ PAGES = frozenset({"/", "/dashboard", "/live", "/events", "/alerts", "/evidence"
                    "/dispatch", "/authorized", "/sos", "/node"})
 #: What a Desk operator may read while a request is on the help path.
 DESK_PATHS = frozenset({"/dashboard", "/live", "/api/health", "/api/metrics"})
-#: Never served through the tunnel.
+#: Never served through the tunnel (sign-in and Wi-Fi setup, HTML and JSON).
 NEVER_EXACT = frozenset({"/login", "/logout", "/docs", "/redoc", "/openapi.json",
-                         "/video", "/setup"})
-NEVER_PREFIXES = ("/setup/", "/ws/", "/docs/", "/redoc/")
-#: Routes only the device admin (LC password, on the LAN) may use.
-LC_ONLY = frozenset({"/api/link/reconnect", "/api/channels/test"})
+                         "/video", "/setup", "/api/login", "/api/logout", "/api/setup"})
+NEVER_PREFIXES = ("/setup/", "/ws/", "/docs/", "/redoc/", "/api/setup/")
+#: Routes only the device admin (LC password, on the LAN) may use, whatever
+#: the method: two actions, and the device app's admin lists (docs/9).
+LC_ONLY = frozenset({"/api/link/reconnect", "/api/channels/test",
+                     "/api/snapshots", "/api/evidence", "/api/dispatch", "/api/authorized"})
 #: Path prefixes only the device admin may use, whatever the method: the
 #: training recordings' files, their downloads and deletes (D20), except the
 #: owner's status and start/stop (:data:`RECORD_STATUS_PATH`,

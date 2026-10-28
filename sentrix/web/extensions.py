@@ -33,6 +33,7 @@ ROUTER_MODULES: tuple[str, ...] = (
     "sentrix.web.channel_routes",   # T-CH    /api/channels/*
     "sentrix.web.setup_routes",     # T-WEB   /sos, /node pages, /setup/wifi, /api/level-history
     "sentrix.web.recording_routes",  # D20    /api/recordings/*, /media/recording/* (LAN files)
+    "sentrix.web.api_routes",       # D22    /api/session, /api/login, /api/state, lists (docs/9)
 )
 
 MIDDLEWARE_MODULES: tuple[str, ...] = (
