@@ -695,8 +695,12 @@ class LinkService:
                 attempt = 0
             delay = await self._after_close(code, auth, session)
             if delay is None:
+                # The exponent is capped: 2 ** 1024 overflows a float, which
+                # ended this loop for good after 1024 failed dials (~8.5 h of
+                # a Portal down at the 1-60 s default).
                 delay = self._random(0.0, min(self.cfg.reconnect_max_seconds,
-                                              self.cfg.reconnect_min_seconds * (2 ** attempt)))
+                                              self.cfg.reconnect_min_seconds
+                                              * (2 ** min(attempt, 32))))
                 attempt += 1
             self._set_state("offline", next_attempt_s=round(delay, 2), last_close_code=code)
             await self._offline_wait(delay)
