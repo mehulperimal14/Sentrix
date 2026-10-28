@@ -133,13 +133,17 @@ def ip_digest(ip: str | None) -> str | None:
 
 def client_ip(request: Request) -> str | None:
     """The client address; from a trusted proxy (Caddy, or any peer with
-    ``PORTAL_TRUSTED_PROXIES=*`` behind Railway's edge) its X-Real-IP, else
-    the first X-Forwarded-For entry."""
+    ``PORTAL_TRUSTED_PROXIES=*`` behind a platform's edge) the header named
+    by ``PORTAL_CLIENT_IP_HEADER`` (X-Real-IP; CF-Connecting-IP on Render,
+    whose edge passes a client's own X-Forwarded-For through, so every
+    sign-in back-off could be dodged), else the first X-Forwarded-For entry."""
     peer = request.client.host if request.client else None
-    trusted = portal_settings.current().trusted_proxies
+    settings = portal_settings.current()
+    trusted = settings.trusted_proxies
     if peer not in trusted and "*" not in trusted:
         return peer
-    real = (request.headers.get("x-real-ip") or "").strip()
+    header = getattr(settings, "client_ip_header", "x-real-ip") or "x-real-ip"
+    real = (request.headers.get(header) or "").strip()
     if real:
         return real
     forwarded = request.headers.get("x-forwarded-for")

@@ -70,6 +70,27 @@ class TestClientAddress:
             == "198.51.100.1"
         assert client_ip(_request("100.64.0.9", {})) == "100.64.0.9"
 
+    def test_render_reads_cloudflare_never_a_client_header(self, trust):
+        """Render's edge passes a client's own X-Forwarded-For/X-Real-IP
+        through: with PORTAL_CLIENT_IP_HEADER=cf-connecting-ip a client that
+        forges them still gets its real address, so back-off holds."""
+        from dataclasses import replace
+        from sentrix_portal import settings as portal_settings
+        from sentrix_portal.security import client_ip
+        trust("*")
+        current = portal_settings.current()
+        portal_settings.set_current(replace(current, client_ip_header="cf-connecting-ip"))
+        try:
+            forged = {"cf-connecting-ip": "203.0.113.5", "x-real-ip": "1.2.3.4",
+                      "x-forwarded-for": "5.6.7.8"}
+            assert client_ip(_request("100.64.0.9", forged)) == "203.0.113.5"
+        finally:
+            portal_settings.set_current(current)
+
+    def test_render_blueprint_names_the_cloudflare_header(self):
+        text = (ROOT / "render.yaml").read_text(encoding="utf-8")
+        assert "PORTAL_CLIENT_IP_HEADER" in text and "cf-connecting-ip" in text
+
     def test_caddy_keeps_working(self, trust):
         from sentrix_portal.security import client_ip
         trust("127.0.0.1", "::1")

@@ -111,6 +111,12 @@ class PortalSettings:
     #: (Caddy); "*" trusts any peer, for a platform whose edge is the only
     #: way in (Railway).
     trusted_proxies: tuple = ("127.0.0.1", "::1")
+    #: The header that carries the client address from a trusted proxy, one
+    #: the edge overwrites so a client cannot choose it: ``x-real-ip``
+    #: (Caddy, Railway) or ``cf-connecting-ip`` (Render, behind Cloudflare,
+    #: whose edge passes a client's own X-Forwarded-For through). Without
+    #: it the first X-Forwarded-For entry is used.
+    client_ip_header: str = "x-real-ip"
     #: Shown instead of 112 in test mode, and the simulated Desk's number.
     desk_number: str = ""
     telegram_bot_name: str = ""
@@ -143,6 +149,7 @@ class PortalSettings:
             secure_cookies=_flag("PORTAL_SECURE_COOKIES", False),
             trusted_proxies=tuple(p.strip() for p in _str(
                 "PORTAL_TRUSTED_PROXIES", "127.0.0.1,::1").split(",") if p.strip()),
+            client_ip_header=_str("PORTAL_CLIENT_IP_HEADER", "x-real-ip").strip().lower(),
             desk_number=_str("PORTAL_DESK_NUMBER", ""),
             telegram_bot_name=_str("PORTAL_TELEGRAM_BOT_NAME", ""),
             telegram_mode=_str("SENTRIX_TELEGRAM_MODE", "polling").lower(),
