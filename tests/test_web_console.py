@@ -683,6 +683,20 @@ class TestPageParityFixes:
         assert 'data-selected=""' in lc_client(console)[0].get(
             "/sos", params={"request": "<x>"}).text
 
+    def test_scripted_trigger_offers_what_the_service_accepts(self, console, monkeypatch):
+        """A fight is an alarm class (D15); an intrusion opens a request only
+        with SENTRIX_SOS_INTRUSION=1, so it is offered only then."""
+        import dataclasses
+        from sentrix.web import setup_routes
+        text = lc_client(console)[0].get("/sos").text
+        if 'id="sos-demo-trigger-type"' not in text:
+            pytest.skip("the scripted trigger box needs the SOS capability here")
+        assert 'value="assault"' in text and 'value="intrusion"' not in text
+        on = dataclasses.replace(setup_routes.settings, sos=dataclasses.replace(
+            setup_routes.settings.sos, intrusion_requests=True))
+        monkeypatch.setattr(setup_routes, "settings", on)
+        assert 'value="intrusion"' in lc_client(console)[0].get("/sos").text
+
     def test_static_assets_are_versioned(self, console):
         text = lc_client(console)[0].get("/dashboard").text
         assert re.search(r'href="/static/css/style\.css\?v=[0-9a-f]{10}"', text)

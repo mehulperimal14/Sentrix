@@ -64,7 +64,10 @@ async def sos_page(request: Request) -> HTMLResponse:
     service = sos_service()
     return render(request, "sos.html", "sos",
                   selected=selected if _ID.match(selected) else "",
-                  sos_enabled=getattr(service, "enabled", True) is not False)
+                  sos_enabled=getattr(service, "enabled", True) is not False,
+                  # The scripted trigger offers "intrusion" only when an
+                  # intrusion may open a request (SENTRIX_SOS_INTRUSION=1).
+                  intrusion_requests=bool(settings.sos.intrusion_requests))
 
 
 @router.get("/node", response_class=HTMLResponse, dependencies=[Depends(require_auth)])

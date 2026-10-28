@@ -57,7 +57,8 @@
       <select id="sos-demo-trigger-type" class="text-input" aria-label="Scripted trigger type">
         <option value="weapon">weapon</option>
         <option value="fire">fire</option>
-        <option value="intrusion">intrusion (armed mode)</option>
+        <option value="assault">fight (seen and heard)</option>
+        {% if intrusion_requests %}<option value="intrusion">intrusion (armed mode)</option>{% endif %}
       </select>
       <button type="button" class="btn btn-sm btn-outline" id="sos-demo-trigger">Scripted trigger (SIMULATED DETECTION)</button>
       <p class="sos-note">Test mode, device admin only. Opens a confirmed L3 that is not a detection: the SOS text and the audit say SIMULATED DETECTION. Tell the audience when you use it.</p>

@@ -396,7 +396,9 @@ def main(argv: list[str] | None = None) -> int:
             command.add_argument("name", help=f"idle, {', '.join(SCENES)}")
         if name == "trigger":
             command.add_argument("kind", nargs="?", default="weapon",
-                                 choices=("weapon", "fire", "intrusion"))
+                                 choices=("weapon", "fire", "assault", "intrusion"),
+                                 help="intrusion opens a request only with "
+                                      "SENTRIX_SOS_INTRUSION=1, in armed mode")
     args = parser.parse_args(argv)
     directory = Path(args.dir)
     if "sentrix" not in sys.modules:
