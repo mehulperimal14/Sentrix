@@ -113,3 +113,10 @@ coverage.xml
 CLAUDE.local.md
 # Office lock files (docs/capstone/)
 ~$*
+
+# frontend (D22)
+node_modules/
+frontend/test-results/
+frontend/playwright-report/
+frontend/.vite/
+frontend/e2e/.world.json

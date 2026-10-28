@@ -1,0 +1,49 @@
+{
+  "name": "sentrix-frontend",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:portal": "npm run dev -w @sentrix/portal",
+    "dev:device": "npm run dev -w @sentrix/device",
+    "build": "npm run build -w @sentrix/portal && npm run build -w @sentrix/device",
+    "typecheck": "tsc -p apps/portal && tsc -p apps/device",
+    "test": "vitest run",
+    "e2e": "playwright test",
+    "gen:api": "node scripts/gen-api.mjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/anek-latin": "^5.2.0",
+    "@fontsource-variable/noto-sans": "^5.2.0",
+    "@hookform/resolvers": "^5.2.0",
+    "@tanstack/react-query": "^5.90.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.545.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-hook-form": "^7.62.0",
+    "react-router": "^7.9.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@tailwindcss/vite": "^4.1.0",
+    "@testing-library/jest-dom": "^6.8.0",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.0",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "jsdom": "^26.1.0",
+    "openapi-typescript": "^7.9.0",
+    "tailwindcss": "^4.1.0",
+    "typescript": "~5.9.0",
+    "vite": "^6.3.0",
+    "vitest": "^3.2.0"
+  }
+}

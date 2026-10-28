@@ -1,0 +1,87 @@
+@import 'tailwindcss';
+@import './tokens.css';
+@import '@fontsource-variable/anek-latin/wdth.css';
+@import '@fontsource-variable/noto-sans/wght.css';
+
+/* Tailwind reads the runtime tokens, so one class works in both themes. */
+@theme inline {
+  --color-chalk: var(--chalk);
+  --color-paper: var(--paper);
+  --color-graphite: var(--graphite);
+  --color-slate: var(--slate);
+  --color-line: var(--line);
+  --color-hatch: var(--hatch);
+  --color-indigo: var(--indigo);
+  --color-indigo-fill: var(--indigo-fill);
+  --color-indigo-wash: var(--indigo-wash);
+  --color-neem: var(--neem);
+  --color-neem-wash: var(--neem-wash);
+  --color-haldi: var(--haldi);
+  --color-haldi-fill: var(--haldi-fill);
+  --color-haldi-wash: var(--haldi-wash);
+  --color-chilli: var(--chilli);
+  --color-chilli-fill: var(--chilli-fill);
+  --color-chilli-deep: var(--chilli-deep);
+  --color-chilli-wash: var(--chilli-wash);
+  --color-on-fill: var(--on-fill);
+  --color-band-help: var(--band-help);
+  --color-band-quiet: var(--band-quiet);
+  --color-band-calm: var(--band-calm);
+  --font-display: var(--font-display);
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-mono);
+  --shadow-float: var(--shadow);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    background: var(--chalk);
+  }
+  body {
+    margin: 0;
+    background: var(--chalk);
+    color: var(--graphite);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-tap-highlight-color: transparent;
+  }
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    line-height: 1.12;
+    text-wrap: balance;
+  }
+  :focus-visible {
+    outline: 3px solid var(--indigo);
+    outline-offset: 2px;
+  }
+  button, a, input, select, textarea, label {
+    touch-action: manipulation;
+  }
+  [hidden] {
+    display: none !important;
+  }
+}
+
+@layer utilities {
+  .tabular { font-variant-numeric: tabular-nums; }
+  .stretch-90 { font-stretch: 90%; }
+  .stretch-82 { font-stretch: 82%; }
+  .safe-x {
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .safe-top { padding-top: env(safe-area-inset-top, 0px); }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .anim-in { animation: sx-in 200ms ease-out; }
+  .anim-sheet { animation: sx-sheet 220ms ease-out; }
+  .blink-slow { animation: sx-blink 2s steps(1, end) infinite; }
+  .blink-fast { animation: sx-blink 0.4s steps(1, end) infinite; }
+}
+@keyframes sx-in { from { opacity: 0.4; } to { opacity: 1; } }
+@keyframes sx-sheet { from { transform: translateY(24px); opacity: 0.6; } to { transform: none; opacity: 1; } }
+@keyframes sx-blink { 0% { opacity: 1; } 50% { opacity: 0.15; } }

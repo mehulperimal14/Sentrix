@@ -1,0 +1,87 @@
+/* SENTRIX design tokens (Experience Plan, "Look and feel").
+   Colour carries status only: neem = all clear, haldi = something unusual,
+   chilli = an alert that needs an answer. Indigo is for everyday actions.
+   Every token has a light and a dark value; the device screen is dark by default
+   (add class "theme-dark" on <html>), phones follow the system unless the
+   user picks a theme ("theme-light" / "theme-dark"). */
+
+:root {
+  --chalk: #f2f4f2;
+  --paper: #ffffff;
+  --graphite: #1b2320;
+  --slate: #55635e;
+  --line: #d3dbd7;
+  --hatch: #d9e0dc;
+  --indigo: #3444a6;
+  --indigo-fill: #3444a6;
+  --indigo-wash: #e7e9f6;
+  --neem: #2b7351;
+  --neem-wash: #e1f0e8;
+  --haldi: #8a5800;
+  --haldi-fill: #e3a33a;
+  --haldi-wash: #fbefd9;
+  --chilli: #b91e2b;
+  --chilli-fill: #c0202e;
+  --chilli-deep: #9a1622;
+  --chilli-wash: #fbe4e5;
+  --on-fill: #ffffff;
+  --band-help: #1b2320;
+  --band-quiet: #55635e;
+  --band-calm: #2b7351;
+  --scrim: rgb(16 24 21 / 0.55);
+  --shadow: 0 10px 26px rgb(0 0 0 / 0.14);
+  --font-display: 'Anek Latin Variable', 'Noto Sans Variable', system-ui, sans-serif;
+  --font-body: 'Noto Sans Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.theme-light) {
+    --chalk: #101815;
+    --paper: #18221f;
+    --graphite: #e3eae7;
+    --slate: #9daca6;
+    --line: #2b3833;
+    --hatch: #26332f;
+    --indigo: #a3adff;
+    --indigo-fill: #4b5bc4;
+    --indigo-wash: #22294a;
+    --neem: #63c796;
+    --neem-wash: #15342a;
+    --haldi: #f0b95c;
+    --haldi-wash: #3a2d13;
+    --chilli: #ff7b7f;
+    --chilli-wash: #3e1b1e;
+    --band-help: #2e3d38;
+    --band-quiet: #3f4d48;
+    --band-calm: #22704c;
+    --scrim: rgb(0 0 0 / 0.6);
+    --shadow: 0 10px 26px rgb(0 0 0 / 0.4);
+    color-scheme: dark;
+  }
+}
+
+:root.theme-dark {
+  --chalk: #101815;
+  --paper: #18221f;
+  --graphite: #e3eae7;
+  --slate: #9daca6;
+  --line: #2b3833;
+  --hatch: #26332f;
+  --indigo: #a3adff;
+  --indigo-fill: #4b5bc4;
+  --indigo-wash: #22294a;
+  --neem: #63c796;
+  --neem-wash: #15342a;
+  --haldi: #f0b95c;
+  --haldi-wash: #3a2d13;
+  --chilli: #ff7b7f;
+  --chilli-wash: #3e1b1e;
+  --band-help: #2e3d38;
+  --band-quiet: #3f4d48;
+  --band-calm: #22704c;
+  --scrim: rgb(0 0 0 / 0.6);
+  --shadow: 0 10px 26px rgb(0 0 0 / 0.4);
+  color-scheme: dark;
+}
