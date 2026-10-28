@@ -52,7 +52,11 @@ ALLOWED_ACTORS: dict[str, frozenset] = {
     "siren.test": frozenset({"owner"}),
     "sms.send": frozenset({"owner", "operator", "cloud"}),
     "token.rotate": frozenset({"owner"}),
-    "unpair": frozenset({"owner"}),
+    # The Portal itself unpairs too: an admin transfer or retire ("cloud")
+    # and the retention worker before an erasure ("system"). The link is the
+    # device's own authenticated connection to the Portal, so they need no
+    # step-up; an owner does.
+    "unpair": frozenset({"owner", "cloud", "system"}),
     "diag.ping": frozenset({"owner", "member", "operator", "cloud"}),
     "demo.close_incident": frozenset({"owner", "member", "operator", "cloud"}),
     "demo.trigger": frozenset({"owner", "member", "operator", "cloud"}),
@@ -151,8 +155,8 @@ class CommandHandler:
             return outcome("timeout", "the command expired before it arrived")
         if actor.type not in ALLOWED_ACTORS[name]:
             return outcome("forbidden_role", f"{actor.type} may not use {name}")
-        if name in STEP_UP_COMMANDS and not actor.stepped_up_within(
-                STEP_UP_SECONDS, self._clock()):
+        if (name in STEP_UP_COMMANDS and actor.type not in ("cloud", "system")
+                and not actor.stepped_up_within(STEP_UP_SECONDS, self._clock())):
             return outcome("step_up_required", "re-enter your password first")
         if name in TEST_MODE_COMMANDS and not self.hooks.test_mode():
             return outcome("test_mode_only", f"{name} exists only in test mode")

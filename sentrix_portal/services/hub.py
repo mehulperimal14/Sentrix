@@ -1420,19 +1420,27 @@ async def issue_token(db, device_id: str) -> None:
 
 async def unpair(db, device_id: str, actor: dict) -> dict[str, Any]:
     """``unpair`` command (the device wipes token and profile), token revoked,
-    socket closed with 4003, ``device.unpaired`` audit. A device that is
-    online and refuses (its own owner + step-up rule) stays paired."""
+    socket closed with 4003, ``device.unpaired`` audit. When the owner asks,
+    a device that is online and refuses (its own owner + step-up rule) stays
+    paired. When the Portal itself asks (``cloud``: an admin transfer or
+    retire; ``system``: the retention worker before an erasure) the token is
+    revoked and the socket closed whatever the device answers, so a device
+    that refuses (an older build) is cut off instead of staying connected."""
     from sentrix_portal import security
     device = db.get(Device, device_id)
     if device is None:
         return _command_result(False, "not_found", "unknown device")
     hub = _current
     result = None
+    portal_itself = str((actor or {}).get("type") or "") in ("cloud", "system")
     if hub is not None and hub.online(device_id):
         result = await hub.send_command(device_id, "unpair", {}, actor, timeout=10,
                                         queue_if_offline=False)
         if not result["ok"] and result["code"] != "device_offline":
-            return result
+            if not portal_itself:
+                return result
+            log.warning("device %s refused unpair (%s); revoking it anyway",
+                        device_id, result["code"])
     device.token_hash = None
     device.token_rotated_at = utcnow()
     device.state = "ASSIGNED" if device.household_id else "UNASSIGNED"

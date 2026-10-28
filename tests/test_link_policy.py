@@ -432,6 +432,21 @@ class TestCommandRules:
         done = h.handle(command("unpair"))
         assert done["ok"] and bag.wiped == [True] and profile.current() is None
 
+    @pytest.mark.parametrize("actor", [Actor.cloud(), Actor.system()])
+    def test_the_portal_itself_may_unpair_without_step_up(self, temp_db, actor):
+        """Admin transfer/retire (cloud) and erasure (system) unpair an online
+        device: it wipes its token and the old household's profile."""
+        from sentrix.link import profile, protocol
+        from test_link_support import Seeded, profile_for
+        doc = profile_for(Seeded("h", "u1", "m1", "op1", "c1", "d", "s"))
+        profile.store(doc, version=1, sha256=protocol.sha256_hex(doc))
+        h, bag = handler()
+        done = h.handle(command("unpair", actor=actor))
+        assert done["ok"] and bag.wiped == [True] and profile.current() is None
+        # Only unpair: the Portal still may not rotate the token or test the siren.
+        assert h.handle(command("token.rotate", actor=actor))["code"] == "forbidden_role"
+        assert h.handle(command("siren.test", actor=actor))["code"] == "forbidden_role"
+
     def test_demo_commands_only_in_test_mode(self, temp_db):
         h, bag = handler(test_mode=lambda: False)
         assert h.handle(command("demo.trigger", {"incident_type": "weapon"}))["code"] == \

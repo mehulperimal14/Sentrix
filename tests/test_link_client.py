@@ -205,6 +205,23 @@ class TestPairing:
         with rig.app.state.db.session() as db:
             assert db.get(Device, rig.seeded.device_id).token_hash is None
 
+    def test_an_admin_unpair_reaches_an_online_device(self, rig):
+        """Admin transfer/retire unpair as the Portal ("cloud"): the device
+        must wipe the old household's token and profile, not refuse."""
+        from sentrix.link import profile
+        from sentrix_portal.services import hub
+        start_claimed(rig)
+        wait_for(lambda: profile.current_version() == 1, what="profile")
+        actor = Actor("cloud", name="SENTRIX admin").to_dict()
+
+        async def go():
+            with rig.app.state.db.session() as db:
+                return await hub.unpair(db, rig.seeded.device_id, actor)
+        result = run_on(rig.service._loop, go())
+        assert result["ok"]
+        wait_for(lambda: link_client.load_token(rig.identity_dir) is None, what="token wiped")
+        assert profile.current() is None
+
     def test_a_rejected_token_backs_off_to_the_maximum_then_tries_bootstrap(self, rig):
         link_client.save_token(rig.identity_dir, "stale-token-" + "x" * 30)
         rig.service.start()
