@@ -168,7 +168,8 @@ responder console) + confirmed emergency contacts → Desk resolves.
 * **Parity by tunnel (D10):** the Portal does not re-implement LC pages.
   `/d/{device_id}/...` is forwarded over the link and replayed *in-process* into
   the device's own LC app (`httpx.ASGITransport`), so the same code serves both.
-  `/video` and `/ws/threat` are relayed specially (frame and state messages).
+  `/video` and `/ws/threat` are relayed specially (frame and state messages;
+  remote video adaptive up to 15 fps, at most 640 px wide).
 * **Topologies.** Laptop (what was run, §17): device = `python -m sentrix`
   with a video file or the demo reel as the camera; Portal = `python -m
   sentrix_portal` on `http://portal.localhost:8100`; LC on
@@ -410,8 +411,9 @@ from the environment at use time. `settings.test_mode` mirrors
 | `outbox_window` | — | 64 | Unacked events in flight |
 | `state_hz_subscribed` / `state_idle_seconds` | — | 2.0 / 10 | `state` message rate |
 | `subscription_lease_seconds` | — | 75 | State/video subscriptions expire unless renewed |
-| `video_max_fps` / `video_min_fps` | — | 15 / 2 | Adaptive remote video |
-| `video_jpeg_quality` | — | 70 | = the MJPEG stream's, so `latest_jpeg` encodes once |
+| `video_max_fps` / `video_min_fps` | — | 15 / 2 | Adaptive remote video: 80 % of the uplink, measured as bytes over wall time while sends wait on a backlog (a frame that fits in the socket's buffers returns at once and says nothing), or as time per byte for frames bigger than the buffers (`AdaptiveRate`) |
+| `video_jpeg_quality` | — | 70 | = the MJPEG stream's; `latest_jpeg` encodes once per frame for each width and quality |
+| `video_max_width` | `SENTRIX_LINK_VIDEO_WIDTH` | 640 | Remote video scaled down to this width, aspect kept (0 = full size); the LC's MJPEG stays full size. Since 2026-10-28, after the remote video lagged on the Render Portal: the Pi's full-size 1280×720 frames over its Wi-Fi are the suspected cause, not yet measured on the Pi or through Render |
 | `video_idle_stop_seconds` | — | 10 | Stop pushing frames after the last viewer |
 | `max_viewers` | — | 3 | Owner/member and Desk are exempt during an open request |
 | `tunnel_timeout_seconds` / `tunnel_upload_timeout_seconds` | — | 20 / 60 | |
@@ -943,11 +945,12 @@ routes enforce only their business rules (§5.8).
 
 Relays:
 * `/d/{id}/video` → `video.subscribe`; the device pushes FRAME messages from
-  `pipeline.latest_jpeg(70)` (one encode per frame, shared with the LC MJPEG)
-  only when `preview_seq` changed, at most `max_fps` (adaptive 2–15 fps from the
-  measured uplink); the Portal fans out `multipart/x-mixed-replace;
-  boundary=frame` to each viewer and shows "remote N fps · relay delay N ms".
-  The LC keeps full rate.
+  `pipeline.latest_jpeg(70, video_max_width)` only when `preview_seq` changed:
+  adaptive up to 15 fps (2–15 fps from the measured uplink, at most `max_fps`),
+  at most 640 px wide (aspect kept; one encode per frame however many viewers,
+  shared with the LC MJPEG when the preview is no wider); the Portal fans out
+  `multipart/x-mixed-replace; boundary=frame` to each viewer and shows "remote
+  N fps · relay delay N ms". The LC keeps full rate and full size.
 * `/d/{id}/ws/threat` → `state.subscribe`; each `state.payload` is sent as the
   same JSON text the LC websocket sends. While the device is offline the relay
   overrides `camera_online=false`, `camera_available=false`, `ai_hz=0`,
@@ -1812,7 +1815,7 @@ is left alone). A test renders every page through the tunnel and asserts every
 
 | Capability | device_admin (LC password) | owner | member | operator (Desk) | company_admin |
 |---|---|---|---|---|---|
-| LC pages, live video, state | ✓ | ✓ (tunnel; video needs `remote_view`) | ✓ (same) | only during a help-path request with `desk_live_view` | ✗ |
+| LC pages, live video, state | ✓ | ✓ (tunnel; video needs `remote_view`, adaptive up to 15 fps, at most 640 px wide) | ✓ (same) | only during a help-path request with `desk_live_view` | ✗ |
 | Snapshots / evidence images | ✓ | ✓ (`remote_view`) | ✓ (`remote_view`) | ✗ | ✗ |
 | Face gallery view / enrol / delete | ✓ | ✓ / ✓ / ✓ step-up (`face_recognition`) | view only | ✗ | ✗ |
 | Verdict Real/False | ✓ | ✓ (PIN with an open request) | ✓ (same) | via resolve | ✗ |

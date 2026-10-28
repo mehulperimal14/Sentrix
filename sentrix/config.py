@@ -722,10 +722,12 @@ class LinkConfig:
     #: Subscriptions are leases the Portal renews; an orphan stops itself.
     subscription_lease_seconds: float = 75.0
     #: Remote video: adaptive up to ``video_max_fps``; JPEG quality equals the
-    #: MJPEG stream's so the once-per-frame encode cache is reused.
+    #: MJPEG stream's, so a preview no wider than ``video_max_width`` reuses its encode.
     video_max_fps: float = 15.0
     video_min_fps: float = 2.0
     video_jpeg_quality: int = 70
+    #: Remote video scaled down to this width (0 = full size); the LAN MJPEG stays full size.
+    video_max_width: int = _env_int("SENTRIX_LINK_VIDEO_WIDTH", 640)
     video_idle_stop_seconds: float = 10.0
     max_viewers: int = 3
     tunnel_timeout_seconds: float = 20.0

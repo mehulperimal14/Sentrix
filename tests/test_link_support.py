@@ -205,15 +205,32 @@ class FakePipeline:
         self.events = SimpleNamespace(audit=lambda event, **detail: None)
         self._seq = 0
         self.jpeg_quality: list[int] = []
+        self.jpeg_max_width: list[int] = []
+        #: A preview to encode with the real ``Pipeline.latest_jpeg``; None = a tiny JPEG.
+        self.frame = None
 
     @property
     def preview_seq(self) -> int:
         self._seq += 1                         # a new camera frame every time it is asked
         return self._seq
 
-    def latest_jpeg(self, quality: int = 70):
+    def latest_jpeg(self, quality: int = 70, max_width: int = 0):
         self.jpeg_quality.append(quality)
+        self.jpeg_max_width.append(max_width)
+        if self.frame is not None:
+            return self._seq, _pipeline_jpeg(self.frame, quality, max_width)
         return self._seq, _tiny_jpeg(self._seq)
+
+
+def _pipeline_jpeg(frame, quality: int, max_width: int) -> bytes:
+    """``frame`` through the real ``Pipeline.latest_jpeg`` (no models, no camera)."""
+    from sentrix.config import settings
+    from sentrix.pipeline.engine import Pipeline
+    pipeline = Pipeline.__new__(Pipeline)
+    pipeline.cfg = settings
+    pipeline._init_live()
+    pipeline._publish(frame)
+    return pipeline.latest_jpeg(quality, max_width)[1]
 
 
 def fake_hardening_install(app) -> None:

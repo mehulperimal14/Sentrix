@@ -102,7 +102,62 @@ class TestDecoupledLoop:
         run_for(pipeline, 0.3)
         seq, data = pipeline.latest_jpeg()
         assert data is not None and data[:2] == b"\xff\xd8"
-        assert pipeline.latest_jpeg() is pipeline._jpeg
+        assert pipeline.latest_jpeg() is pipeline._jpegs[(0, 70)]
+
+
+def preview_pipeline(width: int, height: int):
+    """A pipeline holding one published preview frame (no camera, no models)."""
+    pipeline = Pipeline.__new__(Pipeline)
+    pipeline.cfg = settings
+    pipeline._init_live()
+    pipeline._publish(np.tile(np.arange(width, dtype=np.uint8)[None, :, None], (height, 1, 3)))
+    return pipeline
+
+
+def decoded_shape(encoded) -> tuple[int, int]:
+    import cv2
+    return cv2.imdecode(np.frombuffer(encoded[1], np.uint8), cv2.IMREAD_COLOR).shape[:2]
+
+
+class TestRemotePreview:
+    """The Portal's remote video is a scaled copy of the preview (full-size
+    1280x720 frames are suspected of lagging over the Pi's Wi-Fi; not yet
+    measured); the LAN MJPEG stays full size."""
+
+    def test_scaled_copy_keeps_the_aspect_with_even_sides(self):
+        assert decoded_shape(preview_pipeline(1280, 720).latest_jpeg(70, 640)) == (360, 640)
+        assert decoded_shape(preview_pipeline(1000, 563).latest_jpeg(70, 641)) == (360, 640)
+
+    def test_full_size_by_default_and_for_a_narrower_preview(self):
+        assert decoded_shape(preview_pipeline(1280, 720).latest_jpeg()) == (720, 1280)
+        assert decoded_shape(preview_pipeline(1280, 720).latest_jpeg(70, 0)) == (720, 1280)
+        laptop = preview_pipeline(640, 480)
+        assert laptop.latest_jpeg(70, 640) is laptop.latest_jpeg(70), \
+            "a preview no wider than max_width shares the full-size JPEG"
+
+    def test_each_size_and_quality_is_encoded_once_per_frame(self, monkeypatch):
+        import cv2
+        from sentrix.pipeline import engine
+        encoded: list[tuple] = []
+        real = cv2.imencode
+        monkeypatch.setattr(engine.cv2, "imencode",
+                            lambda ext, img, params: encoded.append(img.shape) or
+                            real(ext, img, params))
+        pipeline = preview_pipeline(1280, 720)
+        for _ in range(3):                       # three LAN viewers and three remote ones
+            full = pipeline.latest_jpeg(70)
+            small = pipeline.latest_jpeg(70, 640)
+        assert encoded == [(720, 1280, 3), (360, 640, 3)]
+        assert full[0] == small[0] and len(small[1]) < len(full[1])
+        pipeline.latest_jpeg(90, 640)
+        assert len(encoded) == 3, "another quality is another JPEG"
+        pipeline._publish(np.zeros((720, 1280, 3), np.uint8))
+        for _ in range(2):
+            pipeline.latest_jpeg(70)
+            pipeline.latest_jpeg(70, 640)
+        assert len(encoded) == 5, "a new frame: each size encoded once more"
+        assert {seq for seq, _ in pipeline._jpegs.values()} == {pipeline.preview_seq}, \
+            "older frames' JPEGs are dropped"
 
 
 class TestOverlay:

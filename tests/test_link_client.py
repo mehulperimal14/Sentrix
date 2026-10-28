@@ -26,6 +26,30 @@ from test_link_support import (MemoryNetwork, lc_app, make_device,
 OWNER_ACTOR = Actor("owner", id="u1", name="Riya", step_up_at=time.time()).to_dict()
 
 
+def drive_link(rate, frame: int, uplink: float, seconds: float = 60.0,
+               kernel: int = 16 * 1024) -> tuple[list[float], list[float]]:
+    """``LinkService._frame_loop`` on a virtual clock over the socket's buffers:
+    the kernel takes ``kernel`` bytes at once, websockets' ``drain()`` waits
+    once 32 KiB more are queued until 8 KiB are left, the link sends
+    ``uplink`` B/s; the loop sleeps ``rate.interval`` plus a 4 ms encode.
+    Returns the estimator's fps and each frame's lag (queued bytes / uplink
+    when it is sent) over the second half."""
+    now, queued, fps, lags = 0.0, 0.0, [], []
+    while now < seconds:
+        started, queued = now, queued + frame
+        if now > seconds / 2:
+            lags.append(queued / uplink)
+        if queued > kernel + 32 * 1024:
+            now += (queued - kernel - 8 * 1024) / uplink
+            queued = kernel + 8 * 1024
+        rate.on_sent(frame, now - started, now=now)
+        if now > seconds / 2:
+            fps.append(rate.fps)
+        sleep = rate.interval(15.0) + 0.004
+        queued, now = max(0.0, queued - uplink * sleep), now + sleep
+    return fps, lags
+
+
 def fast_settings(**link):
     """The device settings the hub reads, with test-speed link timings."""
     from dataclasses import replace
@@ -378,10 +402,36 @@ class TestSession:
         assert all(jpeg.startswith(b"\xff\xd8") for _seq, _ts, jpeg in got)
         assert len({seq for seq, _ts, _j in got}) == 3
         assert set(rig.pipeline.jpeg_quality) == {70}, "the MJPEG stream's cached quality"
+        assert set(rig.pipeline.jpeg_max_width) == {rig.service.cfg.video_max_width}
         session = rig.network.hub.sessions[rig.seeded.device_id]
         assert session.delay_ms is not None
         from sentrix.storage import link_store
         assert any(r["kind"] == "video" and r["allowed"] for r in link_store.recent_remote(20))
+
+    @pytest.mark.parametrize("max_width, shape", [(640, (360, 640)), (0, (720, 1280))])
+    def test_remote_frames_are_scaled_to_the_video_width(self, rig, max_width, shape):
+        """The Pi's 1280x720 HUD preview is suspected of lagging over its Wi-Fi
+        (not yet measured): the Portal gets at most ``video_max_width`` px
+        (0 = full size), aspect kept."""
+        import cv2
+        import numpy as np
+        from dataclasses import replace
+        from sentrix.link import profile
+        from sentrix_portal.services.hub import Viewer
+        rig.service.cfg = replace(rig.service.cfg, video_max_width=max_width)
+        rig.pipeline.frame = np.tile(np.arange(1280, dtype=np.uint8)[None, :, None], (720, 1, 3))
+        start_claimed(rig)
+        wait_for(lambda: profile.current_version() == 1, what="profile with consents")
+        viewer = Viewer(key="s1", role="owner", actor=OWNER_ACTOR)
+        assert run_on(rig.service._loop,
+                      rig.network.hub.add_video_viewer(rig.seeded.device_id, viewer)) is None
+
+        async def frames(n):
+            return [await asyncio.wait_for(viewer.queue.get(), 5) for _ in range(n)]
+        for _seq, _ts, jpeg in run_on(rig.service._loop, frames(2)):
+            image = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)
+            assert image.shape[:2] == shape
+        assert set(rig.pipeline.jpeg_max_width) == {max_width}
 
     def test_video_is_refused_without_the_consent(self, rig, monkeypatch):
         from sentrix.link import profile
@@ -482,6 +532,80 @@ class TestPieces:
             rate.on_sent(40_000, 5.0)                # a congested link: the floor
         assert rate.fps == 2 and rate.interval() == pytest.approx(0.5)
         assert rate.interval(requested_fps=1) == pytest.approx(0.5)
+
+    @pytest.mark.parametrize("frame, uplink, kernel", [(22_000, 150_000, 16 * 1024),
+                                                       (30_000, 300_000, 16 * 1024),
+                                                       (22_000, 150_000, 128 * 1024)])
+    def test_adaptive_rate_measures_an_uplink_its_frames_fit_under(self, frame, uplink, kernel):
+        """640 px frames fit in the socket's buffers, so every other send
+        returns at once: the old bytes-per-second EWMA took those for a
+        ~10^8 B/s uplink and stayed at 15 fps, the link saturated and the
+        lag grew. The estimate now follows 80 % of the uplink."""
+        import statistics
+        fps, lags = drive_link(link_client.AdaptiveRate(2, 15), frame, uplink, kernel=kernel)
+        budget = 0.8 * uplink / frame
+        assert 0.8 * budget <= statistics.median(fps) <= 1.5 * budget < 15
+        if kernel == 16 * 1024:            # a bigger kernel buffer hides the backlog longer
+            assert statistics.median(fps) * frame < uplink, "headroom left on the link"
+            assert statistics.median(lags) < 0.25, "the old estimator: ~0.3 s and more"
+
+    def test_adaptive_rate_keeps_the_cap_on_a_fast_uplink(self):
+        import statistics
+        fps, lags = drive_link(link_client.AdaptiveRate(2, 15), 22_000, 2_000_000)
+        assert min(fps) == 15 and statistics.median(lags) < 0.02
+
+    def test_adaptive_rate_alternating_quick_and_waiting_sends(self):
+        """The pattern from the review: a 20 KB frame returns at once, the
+        next waits 0.2 s for the link (the loop sleeping 1/15 s between):
+        40 KB per ~0.33 s is ~120 kB/s, so ~4.8 fps at 80 %, not 15."""
+        rate = link_client.AdaptiveRate(2, 15)
+        now = 0.0
+        for i in range(60):
+            took = 0.2 if i % 2 else 0.0005
+            now += took
+            rate.on_sent(20_000, took, now=now)
+            now += 1 / 15
+        assert 3.5 <= rate.fps <= 6.5
+
+    def test_adaptive_rate_ignores_one_stall_of_the_event_loop(self):
+        rate = link_client.AdaptiveRate(2, 15)
+        now = 0.0
+        for i in range(90):                          # 6 s at 15 fps, one 0.3 s stall
+            took = 0.3 if i == 45 else 0.0005
+            now += took
+            rate.on_sent(25_000, took, now=now)
+            now += 1 / 15
+            assert rate.fps == 15
+
+    def test_adaptive_rate_large_frames_average_time_per_byte(self):
+        """A frame bigger than the buffers waits for its own bytes. Quick and
+        slow sends average as time per byte (60 kB per 0.2 s = 300 kB/s, about
+        4 fps at 80 %), so a quick one cannot pin the rate at the cap."""
+        rate = link_client.AdaptiveRate(2, 15)
+        now = 0.0
+        for i in range(40):
+            took = 0.4 if i % 2 else 0.0
+            now += took
+            rate.on_sent(60_000, took, now=now)
+            now += 1 / 15
+            if i > 20:
+                assert 3.0 <= rate.fps <= 5.5
+
+    @pytest.mark.parametrize("value, width", [(None, 640), ("320", 320)])
+    def test_video_width_setting(self, value, width):
+        """``SENTRIX_LINK_VIDEO_WIDTH``, read in a clean interpreter (an import-time default)."""
+        import os
+        import subprocess
+        import sys
+        from sentrix.paths import ROOT_DIR
+        env = {k: v for k, v in os.environ.items() if k != "SENTRIX_LINK_VIDEO_WIDTH"}
+        if value is not None:
+            env["SENTRIX_LINK_VIDEO_WIDTH"] = value
+        out = subprocess.run([sys.executable, "-c", "from sentrix.config import settings; "
+                              "print(settings.link.video_max_width)"],
+                             env=env, cwd=ROOT_DIR, capture_output=True, text=True,
+                             timeout=120, check=True)
+        assert int(out.stdout.strip().splitlines()[-1]) == width
 
     def test_backoff_rules(self, tmp_path):
         from types import SimpleNamespace

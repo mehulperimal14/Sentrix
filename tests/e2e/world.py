@@ -206,7 +206,7 @@ class DevicePipeline:
     def latest_raw(self):
         return self.frame
 
-    def latest_jpeg(self, quality: int = 70):
+    def latest_jpeg(self, quality: int = 70, max_width: int = 0):
         import cv2
         ok, buffer = cv2.imencode(".jpg", self.frame)
         return self._seq, buffer.tobytes()

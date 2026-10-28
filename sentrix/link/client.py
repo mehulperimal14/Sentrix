@@ -17,7 +17,8 @@ not running). The service runs on the LC's event loop and:
   reconnect until acked;
 * pushes ``state`` (2 Hz while subscribed, else every 10 s) and, while a video
   subscription is leased, FRAME messages from ``pipeline.latest_jpeg`` at the
-  stream's quality (the once-per-frame encode is shared with the LC's MJPEG),
+  stream's quality, scaled down to ``video_max_width`` (640 px; encoded once
+  per frame however many viewers, while the LC's MJPEG stays full size),
   adaptively up to 15 fps from the measured uplink;
 * serves ``tunnel.request`` through :class:`~sentrix.link.tunnel.TunnelExecutor`
   and ``command`` through :class:`~sentrix.link.commands.CommandHandler`,
@@ -44,6 +45,7 @@ import sys
 import threading
 import time
 import uuid
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -246,31 +248,88 @@ Connector = Callable[[str, dict], Awaitable[Any]]
 class AdaptiveRate:
     """Remote video rate from the measured uplink (docs/7 §5.7: 2..15 fps).
 
-    Each frame's send time (the socket applies back-pressure once its buffer
-    fills) gives an uplink estimate (EWMA of bytes per second of sending);
-    the rate is the fps that spends at most ``budget`` of the uplink on video,
-    clamped to ``[min_fps, max_fps]`` and to what the viewer asked for.
+    A send waits only once the socket's buffers are full (websockets drains
+    above 32 KiB queued, on top of the kernel's own buffer), so a frame that
+    fits in them returns at once whatever the uplink, and its send time says
+    nothing. Two measures instead:
+
+    * **backlog** - a send of a frame up to ``socket_buffer`` bytes that waits
+      at least ``hold_floor`` s proves earlier frames were still queued. When
+      such waits fill ``backlogged`` of the last ``window`` s (and number at
+      least ``min_holds``, so one stall of the event loop is not a backlog),
+      the link set the loop's pace and the bytes sent over that wall time,
+      sleeps included, are the uplink;
+    * **large frames** - a frame bigger than the buffers waits for its own
+      bytes; its seconds per byte feed a time-per-byte EWMA (a send that
+      returns at once adds about 0, never 10^4 x its size).
+
+    With neither, the estimate creeps up by ``probe`` per second to find spare
+    room (until the cap). The rate is the fps that spends at most ``budget``
+    of the uplink on video, clamped to ``[min_fps, max_fps]`` and to what the
+    viewer asked for. ``now`` is the send's end on the monotonic clock;
+    without it the sends are taken as back to back.
     """
 
     def __init__(self, min_fps: float = 2.0, max_fps: float = 15.0, *,
-                 budget: float = 0.8, alpha: float = 0.3) -> None:
+                 budget: float = 0.8, alpha: float = 0.3, window: float = 3.0,
+                 backlogged: float = 0.1, min_holds: int = 3, probe: float = 0.05,
+                 hold_floor: float = 0.01, socket_buffer: int = 48 * 1024) -> None:
         self.min_fps = float(min_fps)
         self.max_fps = float(max_fps)
         self.budget = float(budget)
         self.alpha = float(alpha)
+        self.window = float(window)
+        self.backlogged = float(backlogged)
+        self.min_holds = int(min_holds)
+        self.probe = float(probe)
+        #: A real wait lasts at least 24 KiB / uplink: over 10 ms on any link
+        #: too slow for 15 fps of 640 px frames.
+        self.hold_floor = float(hold_floor)
+        #: A frame up to this size cannot fill the buffers on its own (32 KiB
+        #: in websockets + the kernel's 16 KiB or more; more again under TLS).
+        self.socket_buffer = int(socket_buffer)
         self.uplink_bps: float | None = None
         self.frame_bytes: float | None = None
         self.fps = float(max_fps)
+        self._sends: deque[tuple[float, int, float, float]] = deque()  # end, bytes, held, gap
+        self._clock: float | None = None
 
-    def on_sent(self, nbytes: int, seconds: float) -> float:
-        seconds = max(seconds, 1e-4)
-        bps = nbytes / seconds
+    def on_sent(self, nbytes: int, seconds: float, now: float | None = None) -> float:
+        nbytes = max(int(nbytes), 1)
+        seconds = max(float(seconds), 0.0)
+        if now is None:
+            now = (self._clock or 0.0) + seconds
+        gap = seconds if self._clock is None else min(max(now - self._clock, seconds),
+                                                      self.window)
+        self._clock = now
+        small = nbytes <= self.socket_buffer
+        held = seconds if small and seconds >= self.hold_floor else 0.0
+        self._sends.append((now, nbytes, held, gap))
+        while len(self._sends) > self.min_holds and self._sends[0][0] <= now - self.window:
+            self._sends.popleft()                     # never fewer than min_holds sends
+        sent = sum(s[1] for s in self._sends)
+        waited = sum(s[2] for s in self._sends)
+        holds = sum(1 for s in self._sends if s[2] > 0)
+        elapsed = max(sum(s[3] for s in self._sends), 1e-4)
         a = self.alpha
-        self.uplink_bps = bps if self.uplink_bps is None else (1 - a) * self.uplink_bps + a * bps
         self.frame_bytes = (nbytes if self.frame_bytes is None
                             else (1 - a) * self.frame_bytes + a * nbytes)
-        affordable = self.budget * self.uplink_bps / max(self.frame_bytes, 1.0)
-        self.fps = max(self.min_fps, min(self.max_fps, affordable))
+        frame = max(self.frame_bytes, 1.0)
+        cap = self.max_fps * frame / self.budget              # the uplink 15 fps needs
+        if holds >= self.min_holds and waited >= self.backlogged * elapsed:
+            self.uplink_bps = sent / elapsed
+        elif not small:
+            per_byte = seconds / nbytes
+            if self.uplink_bps is None:
+                self.uplink_bps = 1 / per_byte if per_byte > 0 else cap
+            else:
+                self.uplink_bps = 1 / ((1 - a) / self.uplink_bps + a * per_byte)
+        elif self.uplink_bps is not None:
+            self.uplink_bps = max(self.uplink_bps, sent / elapsed) * (1 + self.probe * gap)
+        if self.uplink_bps is not None:
+            self.uplink_bps = min(self.uplink_bps, cap)
+            affordable = self.budget * self.uplink_bps / frame
+            self.fps = max(self.min_fps, min(self.max_fps, affordable))
         return self.fps
 
     def interval(self, requested_fps: float | None = None) -> float:
@@ -1174,6 +1233,7 @@ class LinkService:
             return await asyncio.Event().wait()
         rate = AdaptiveRate(self.cfg.video_min_fps, self.cfg.video_max_fps)
         quality = int(self.cfg.video_jpeg_quality)
+        max_width = int(self.cfg.video_max_width)
         last_seq = None
         while True:
             now = time.monotonic()
@@ -1194,7 +1254,7 @@ class LinkService:
             if pipeline is None or getattr(pipeline, "preview_seq", None) == last_seq:
                 await asyncio.sleep(0.02)
                 continue
-            seq, jpeg = await asyncio.to_thread(pipeline.latest_jpeg, quality)
+            seq, jpeg = await asyncio.to_thread(pipeline.latest_jpeg, quality, max_width)
             if jpeg is None or seq == last_seq or len(jpeg) > protocol.MAX_FRAME_JPEG_BYTES:
                 last_seq = seq
                 await asyncio.sleep(0.02)
@@ -1202,7 +1262,8 @@ class LinkService:
             last_seq = seq
             started = time.monotonic()
             await self._send_bytes(session, protocol.pack_frame(seq, protocol.now_ms(), jpeg))
-            rate.on_sent(len(jpeg), time.monotonic() - started)
+            ended = time.monotonic()
+            rate.on_sent(len(jpeg), ended - started, now=ended)
             self._status["video_fps"] = round(min(rate.fps, requested), 1)
             await asyncio.sleep(rate.interval(requested))
 

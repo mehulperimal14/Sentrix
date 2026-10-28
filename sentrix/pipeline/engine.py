@@ -63,7 +63,7 @@ from sentrix.fusion.features import FeatureVector
 from sentrix.fusion.policy import LevelPolicy
 from sentrix.fusion.tci import TCIEngine, TCIResult
 from sentrix.io.actuators import build_siren
-from sentrix.io.recorder import Recorder, RecorderError
+from sentrix.io.recorder import Recorder, RecorderError, _target_size
 from sentrix.io.sources import FrameSource, _placeholder, build_source
 from sentrix.perception.audio import AudioEngine, AudioResult, audio_votes, neutral_reason
 from sentrix.perception.behaviour import BehaviourEngine
@@ -266,7 +266,8 @@ class Pipeline:
         self._preview_lock = threading.Lock()
         self._preview: np.ndarray | None = None
         self._preview_seq = 0
-        self._jpeg: tuple[int, bytes] | None = None
+        #: (max_width, quality) -> (preview seq, JPEG); max_width 0 = full size.
+        self._jpegs: dict[tuple[int, int], tuple[int, bytes]] = {}
         self._last_seq = -1
         self._video_times: deque[float] = deque(maxlen=90)
         self._ai_times: deque[float] = deque(maxlen=30)
@@ -931,21 +932,36 @@ class Pipeline:
     def preview_seq(self) -> int:
         return self._preview_seq
 
-    def latest_jpeg(self, quality: int = 70) -> tuple[int, bytes | None]:
-        """The preview as JPEG, encoded once per frame however many viewers."""
+    def latest_jpeg(self, quality: int = 70, max_width: int = 0) -> tuple[int, bytes | None]:
+        """The preview as JPEG, encoded once per frame however many viewers.
+
+        ``max_width`` > 0 scales a wider preview down first (the Portal's
+        remote video, ``LinkConfig.video_max_width``: full-size frames over the
+        Pi's Wi-Fi are the suspected cause of its lag, not yet measured); the
+        LAN MJPEG asks for the full size. Each
+        (width, quality) is cached on its own, and a preview no wider than
+        ``max_width`` shares the full-size JPEG."""
         with self._preview_lock:
-            seq, frame, cached = self._preview_seq, self._preview, self._jpeg
+            seq, frame = self._preview_seq, self._preview
+            width = int(max_width) if frame is not None and 0 < max_width < frame.shape[1] else 0
+            key = (width, int(quality))
+            cached = self._jpegs.get(key)
         if cached is not None and cached[0] == seq:
             return cached
         if frame is None or cv2 is None:
             return seq, None
+        if width:
+            frame = cv2.resize(frame, _target_size(frame.shape[1], frame.shape[0], width),
+                               interpolation=cv2.INTER_AREA)
         ok, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
         if not ok:
             return seq, None
         encoded = (seq, buffer.tobytes())
         with self._preview_lock:
             if self._preview_seq == seq:
-                self._jpeg = encoded
+                # Only the newest frame is ever served: older JPEGs go.
+                self._jpegs = {k: v for k, v in self._jpegs.items() if v[0] == seq}
+                self._jpegs[key] = encoded
         return encoded
 
     # ── training recordings (D20) ─────────────────────────────────────────────
