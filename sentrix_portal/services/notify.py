@@ -66,7 +66,7 @@ from sentrix.alerting.channels.router import Router, notification_payload
 from sentrix.utils.redact import mask_recipient
 from sentrix_portal import security
 from sentrix_portal.models import (ActionToken, AssistanceRequest, Device, EmergencyContact,
-                                   Notification, TelegramLink, User)
+                                   Household, Notification, TelegramLink, User)
 
 log = logging.getLogger("sentrix_portal.notify")
 
@@ -597,6 +597,15 @@ async def _on_start(app, inbound: telegram.Inbound, api) -> dict[str, Any]:
         else:
             user = db.get(User, token.subject_id)
             role = user.role if user is not None else "owner"
+            if user is not None and user.role == "owner" and token.household_id:
+                # The bot is about to say "alerts will arrive in this chat":
+                # make it true even if the Telegram channel was switched off.
+                household = db.get(Household, token.household_id)
+                if household is not None:
+                    channels = dict(household.channels or {})
+                    if not channels.get("telegram", True):
+                        channels["telegram"] = True
+                        household.channels = channels
         token.used_at = now
         token.opened_count = (token.opened_count or 0) + 1
         security.audit(db, "telegram.linked", actor_type=token.subject_type,

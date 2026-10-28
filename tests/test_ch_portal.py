@@ -237,6 +237,23 @@ class TestStartLinking:
         again = run(notify.handle_update(portal_app, start_update("link-code-1", update_id=2)))
         assert again["handled"] == "refused"
 
+    def test_linking_the_owners_chat_switches_telegram_on(self, portal_app, fakes, bot):
+        """The bot answers "alerts will arrive in this chat": with the channel
+        off they never would, so linking the owner's chat switches it on."""
+        from sentrix_portal.models import Household
+        from sentrix_portal.services import accounts
+        assert accounts.DEFAULT_CHANNELS["telegram"] is True
+        with portal_app.state.db.session() as db:
+            home = household(db)
+            home.channels = {"email": True, "telegram": False, "whatsapp": True, "sms": True}
+            user = owner_user(db, home)
+            link_token(db, home, "user", user.id)
+            home_id = home.id
+        run(notify.handle_update(portal_app, start_update("link-code-1")))
+        with portal_app.state.db.session() as db:
+            channels = db.get(Household, home_id).channels
+            assert channels["telegram"] is True and channels["email"] is True
+
     def test_links_a_contact_and_records_the_chat_on_the_contact(self, portal_app, fakes, bot):
         from sentrix_portal.models import EmergencyContact, TelegramLink
         with portal_app.state.db.session() as db:

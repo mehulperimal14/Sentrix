@@ -99,8 +99,10 @@ LANGUAGES = {"en": "English"}
 HOUSEHOLD_STATUSES = ("active", "disabled", "erasing", "closed")
 CHANNEL_KEYS = ("email", "telegram", "whatsapp", "sms")
 #: WhatsApp reaches the owner's mobile number once the Cloud API is
-#: configured on the Portal (D17); on by default like e-mail.
-DEFAULT_CHANNELS = {"email": True, "telegram": False, "whatsapp": True, "sms": True}
+#: configured on the Portal (D17); on by default like e-mail. Telegram is on
+#: too: it reaches only a chat the owner linked with /start, and linking a
+#: chat switches it back on (``notify._on_start``).
+DEFAULT_CHANNELS = {"email": True, "telegram": True, "whatsapp": True, "sms": True}
 STAFF_ROLES = ("company_admin", "operator")
 INDIAN_STATES = (
     "Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam",
