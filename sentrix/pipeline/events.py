@@ -55,10 +55,28 @@ class EventLog:
         self._handle = None
         self._rows = 0
         self.directory.mkdir(parents=True, exist_ok=True)
+        self._day = time.strftime("%Y%m%d")
         stamp = time.strftime("%Y%m%d_%H%M%S")
         self.path = self.directory / f"events_{stamp}_{self.session_id}.jsonl"
 
     def _open(self):
+        # A new file each day (same session id in the name): a unit that is
+        # never restarted would otherwise grow one file past every retention
+        # cap, since the file being written is never pruned.
+        day = time.strftime("%Y%m%d")
+        if day != self._day and self._handle:
+            try:
+                self._handle.close()
+            except OSError:
+                pass
+            self._handle = None
+            self._day = day
+            stamp, n = time.strftime("%Y%m%d_%H%M%S"), 1
+            fresh = self.directory / f"events_{stamp}_{self.session_id}.jsonl"
+            while fresh == self.path or fresh.exists():
+                n += 1
+                fresh = self.directory / f"events_{stamp}_{self.session_id}_{n}.jsonl"
+            self.path = fresh
         if self._handle is None:
             try:
                 self._handle = open(self.path, "a", encoding="utf-8")
@@ -224,15 +242,17 @@ def load_dataset(directory: Path | None = None):
 
 
 def prune_logs(directory: Path | None = None, *, keep_days: float, max_bytes: float,
-               keep: Path | None = None, now: float | None = None) -> list[Path]:
-    """Delete event logs older than ``keep_days``, then the oldest while all
-    of them together exceed ``max_bytes``. ``keep`` (the file being written)
-    is never deleted. Returns the deleted paths."""
+               keep: Path | None = None, now: float | None = None,
+               pattern: str = "events_*.jsonl") -> list[Path]:
+    """Delete logs (``pattern``: event logs, or ``telemetry_*.jsonl``) older
+    than ``keep_days``, then the oldest while all of them together exceed
+    ``max_bytes``. ``keep`` (the file being written) is never deleted.
+    Returns the deleted paths."""
     directory = directory or EVENTLOG_DIR
     now = time.time() if now is None else now
     try:
         files = sorted(((p.stat().st_mtime, p.stat().st_size, p)
-                        for p in directory.glob("events_*.jsonl")
+                        for p in directory.glob(pattern)
                         if keep is None or p.resolve() != Path(keep).resolve()),
                        key=lambda item: item[0])
     except OSError as exc:
@@ -257,7 +277,7 @@ def prune_logs(directory: Path | None = None, *, keep_days: float, max_bytes: fl
         deleted.append(path)
         total -= size
     if deleted:
-        log.info("event logs: %d old file(s) deleted (retention)", len(deleted))
+        log.info("%s: %d old file(s) deleted (retention)", pattern, len(deleted))
     return deleted
 
 

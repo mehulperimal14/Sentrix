@@ -510,6 +510,7 @@ class Pipeline:
         path = notifier.save_snapshot(frame, incident.id)
         if path is not None:
             incident.snapshot_path = path.name
+            self._save_with_capture(incident)
             listeners.emit("snapshot", lambda: {
                 "name": path.name, "incident_id": incident.id,
                 "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
@@ -525,6 +526,16 @@ class Pipeline:
             # the trigger, which is what a reviewer wants to see first.
             incident.evidence_bundle = record.bundle_id
             incident.evidence_hash = record.sha256
+            self._save_with_capture(incident)
+
+    def _save_with_capture(self, incident) -> None:
+        """Re-save the row once a capture landed (worker thread, after the
+        open row's save). A steady incident is otherwise re-saved only when
+        its peak moves, so a crash left its row without snapshot/evidence."""
+        try:
+            database.save_incident(incident, self.session_id, incident.ended_at is None)
+        except Exception as exc:
+            log.error("incident %s: saving the capture failed: %s", incident.id[:8], exc)
 
     @staticmethod
     def _create_dispatch(incident, result: TCIResult, level: int) -> None:

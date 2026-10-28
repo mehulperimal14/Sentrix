@@ -23,6 +23,8 @@ regardless of frame rate.
 
 from __future__ import annotations
 
+from collections import deque
+
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -138,7 +140,8 @@ class IncidentManager:
     def __init__(self) -> None:
         self.cfg = settings.incident
         self._current: Incident | None = None
-        self._closed: list[Incident] = []
+        # Only the last 50 are ever read (recent()); a unit runs for weeks.
+        self._closed: deque[Incident] = deque(maxlen=50)
 
     @property
     def current(self) -> Incident | None:
@@ -146,7 +149,7 @@ class IncidentManager:
 
     @property
     def recent(self) -> list[Incident]:
-        return list(self._closed[-50:])
+        return list(self._closed)
 
     def update(self, level: int, tci: float, incident_type: str,
                now: float | None = None, features: dict | None = None,
