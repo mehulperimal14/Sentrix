@@ -42,7 +42,11 @@ deleting the service.
    `render.yaml` at the repository root: one web service `sentrix-portal`,
    Docker (`deploy/portal/Dockerfile`), **Starter** (`0.5c-512mb`), **Singapore**, a 1 GB
    disk on `/data`, health check `/healthz`. The two Portal keys and the
-   WhatsApp verify token are generated for you.
+   WhatsApp verify token are generated for you. It also sets
+   `PORTAL_CLIENT_IP_HEADER=cf-connecting-ip`: Render's edge passes a
+   client's own `X-Forwarded-For` through, so the sign-in back-off counts the
+   address Cloudflare (in front of Render) reports instead. A service created
+   before 2026-10-28 picks it up with **Blueprint → Sync**.
 3. Render asks for the values marked `sync: false`. Fill in what you have
    now; the rest can be added later under the service's **Environment**:
 
@@ -74,8 +78,6 @@ outbound traffic a month, and the live video through the Portal uses about
 **Railway instead** (if its sign-ups reopen): `railway.json` builds the same
 image; add a volume on `/data`, generate a domain and set the same variables
 (`PORTAL_WORKERS=1`, `PORTAL_SECURE_COOKIES=1`, `PORTAL_TRUSTED_PROXIES=*`,
-`PORTAL_CLIENT_IP_HEADER=cf-connecting-ip` - Render's edge passes a client's own
-`X-Forwarded-For` through, so the address comes from Cloudflare's header -,
 `PORTAL_TEST_MODE=1`, `SENTRIX_TEST_MODE=1`, `PORTAL_BOOTSTRAP_ADMIN=admin`,
 `PORTAL_SECRET_KEY` and `PORTAL_DATA_KEY` from
 `python -c "import secrets; print(secrets.token_hex(32))"`, and the WhatsApp
