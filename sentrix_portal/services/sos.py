@@ -379,7 +379,8 @@ def _apply_device(db, device: Device, payload: dict) -> list[tuple[str, dict]] |
                                 authority_side="device", flags={}, incident_ids=[],
                                 policy={})
         db.add(row)
-    _merge_request(db, row, request, has_cloud_events(db, request_id))
+    cloud_acted = has_cloud_events(db, request_id)
+    _merge_request(db, row, request, cloud_acted)
     db.add(RequestEvent(
         request_id=request_id, seq=fields["seq"], origin="device", at=_parse(fields["at"]),
         at_text=fields["at"], received_at=utcnow(), from_state=fields["from_state"],
@@ -398,6 +399,14 @@ def _apply_device(db, device: Device, payload: dict) -> list[tuple[str, dict]] |
                            "actor": f"{fields['actor_type']}:{fields['actor_id'] or ''}",
                            # A duress help path: never in the household's log.
                            **({"restricted": True} if fields["restricted"] else {})})
+    if cloud_acted and fields["to_state"] and row.state != fields["to_state"]:
+        # Stale: the device's own timers ran while it was cut off and the
+        # cloud took over (or it restarted). The event stays in the chain,
+        # but its reminders / "lapsed" / withdrawal no longer match the
+        # request, which the reconcile kept in the cloud's state.
+        log.info("request %s: stale device %s (-> %s) kept, not acted on (now %s)",
+                 request_id[:8], fields["event"], fields["to_state"], row.state)
+        return []
     return _after_event(db, row, event_dict_from(fields, event["hash"], prev), "device")
 
 
@@ -1017,10 +1026,11 @@ def _cloud_answer(db, row: AssistanceRequest, action: str, who, channel: str,
         if (row.flags or {}).get("duress"):
             # Looks declined to the household: answer as a declined request
             # would, and page the Desk and contacts again with the banner.
+            step = f"help_now{int(row.repage_count or 0) + 1}"
+            row.repage_count = int(row.repage_count or 0) + 1   # each press: its own step
             _cloud_event(db, row, S.NOTIFICATION, actor_type=actor_type, actor_id=actor_id,
                          channel=channel, restricted=True,
-                         detail={"step": f"help_now{int(row.repage_count or 0) + 1}",
-                                 "duress": True})
+                         detail={"step": step, "duress": True})
             return result("ok", "Help requested", request_view(row, view))
         if row.state not in (S.EXPIRED, S.DECLINED, S.CANCELLED):
             return result("conflict", "this request is still open", request_view(row, view))
@@ -1478,6 +1488,12 @@ def _after_event(db, row: AssistanceRequest, ev: dict, origin: str) -> list[tupl
                            text_for=lambda c, p: ((f"SENTRIX: the alert at {owner_name}'s home "
                                                    f"({short}) lapsed unanswered. {FOOTER}"),) * 2)
         _close_tokens(db, row, revoke_contacts=False)
+    elif (event == S.NOTIFICATION and duress
+          and str((ev.get("detail") or {}).get("step") or "").startswith("help_now")):
+        # "Request help now" under duress (it looks declined to the household):
+        # page the contacts again with the duress banner, as its own step.
+        _send_contacts(db, row, step=str(ev["detail"]["step"]), template="sos.duress",
+                       text_for=sos_texts, subject=f"SENTRIX SOS {short}")
     elif event in (S.DECLINE, S.CANCEL):
         if flags.get("contacts_notified"):
             _send_contacts(db, row, step=S.STEP_RESOLVED, template="sos.resolved",
