@@ -568,13 +568,14 @@ class Pipeline:
 
         evidence_state = ((result.features.extras or {}).get("evidence") or {}).get(
             result.incident_type, {}).get("state")
-        if (plan.sos and "sos" not in incident.actions
+        sos_claim = f"sos:{result.incident_type}"
+        if (plan.sos and sos_claim not in incident.actions
                 and self.sos.wants(result.incident_type, level, evidence_state)):
-            # Claimed only once the service wants this incident type, so an
-            # incident that becomes a weapon after an experimental L2 still
-            # opens a request. Queued after the snapshot and evidence above,
-            # so the trigger carries their paths; never dropped (D8).
-            incident.actions.add("sos")
+            # Claimed per class once the service wants it, so an incident that
+            # becomes a weapon after an experimental L2, or a fire after a
+            # declined weapon, still reaches SOS. Queued after the snapshot and
+            # evidence above, so the trigger carries their paths (D8).
+            incident.actions.add(sos_claim)
             self._submit_or_run(self._sos_trigger, incident, result, level, now)
 
         # Once the SOS service owns an incident it owns every message about it
@@ -582,7 +583,7 @@ class Pipeline:
         # into the request's level_rise reminder, the L5 call into its rise5
         # step) and its one dispatch package (opened with the request at L3).
         # The siren stays: a physical deterrent is not a message.
-        sos_owned = "sos" in incident.actions
+        sos_owned = any(a == "sos" or a.startswith("sos:") for a in incident.actions)
 
         if plan.sms and not sos_owned and claim(incident, "sms"):
             self._submit(notifier.send_sms, result, level, status)

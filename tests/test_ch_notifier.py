@@ -229,7 +229,7 @@ class TestPipelineClaims:
         fake._submit_or_run = lambda func, *args: None
         fake._act(incident, plan_for(5), np.zeros((4, 4, 3), np.uint8), tci_result(), 5,
                   "CRITICAL", 0.0)
-        assert outbox(channels) == [] and "sos" in incident.actions
+        assert outbox(channels) == [] and "sos:weapon" in incident.actions
 
 
 def test_running_service_in_the_registry_is_found(temp_db, monkeypatch):

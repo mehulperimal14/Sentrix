@@ -100,6 +100,13 @@ def _cloud_outcome(cloud_events: list[dict]) -> str | None:
     return outcome
 
 
+def _tkey(incident_id: str | None, incident_type: str | None) -> str:
+    """Trigger dedupe key: one trigger per incident *and class*, so a fire
+    after a declined weapon in the same incident still prompts. ``*`` marks
+    the whole incident handled (a duress request)."""
+    return f"{incident_id}|{incident_type or '*'}"
+
+
 def _remember(store: OrderedDict, key: Any, value: Any) -> None:
     """Insert (as newest) and forget the oldest beyond ``INCIDENT_MEMORY``."""
     store[key] = value
@@ -163,6 +170,8 @@ class SosEngine:
         # Per incident, oldest first and capped (a device runs for months).
         self._suppressed: OrderedDict[str, tuple[SosTrigger, M.TriggerFacts]] = OrderedDict()
         self._triggered: OrderedDict[str, None] = OrderedDict()
+        #: (incident, level) re-prompts after the incident's request closed.
+        self._reprompted: OrderedDict[tuple, None] = OrderedDict()
         self._levels: OrderedDict[str, int] = OrderedDict()
         self._level, self._level_incident = 1, None
         #: (incident, request) links still to write -> attempts so far.
@@ -517,9 +526,11 @@ class SosEngine:
     def _handle_trigger(self, trigger: SosTrigger, *, entry_delay_over: bool = False,
                         actor: Actor | None = None) -> dict | None:
         """One incident handed over by the pipeline (idempotent per incident)."""
-        if trigger.incident_id in self._triggered and not entry_delay_over:
+        key = _tkey(trigger.incident_id, trigger.incident_type)
+        if ((key in self._triggered or _tkey(trigger.incident_id, "*") in self._triggered)
+                and not entry_delay_over):
             return None
-        _remember(self._triggered, trigger.incident_id, None)
+        _remember(self._triggered, key, None)
         self.counters["triggers"] += 1
         facts = self._facts(trigger)
         open_snap = self._open_snapshot()
@@ -541,7 +552,7 @@ class SosEngine:
             self._held[trigger.incident_id] = _Hold(trigger, facts, decision.hold_until)
             # Not "triggered": a weapon or fire later in the same incident must
             # still open a request, even if this hold is dropped (disarm, face).
-            self._triggered.pop(trigger.incident_id, None)
+            self._triggered.pop(key, None)
             self._audit("sos_entry_delay", incident_id=trigger.incident_id,
                         seconds=self.rules.intrusion_entry_delay)
             return None
@@ -578,7 +589,7 @@ class SosEngine:
                 and change.level >= self.rules.min_level):
             from sentrix import mode
             if mode.is_armed() and change.incident_id not in self._held \
-                    and change.incident_id not in self._triggered:
+                    and _tkey(change.incident_id, "intrusion") not in self._triggered:
                 self._handle_trigger(self._trigger_from_level(change))
         open_snap = self._open_snapshot()
         if open_snap is not None and change.incident_id in open_snap.incident_ids:
@@ -591,20 +602,40 @@ class SosEngine:
             # Stronger evidence than what was declined always prompts.
             del self._suppressed[change.incident_id]
             trigger, _ = suppressed
-            self._triggered.pop(trigger.incident_id, None)
+            self._triggered.pop(_tkey(trigger.incident_id, trigger.incident_type), None)
             self._handle_trigger(replace(trigger, level=int(change.level),
                                          evidence_state=change.evidence_state))
+        elif (change.incident_id and change.level in self.rules.contacts_immediate_levels
+              and change.incident_type in self.rules.alarm_classes
+              and _tkey(change.incident_id, change.incident_type) in self._triggered
+              and (change.incident_id, int(change.level)) not in self._reprompted
+              and (open_snap is None or change.incident_id not in open_snap.incident_ids)):
+            # The incident's request was answered or lapsed (declined, false
+            # alarm, expired) and the same incident is now L4/L5. Stronger
+            # evidence always prompts (M.on_trigger), but only as a trigger:
+            # otherwise it reaches nobody, the pipeline having handed its
+            # messages to SOS. Once per incident and level.
+            _remember(self._reprompted, (change.incident_id, int(change.level)), None)
+            self._triggered.pop(_tkey(change.incident_id, change.incident_type), None)
+            self._handle_trigger(self._trigger_from_level(
+                change, reason=f"Level {int(change.level)} after the earlier answer",
+                armed=None))
 
-    def _trigger_from_level(self, change: LevelChange) -> SosTrigger:
-        """An armed intrusion arrives as a level change; its snapshot and
-        evidence come from the live incident when it is the same one."""
+    def _trigger_from_level(self, change: LevelChange, *,
+                            reason: str = "Unrecognised person (armed mode)",
+                            armed: bool | None = True) -> SosTrigger:
+        """A trigger built from a level change (an armed intrusion, or a
+        re-prompt); its snapshot and evidence come from the live incident
+        when it is the same one. ``armed=None``: the current mode."""
+        from sentrix import mode
         live = self._live_incident(change.incident_id)
         session = getattr(self._pipeline(), "session_id", "") or ""
         return SosTrigger(
             incident_id=change.incident_id, level=int(change.level),
             incident_type=change.incident_type, evidence_state=change.evidence_state,
-            tci=change.tci, reason="Unrecognised person (armed mode)", session_id=session,
-            armed=True, at_wall=change.at_wall or self._now(), at_mono=change.at_mono,
+            tci=change.tci, reason=reason, session_id=session,
+            armed=mode.is_armed() if armed is None else armed,
+            at_wall=change.at_wall or self._now(), at_mono=change.at_mono,
             snapshot_path=getattr(live, "snapshot_path", None),
             evidence_bundle=getattr(live, "evidence_bundle", None),
             evidence_hash=getattr(live, "evidence_hash", None))
@@ -1432,7 +1463,7 @@ class SosEngine:
                              evidence_bundle=getattr(live, "evidence_bundle", None),
                              evidence_hash=getattr(live, "evidence_hash", None))
         if incident_id:
-            _remember(self._triggered, incident_id, None)
+            _remember(self._triggered, _tkey(incident_id, "*"), None)
         self._open(trigger, self._facts(trigger), {"silent": True}, actor=actor, channel="lc",
                    approve=M.LinkedRequest("", recommended_authority("duress"), duress=True))
 

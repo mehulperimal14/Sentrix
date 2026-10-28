@@ -1260,3 +1260,55 @@ class TestReviewRegressions:
         names = event_names(req["id"])
         assert names.index("contacts_notified") < names.index("expire")
         assert requests.get_request(req["id"])["state"] == S.EXPIRED
+
+
+# ── the same incident grows after its request was answered (audit 2026-10-28) ─
+def _rise(w, incident, level, kind="weapon", evidence="corroborated"):
+    w.engine.on_level(LevelChange(level=level, previous_level=level - 1, incident_id=incident,
+                                  incident_type=kind, evidence_state=evidence, tci=0.9,
+                                  at_wall=w.clock(), at_mono=0.0))
+    w.engine.work()
+
+
+class TestTheSameIncidentGrows:
+    """The pipeline hands an incident's messages to SOS for good (no legacy
+    SMS or call), so a stronger alarm in it after its request was answered
+    must open a new request instead of reaching nobody."""
+
+    def test_declined_then_corroborated_l4_prompts_again(self, world):
+        incident = fire_trigger(world)
+        first = the_request()
+        assert world.engine.respond(first["id"], "decline", actor=OWNER, channel="lc",
+                                    pin=SOS_PIN)["ok"]
+        world.clock.now += 30
+        _rise(world, incident, 4)
+        _rise(world, incident, 4)                         # once per incident and level
+        listed = requests.list_requests(5)
+        assert len(listed) == 2, [r["state"] for r in listed]
+        second = next(r for r in listed if r["id"] != first["id"])
+        assert incident in second["incident_ids"] and second["state"] not in S.TERMINAL_STATES
+
+    def test_expired_then_l5_prompts_again(self, world):
+        incident = fire_trigger(world)
+        first = the_request()
+        advance(world, 1801)
+        assert requests.get_request(first["id"])["state"] == S.EXPIRED
+        _rise(world, incident, 5)
+        assert len(requests.list_requests(5)) == 2
+
+    def test_a_new_class_in_the_same_incident_triggers(self, world):
+        incident = fire_trigger(world)                     # weapon
+        first = the_request()
+        assert world.engine.respond(first["id"], "decline", actor=OWNER, channel="lc",
+                                    pin=SOS_PIN)["ok"]
+        fire_trigger(world, "fire", incident_id=incident)  # the pipeline's "sos:fire" claim
+        listed = requests.list_requests(5)
+        assert len(listed) == 2 and {r["incident_type"] for r in listed} == {"weapon", "fire"}
+
+    def test_the_same_class_at_l3_does_not_prompt_twice(self, world):
+        incident = fire_trigger(world)
+        first = the_request()
+        assert world.engine.respond(first["id"], "decline", actor=OWNER, channel="lc",
+                                    pin=SOS_PIN)["ok"]
+        fire_trigger(world, incident_id=incident)          # a repeated weapon trigger
+        assert len(requests.list_requests(5)) == 1

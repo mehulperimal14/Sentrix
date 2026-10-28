@@ -250,7 +250,7 @@ class TestSosOwnsItsIncidents:
         frame = np.zeros((4, 4, 3), np.uint8)
         fake._act(incident, plan_for(3), frame, self._result(), 3, "ELEVATED", 0.0)
         fake._act(incident, plan_for(5), frame, self._result(), 5, "CRITICAL", 1.0)
-        assert "sos" in incident.actions
+        assert "sos:weapon" in incident.actions
         for legacy in ("send_sms", "_create_dispatch", "make_call"):
             assert legacy not in fake.submitted, legacy
         assert fake.siren.activated == 1, "the siren is not a message: it stays"
