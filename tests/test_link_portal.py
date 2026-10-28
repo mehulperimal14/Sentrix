@@ -179,6 +179,57 @@ class TestProtocol:
             return code, w1["type"], w2["type"]
         assert asyncio.run(go()) == (protocol.CLOSE_REPLACED, "welcome", "welcome")
 
+    @pytest.mark.parametrize("dropped", [True, False])
+    def test_an_older_connection_whose_hello_is_stored_last_stays_out(self, portal,
+                                                                      monkeypatch, dropped):
+        """The device dials again while its previous hello still waits for the
+        database. The older hello finishing last used to register that
+        connection over the live one, and its close then left the device
+        connected but not online (the 100-drop test's "timed out waiting for
+        reconnect")."""
+        from sentrix_portal.models import Device
+        from sentrix_portal.services.hub import LinkHub, hub_for
+        app, seeded, _ = portal
+        pair(app, seeded)
+        hub = hub_for(app)
+        waiting, release = threading.Event(), threading.Event()
+        on_hello = LinkHub._on_hello
+
+        def slow_old_hello(self, session, hello):
+            if hello.get("session_id") == "old":
+                waiting.set()
+                release.wait(5)
+            return on_hello(self, session, hello)
+        monkeypatch.setattr(LinkHub, "_on_hello", slow_old_hello)
+
+        async def dial(session_id):
+            pipe = MemoryPipe()
+            task = asyncio.ensure_future(hub.serve(pipe.portal, f"Bearer {TOKEN}"))
+            await pipe.device.send_text(protocol.encode(protocol.envelope(
+                protocol.HELLO, protocol=1, outbox={}, device_id=seeded.device_id,
+                session_id=session_id)))
+            return pipe, task
+
+        async def go():
+            old, old_task = await dial("old")
+            assert await asyncio.to_thread(waiting.wait, 5)
+            if dropped:
+                old.drop()                     # the device gave it up and dialled again
+            new, new_task = await dial("new")
+            welcome = json.loads(await asyncio.wait_for(new.device.receive(), 3))
+            release.set()
+            await asyncio.wait_for(old_task, 5)
+            live = hub.sessions.get(seeded.device_id)
+            seen = (welcome["type"], old.code, hub.online(seeded.device_id),
+                    live is not None and live.conn is new.portal)
+            new.drop()
+            await asyncio.wait_for(new_task, 5)
+            return seen
+        assert asyncio.run(go()) == ("welcome", 1006 if dropped else protocol.CLOSE_REPLACED,
+                                     True, True)
+        with app.state.db.session() as db:
+            assert db.get(Device, seeded.device_id).last_hello["session_id"] == "new"
+
     def test_a_bootstrap_session_may_only_say_hello_and_heartbeat(self, portal):
         app, seeded, _ = portal
         from sentrix_portal.models import Device
@@ -217,6 +268,44 @@ class TestIngest:
             assert db.query(DeviceEvent).count() == 2
             assert db.query(AuditLog).filter_by(event="mode.set").count() == 2
             assert db.get(Device, seeded.device_id).last_acked_seq == 2
+
+    def test_a_resend_racing_the_old_connection_is_a_duplicate_not_a_failure(
+            self, portal, monkeypatch):
+        """After a drop the old connection may still be storing an event the
+        new one was asked to resend: the second insert of one (device, seq)
+        failed with an IntegrityError and was audited as ``device.event_failed``."""
+        from sentrix_portal.models import AuditLog, DeviceEvent, IncidentMirror
+        from sentrix_portal.services.hub import DeviceSession, LinkHub, hub_for
+        app, seeded, _ = portal
+        hub = hub_for(app)
+        old, new = (DeviceSession(seeded.device_id, None, "bearer", True, seeded.household_id)
+                    for _ in range(2))
+        payload = {"id": str(uuid.uuid4()), "peak_level": 3}
+        inside, release = threading.Event(), threading.Event()
+        apply = LinkHub._apply
+
+        def slow_apply(self, *args):
+            if not inside.is_set():
+                inside.set()
+                release.wait(5)                 # the old connection's transaction is open
+            return apply(self, *args)
+        monkeypatch.setattr(LinkHub, "_apply", slow_apply)
+        first = threading.Thread(target=hub._ingest,
+                                 args=(old, 1, "incident.upsert", payload, None))
+        first.start()
+        assert inside.wait(5)
+        second = threading.Thread(target=hub._ingest,
+                                  args=(new, 1, "incident.upsert", payload, None))
+        second.start()
+        time.sleep(0.3)                         # the resend reaches its insert (or the lock)
+        release.set()
+        first.join(10)
+        second.join(10)
+        with app.state.db.session() as db:
+            assert db.query(DeviceEvent).count() == 1
+            assert db.query(IncidentMirror).count() == 1
+            assert db.query(AuditLog).filter_by(event="device.event_failed").count() == 0
+        assert old.watermark == new.watermark == 1
 
     def test_a_failing_effect_still_keeps_the_raw_event(self, portal):
         from sentrix_portal.models import AuditLog, DeviceEvent
