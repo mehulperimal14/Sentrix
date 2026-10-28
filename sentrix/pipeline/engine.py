@@ -127,6 +127,13 @@ class Overlay:
     detections: dict
     #: Capture time of the frame the overlay was computed on.
     at: float
+    #: Width of the frame the detections' boxes refer to (the clip engine
+    #: analyses a downscaled keyframe); 0 = the preview frame's own.
+    frame_width: int = 0
+    #: ``time.monotonic()`` when the decision was published. The clip engine
+    #: publishes a clip's decision seconds after its capture time, so "AI
+    #: STALLED" is judged on this, not on ``at``.
+    published: float | None = None
 
 
 @runtime_checkable
@@ -731,7 +738,9 @@ class Pipeline:
             behaviour_label=features.behaviour_label, weapon=features.weapon,
             fire=features.fire, authorized=features.authorized,
             identity_degraded=features.identity_degraded,
-            detections=features.extras.get("detections", {}), at=now)
+            detections=features.extras.get("detections", {}), at=now,
+            frame_width=int(frame.shape[1]) if getattr(frame, "ndim", 0) >= 2 else 0,
+            published=time.monotonic())
         if self._close_requested is not None:
             self._apply_close_request(result, now)
         return {"tci": result.tci, "level": level, "status": status,
@@ -1248,9 +1257,11 @@ class Pipeline:
                 # Anyone watching through the Portal is visible in the room.
                 cv2.putText(frame, f"REMOTE VIEW: {viewers}", (12, 92),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 200, 255), 2)
-            if age > self._stale_overlay_seconds():
+            stale = (time.monotonic() - overlay.published
+                     if overlay.published is not None else age)
+            if stale > self._stale_overlay_seconds():
                 # Boxes this old describe a scene that has moved on.
-                cv2.putText(frame, f"AI STALLED {age:.0f}s  VIDEO {self._video_fps:.0f} fps",
+                cv2.putText(frame, f"AI STALLED {stale:.0f}s  VIDEO {self._video_fps:.0f} fps",
                             (info_x, 66), cv2.FONT_HERSHEY_SIMPLEX, 0.45,
                             (0, 165, 255), 1)
                 return frame
@@ -1260,9 +1271,12 @@ class Pipeline:
             detections = overlay.detections
             palette = {"persons": colour, "weapons": (0, 0, 255),
                        "fires": (0, 140, 255)}
+            # Boxes from a downscaled analysis frame (clip mode) onto the
+            # full-size preview: the same aspect, so one factor.
+            scale = width / overlay.frame_width if overlay.frame_width else 1.0
             for group, box_colour in palette.items():
                 for det in detections.get(group, []):
-                    x1, y1, x2, y2 = det["bbox"]
+                    x1, y1, x2, y2 = (int(round(v * scale)) for v in det["bbox"])
                     cv2.rectangle(frame, (x1, y1), (x2, y2), box_colour, 2)
                     tag = det.get("identity") or det["label"]
                     if det.get("track_id") is not None:

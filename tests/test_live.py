@@ -174,6 +174,26 @@ class TestOverlay:
         region = (slice(100, 201), slice(0, 70))      # the box, below the banner
         assert fresh[region].any() and not stale[region].any()
 
+    def test_a_late_clip_decision_is_fresh_and_its_boxes_are_scaled(self):
+        """Clip mode publishes a clip's decision seconds after its capture
+        time, and its boxes come from a half-size analysis frame (the Pi:
+        1280x720 analysed at 640x360). Neither may read as AI STALLED, nor
+        land at half position on the full preview."""
+        import time as clock
+        pipeline, _ = live_pipeline(process_seconds=0.0)
+        box = {"persons": [{"bbox": [100, 50, 150, 100], "label": "person", "conf": 0.9}]}
+        late = settings.pipeline.stale_overlay_seconds + 2.0
+        overlay = Overlay(tci=0.1, level=1, status="SECURE", behaviour_label="normal",
+                          weapon=0.0, fire=0.0, authorized=False, identity_degraded=False,
+                          detections=box, at=0.0, frame_width=320,
+                          published=clock.monotonic())
+        frame = pipeline._draw(np.zeros((360, 640, 3), np.uint8), overlay, now=late)
+        assert frame[100:201, 195:205].any(), "drawn at x 200 (100 x 2), not at x 100"
+        assert not frame[110:190, 95:105].any(), "nothing at the unscaled position"
+        stalled = Overlay(**{**overlay.__dict__, "published": clock.monotonic() - late})
+        frame = pipeline._draw(np.zeros((360, 640, 3), np.uint8), stalled, now=late)
+        assert not frame[100:201, 195:205].any(), "a decision this old is not drawn"
+
 
 class TestRates:
     def test_rate_over_window(self):
