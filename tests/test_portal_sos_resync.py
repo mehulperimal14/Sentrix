@@ -183,3 +183,63 @@ def test_the_offline_l2_notice_names_the_owner_for_erasure_and_export(portal):
     notices = [(r.ref, m.template) for r, m in outbox.messages[before:]]
     assert notices and all(ref == f"user:{seeded.owner_id}" and template == "device.offline"
                            for ref, template in notices), notices
+
+
+def test_a_request_stranded_with_the_cloud_is_handed_back_on_the_next_heartbeat(portal,
+                                                                              monkeypatch):
+    """The heartbeat watcher can hand a request to the cloud while the
+    device's reconnect is being set up, after the welcome's own hand-back:
+    the next heartbeat gives it back instead of the next reconnect (days)."""
+    from sentrix_portal.models import AssistanceRequest
+    from sentrix_portal.services.hub import DeviceSession, hub_for
+    app, seeded, _ = portal
+    rid, _ = open_request(app, seeded)                  # the cloud's (device offline)
+    with app.state.db.session() as db:
+        assert db.get(AssistanceRequest, rid).authority_side == "cloud"
+    hub = hub_for(app)
+    sent = []
+
+    async def capture(session, message):
+        sent.append(message)
+    monkeypatch.setattr(hub, "_send", capture)
+    session = DeviceSession(seeded.device_id, None, "bearer", True, seeded.household_id)
+    asyncio.run(hub._on_heartbeat(session, {"type": "heartbeat", "armed": False}))
+    assert any(m.get("type") == "sos.sync" for m in sent), [m.get("type") for m in sent]
+    with app.state.db.session() as db:
+        assert db.get(AssistanceRequest, rid).authority_side == "device"
+    sent.clear()
+    asyncio.run(hub._on_heartbeat(session, {"type": "heartbeat", "armed": False}))
+    assert not any(m.get("type") == "sos.sync" for m in sent), "once, not every heartbeat"
+
+
+def test_an_event_that_failed_to_apply_is_applied_on_the_next_heartbeat(portal, monkeypatch):
+    """It used to be acknowledged and never applied unless a later event of
+    the same request came: a request the device closed could stay open on the
+    Portal and page the contacts weeks later."""
+    from sentrix.sos import states as S
+    from sentrix_portal.models import AssistanceRequest
+    from sentrix_portal.services.hub import DeviceSession, hub_for
+    app, seeded, _ = portal
+    hub = hub_for(app)
+
+    async def ignore(session, message):
+        pass
+    monkeypatch.setattr(hub, "_send", ignore)
+    real, calls = hub._apply, []
+
+    def flaky(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("database is locked")
+        return real(*args, **kwargs)
+    monkeypatch.setattr(hub, "_apply", flaky)
+    session = DeviceSession(seeded.device_id, None, "bearer", True, seeded.household_id)
+    rid = str(uuid.uuid4())
+    seq, kind, payload = _device_chain(seeded, rid)(None, S.DRAFTED, S.CREATED)
+    hub._ingest(session, seq, kind, payload, None)
+    with app.state.db.session() as db:
+        assert db.get(AssistanceRequest, rid) is None, "the first apply failed"
+    asyncio.run(hub._on_heartbeat(session, {"type": "heartbeat", "armed": False}))
+    with app.state.db.session() as db:
+        assert db.get(AssistanceRequest, rid) is not None, "applied on the heartbeat"
+    assert not hub.unapplied.get(seeded.device_id)
