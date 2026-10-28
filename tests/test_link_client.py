@@ -464,6 +464,30 @@ class TestSession:
         assert refusal and refusal["code"] == "consent_required"
         assert not rig.network.hub.video_viewers.get(rig.seeded.device_id)
 
+    def test_a_refused_desk_subscribe_does_not_stop_the_owners_video(self, rig):
+        """One shared video subscription per device: the device drops it on a
+        refused (Desk) subscribe, and the owner's video froze until the next
+        renewal - or for good, while that Desk tab stayed open."""
+        from sentrix.link import profile
+        from sentrix_portal.services.hub import Viewer
+        start_claimed(rig)
+        wait_for(lambda: profile.current_version() == 1, what="profile with consents")
+        owner = Viewer(key="s1", role="owner", actor=OWNER_ACTOR)
+        assert run_on(rig.service._loop,
+                      rig.network.hub.add_video_viewer(rig.seeded.device_id, owner)) is None
+
+        async def frames(n, timeout=5):
+            return [await asyncio.wait_for(owner.queue.get(), timeout) for _ in range(n)]
+        run_on(rig.service._loop, frames(2))
+        desk = Viewer(key="d1", role="operator",
+                      actor=Actor("operator", id="op1", name="Desk").to_dict())
+        refusal = run_on(rig.service._loop,
+                         rig.network.hub.add_video_viewer(rig.seeded.device_id, desk))
+        assert refusal is not None, "no request on the help path: the Desk is refused"
+        while not owner.queue.empty():
+            owner.queue.get_nowait()
+        run_on(rig.service._loop, frames(1, timeout=3), timeout=6)   # still flowing
+
     def test_a_silent_portal_is_left_and_redialled(self, rig, monkeypatch):
         rig.service.cfg = rig.service.cfg.__class__(**{**rig.service.cfg.__dict__,
                                                        "offline_after_seconds": 0.6})

@@ -1138,6 +1138,11 @@ class LinkHub:
         await self._send_viewer_count(device_id)
         if refusal is not None:
             await self.remove_video_viewer(device_id, viewer, idle_stop=False)
+            # The device dropped the shared subscription with the refusal:
+            # restore it at once for whoever else is watching.
+            remaining = self.video_viewers.get(device_id)
+            if remaining and session is not None and not session.closed:
+                await self._subscribe_video(device_id, _lease_actor(remaining))
         return refusal
 
     async def _wait_video(self, session: DeviceSession, ref: str | None,
@@ -1216,7 +1221,7 @@ class LinkHub:
             await self._subscribe_state(device_id)
         viewers = self.video_viewers.get(device_id)
         if viewers:
-            await self._subscribe_video(device_id, next(iter(viewers)).actor)
+            await self._subscribe_video(device_id, _lease_actor(viewers))
 
     def _ensure_renewer(self, device_id: str) -> None:
         task = self._renewers.get(device_id)
@@ -1232,7 +1237,7 @@ class LinkHub:
                     await self._subscribe_state(device_id)
                 viewers = self.video_viewers.get(device_id)
                 if viewers:
-                    await self._subscribe_video(device_id, next(iter(viewers)).actor)
+                    await self._subscribe_video(device_id, _lease_actor(viewers))
         except Exception as exc:
             if not _is_closed(exc):
                 log.error("subscription renewal for %s failed: %s", device_id, exc)
@@ -1460,6 +1465,15 @@ async def unpair(db, device_id: str, actor: dict) -> dict[str, Any]:
             session.closed = True
             await session.conn.close(protocol.CLOSE_REVOKED, "unpaired")
     return _command_result(True, "ok", "unpaired")
+
+
+def _lease_actor(viewers) -> dict:
+    """The actor that renews the one shared video subscription: an owner's
+    or member's while one watches. Their access is the household's own; the
+    Desk's is re-checked per viewer on the Portal (device_proxy), and a
+    refused Desk renewal would have dropped the household's video too."""
+    household = [v for v in viewers if v.role in ("owner", "member")]
+    return (household or list(viewers))[0].actor
 
 
 def start(app):
