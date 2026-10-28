@@ -920,6 +920,10 @@ class RetentionConfig:
     audit_days: int = 365
     #: Declined emergency contacts are erased within this many days.
     declined_contact_days: int = 7
+    #: Device event logs (var/events): older files go after ``audit_days``,
+    #: and the oldest go first while all of them exceed this cap, so a unit
+    #: that runs for months never fills its SD card (the current file stays).
+    event_log_max_gb: float = _env_float("SENTRIX_EVENT_LOG_MAX_GB", 5.0)
 
 
 @dataclass(frozen=True)

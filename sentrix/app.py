@@ -122,6 +122,28 @@ def _prepare_recordings(pipeline) -> None:
     threading.Thread(target=run, daemon=True, name="sentrix-recorder-recover").start()
 
 
+#: How often a running unit re-checks the event logs' retention.
+EVENT_LOG_PRUNE_SECONDS = 6 * 3600
+
+
+async def _prune_event_logs(pipeline) -> None:
+    """Event-log retention (``settings.retention``): at start-up, then every
+    six hours, so a unit that runs for months never fills its SD card. The
+    file the pipeline is writing is never deleted."""
+    from sentrix.config import settings
+    from sentrix.pipeline.events import prune_logs
+    retention = settings.retention
+    while True:
+        try:
+            current = getattr(getattr(pipeline, "events", None), "path", None)
+            await asyncio.to_thread(prune_logs, keep_days=retention.audit_days,
+                                    max_bytes=retention.event_log_max_gb * 2**30,
+                                    keep=current)
+        except Exception as exc:
+            log.warning("event-log retention skipped: %s", exc)
+        await asyncio.sleep(EVENT_LOG_PRUNE_SECONDS)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Start-up: database, pipeline, persisted HOME/ARMED, services, then the
@@ -152,6 +174,7 @@ async def lifespan(app: FastAPI):
         database.prune(int(os.getenv("RETENTION_DAYS", "30")))
     except Exception as exc:
         log.warning("retention prune skipped: %s", exc)
+    retention = asyncio.get_running_loop().create_task(_prune_event_logs(pipeline))
 
     # Before the loop, so the first L3 can reach SOS.
     _start_services(pipeline, app, asyncio.get_running_loop())
@@ -168,6 +191,7 @@ async def lifespan(app: FastAPI):
     yield
 
     log.info("stopping SENTRIX")
+    retention.cancel()
     _stop.set()
     if _thread is not None:
         _thread.join(timeout=5.0)

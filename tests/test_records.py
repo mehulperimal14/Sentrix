@@ -222,3 +222,40 @@ class TestMeasurementNeverWritesTheDatabase:
             assert f"pipeline.{attr} = _noop" in source
         bench = (Path(__file__).parent.parent / "tools" / "bench_live.py").read_text(encoding="utf-8")
         assert "pipeline._save_open_incident = noop" in bench
+
+
+# ── event-log retention (the SD card must not fill up) ────────────────────────
+class TestEventLogRetention:
+    def _log(self, directory, name, size, age_days, now):
+        import os
+        path = directory / f"events_{name}.jsonl"
+        path.write_bytes(b"x" * size)
+        os.utime(path, (now - age_days * 86400, now - age_days * 86400))
+        return path
+
+    def test_old_files_go_and_the_size_cap_trims_the_oldest(self, tmp_path):
+        from sentrix.pipeline.events import prune_logs
+        now = 1_800_000_000.0
+        ancient = self._log(tmp_path, "a", 10, 400, now)
+        older = self._log(tmp_path, "b", 100, 30, now)
+        newer = self._log(tmp_path, "c", 100, 2, now)
+        current = self._log(tmp_path, "d", 100, 0, now)
+        other = tmp_path / "notes.txt"
+        other.write_text("keep")
+        deleted = prune_logs(tmp_path, keep_days=365, max_bytes=250, keep=current, now=now)
+        assert deleted == [ancient, older], "past 365 days, then oldest until <= 250 bytes"
+        assert newer.exists() and current.exists() and other.exists()
+
+    def test_the_file_being_written_is_never_deleted(self, tmp_path):
+        from sentrix.pipeline.events import prune_logs
+        now = 1_800_000_000.0
+        current = self._log(tmp_path, "live", 1000, 500, now)
+        assert prune_logs(tmp_path, keep_days=1, max_bytes=1, keep=current, now=now) == []
+        assert current.exists()
+
+    def test_nothing_to_do(self, tmp_path):
+        from sentrix.pipeline.events import prune_logs
+        now = 1_800_000_000.0
+        kept = self._log(tmp_path, "a", 10, 1, now)
+        assert prune_logs(tmp_path, keep_days=365, max_bytes=1e9, now=now) == []
+        assert kept.exists()

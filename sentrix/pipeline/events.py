@@ -223,7 +223,45 @@ def load_dataset(directory: Path | None = None):
     return pd.DataFrame(rows)
 
 
-__all__ = ["EventLog", "read_events", "load_dataset", "SCHEMA_VERSION"]
+def prune_logs(directory: Path | None = None, *, keep_days: float, max_bytes: float,
+               keep: Path | None = None, now: float | None = None) -> list[Path]:
+    """Delete event logs older than ``keep_days``, then the oldest while all
+    of them together exceed ``max_bytes``. ``keep`` (the file being written)
+    is never deleted. Returns the deleted paths."""
+    directory = directory or EVENTLOG_DIR
+    now = time.time() if now is None else now
+    try:
+        files = sorted(((p.stat().st_mtime, p.stat().st_size, p)
+                        for p in directory.glob("events_*.jsonl")
+                        if keep is None or p.resolve() != Path(keep).resolve()),
+                       key=lambda item: item[0])
+    except OSError as exc:
+        log.warning("event-log prune skipped: %s", exc)
+        return []
+    total = sum(size for _, size, _ in files)
+    if keep is not None:
+        try:
+            total += Path(keep).stat().st_size
+        except OSError:
+            pass
+    deleted: list[Path] = []
+    for mtime, size, path in files:
+        too_old = now - mtime > keep_days * 86400
+        if not too_old and total <= max_bytes:
+            break
+        try:
+            path.unlink()
+        except OSError as exc:
+            log.warning("could not delete %s: %s", path.name, exc)
+            continue
+        deleted.append(path)
+        total -= size
+    if deleted:
+        log.info("event logs: %d old file(s) deleted (retention)", len(deleted))
+    return deleted
+
+
+__all__ = ["EventLog", "read_events", "load_dataset", "SCHEMA_VERSION", "prune_logs"]
 
 
 # ── clip rows (docs/7 §2.4 seam, track T-CLIP) ────────────────────────────────
