@@ -484,6 +484,19 @@ class TestAnswers:
         world.channels.router.pump()
         assert not [s for s in world.channels.sent() if s[2] == "t0"]
 
+    def test_a_false_alarm_verdict_withdraws_queued_messages(self, world):
+        """The Events page / verdict.set cancels outside _apply: its queued
+        "do you need assistance?" must not go out after the verdict."""
+        incident = fire_trigger(world, "fire")
+        req = the_request()
+        assert ("owner", "modem_sms", "t0") in world.channels.keys(req["id"])
+        result = world.engine.false_verdict(incident, pin=SOS_PIN, actor=OWNER, channel="lc")
+        assert result["ok"]
+        world.engine.drain()
+        assert requests.get_request(req["id"])["state"] == S.CANCELLED
+        world.channels.router.pump()
+        assert not [s for s in world.channels.sent() if s[2] == "t0"]
+
     def test_answering_withdraws_only_the_owners_prompting_messages(self, world):
         fire_trigger(world, "fire")
         req = the_request()

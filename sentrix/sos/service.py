@@ -929,6 +929,9 @@ class SosEngine:
         now = self._now()
         flags = request.get("flags") or {}
         if effect == "request_cancelled":
+            # Cancelled outside _apply (database.set_verdict): withdraw here,
+            # before the contacts' "resolved" is queued.
+            self._withdraw(request_id, S.PENDING, request["state"])
             if flags.get("contacts_notified"):
                 self._notify(request, M.Notice("contacts", S.STEP_RESOLVED, M.T_RESOLVED),
                              now=now)
