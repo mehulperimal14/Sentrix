@@ -625,10 +625,25 @@ class TestModemTransports:
                                         allowlist=lambda: frozenset({TEAM}))
         assert transport.send(recipient(), MESSAGE).ok
         capped = transport.send(recipient(), MESSAGE)
-        assert not capped.ok and not capped.retryable and capped.error.startswith("daily_cap")
+        assert not capped.ok and capped.error.startswith("daily_cap")
+        # Retried after local midnight, never given up for good.
+        assert capped.retryable and 0 < capped.retry_after <= 86400
         assert counter.used == 2 and transport.state() == (True, "ok")
         counter.take(1)
         assert transport.state() == (False, "daily SMS cap reached (3)")
+
+    def test_the_last_segments_are_kept_for_an_alarms_first_messages(self):
+        """A day of reminders and re-pages must leave room for the next
+        alarm's first prompt and first pages."""
+        import dataclasses
+        counter = M.DailyCounter(30)
+        counter.seed(30 - M.RESERVED_SEGMENTS)
+        transport = M.ModemSmsTransport(StubWorker(parts=2), counter=counter,
+                                        allowlist=lambda: frozenset({TEAM}))
+        reminder = transport.send(recipient(), dataclasses.replace(MESSAGE, step="r600"))
+        assert not reminder.ok and reminder.retryable
+        for step in ("t0", "contacts_t0", "desk_t0", "duress"):
+            assert transport.send(recipient(), dataclasses.replace(MESSAGE, step=step)).ok, step
 
     def test_errors_give_unsent_segments_back(self):
         counter = M.DailyCounter(30)
