@@ -40,6 +40,7 @@ owners and members: a duress approval reads "Marked as false alarm").
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import hashlib
 import html
 import json
@@ -715,6 +716,9 @@ def _notify_owner_offline(db, device: Device, incident_type: str, level: int,
             f"and nobody else was alerted. Check the home or the device.\n{FOOTER}")
     step = f"offline_l2:{incident_id or device.id}"
     for recipient in recipients:
+        # No request to find the household by: name the owner, so erasure
+        # and the data export find this notice (a bare "owner" ref did not).
+        recipient = dataclasses.replace(recipient, ref=f"user:{owner.id}")
         _enqueue(db, recipient, Message(template="device.offline", step=step, text=text,
                                         subject="SENTRIX: device offline during an alert"))
 

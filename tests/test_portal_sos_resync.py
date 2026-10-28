@@ -166,3 +166,20 @@ def test_help_now_under_duress_pages_the_contacts_each_time(portal):
         paged = [(r.ref, m.step, m.text) for r, m in outbox.messages[before:]]
         assert paged and all(ref.startswith("contact:") and step == f"help_now{press}"
                              and "DURESS" in text.upper() for ref, step, text in paged), paged
+
+
+def test_the_offline_l2_notice_names_the_owner_for_erasure_and_export(portal):
+    """No request to find the household by: the notice is stored for the
+    owner's user, so erasure and the data export find it."""
+    from sentrix_portal.models import Device
+    from sentrix_portal.services import sos as portal_sos
+    app, seeded, outbox = portal
+    with app.state.db.session() as db:
+        device = db.get(Device, seeded.device_id)
+        device.last_heartbeat = {"alarm": {"level": 2, "incident_type": "intrusion",
+                                           "incident_id": "inc-l2"}}
+        before = len(outbox.messages)
+        assert portal_sos.on_device_offline(db, device) is None, "an L2 opens no request"
+    notices = [(r.ref, m.template) for r, m in outbox.messages[before:]]
+    assert notices and all(ref == f"user:{seeded.owner_id}" and template == "device.offline"
+                           for ref, template in notices), notices
