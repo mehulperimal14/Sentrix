@@ -43,13 +43,17 @@ class TestPathTable:
             assert normalise_path(bad) is None, bad
 
     def test_classes(self):
-        assert classify("GET", "/dashboard") == "page"
         assert classify("GET", "/api/health") == "read_api"
-        assert classify("GET", "/static/js/app.js") == "static"
+        # No page and no static file is tunnelled: the device app is the LAN's (D22).
+        for page in ("/", "/dashboard", "/live", "/events", "/admin/faces",
+                     "/static/app/index.html", "/static/sounds/siren.wav"):
+            assert classify("GET", page) == "unknown", page
         assert classify("GET", "/media/snapshot/x.jpg") == "media"
         assert classify("GET", "/api/authorized/preview.jpg") == "media"
         assert classify("GET", "/media/face/riya.jpg") == "faces"
         assert classify("POST", "/api/authorized/capture") == "gallery_write"
+        assert classify("POST", "/api/authorized/upload") == "gallery_write"
+        assert classify("POST", "/authorized/upload") == "gallery_write"
         assert classify("DELETE", "/api/authorized/riya.jpg") == "gallery_delete"
         assert classify("POST", "/api/incidents/i1/verdict") == "sos_write"
         assert classify("POST", "/api/sos/requests/r/approve") == "sos_write"
@@ -77,13 +81,18 @@ class TestPathTable:
         decision = policy(ALL).check_request("GET", path, OWNER)
         assert not decision and decision.code == "not_found" and decision.status == 404
 
-    def test_owner_and_member_read_pages_and_apis(self):
+    def test_owner_and_member_read_the_apis_but_no_page(self):
         p = policy()
-        for path in ("/dashboard", "/live", "/events", "/alerts", "/evidence", "/dispatch",
-                     "/authorized", "/sos", "/node", "/", "/api/health", "/static/css/style.css"):
+        for path in ("/api/health", "/api/session", "/api/state", "/api/activity",
+                     "/api/incidents", "/api/sos", "/api/level-history", "/api/node"):
             assert p.check_request("GET", path, OWNER), path
             assert p.check_request("GET", path, MEMBER), path
-        assert not p.check_request("GET", "/no-such-page", OWNER)
+        for path in ("/", "/dashboard", "/live", "/events", "/alerts", "/evidence", "/dispatch",
+                     "/authorized", "/sos", "/node", "/admin/faces", "/static/app/index.html",
+                     "/no-such-page"):
+            for actor in (OWNER, MEMBER):
+                refused = p.check_request("GET", path, actor)
+                assert refused.code == "not_found" and refused.status == 404, path
 
     def test_media_needs_remote_view_and_faces_face_recognition(self):
         assert policy({}).check_request("GET", "/media/snapshot/a.jpg", OWNER).code == \
@@ -185,14 +194,15 @@ class TestPathTable:
                 assert refused.path_class == "record_status"
 
     def test_desk_only_on_the_help_path_with_consent(self):
-        assert policy(ALL, help_path=False).check_request("GET", "/live", DESK).code == \
+        assert policy(ALL, help_path=False).check_request("GET", "/api/metrics", DESK).code == \
             "forbidden_role"
-        assert policy({}, help_path=True).check_request("GET", "/live", DESK).code == \
+        assert policy({}, help_path=True).check_request("GET", "/api/metrics", DESK).code == \
             "consent_required"
         allowed = policy(ALL, help_path=True)
-        for path in ("/dashboard", "/live", "/api/health", "/api/metrics", "/static/js/app.js"):
+        for path in ("/api/health", "/api/metrics"):
             assert allowed.check_request("GET", path, DESK), path
-        for path in ("/events", "/evidence", "/media/snapshot/a.jpg", "/authorized"):
+        for path in ("/dashboard", "/live", "/static/app/index.html", "/events", "/evidence",
+                     "/media/snapshot/a.jpg", "/authorized", "/api/session", "/api/state"):
             assert not allowed.check_request("GET", path, DESK), path
         assert not allowed.check_request("POST", "/api/incidents/i/verdict", DESK)
         assert allowed.check_video(DESK) and not policy(ALL).check_video(DESK)
@@ -206,14 +216,14 @@ class TestPathTable:
     def test_desk_rule_reads_the_device_request_store(self, temp_db):
         from sentrix.storage import requests
         real = TunnelPolicy(media_per_minute=60, consents=lambda: ALL)
-        assert not real.check_request("GET", "/live", DESK)
+        assert not real.check_request("GET", "/api/metrics", DESK)
         requests.create_request("r-help", incident_id="i", incident_type="weapon", level=3,
                                 evidence_state="confirmed", policy={}, expires_at=None,
                                 test_mode=True)
         requests.transition("r-help", "prompted")
-        assert not real.check_request("GET", "/live", DESK), "PENDING is not the help path"
+        assert not real.check_request("GET", "/api/metrics", DESK), "PENDING is not the help path"
         requests.transition("r-help", "approve")
-        assert real.check_request("GET", "/live", DESK)
+        assert real.check_request("GET", "/api/metrics", DESK)
 
     def test_consents_come_from_the_pushed_profile(self, temp_db):
         from sentrix.link import profile, protocol

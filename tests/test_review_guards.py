@@ -58,13 +58,13 @@ class TestNoEmergencyNumberInTestMode:
     @pytest.mark.parametrize("desk", ["112", "+91112", "100", "108"])
     def test_portal_call_button_never_dials_an_emergency_number(self, desk):
         from types import SimpleNamespace
-        from sentrix_portal.routes.sos import call_112
+        from sentrix_portal.services.sos_views import call_112
         target = call_112(SimpleNamespace(test_mode=True, desk_number=desk))
         assert target["href"] is None and "112" not in (target["href"] or "")
 
     def test_portal_call_button_uses_a_real_desk_number(self):
         from types import SimpleNamespace
-        from sentrix_portal.routes.sos import call_112
+        from sentrix_portal.services.sos_views import call_112
         target = call_112(SimpleNamespace(test_mode=True, desk_number="+919800000001"))
         assert target["href"] == "tel:+919800000001"
 
@@ -119,9 +119,19 @@ class TestHardwareParity:
                             SimpleNamespace(_pipeline=None))
         assert gpio.forward_sensor_event("pir") is False
 
-    def test_access_preview_polls_slowly_through_the_tunnel(self):
-        from pathlib import Path
-        source = (Path(__file__).resolve().parents[1] / "sentrix" / "web" / "static" / "js"
-                  / "authorized.js").read_text(encoding="utf-8")
-        assert "setInterval(refreshPreview, 500)" not in source
-        assert "TUNNELLED ? 2000" in source and "document.hidden" in source
+    def test_the_capture_preview_never_drains_the_tunnel(self):
+        """The old Access page polled the preview through the Portal. The
+        device app's Faces page, which polls it, runs on the LAN only (its
+        page is not in the path table), and through the tunnel the preview
+        stays inside the per-user media budget."""
+        from sentrix.actor import Actor
+        from sentrix.link.policy import TunnelPolicy, classify
+        assert classify("GET", "/admin/faces") == "unknown"
+        assert classify("GET", "/api/authorized/preview.jpg") == "media"
+        policy = TunnelPolicy(media_per_minute=3, consents=lambda: {"remote_view": True},
+                              help_path_open=lambda: False)
+        owner = Actor("owner", id="u1", name="Riya")
+        for _ in range(3):
+            assert policy.check_request("GET", "/api/authorized/preview.jpg", owner)
+        limited = policy.check_request("GET", "/api/authorized/preview.jpg", owner)
+        assert limited.code == "rate_limited" and limited.retry_after

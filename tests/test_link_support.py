@@ -276,6 +276,18 @@ def lc_app(monkeypatch):
         return JSONResponse({"size": len(body), "head": body[:16].decode("latin-1"),
                              "content_type": request.headers.get("content-type")})
 
+    return shell_last(app)
+
+
+def shell_last(app):
+    """The device app's catch-all back at the end, after routes a test added
+    (``create_app`` includes it last, and it would shadow later GET routes)."""
+    from sentrix.web import spa_routes
+    shell = [route for route in app.router.routes
+             if getattr(route, "original_router", None) is spa_routes.router]
+    for route in shell:
+        app.router.routes.remove(route)
+        app.router.routes.append(route)
     return app
 
 

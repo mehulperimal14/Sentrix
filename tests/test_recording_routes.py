@@ -566,17 +566,36 @@ class TestHealthAndNode:
         assert rec.client.get("/api/node").json()["microphone"] is None
 
 
-class TestDashboardCard:
+class TestRecordCardData:
+    """What the apps' "Record video" card is built from (the device app's
+    Recordings page on the LAN, the Portal app for the owner)."""
+
     def test_the_device_admin_and_the_owner_get_the_card(self, rec):
-        page = rec.client.get("/dashboard").text
-        assert 'id="record-card"' in page and "js/recording.js" in page
-        assert "Record video" in page and "not through the Portal" in page
-        remote = tunnel_client(rec.console, "owner").get("/dashboard")
-        assert remote.status_code == 200
-        assert 'id="record-card"' in remote.text and "js/recording.js" in remote.text
-        assert "Start and stop recordings here" in remote.text
-        assert "on the home Wi-Fi" in remote.text and "not through the Portal" not in remote.text
+        lan = rec.client.get("/api/session").json()
+        assert "record" in lan["capabilities"] and lan["lan_admin"] is True
+        listing = rec.client.get("/api/recordings").json()
+        assert listing["via"] == "lan" and listing["can_delete"] is True
+        owner_client = tunnel_client(rec.console, "owner")
+        assert "record" in owner_client.get("/api/session").json()["capabilities"]
+        remote = owner_client.get("/api/recordings").json()
+        assert remote["via"] == "portal" and remote["can_delete"] is False
+        assert remote["download_here"] is False, "files stay on the home network (D12, D20)"
         for role in ("member", "operator"):
-            remote = tunnel_client(rec.console, role).get("/dashboard")
-            assert remote.status_code == 200
-            assert 'id="record-card"' not in remote.text and "recording.js" not in remote.text
+            client = tunnel_client(rec.console, role)
+            assert "record" not in client.get("/api/session").json()["capabilities"], role
+            assert client.get("/api/recordings").status_code == 403, role
+
+    def test_the_rec_indicator_data(self, rec):
+        """REC mm:ss on the preview (burnt into the frames by the pipeline) and
+        on the card: the recorder's status while it records, then idle."""
+        assert rec.client.post("/api/recordings/start", json={"label": "take"}).status_code == 200
+        feed(rec.pipeline)
+        status = rec.client.get("/api/recordings").json()["status"]
+        assert status["active"] is True and status["recording"] is True
+        assert status["frames"] >= 1 and status["max_seconds"] > 0
+        owner_view = tunnel_client(rec.console, "owner").get("/api/recordings").json()["status"]
+        assert owner_view["recording"] is True, "the owner sees it is filming"
+        assert rec.client.post("/api/recordings/stop").status_code == 200
+        assert rec.pipeline.recorder.wait(10.0)
+        status = rec.client.get("/api/recordings").json()["status"]
+        assert status["active"] is False and status["recording"] is False

@@ -1,4 +1,4 @@
-"""LC hardening: tunnel identity, CSRF, CSP nonces, security headers.
+"""LC hardening: tunnel identity, CSRF, CSP, security headers.
 
 Owner: track T-WEB. ``install(app)`` is called by ``sentrix.web.extensions``
 (docs/7 §5.8, §9.1). One pure-ASGI middleware does all of it, so the MJPEG
@@ -8,12 +8,12 @@ stream and the websocket pass through unbuffered:
   and websocket request. A verified identity is stored at
   ``scope[tunnel_auth.SCOPE_KEY]`` (``auth.principal_of`` reads it); a request
   that fails verification has every bridge header removed, so headers that
-  arrive from the network are inert. Paths the tunnel never carries
-  (``/login``, ``/logout``, ``/setup/*``, the API docs, ``/video``, ``/ws/*``)
-  are refused for tunnel identities: the Portal relays video and state itself.
+  arrive from the network are inert. Paths the tunnel never carries (sign-in,
+  Wi-Fi setup, the API docs, ``/video``, ``/ws/*``) are refused for tunnel
+  identities: the Portal relays video and state itself.
 * **CSRF.** A state-changing request (POST, PUT, PATCH, DELETE) from an LC
   session must carry ``X-CSRF-Token`` = ``auth.csrf_for_session(cookie)``,
-  which every page renders into ``<meta name="csrf-token">``. Any LAN
+  which ``/api/login`` and ``/api/session`` give the device app. Any LAN
   state-changing request a browser marks as cross-site (``Origin``,
   ``Sec-Fetch-Site``, ``Referer``) is refused, signed in or not (login CSRF).
   Tunnelled requests were checked by the Portal against its own token (their
@@ -21,11 +21,11 @@ stream and the websocket pass through unbuffered:
   The pre-M10 ``session_token`` cookie is still honoured until it expires
   (12 h): without the header it passes only the cross-site check, so a tab
   opened before the upgrade keeps working.
-* **Headers.** A per-request nonce (``scope["csp_nonce"]`` and
-  ``request.state.csp_nonce``), the CSP built from it (no inline script, no
-  inline style), ``X-Frame-Options: DENY``, ``X-Content-Type-Options``,
-  ``Referrer-Policy``, ``Permissions-Policy``, and ``Cache-Control: no-store``
-  on everything except ``/static``. Headers a route set itself are kept.
+* **Headers.** The CSP (``'self'`` only: no inline script or style, which the
+  device app's build never has; React sets styles through the CSSOM),
+  ``X-Frame-Options: DENY``, ``X-Content-Type-Options``, ``Referrer-Policy``,
+  ``Permissions-Policy``, and ``Cache-Control: no-store`` on everything except
+  ``/static``. Headers a route set itself are kept.
 """
 
 from __future__ import annotations
@@ -33,7 +33,6 @@ from __future__ import annotations
 import hmac
 import os
 import re
-import secrets
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -176,17 +175,18 @@ def csrf_refusal(scope: dict, identity: tunnel_auth.TunnelIdentity | None) -> st
 
 
 # ── response headers ──────────────────────────────────────────────────────────
-def content_security_policy(nonce: str, host: str | None = None) -> str:
-    """No inline script or style without the nonce; images may be blob:/data:
-    (the access preview); websockets only to this host. Through the tunnel
-    the browser-facing host is the Portal's, which ``'self'`` covers."""
+def content_security_policy(host: str | None = None) -> str:
+    """Same-origin script, style, font and media only (no inline code);
+    images may be blob:/data: (the capture preview); websockets only to this
+    host. Through the tunnel the browser-facing host is the Portal's, which
+    ``'self'`` covers (docs/9 §6)."""
     connect = ["'self'"]
     if host and _HOST.match(host):
         connect += [f"ws://{host}", f"wss://{host}"]
     return "; ".join((
         "default-src 'self'",
-        f"script-src 'self' 'nonce-{nonce}'",
-        f"style-src 'self' 'nonce-{nonce}'",
+        "script-src 'self'",
+        "style-src 'self'",
         "img-src 'self' blob: data:",
         "font-src 'self'",
         f"connect-src {' '.join(connect)}",
@@ -198,20 +198,20 @@ def content_security_policy(nonce: str, host: str | None = None) -> str:
     ))
 
 
-def security_headers(scope: dict, nonce: str) -> dict[str, str]:
+def security_headers(scope: dict) -> dict[str, str]:
     headers = dict(_HEADERS)
     if csp_enabled():
         host = None
         if tunnel_auth.SCOPE_KEY not in scope:
             host = Headers(scope=scope).get("host")
-        headers["content-security-policy"] = content_security_policy(nonce, host)
+        headers["content-security-policy"] = content_security_policy(host)
     if not scope.get("path", "").startswith("/static/"):
         headers["cache-control"] = "no-store"
     return headers
 
 
 class ConsoleHardening:
-    """Pure ASGI: tunnel identity, CSRF, CSP nonce and security headers."""
+    """Pure ASGI: tunnel identity, CSRF, CSP and security headers."""
 
     def __init__(self, app: Any) -> None:
         self.app = app
@@ -221,15 +221,12 @@ class ConsoleHardening:
             await self.app(scope, receive, send)
             return
         identity = accept_tunnel(scope)
-        nonce = secrets.token_urlsafe(18)
-        scope["csp_nonce"] = nonce
-        scope.setdefault("state", {})["csp_nonce"] = nonce
 
         if identity is not None and never_tunnelled(scope.get("path", "")):
             if scope["type"] == "websocket":
                 await send({"type": "websocket.close", "code": 1008})
                 return
-            await self._refuse(scope, receive, send, nonce, 404, "not_found",
+            await self._refuse(scope, receive, send, 404, "not_found",
                                "not available through the Portal")
             return
         if scope["type"] == "websocket":
@@ -239,10 +236,10 @@ class ConsoleHardening:
         reason = csrf_refusal(scope, identity)
         if reason is not None:
             log.warning("refused %s %s: %s", scope.get("method"), scope.get("path"), reason)
-            await self._refuse(scope, receive, send, nonce, 403, "csrf", reason)
+            await self._refuse(scope, receive, send, 403, "csrf", reason)
             return
 
-        extra = security_headers(scope, nonce)
+        extra = security_headers(scope)
 
         async def send_with_headers(message: dict) -> None:
             if message["type"] == "http.response.start":
@@ -255,10 +252,10 @@ class ConsoleHardening:
         await self.app(scope, receive, send_with_headers)
 
     @staticmethod
-    async def _refuse(scope: dict, receive: Any, send: Any, nonce: str, status: int,
+    async def _refuse(scope: dict, receive: Any, send: Any, status: int,
                       code: str, message: str) -> None:
         response = JSONResponse({"detail": message, "code": code}, status_code=status,
-                                headers=security_headers(scope, nonce))
+                                headers=security_headers(scope))
         await response(scope, receive, send)
 
 

@@ -1,16 +1,18 @@
-"""Track T-WEB: the console's JSON APIs and the setup-mode Wi-Fi page.
+"""Track T-WEB: the console's JSON APIs and the setup-mode helpers.
 
 ``/api/incidents`` paging and filters, ``/api/level-history``, credential
 redaction on every JSON output, verdicts with note and author, the gallery
-routes' audit of who changed it and per-actor rate limits, and ``/setup/wifi``
-(setup mode only, LAN only, the label's code, a fake ``sentrix.io.network``).
+routes' audit of who changed it and per-actor rate limits, the setup-mode
+fixture (setup mode on, the label's code, a fake ``sentrix.io.network``) and
+the setup code's matching. The Wi-Fi setup itself is ``/api/setup/wifi*``
+(``test_device_api_v2_lists.TestSetupWifi``); the old ``/setup/wifi`` page
+and its form posts are gone.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
-import logging
 import sys
 import types
 from datetime import datetime
@@ -156,6 +158,30 @@ class TestGallery:
         event, detail = console.pipeline.events.rows[-1]
         assert event == "gallery_enrolled" and detail["by"] == "lc:device_admin"
 
+    def test_the_api_upload_path_is_the_same_handler(self, console):
+        """``POST /api/authorized/upload`` (the device app's Faces page) =
+        ``/authorized/upload``: same checks, same audit, the same path-table
+        row (gallery_write: owner with face_recognition through the Portal)."""
+        from sentrix.link.policy import classify
+        client, csrf = lc_client(console)
+        response = client.post("/api/authorized/upload",
+                               files={"file": ("meera.jpg", _jpeg(), "image/jpeg")},
+                               headers={"X-CSRF-Token": csrf})
+        assert response.status_code == 200 and response.json()["filename"] == "meera.jpg"
+        assert (console.faces / "meera.jpg").exists()
+        event, detail = console.pipeline.events.rows[-1]
+        assert event == "gallery_enrolled" and detail["via"] == "upload"
+        assert client.post("/api/authorized/upload",
+                           files={"file": ("a.gif", b"GIF89a", "image/gif")},
+                           headers={"X-CSRF-Token": csrf}).status_code == 400
+        assert client.post("/api/authorized/upload",
+                           files={"file": ("b.jpg", _jpeg(), "image/jpeg")}).status_code == 403, \
+            "CSRF like every write"
+        owner = tunnel_client(console, "owner").post(
+            "/api/authorized/upload", files={"file": ("ravi.jpg", _jpeg(), "image/jpeg")})
+        assert owner.status_code == 200 and console.pipeline.events.rows[-1][1]["by"] == "portal:u-1"
+        assert classify("POST", "/api/authorized/upload") == classify("POST", "/authorized/upload")
+
     def test_upload_limits(self, console):
         from sentrix.web import routes
         client, csrf = lc_client(console)
@@ -230,62 +256,19 @@ def setup_mode(console, tmp_path, monkeypatch):
 
 
 class TestSetupWifi:
-    def test_absent_outside_setup_mode(self, console):
+    def test_the_old_page_and_form_posts_are_gone(self, setup_mode, console):
+        """The device app's /setup/wifi screen is the shell, on the LAN only;
+        its data and actions are /api/setup/wifi* (setup mode, the label's code)."""
         client = TestClient(console.app)
-        assert client.get("/setup/wifi").status_code == 404
+        page = client.get("/setup/wifi")
+        assert page.status_code == 200 and b'id="root"' in page.content
+        assert b"setup-scan" not in page.content, "no server-rendered form"
         assert client.post("/setup/wifi/scan", json={"code": CODE}).status_code == 404
-        assert client.post("/setup/wifi", json={"code": CODE, "ssid": "x"}).status_code == 404
-
-    def test_page_and_scan_with_the_code(self, setup_mode, console):
-        client = TestClient(console.app)
-        page = client.get("/setup/wifi")
-        assert page.status_code == 200 and 'id="setup-scan"' in page.text
-        assert "/static/js/setup.js" in page.text
-        for typed in (CODE, "ktrw bqxl", "KTRWBQXL"):
-            setup_routes_reset()
-            body = client.post("/setup/wifi/scan", json={"code": typed}).json()
-            assert [n["ssid"] for n in body["networks"]] == ["HomeNet", "<b>evil</b>"], typed
-        assert body["status"]["connected"] is False
-
-    def test_wrong_codes_are_refused_and_rate_limited(self, setup_mode, console):
-        client = TestClient(console.app)
-        for _ in range(5):
-            wrong = client.post("/setup/wifi/scan", json={"code": "AAAA-BBBB"})
-            assert wrong.status_code == 403 and wrong.json()["code"] == "pin_invalid"
-        locked = client.post("/setup/wifi/scan", json={"code": CODE})
-        assert locked.status_code == 429 and locked.headers["retry-after"] == "600"
-
-    def test_connect_validates_and_never_logs_the_passphrase(self, setup_mode, console, caplog):
-        client = TestClient(console.app)
-        caplog.set_level(logging.DEBUG)
-        assert client.post("/setup/wifi", json={"code": CODE, "ssid": ""}).status_code == 400
         assert client.post("/setup/wifi", json={"code": CODE, "ssid": "HomeNet",
-                                                "psk": "short"}).status_code == 400
-        ok = client.post("/setup/wifi", json={"code": CODE, "ssid": "HomeNet",
-                                              "psk": "correct-horse-9"})
-        assert ok.status_code == 200 and ok.json()["ok"] is True
-        assert setup_mode.calls == [("HomeNet", "correct-horse-9")]
-        failed = client.post("/setup/wifi", json={"code": CODE, "ssid": "Other", "psk": "12345678"})
-        assert failed.status_code == 502 and failed.json()["error"] == "no such network"
-        assert "correct-horse-9" not in caplog.text
-
-    def test_refused_through_the_tunnel(self, setup_mode, console):
-        from sentrix.link import tunnel_auth
+                                                "psk": "correct-horse-9"}).status_code == 404
+        assert setup_mode.calls == [], "nothing joined a network"
         assert tunnel_client(console).get("/setup/wifi").status_code == 404
-        bare = TestClient(console.app, client=tunnel_auth.TUNNEL_CLIENT)
-        assert bare.get("/setup/wifi").status_code == 404
-
-    def test_without_network_control_or_identity(self, setup_mode, console, monkeypatch, tmp_path):
-        from sentrix.link import profile
-        from sentrix.web import setup_routes
-        monkeypatch.setattr(setup_routes, "_network", lambda: None)
-        client = TestClient(console.app)
-        page = client.get("/setup/wifi")
-        assert 'id="setup-unavailable"' in page.text and "setup.js" not in page.text
-        assert client.post("/setup/wifi/scan", json={"code": CODE}).json()["code"] == "unsupported"
-        monkeypatch.setattr(profile, "identity_dir", lambda: tmp_path / "nowhere")
-        refused = client.post("/setup/wifi/scan", json={"code": CODE})
-        assert refused.status_code == 400 and "provision" in refused.json()["detail"]
+        assert client.get("/api/setup/wifi").json()["setup_mode"] is True
 
     def test_code_matching(self):
         from sentrix.web.setup_routes import code_matches

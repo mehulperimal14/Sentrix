@@ -202,11 +202,10 @@ class TestLogin:
                          422, "validation")
         assert error["fields"]
 
-    def test_the_rate_limit_is_shared_with_the_html_form(self, console):
+    def test_the_rate_limit(self, console):
+        """8 tries in 5 minutes per address (``security.login_limiter``)."""
         client = anonymous(console, follow_redirects=False)
-        for _ in range(4):
-            assert client.post("/login", data={"password": "x"}).status_code == 401
-        for _ in range(4):
+        for _ in range(8):
             envelope(client.post("/api/login", json={"password": "x"}), 401, "wrong_password")
         limited = client.post("/api/login", json={"password": PASSWORD})
         error = envelope(limited, 429, "rate_limited")
@@ -329,11 +328,15 @@ class TestContract:
         error = envelope(tunnel_client(console).get("/api/evidence"), 403, "forbidden")
         assert "owner" not in error["message"], "a sentence for the user, not a role dump"
 
-    def test_the_old_pages_still_render(self, console):
+    def test_old_page_links_open_the_app(self, console):
+        """Bookmarks of the old pages land in the device app, which routes
+        them; nothing renders data on the server."""
         client, _ = lc_client(console)
         for path in ("/dashboard", "/events", "/evidence", "/dispatch", "/alerts",
                      "/authorized", "/sos", "/node"):
-            assert client.get(path).status_code == 200, path
+            response = client.get(path)
+            assert response.status_code == 200, path
+            assert b'<div id="root"></div>' in response.content, path
 
     def test_websocket_still_refuses_a_signed_out_page(self, console):
         with anonymous(console).websocket_connect("/ws/threat") as socket:

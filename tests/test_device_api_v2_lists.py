@@ -306,11 +306,9 @@ class TestSetupWifi:
                 {"ssid": "<b>evil</b>", "signal": 10, "security": ""}], typed
         assert body["status"] == {"connected": False, "ssid": None, "ip": None, "via": None}
 
-    def test_wrong_codes_share_the_html_pages_limit(self, setup_mode, console):
+    def test_wrong_codes_are_limited(self, setup_mode, console):
         client = TestClient(console.app)
-        for _ in range(3):
-            assert client.post("/setup/wifi/scan", json={"code": "AAAA-BBBB"}).status_code == 403
-        for _ in range(2):
+        for _ in range(5):
             error = envelope(client.post("/api/setup/wifi/scan", json={"code": "AAAA-BBBB"}),
                              403, "wrong_code")
             assert error["fields"] == {"code": "Not the code on the label"}

@@ -1,4 +1,10 @@
-"""HTTP and WebSocket routes.
+"""HTTP and WebSocket routes of the Local Console: the JSON API, authenticated
+media, enrolment and the live-state websocket.
+
+The pages are the device app (``frontend/apps/device``, built into
+``static/app/`` and served by ``sentrix.web.spa_routes``, decision D22); this
+module serves data only. Unauthenticated calls answer 401 JSON
+(``auth.require_lc``), never a redirect.
 
 The security fix that mattered most is structural rather than a code change
 here: ``var/`` is no longer under a ``StaticFiles`` mount. Previously the app
@@ -14,42 +20,32 @@ to static mounts. Anyone who could reach the port could download:
 ``docs/4`` stated that "all /api/* and /ws/* endpoints require a valid
 HMAC-signed session cookie", which was true and the wrong scope.
 
-Now ``/static`` serves only CSS, JS, images and the siren sound that ship with
-the package, and every artifact is served through an authenticated route that
-resolves paths inside a fixed base directory.
+Now ``/static`` serves only the device app's build and the siren sound that
+ship with the package, and every artifact is served through an authenticated
+route that resolves paths inside a fixed base directory.
 
-The same pages serve two audiences (docs/7 §9): the device admin on the LAN
-and Portal users whose requests the link replays in-process under
-``/d/<device_id>``. Every URL a page, a script or this module builds goes
-through the base helper (:func:`base_url`, the ``url()`` Jinja global), so
-links, fetches, images and the websocket work under both prefixes. Pages
-answer 307 to ``/login`` when signed out; APIs and media answer 401 JSON
-(``auth.require_lc``). Role rules for tunnelled users are enforced by the
-link's path table; the pages only hide what a role cannot use
-(:data:`ROLE_CAPABILITIES`).
+The API serves two audiences (docs/7 §9): the device admin on the LAN and
+Portal users whose requests the link replays in-process under
+``/d/<device_id>``. Every URL this module builds goes through the base helper
+(:func:`base_url`), so links work under both prefixes. Role rules for
+tunnelled users are enforced by the link's path table; ``/api/session`` tells
+the apps what a role may use (:data:`ROLE_CAPABILITIES`).
 """
 
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import hmac
 import json
-import os
 import re
 import time as _time
 from datetime import date, datetime, time, timedelta, timezone
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote, urlencode
+from urllib.parse import quote
 
 from fastapi import (APIRouter, Body, Depends, File, Form, HTTPException,
-                     Request, UploadFile, status)
-from fastapi.responses import (HTMLResponse, JSONResponse, RedirectResponse,
-                               Response)
-from fastapi.templating import Jinja2Templates
-from jinja2 import pass_context
+                     Request, UploadFile)
+from fastapi.responses import JSONResponse, Response
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from sentrix import mode as runtime_mode
@@ -57,7 +53,7 @@ from sentrix import services
 from sentrix.config import settings
 from sentrix.evidence.vault import vault
 from sentrix.link import tunnel_auth
-from sentrix.paths import FACES_DIR, SNAPSHOT_DIR, STATIC_DIR, TEMPLATES_DIR
+from sentrix.paths import FACES_DIR, SNAPSHOT_DIR
 from sentrix.pipeline.engine import audio_status, get_pipeline
 from sentrix.pipeline.state import state
 from sentrix.storage import database
@@ -67,24 +63,24 @@ from sentrix.perception.identity import person_name
 from sentrix.sos import current_service as sos_service
 from sentrix.web import auth
 from sentrix.web.hardening import websocket_origin_ok
-from sentrix.web.security import (RateLimiter, generate_token, login_limiter,
-                                  sanitize_filename, validate_image)
+from sentrix.web.security import RateLimiter, sanitize_filename, validate_image
 
 log = get_logger("routes")
 router = APIRouter()
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
-#: Events page size when the query does not say (the pre-M10 page showed 100).
+#: Incident page size when the query does not say.
 EVENTS_PAGE_SIZE = 100
 #: Incident types the filters accept (``IncidentRecord.incident_type`` values).
 _TYPE = re.compile(r"^[a-z_]{1,32}$")
 #: How often an open websocket re-checks that its session is still valid.
 WS_REAUTH_SECONDS = 60.0
 
-#: What each console role may do (docs/7 §10). The pages show only what the
-#: role can use; tunnelled requests are *enforced* by the link's path table
+#: What each console role may do (docs/7 §10), as ``GET /api/session`` lists
+#: it for the apps; tunnelled requests are *enforced* by the link's path table
 #: (``sentrix/link/policy.py``) before they reach these routes, and are never
-#: restated here. A Desk operator sees the dashboard and the live view only.
+#: restated here. A Desk operator gets nothing here: the Desk's view of a home
+#: is the Portal's relayed video and state.
 #: ``record`` (training recordings, D20): the device admin, and the owner, who
 #: starts and stops them through the Portal (step-up); downloads and deletes
 #: stay on the LAN (the path table refuses them to every tunnelled role).
@@ -99,54 +95,16 @@ ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
     "operator": frozenset(),
 }
 
-#: Navigation: (active_page key, path, label, capability needed or None).
-NAV_ITEMS = (
-    ("dashboard", "/dashboard", "Dashboard", None),
-    ("live", "/live", "Live Feed", None),
-    ("events", "/events", "Events", "pages"),
-    ("alerts", "/alerts", "Alerts", "pages"),
-    ("evidence", "/evidence", "Evidence", "pages"),
-    ("dispatch", "/dispatch", "Dispatch", "pages"),
-    ("sos", "/sos", "SOS", "pages"),
-    ("authorized", "/authorized", "Access", "pages"),
-    ("node", "/node", "Node", "pages"),
-)
-
-
-def _password() -> str:
-    return os.getenv("SENTRIX_PASSWORD", "").strip()
-
-
-def _secure_cookies() -> bool:
-    return os.getenv("SENTRIX_SECURE_COOKIES", "").strip().lower() in ("1", "true", "yes")
-
 
 def _test_mode() -> bool:
     """Decision D13 (display value). A function so tests can switch it."""
     return bool(settings.test_mode)
 
 
-async def require_auth(request: Request) -> bool:
-    """Every LC page: the device admin's session or a verified tunnel
-    identity (``sentrix.web.auth.principal_of``). The principal is on
-    ``request.state.lc_principal``.
-
-    Unset password or no session: the browser goes to the login page, which
-    says what to do, instead of a raw JSON 500 on the first page a newcomer
-    opens. Tunnelled requests get 401 JSON instead (the Portal never rewrites
-    a redirect to the device's login). APIs and media use
-    ``auth.require_lc()`` and answer 401 JSON.
-    """
-    principal = auth.principal_of(request)
-    if principal is None:
-        raise auth.unauthenticated(request, legacy_redirect=True)
-    request.state.lc_principal = principal
-    return True
-
-
 def _principal(request: Request) -> auth.LcPrincipal:
+    """The caller ``auth.require_lc`` stored on the request."""
     principal = getattr(request.state, "lc_principal", None)
-    if principal is None:                 # a route without require_auth
+    if principal is None:                 # a route without require_lc
         raise auth.unauthenticated(request)
     return principal
 
@@ -167,11 +125,11 @@ def _safe_path(base: Path, name: str) -> Path:
     return candidate
 
 
-# ── URLs, redaction and the page context ──────────────────────────────────────
+# ── URLs, redaction and the call button ───────────────────────────────────────
 def base_url(request: Any, path: str) -> str:
     """``path`` under this request's prefix: ``/d/<id>/x`` through the Portal,
     ``/x`` on the LAN (docs/7 §9.5). Every URL built in Python goes through
-    here; templates use the ``url()`` global, scripts ``Sentrix.url()``."""
+    here."""
     if not path.startswith("/"):
         path = "/" + path
     return tunnel_auth.base_for(request) + path
@@ -199,7 +157,8 @@ def call_target() -> dict[str, str]:
     """The "Call 112 now" button (docs/7 §7.10, D13). Outside test mode it
     dials 112; in test mode it never does: it dials the SENTRIX Desk number
     (``state.sos.desk_number`` or the profile's), or is disabled when none is
-    configured. Built here, so no script ever holds an emergency number."""
+    configured. Built here (``/api/session`` ``call``), so no app ever holds
+    an emergency number."""
     if not _test_mode():
         return {"href": "tel:112", "note": ""}
     desk = (state.get().get("sos") or {}).get("desk_number")
@@ -219,50 +178,6 @@ def call_target() -> dict[str, str]:
                                 "(SENTRIX_DESK_NUMBER), so this button is disabled."}
 
 
-@lru_cache(maxsize=256)
-def _asset_version(path: str, mtime_ns: int) -> str:
-    return hashlib.sha256(f"{path}:{mtime_ns}".encode()).hexdigest()[:10]
-
-
-def static_path(path: str) -> str:
-    """``/static/<path>?v=<stamp>``: the Portal caches static files for an
-    hour, so a new build must change the URL."""
-    path = path.lstrip("/")
-    try:
-        stamp = _asset_version(path, (STATIC_DIR / path).stat().st_mtime_ns)
-    except OSError:
-        return f"/static/{path}"
-    return f"/static/{path}?v={stamp}"
-
-
-@pass_context
-def _jinja_url(context, path: str) -> str:
-    if not str(path).startswith("/"):
-        path = "/" + str(path)
-    return f"{context.get('base', '')}{path}"
-
-
-@pass_context
-def _jinja_static_url(context, path: str) -> str:
-    return f"{context.get('base', '')}{static_path(path)}"
-
-
-def _detection_label(item: Any) -> str:
-    """Evidence "Objects" cell: ``person 0.82`` instead of a raw dict."""
-    if isinstance(item, dict):
-        label = str(item.get("label") or "object")
-        conf = item.get("conf")
-        try:
-            return f"{label} {float(conf):.2f}"
-        except (TypeError, ValueError):
-            return label
-    text = str(item)
-    match = re.search(r"label=['\"]?([\w -]+)['\"]?.*?conf=([\d.]+)", text)
-    if match:
-        return f"{match.group(1)} {float(match.group(2)):.2f}"
-    return text[:40]
-
-
 def _actor_label(ref: str | None) -> str:
     """``verdict_by`` / ``sent_by`` for people: who, not an audit string."""
     if not ref:
@@ -272,141 +187,6 @@ def _actor_label(ref: str | None) -> str:
     kind, _, ident = ref.partition(":")
     names = {"portal": "Portal user", "desk": "SENTRIX Desk", "contact": "contact"}
     return f"{names.get(kind, kind)} {ident[:8]}".strip()
-
-
-def _recipient_list(items: Any) -> str:
-    """``sent_to`` (masked addresses, or dicts carrying one) as one line."""
-    from sentrix.utils.redact import mask_recipient
-    shown = []
-    for item in items or []:
-        if isinstance(item, dict):
-            item = (item.get("masked") or item.get("recipient_masked")
-                    or mask_recipient(item.get("address")) or item.get("ref") or "")
-        if item:
-            shown.append(str(item))
-    return ", ".join(shown)
-
-
-def _console_context(request: Request) -> dict[str, Any]:
-    """Request-scoped values every template reads (a context processor)."""
-    principal = getattr(request.state, "lc_principal", None) or auth.principal_of(request)
-    nonce = request.scope.get("csp_nonce") or ""
-    return {
-        "base": tunnel_auth.base_for(request),
-        "csp_nonce": nonce,
-        "csrf_token": (principal.csrf or "") if principal else "",
-        "principal": principal,
-        "role": principal.role if principal else None,
-        "tunnelled": bool(principal and principal.kind == "tunnel"),
-        "caps": capabilities(principal),
-        "test_mode": _test_mode(),
-    }
-
-
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR),
-                            context_processors=[_console_context])
-templates.env.globals.update(url=_jinja_url, static_url=_jinja_static_url,
-                             nav_items=NAV_ITEMS)
-templates.env.filters["detection"] = _detection_label
-templates.env.filters["actor_label"] = _actor_label
-templates.env.filters["recipient_list"] = _recipient_list
-
-
-def render(request: Request, name: str, page: str, status_code: int = 200,
-           **context: Any) -> HTMLResponse:
-    """A console page: ``page`` is the nav key (``active_page``), so the
-    highlight does not depend on the URL prefix."""
-    live = state.get()
-    context.update(request=request, active_page=page, call=call_target(),
-                   sos=live.get("sos") or {}, remote_viewers=live.get("remote_viewers", 0),
-                   channels_warn=bool((live.get("channels") or {}).get("warn")))
-    return templates.TemplateResponse(request=request, name=name, context=context,
-                                      status_code=status_code)
-
-
-# ── auth ──────────────────────────────────────────────────────────────────────
-def _login_page(request: Request, error: str | None = None,
-                status_code: int = 200) -> HTMLResponse:
-    context: dict[str, Any] = {"request": request}
-    if error:
-        context["error"] = error
-    return templates.TemplateResponse(request=request, name="login.html",
-                                      context=context, status_code=status_code)
-
-
-@router.get("/", response_class=RedirectResponse)
-async def root() -> RedirectResponse:
-    # Redirects stay unprefixed: the Portal rewrites "Location: /x" itself.
-    return RedirectResponse(url="/dashboard")
-
-
-@router.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request) -> HTMLResponse:
-    if not _password():
-        return _login_page(request, "No password is configured. Set SENTRIX_PASSWORD in "
-                                    ".env (copy .env.example) and restart SENTRIX.")
-    return _login_page(request)
-
-
-@router.post("/login")
-async def login(request: Request, password: str = Form(...)):
-    client = request.client.host if request.client else "unknown"
-    if not login_limiter.allow(client):
-        log.warning("login rate limit hit from %s", client)
-        return _login_page(request, "Too many attempts. Try again shortly.", 429)
-
-    expected = _password()
-    if not expected:
-        return _login_page(request, "No password is configured. Set SENTRIX_PASSWORD "
-                                    "in .env (copy .env.example) and restart SENTRIX.", 500)
-
-    if not hmac.compare_digest(password.encode(), expected.encode()):
-        return _login_page(request, "Invalid password", 401)
-
-    login_limiter.reset(client)
-    response = RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
-    response.set_cookie(settings.web.cookie_name, generate_token(expected), httponly=True,
-                        secure=_secure_cookies(), samesite="lax", max_age=43_200)
-    response.delete_cookie(auth.LEGACY_COOKIE)
-    return response
-
-
-@router.get("/logout", response_class=HTMLResponse)
-async def logout_page(request: Request):
-    """A confirmation page: signing out is a POST (a link must not log
-    anyone out on someone else's behalf)."""
-    principal = auth.principal_of(request)
-    if principal is None:
-        return RedirectResponse(url="/login")
-    request.state.lc_principal = principal
-    return render(request, "logout.html", "logout")
-
-
-@router.post("/logout")
-async def logout(request: Request):
-    """Ends the LC session (the hardening checked the CSRF header)."""
-    if auth.wants_json(request):
-        response: Response = JSONResponse({"ok": True, "redirect": "/login"})
-    else:
-        response = RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
-    response.delete_cookie(settings.web.cookie_name)
-    response.delete_cookie(auth.LEGACY_COOKIE)
-    return response
-
-
-# ── pages ─────────────────────────────────────────────────────────────────────
-@router.get("/dashboard", response_class=HTMLResponse,
-            dependencies=[Depends(require_auth)])
-async def dashboard(request: Request) -> HTMLResponse:
-    return render(request, "dashboard.html", "dashboard",
-                  score_keys=("vision", "audio", "motion", "behaviour", "identity",
-                              "weapon", "fire", "theft", "harmful", "is_night"))
-
-
-@router.get("/live", response_class=HTMLResponse,
-            dependencies=[Depends(require_auth)])
-async def live(request: Request) -> HTMLResponse:
-    return render(request, "live.html", "live")
 
 
 def _local_day(value: str | None, *, end: bool) -> datetime | None:
@@ -509,54 +289,6 @@ def request_views(request_ids: list[str | None]) -> dict[str, dict[str, Any]]:
     return views
 
 
-def _page_links(request: Request, path: str, filters: dict[str, Any], offset: int,
-                limit: int, total: int) -> dict[str, str | None]:
-    params = {key: value for key, value in filters.items() if not key.startswith("_")}
-    if "type" in params:
-        params["incident_type"] = params.pop("type")
-    if limit != EVENTS_PAGE_SIZE:
-        params["limit"] = limit
-
-    def link(at: int) -> str:
-        query = urlencode({**params, **({"offset": at} if at else {})})
-        return base_url(request, path) + (f"?{query}" if query else "")
-
-    return {"prev": link(max(0, offset - limit)) if offset > 0 else None,
-            "next": link(offset + limit) if offset + limit < total else None}
-
-
-@router.get("/events", response_class=HTMLResponse,
-            dependencies=[Depends(require_auth)])
-async def events(request: Request, incident_type: str | None = None,
-                 level: str | None = None, verdict: str | None = None,
-                 since: str | None = None, until: str | None = None,
-                 offset: int = 0, limit: int = EVENTS_PAGE_SIZE) -> HTMLResponse:
-    filters = incident_filters(incident_type=incident_type, level=level,
-                               verdict=verdict, since=since, until=until)
-    limit = max(1, min(int(limit), 500))
-    offset = max(0, int(offset))
-    rows, total = await asyncio.to_thread(query_incidents, filters, limit, offset)
-    for row in rows:
-        if row.get("snapshot_path"):
-            row["snapshot_url"] = media_url(request, "snapshot", row["snapshot_path"])
-        if row.get("evidence_bundle"):
-            row["evidence_url"] = media_url(request, "evidence", row["evidence_bundle"])
-    requests_by_id = request_views([row.get("request_id") for row in rows])
-    return render(request, "events.html", "events", events=rows,
-                  stats=database.incident_stats(), filters=filters, total=total,
-                  offset=offset, limit=limit, requests=requests_by_id,
-                  pages=_page_links(request, "/events", filters, offset, limit, total),
-                  sos_url=base_url(request, "/sos"))
-
-
-@router.get("/alerts", response_class=HTMLResponse,
-            dependencies=[Depends(require_auth)])
-async def alerts(request: Request) -> HTMLResponse:
-    images = [{"url": media_url(request, "snapshot", p.name), "name": p.name}
-              for p in sorted(SNAPSHOT_DIR.glob("*.jpg"), reverse=True)[:120]]
-    return render(request, "alerts.html", "alerts", images=images)
-
-
 def _camera_rooms() -> dict[str, str]:
     """camera_id -> room label from the household profile."""
     try:
@@ -567,42 +299,6 @@ def _camera_rooms() -> dict[str, str]:
     except Exception as exc:
         log.debug("camera labels unavailable: %s", exc)
         return {}
-
-
-@router.get("/evidence", response_class=HTMLResponse,
-            dependencies=[Depends(require_auth)])
-async def evidence(request: Request) -> HTMLResponse:
-    items = await asyncio.to_thread(vault.list_records, 200)
-    chain = await asyncio.to_thread(vault.verify_chain)
-    for item in items:
-        # vault.view_url is device-relative; prefix it for the tunnel.
-        item["view_url"] = media_url(request, "evidence", item.get("bundle_id", ""))
-    return render(request, "evidence.html", "evidence", items=items, chain=chain,
-                  rooms=_camera_rooms())
-
-
-@router.get("/dispatch", response_class=HTMLResponse,
-            dependencies=[Depends(require_auth)])
-async def dispatch_page(request: Request) -> HTMLResponse:
-    from sentrix.alerting.dispatch import AUTHORITIES, SENDABLE_STATUSES
-    packages = owner_packages(database.all_dispatches())
-    return render(request, "dispatch.html", "dispatch", packages=packages,
-                  requests=request_views([p.get("request_id") for p in packages]),
-                  authorities=AUTHORITIES, sendable=SENDABLE_STATUSES,
-                  sos_url=base_url(request, "/sos"))
-
-
-@router.get("/authorized", response_class=HTMLResponse,
-            dependencies=[Depends(require_auth)])
-async def authorized(request: Request) -> HTMLResponse:
-    pipeline = get_pipeline()
-    enrolled = pipeline.identity.enrolled_files
-    faces = [{"filename": p.name, "url": media_url(request, "face", p.name),
-              "person": person_name(p.stem), "enrolled": p.name in enrolled}
-             for p in (sorted(FACES_DIR.iterdir()) if FACES_DIR.is_dir() else [])
-             if p.suffix.lower() in (".jpg", ".jpeg", ".png")]
-    return render(request, "authorized.html", "authorized", faces=faces,
-                  backend=pipeline.identity.backend)
 
 
 # ── authenticated media ───────────────────────────────────────────────────────
@@ -849,8 +545,12 @@ async def _enrol_image(image, person: str, payload: bytes | None, suffix: str,
 
 
 @router.post("/authorized/upload", dependencies=[Depends(auth.require_lc())])
+@router.post("/api/authorized/upload", dependencies=[Depends(auth.require_lc())])
 async def upload_face(request: Request, file: UploadFile = File(...),
                       person: str = Form(None)) -> JSONResponse:
+    """Enrol from an uploaded JPEG or PNG (multipart ``file``, optional
+    ``person``). ``/api/authorized/upload`` is the device app's path; the
+    older ``/authorized/upload`` is the same handler."""
     principal = _principal(request)
     payload = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(payload) > MAX_UPLOAD_BYTES:
@@ -961,6 +661,6 @@ async def ws_threat(websocket: WebSocket) -> None:
         log.debug("websocket closed: %s", exc)
 
 
-__all__ = ["router", "require_auth", "health_payload", "render", "base_url",
-           "media_url", "redacted", "capabilities", "call_target", "query_incidents",
-           "incident_filters", "request_views", "ROLE_CAPABILITIES", "templates"]
+__all__ = ["router", "health_payload", "base_url", "media_url", "redacted", "capabilities",
+           "call_target", "query_incidents", "incident_filters", "request_views",
+           "owner_packages", "ROLE_CAPABILITIES", "ws_payload"]

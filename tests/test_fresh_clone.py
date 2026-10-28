@@ -6,11 +6,7 @@ a camera-free run work out of the box; these tests keep it that way.
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
-
-import pytest
-from fastapi import HTTPException
 
 from sentrix.evaluation.custom_dataset import load_frames, videos_for
 from sentrix.io.sources import FileSource, build_source
@@ -42,25 +38,27 @@ class TestCameraChoice:
 
 
 class TestFirstLogin:
-    def test_unset_password_sends_the_browser_to_the_login_page(self, monkeypatch):
-        from starlette.requests import Request
-        from sentrix.web.routes import require_auth
-        monkeypatch.setenv("SENTRIX_PASSWORD", "")
-        request = Request({"type": "http", "method": "GET", "path": "/dashboard",
-                           "headers": [(b"accept", b"text/html")], "query_string": b"",
-                           "client": ("127.0.0.1", 50000)})
-        with pytest.raises(HTTPException) as caught:
-            asyncio.run(require_auth(request))
-        assert caught.value.status_code == 307
-        assert caught.value.headers["Location"] == "/login"
-
-    def test_login_page_explains_a_missing_password(self, monkeypatch):
+    def test_unset_password_still_opens_the_app(self, monkeypatch):
+        """A newcomer without SENTRIX_PASSWORD gets the device app (it asks
+        /api/session and shows its sign-in screen), not a raw error."""
         from fastapi.testclient import TestClient
         from sentrix.app import app
         monkeypatch.setenv("SENTRIX_PASSWORD", "")
-        page = TestClient(app).get("/login")       # no lifespan: no pipeline, no camera
-        assert page.status_code == 200
-        assert "Set SENTRIX_PASSWORD in .env" in page.text
+        client = TestClient(app)                   # no lifespan: no pipeline, no camera
+        for path in ("/", "/dashboard", "/login"):
+            page = client.get(path)
+            assert page.status_code == 200 and b'id="root"' in page.content, path
+        session = client.get("/api/session").json()
+        assert session["signed_in"] is False and session["password_configured"] is False
+
+    def test_sign_in_explains_a_missing_password(self, monkeypatch):
+        from fastapi.testclient import TestClient
+        from sentrix.app import app
+        monkeypatch.setenv("SENTRIX_PASSWORD", "")
+        refused = TestClient(app).post("/api/login", json={"password": "admin"})
+        assert refused.status_code == 503
+        error = refused.json()["error"]
+        assert error["code"] == "not_configured" and "password" in error["message"]
 
 
 class TestReplayToolIsSideEffectFree:

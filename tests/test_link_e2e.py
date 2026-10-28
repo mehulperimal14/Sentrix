@@ -6,7 +6,8 @@ Local Console app in-process (stand-in hardening, fake pipeline, a test SOS
 service on the real request store). A browser is ``httpx`` plus a
 ``websockets`` client. The story:
 
-claim -> connect -> the tunnelled dashboard renders with the /d/{id} base ->
+claim -> connect -> the tunnelled console API answers with the /d/{id} base
+(the device app itself is never tunnelled) ->
 state and frames relayed -> an SOS request is mirrored and prompts the owner
 -> the owner approves on the Portal -> the device applies it and the Desk
 queue delivers it -> the Desk acknowledges -> the Desk resolves.
@@ -133,15 +134,17 @@ def test_claim_tunnel_relays_sos_desk_end_to_end(world):
     browser = httpx.Client(base_url=server.url, cookies={"portal_session": owner_raw},
                            timeout=15, follow_redirects=False)
 
-    # ── 3. the tunnelled console ──────────────────────────────────────────────
-    page = browser.get(f"/d/{device_id}/dashboard", headers={"accept": "text/html"})
-    assert page.status_code == 200, page.text[:300]
-    for dom_id in ("incident-badge", "gauge-svg", "level-badge", "live-feed"):
-        assert f'id="{dom_id}"' in page.text
-    # The console's own hardening headers pass through the tunnel (its CSP
-    # carries the nonce of the scripts in this very page).
-    assert page.headers["x-frame-options"] == "DENY"
-    assert "nonce-" in page.headers["content-security-policy"]
+    # ── 3. the tunnelled console API (the device app is the LAN's, D22) ──────
+    session = browser.get(f"/d/{device_id}/api/session")
+    assert session.status_code == 200, session.text[:300]
+    body = session.json()
+    assert body["via"] == "portal" and body["role"] == "owner"
+    assert body["base"] == f"/d/{device_id}" and body["csrf_token"] is None
+    # The console's own hardening headers pass through the tunnel.
+    assert session.headers["x-frame-options"] == "DENY"
+    assert "script-src 'self';" in session.headers["content-security-policy"]
+    shell = browser.get(f"/d/{device_id}/dashboard", headers={"accept": "text/html"})
+    assert shell.status_code == 404 and b'id="root"' not in shell.content
     who = browser.get(f"/d/{device_id}/api/test-whoami").json()
     assert who == {"role": "owner", "actor": f"portal:{seeded.owner_id}", "csrf": owner_csrf,
                    "base": f"/d/{device_id}", "cookies": [], "forwarded_for": None}
@@ -208,9 +211,10 @@ def test_claim_tunnel_relays_sos_desk_end_to_end(world):
                         follow_redirects=False)
     queue = desk.get("/desk/api/queue").json()
     assert [c["id"] for c in queue["requests"]] == [rid] and queue["unacknowledged"] == 1
-    assert desk.get(f"/d/{device_id}/live", headers={"accept": "text/html"}).status_code == 200
+    assert desk.get(f"/d/{device_id}/api/metrics").status_code == 200
     assert desk.get(f"/d/{device_id}/events").status_code in (403, 404), \
-        "the Desk sees the live console only"
+        "the Desk sees the live state only"
+    assert desk.get(f"/d/{device_id}/api/session").status_code in (403, 404)
     ack = desk.post(f"/desk/requests/{rid}/acknowledge", data={"csrf_token": desk_csrf})
     assert ack.status_code == 303 and ack.headers["location"].endswith("m=ok")
     wait_for(lambda: mirror_state(app, rid) == "ACKNOWLEDGED", timeout=15, what="acknowledged")
@@ -237,7 +241,7 @@ def test_claim_tunnel_relays_sos_desk_end_to_end(world):
     # ── what the device recorded about the cloud ──────────────────────────────
     rows = link_store.recent_remote(200)
     targets = {r["target"] for r in rows}
-    assert {"GET /dashboard", "GET /api/test-whoami", "POST /api/mode", "sos.respond",
+    assert {"GET /api/session", "GET /api/test-whoami", "POST /api/mode", "sos.respond",
             "sos.update"} <= targets
     commands = [r for r in rows if r["kind"] == "command"]
     assert all(r["role"] for r in commands), "every command carries its actor"

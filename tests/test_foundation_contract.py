@@ -756,12 +756,15 @@ class TestLcPrincipal:
         assert refused.status_code == 403 and refused.json()["code"] == "forbidden_role"
         assert client.get("/api/key", headers=headers).json() == {"key": "portal:u1"}
 
-    def test_unauthenticated_pages_redirect_apis_and_tunnels_get_json(self, monkeypatch):
+    def test_unauthenticated_calls_get_json_never_a_redirect(self, monkeypatch):
+        """The console has no server pages any more (the device app signs in
+        through /api/login, D22): even a browser's HTML request gets 401 JSON."""
         from fastapi.testclient import TestClient
         monkeypatch.setenv("SENTRIX_PASSWORD", "pw")
         client = TestClient(_lc_app(), follow_redirects=False)
         page = client.get("/page", headers={"accept": "text/html"})
-        assert page.status_code == 307 and page.headers["location"].split("?")[0] == "/login"
+        assert page.status_code == 401 and page.json()["code"] == "unauthorised"
+        assert "location" not in page.headers
         api = client.get("/api/who")
         assert api.status_code == 401 and api.json() == {"detail": "not signed in",
                                                          "code": "unauthorised"}

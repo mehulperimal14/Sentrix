@@ -9,7 +9,7 @@ Two kinds of caller reach the LC app:
   (``sentrix.link.tunnel_auth``; the hardening middleware stores the identity
   on the request scope).
 
-Every console router (T-WEB's pages and APIs, T-SOS's ``/api/sos``, T-HW's
+Every console router (the core APIs and media, T-SOS's ``/api/sos``, T-HW's
 ``/api/node``, T-LINK's ``/api/link``, T-CH's ``/api/channels``) uses
 :func:`require_lc` and reads the :class:`LcPrincipal` it returns. **Roles,
 consents, step-up and rate limits of tunnelled requests are enforced in one
@@ -22,9 +22,9 @@ never restate the path table, except the training recordings (D20), whose
 list, start and stop restate their ``record_status`` / ``record`` rows
 (``recording_routes``).
 
-Unauthenticated: an LC page answers 307 to ``/login`` (as before); an API,
-media or fetch request, and anything tunnelled, answers 401 JSON
-(``{"detail", "code": "unauthorised"}``), never a redirect the Portal would
+Unauthenticated: 401 JSON (``{"detail", "code": "unauthorised"}``), never a
+redirect. The console has no server pages any more (the device app signs in
+through ``/api/login``, D22), and a redirect is something the Portal would
 have to rewrite.
 """
 
@@ -137,28 +137,9 @@ def principal_of(request: Any) -> LcPrincipal | None:
     return None
 
 
-def wants_json(request: Any) -> bool:
-    """An API, media, websocket or script request (or anything tunnelled):
-    errors are JSON, never a redirect to the login page."""
-    if is_tunnelled(request):
-        return True
-    path = request.url.path if getattr(request, "url", None) else ""
-    if path.startswith(("/api/", "/media/", "/ws/")):
-        return True
-    headers = getattr(request, "headers", None) or {}
-    if headers.get("x-requested-with") or headers.get(settings.web.csrf_header.lower()):
-        return True
-    accept = headers.get("accept", "")
-    return "application/json" in accept and "text/html" not in accept
-
-
-def unauthenticated(request: Any, *, legacy_redirect: bool = False) -> HTTPException:
-    """401 JSON for APIs and tunnelled requests, else 307 to ``/login``.
-    ``legacy_redirect`` keeps the pre-M10 behaviour (307 for every LC
-    request) for ``routes.require_auth`` until T-WEB moves its APIs over."""
-    if is_tunnelled(request) or (not legacy_redirect and wants_json(request)):
-        return LcError("unauthorised", "not signed in")
-    return HTTPException(status_code=307, headers={"Location": "/login"})
+def unauthenticated(request: Any = None) -> HTTPException:
+    """401 JSON for every unauthenticated console call (LAN or tunnel)."""
+    return LcError("unauthorised", "not signed in")
 
 
 def require_lc(*roles: str, step_up_seconds: float | None = None) -> Callable[..., Any]:
@@ -201,5 +182,5 @@ def rate_key(request: Any) -> str:
 
 
 __all__ = ["LcPrincipal", "LcError", "LC_ROLES", "LEGACY_COOKIE", "principal_of",
-           "require_lc", "unauthenticated", "wants_json", "is_tunnelled",
+           "require_lc", "unauthenticated", "is_tunnelled",
            "session_cookie", "csrf_for_session", "rate_key"]

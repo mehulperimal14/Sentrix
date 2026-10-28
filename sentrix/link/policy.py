@@ -12,11 +12,13 @@ Path classes (docs/7 §5.7):
 =========================  ================  =====================================
 Class                      Roles             Extra
 =========================  ================  =====================================
-pages, read APIs, static   owner, member
+read APIs (GET ``/api/*``) owner, member
 media, video relay         owner, member     consent ``remote_view``; faces also
                                              ``face_recognition``; <= 60/min/user
 gallery writes             owner             consent ``face_recognition``;
-                                             DELETE needs a step-up
+                                             DELETE needs a step-up; uploads at
+                                             ``/api/authorized/upload`` and the
+                                             older ``/authorized/upload``
 verdict / SOS / dispatch   owner, member
 HOME/ARMED (``/api/mode``) owner, member     the route checks the SOS PIN
 siren test                 owner             step-up (the 1/min limit is
@@ -28,7 +30,8 @@ recording start            owner             step-up; ``POST
 recording stop             owner             ``POST /api/recordings/stop``; no
                                              step-up: stopping the filming of
                                              the room is never blocked (D20)
-Desk view                  operator          only while a request of this device
+Desk view                  operator          ``/api/health``, ``/api/metrics``
+                                             only, while a request of this device
                                              is on the help path *and* consent
                                              ``desk_live_view``
 recording files            none (LC only)    ``DELETE /api/recordings/*`` and
@@ -40,12 +43,16 @@ device admin lists         none (LC only)    ``/api/snapshots``, ``/api/evidence
                                              the device app's admin views (docs/9)
 =========================  ================  =====================================
 
-The device app's JSON API (docs/9, ``sentrix.web.api_routes``) adds
-``GET /api/session``, ``GET /api/state`` and ``GET /api/activity``: read APIs
-like the rest (owner, member; not the Desk, whose view is the relayed video and
-state plus ``DESK_PATHS``). ``/api/state`` is the websocket's message, the
-data ``/api/metrics`` already gives; ``/api/activity`` is ``/api/incidents``
-with each incident's request in the owner view.
+No console page and no static file is tunnelled: the console's pages are the
+device app (D22), which only the LAN loads (owners and members use the Portal
+app, which calls the JSON API below through ``/d/<id>/api/...``), so ``/``,
+the app's paths and ``/static/*`` are not in the table. The device app's JSON
+API (docs/9, ``sentrix.web.api_routes``) has ``GET /api/session``,
+``GET /api/state`` and ``GET /api/activity``: read APIs like the rest (owner,
+member; not the Desk, whose view is the relayed video and state plus
+``DESK_PATHS``). ``/api/state`` is the websocket's message, the data
+``/api/metrics`` already gives; ``/api/activity`` is ``/api/incidents`` with
+each incident's request in the owner view.
 
 Never tunnelled (refused even if the Portal forwarded them): ``/login``,
 ``/logout``, ``/api/login``, ``/api/logout``, ``/setup/*``, ``/api/setup/*``,
@@ -77,11 +84,11 @@ from sentrix.web.security import RateLimiter
 
 #: Step-up window the device accepts for owner-only sensitive actions (s).
 STEP_UP_SECONDS = 300.0
-#: Console pages an owner or member may open through the tunnel.
-PAGES = frozenset({"/", "/dashboard", "/live", "/events", "/alerts", "/evidence",
-                   "/dispatch", "/authorized", "/sos", "/node"})
 #: What a Desk operator may read while a request is on the help path.
-DESK_PATHS = frozenset({"/dashboard", "/live", "/api/health", "/api/metrics"})
+DESK_PATHS = frozenset({"/api/health", "/api/metrics"})
+#: Face uploads (multipart) and captures: the gallery-write row.
+GALLERY_WRITE_PATHS = frozenset({"/api/authorized/upload", "/authorized/upload",
+                                 "/api/authorized/capture"})
 #: Never served through the tunnel (sign-in and Wi-Fi setup, HTML and JSON).
 NEVER_EXACT = frozenset({"/login", "/logout", "/docs", "/redoc", "/openapi.json",
                          "/video", "/setup", "/api/login", "/api/logout", "/api/setup"})
@@ -105,7 +112,7 @@ READ_METHODS = frozenset({"GET", "HEAD"})
 TUNNEL_METHODS = frozenset({"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"})
 
 # Path classes.
-NEVER, PAGE, READ_API, STATIC, MEDIA, FACES = "never", "page", "read_api", "static", "media", "faces"
+NEVER, READ_API, MEDIA, FACES = "never", "read_api", "media", "faces"
 GALLERY_WRITE, GALLERY_DELETE = "gallery_write", "gallery_delete"
 SOS_WRITE, MODE, SIREN, LC_ADMIN, UNKNOWN = "sos_write", "mode", "siren_test", "lc_only", "unknown"
 RECORD, RECORD_STOP, RECORD_STATUS = "record", "record_stop", "record_status"
@@ -166,18 +173,14 @@ def classify(method: str, path: str) -> str:
     if path in LC_ONLY or path.startswith(LC_ONLY_PREFIXES):
         return LC_ADMIN
     if method in READ_METHODS:
-        if path.startswith("/static/"):
-            return STATIC
         if path.startswith("/media/face/"):
             return FACES
         if path.startswith("/media/") or path == "/api/authorized/preview.jpg":
             return MEDIA
-        if path in PAGES:
-            return PAGE
         if path.startswith("/api/"):
             return READ_API
         return UNKNOWN
-    if method == "POST" and path in ("/authorized/upload", "/api/authorized/capture"):
+    if method == "POST" and path in GALLERY_WRITE_PATHS:
         return GALLERY_WRITE
     if method == "DELETE" and path.startswith("/api/authorized/"):
         return GALLERY_DELETE
@@ -274,13 +277,13 @@ class TunnelPolicy:
                            "not in the tunnel path table", path_class)
 
         if actor.type == "operator":
-            if path_class == STATIC or (path_class in (PAGE, READ_API) and clean in DESK_PATHS):
+            if path_class == READ_API and clean in DESK_PATHS:
                 return self._desk(path_class)
             return _refuse("forbidden_role", "the Desk may only view the live console",
                            path_class)
 
         # owner and member from here on
-        if path_class in (PAGE, READ_API, STATIC):
+        if path_class == READ_API:
             return _allow(path_class)
         if path_class in (MEDIA, FACES):
             if not self.consent("remote_view"):
@@ -341,6 +344,6 @@ class TunnelPolicy:
 
 
 __all__ = ["Decision", "TunnelPolicy", "classify", "normalise_path", "STEP_UP_SECONDS",
-           "PAGES", "DESK_PATHS", "LC_ONLY", "LC_ONLY_PREFIXES", "RECORD_STATUS_PATH",
+           "GALLERY_WRITE_PATHS", "DESK_PATHS", "LC_ONLY", "LC_ONLY_PREFIXES", "RECORD_STATUS_PATH",
            "RECORD_CONTROL", "RECORD_STOP_PATH", "NEVER_EXACT", "NEVER_PREFIXES",
            "TUNNEL_METHODS"]

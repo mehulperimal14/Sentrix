@@ -1,14 +1,18 @@
-"""Track T-WEB: the Local Console pages on the LAN and through the Portal tunnel.
+"""Track T-WEB, after the switch to the device app (D22): the Local Console's
+shell, capabilities, test-mode call button, SOS wording and device data.
 
-Every page is rendered twice: as the device admin (no prefix) and as a
-tunnelled Portal user under ``/d/abc``. The pages must build every link,
-image, form, fetch and websocket URL under that prefix, carry the CSP nonce
-on every script, contain no inline handler, inline script or inline style,
-render device-supplied strings inert, and show each role only what it may
-use (docs/7 §9, §10). No pipeline, camera or network: a fake pipeline, a
+The console's pages are the React device app (``frontend/apps/device``,
+built into ``sentrix/web/static/app``). Here: the shell is served on the LAN
+for ``/`` and every app path, never through the tunnel; it and its hashed
+assets load under the strict CSP; each role gets only its capabilities from
+``/api/session``; the "Call 112 now" button never dials 112 in test mode;
+the SOS contract's wording (docs/7 §7.10) is in the apps' sources; the data
+the old pages rendered comes back from the JSON API with the owner view and
+URL-encoded links. No pipeline, camera or network: a fake pipeline, a
 temporary database and temporary media directories.
 
-The fixtures here are shared by the other ``test_web_*`` modules.
+The fixtures here are shared by the other ``test_web_*`` and
+``test_device_api_v2_*`` modules.
 """
 
 from __future__ import annotations
@@ -26,10 +30,13 @@ import pytest
 PASSWORD = "correct horse battery"
 BASE = "/d/abc"
 XSS = "\"'><script>alert(1)</script><img src=x onerror=alert(2)>"
-PAGES = ("/dashboard", "/live", "/events", "/alerts", "/evidence", "/dispatch",
-         "/authorized", "/sos", "/node")
-STATIC_JS = Path(__file__).resolve().parents[1] / "sentrix" / "web" / "static" / "js"
-TEMPLATES = Path(__file__).resolve().parents[1] / "sentrix" / "web" / "templates"
+ROOT = Path(__file__).resolve().parents[1]
+APP_DIR = ROOT / "sentrix" / "web" / "static" / "app"
+APP_SOURCES = (ROOT / "frontend" / "apps" / "device" / "src",
+               ROOT / "frontend" / "apps" / "portal" / "src")
+#: Paths of the device app (its router), which the shell answers on the LAN.
+APP_PATHS = ("/", "/login", "/setup/wifi", "/admin", "/admin/recordings",
+             "/admin/activity", "/admin/faces", "/dashboard", "/events", "/sos")
 
 
 # ── a pipeline without models or a camera ────────────────────────────────────
@@ -189,28 +196,27 @@ def populate(console):
     console.pipeline.identity.enrolled_files.add("alice.jpg")
 
 
-# ── HTML inspection ───────────────────────────────────────────────────────────
+# ── the shell's markup ────────────────────────────────────────────────────────
 class _Collector(HTMLParser):
-    URL_ATTRS = ("href", "src", "action", "formaction", "data-lightbox")
+    URL_ATTRS = ("href", "src")
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
-        self.urls: list[tuple[str, str, str]] = []
+        self.urls: list[str] = []
         self.handlers: list[str] = []
         self.styles: list[str] = []
         self.scripts: list[dict] = []
 
     def handle_starttag(self, tag, attrs):
-        values = dict(attrs)
         for name, value in attrs:
             if name.startswith("on"):
                 self.handlers.append(f"<{tag} {name}>")
             if name == "style":
                 self.styles.append(f"<{tag} style={value!r}>")
             if name in self.URL_ATTRS and value is not None:
-                self.urls.append((tag, name, value))
+                self.urls.append(value)
         if tag == "script":
-            self.scripts.append(values)
+            self.scripts.append(dict(attrs))
         if tag == "style":
             self.styles.append("<style> element")
 
@@ -221,389 +227,379 @@ def inspect_html(text: str) -> _Collector:
     return collector
 
 
-#: Absolute Portal pages the tunnelled console links to on purpose.
-PORTAL_LINKS = frozenset({"/home", "/desk", "/account"})
+def shell_urls() -> list[str]:
+    """Every URL the built ``index.html`` references."""
+    return inspect_html((APP_DIR / "index.html").read_text(encoding="utf-8")).urls
 
 
-def assert_prefixed(text: str, base: str) -> None:
-    """Every URL the page holds starts with the base (or is a tel: link)."""
-    found = inspect_html(text)
-    assert found.urls, "the page has no links at all"
-    for tag, attr, value in found.urls:
-        if value.startswith("tel:"):
-            continue
-        if base and value in PORTAL_LINKS:
-            continue                    # the tunnelled nav's way back to the Portal
-        assert value.startswith(base + "/") and not value.startswith("//"), \
-            f"<{tag} {attr}={value!r}> is not under {base or '/'}"
-        assert "://" not in value, f"external URL {value!r}"
+def asset_file(url: str) -> Path:
+    return APP_DIR / url.split("?")[0][len("/static/app/"):]
 
 
-# ── tests: rendering under both prefixes ──────────────────────────────────────
-class TestPagesUnderBothPrefixes:
-    @pytest.mark.parametrize("path", PAGES)
-    def test_lan_pages_keep_root_urls(self, console, path):
-        populate(console)
-        client, _ = lc_client(console)
-        page = client.get(path)
-        assert page.status_code == 200, page.text[:300]
-        assert_prefixed(page.text, "")
-        assert 'data-base=""' in page.text
+def app_sources(*apps: str) -> str:
+    """The apps' TypeScript sources (not their tests) as one text, JSX
+    entities decoded."""
+    roots = [r for r in APP_SOURCES if not apps or r.parent.name in apps]
+    files = [f for root in roots for f in sorted(root.rglob("*.ts*"))
+             if f.suffix in (".ts", ".tsx") and ".test." not in f.name
+             and "__tests__" not in f.parts]
+    assert files, f"no sources under {roots}"
+    text = "\n".join(f.read_text(encoding="utf-8") for f in files)
+    return text.replace("&apos;", "'").replace("&rsquo;", "’")
 
-    @pytest.mark.parametrize("path", PAGES)
-    def test_tunnel_pages_prefix_every_url(self, console, path):
-        populate(console)
-        page = tunnel_client(console).get(path)
-        assert page.status_code == 200, page.text[:300]
-        assert_prefixed(page.text, BASE)
-        assert f'data-base="{BASE}"' in page.text
-        # The CSRF token the Portal bridged is what page scripts send back.
-        assert '<meta name="csrf-token" content="portal-csrf-token">' in page.text
 
-    @pytest.mark.parametrize("path,key", [("/dashboard", "dashboard"), ("/events", "events"),
-                                          ("/sos", "sos"), ("/node", "node")])
-    def test_nav_highlight_follows_the_page_not_the_path(self, console, path, key):
-        page = tunnel_client(console).get(path)
-        active = re.findall(r'<a href="([^"]+)" class="nav-link active"', page.text)
-        assert active == [f"{BASE}{path}"]
-        assert f'data-page="{key}"' in page.text
+# ── tests: the build ──────────────────────────────────────────────────────────
+class TestTheBuild:
+    def test_index_and_every_asset_it_references_exist(self):
+        index = APP_DIR / "index.html"
+        assert index.is_file(), "build it: cd frontend && npm run build -w @sentrix/device"
+        urls = shell_urls()
+        assert any(u.endswith(".js") for u in urls) and any(u.endswith(".css") for u in urls)
+        for url in urls:
+            assert url.startswith("/static/app/"), f"{url}: not a file of this build"
+            assert asset_file(url).is_file(), url
 
-    def test_lc_session_csrf_token_is_in_the_meta_tag(self, console):
-        client, csrf = lc_client(console)
-        page = client.get("/dashboard")
-        assert f'<meta name="csrf-token" content="{csrf}">' in page.text
+    def test_chunks_and_fonts_the_entry_loads_exist(self):
+        assets = APP_DIR / "assets"
+        for path in assets.glob("*.css"):
+            for url in re.findall(r"url\(([^)]+)\)", path.read_text(encoding="utf-8")):
+                url = url.strip("'\"")
+                if url.startswith("data:"):
+                    continue
+                assert url.startswith("/static/app/"), (path.name, url)
+                assert asset_file(url).is_file(), (path.name, url)
+        for path in assets.glob("*.js"):
+            text = path.read_text(encoding="utf-8")
+            for name in re.findall(r"\"\./([\w.-]+\.(?:js|css))\"", text):
+                assert (assets / name).is_file(), (path.name, name)
+            for name in re.findall(r"\"assets/([\w.-]+\.(?:js|css))\"", text):
+                assert (assets / name).is_file(), (path.name, name)
 
-    def test_logout_confirm_page_on_the_lan(self, console):
-        client, _ = lc_client(console)
-        page = client.get("/logout")
-        assert page.status_code == 200 and 'id="logout-confirm"' in page.text
-        assert_prefixed(page.text, "")
+    def test_assets_are_content_hashed(self):
+        """Replaces the old ``?v=`` stamps: a new build changes every name."""
+        for url in shell_urls():
+            if url.endswith((".js", ".css")):
+                assert re.search(r"-[\w-]{8}\.(js|css)$", url), url
 
-    def test_signed_out_pages_redirect_and_tunnel_gets_json(self, console):
+    def test_the_build_fits_the_strict_csp(self):
+        found = inspect_html((APP_DIR / "index.html").read_text(encoding="utf-8"))
+        assert found.handlers == [] and found.styles == []
+        assert found.scripts, "the app loads its entry script"
+        for script in found.scripts:
+            assert script.get("src", "").startswith("/static/app/"), "no inline script"
+        for path in [APP_DIR / "index.html", *(APP_DIR / "assets").glob("*.css")]:
+            text = path.read_text(encoding="utf-8")
+            assert "fonts.googleapis" not in text and "@import url(http" not in text, path.name
+
+    def test_no_app_holds_an_emergency_number(self):
+        """"Call 112 now" is a link the device builds (the Desk in test mode):
+        no source and no built file holds a tel: or sms: link to 112."""
+        dial = re.compile(r"(tel|sms):\s*\+?112\b")
+        assert not dial.search(app_sources())
+        for path in (APP_DIR / "assets").glob("*.js"):
+            assert not dial.search(path.read_text(encoding="utf-8")), path.name
+
+
+# ── tests: the shell ──────────────────────────────────────────────────────────
+class TestTheShell:
+    @pytest.mark.parametrize("path", APP_PATHS)
+    def test_the_lan_gets_the_app_on_every_app_path(self, console, path):
+        from fastapi.testclient import TestClient
+        index = (APP_DIR / "index.html").read_bytes()
+        for client in (TestClient(console.app), lc_client(console)[0]):
+            response = client.get(path)
+            assert response.status_code == 200, path
+            assert response.headers["content-type"].startswith("text/html")
+            assert response.content == index, "the shell holds no data, signed in or not"
+
+    @pytest.mark.parametrize("path", APP_PATHS)
+    def test_never_through_the_tunnel(self, console, path):
         from fastapi.testclient import TestClient
         from sentrix.link import tunnel_auth
-        page = TestClient(console.app, follow_redirects=False).get(
-            "/dashboard", headers={"accept": "text/html"})
-        assert page.status_code == 307 and page.headers["location"] == "/login"
-        api = TestClient(console.app).get("/api/incidents")
-        assert api.status_code == 401 and api.json()["code"] == "unauthorised"
-        unverified = TestClient(console.app, client=tunnel_auth.TUNNEL_CLIENT,
-                                follow_redirects=False).get("/events")
-        assert unverified.status_code == 401
+        for client in (tunnel_client(console), tunnel_client(console, "member"),
+                       tunnel_client(console, "operator"),
+                       TestClient(console.app, client=tunnel_auth.TUNNEL_CLIENT)):
+            response = client.get(path)
+            assert response.status_code == 404, path
+            assert response.json()["code"] == "not_found"
+            assert b'id="root"' not in response.content
 
-
-# ── tests: CSP-ready markup ───────────────────────────────────────────────────
-class TestStrictCspMarkup:
-    @pytest.mark.parametrize("path", PAGES + ("/logout",))
-    def test_no_inline_handlers_scripts_or_styles(self, console, path):
-        populate(console)
+    def test_server_paths_are_never_the_app(self, console):
         client, _ = lc_client(console)
-        page = client.get(path)
-        found = inspect_html(page.text)
-        assert found.handlers == [], found.handlers
-        assert found.styles == [], found.styles
-        nonce = re.search(r"script-src 'self' 'nonce-([^']+)'",
-                          page.headers["content-security-policy"]).group(1)
-        assert found.scripts, "every page loads its scripts"
-        for script in found.scripts:
-            assert script.get("src", "").startswith("/static/js/"), script
-            assert script.get("nonce") == nonce, script
+        for path in ("/api/no-such-thing", "/media/nothing", "/ws/nothing", "/openapi.json",
+                     "/docs", "/redoc", "/favicon.ico", "/static/app/assets/missing.js"):
+            response = client.get(path)
+            assert response.status_code == 404, path
+            assert not response.headers.get("content-type", "").startswith("text/html"), path
+        session = client.get("/api/session")
+        assert session.status_code == 200 and session.json()["signed_in"] is True
 
-    def test_the_nonce_changes_on_every_response(self, console):
+    def test_the_shell_carries_the_csp_and_security_headers(self, console):
+        from fastapi.testclient import TestClient
+        response = TestClient(console.app).get("/admin/recordings")
+        csp = response.headers["content-security-policy"]
+        directives = dict(part.strip().split(" ", 1) for part in csp.split(";"))
+        assert directives["default-src"] == "'self'"
+        assert directives["script-src"] == "'self'" and directives["style-src"] == "'self'"
+        assert directives["font-src"] == "'self'" and directives["object-src"] == "'none'"
+        assert directives["frame-ancestors"] == "'none'" and directives["base-uri"] == "'none'"
+        assert "ws://testserver" in directives["connect-src"]
+        for loose in ("unsafe-inline", "unsafe-eval", "nonce-", "https:", "*"):
+            assert loose not in csp, loose
+        assert response.headers["x-frame-options"] == "DENY"
+        assert response.headers["x-content-type-options"] == "nosniff"
+        assert response.headers["referrer-policy"] == "same-origin"
+        assert "camera=()" in response.headers["permissions-policy"]
+        assert response.headers["cache-control"] == "no-cache, must-revalidate", \
+            "a new build is picked up at the next load"
+
+    def test_the_assets_load_from_this_origin_under_that_csp(self, console):
+        from fastapi.testclient import TestClient
+        client = TestClient(console.app)
+        for url in shell_urls():
+            response = client.get(url)
+            assert response.status_code == 200, url
+            kind = response.headers["content-type"]
+            if url.endswith(".js"):
+                assert "javascript" in kind, (url, kind)
+            elif url.endswith(".css"):
+                assert kind.startswith("text/css"), (url, kind)
+            assert response.headers.get("cache-control") != "no-store", "hashed: cacheable"
+
+    def test_the_old_server_rendered_ui_is_gone(self, console):
+        import sentrix.paths
+        web = ROOT / "sentrix" / "web"
+        assert not (web / "templates").exists()
+        assert not (web / "static" / "js").exists() and not (web / "static" / "css").exists()
+        assert (web / "static" / "sounds").is_dir() and APP_DIR.is_dir()
+        assert not hasattr(sentrix.paths, "TEMPLATES_DIR")
+        client, csrf = lc_client(console)
+        assert client.get("/static/js/app.js").status_code == 404
+        for path in ("/login", "/logout", "/setup/wifi", "/setup/wifi/scan"):
+            refused = client.post(path, headers={"X-CSRF-Token": csrf},
+                                  data={"password": PASSWORD, "code": "x"})
+            assert refused.status_code == 404, (path, refused.status_code)
+            assert refused.json()["code"] == "not_found"
+            assert "set-cookie" not in refused.headers, path
+
+    def test_a_write_to_no_route_is_a_json_404(self, console):
+        """Never the app, never a 405 from its GET-only catch-all."""
+        client, csrf = lc_client(console)
+        for method in ("POST", "PUT", "PATCH", "DELETE"):
+            for path in ("/api/no-such-thing", "/api/node/buzzer-test", "/admin/faces"):
+                response = client.request(method, path, headers={"X-CSRF-Token": csrf})
+                assert response.status_code == 404, (method, path)
+                assert response.json()["code"] == "not_found"
+
+
+# ── tests: what each role may use ─────────────────────────────────────────────
+def capabilities_of(client) -> set[str]:
+    return set(client.get("/api/session").json()["capabilities"])
+
+
+class TestCapabilities:
+    def test_the_device_admin_uses_everything_on_the_lan(self, console):
+        body = lc_client(console)[0].get("/api/session").json()
+        assert {"media", "gallery_view", "gallery_write", "verdict", "sos", "dispatch", "mode",
+                "siren_test", "record"} <= set(body["capabilities"])
+        assert body["lan_admin"] is True and body["sos"]["demo_trigger"] is True
+
+    def test_the_owner_edits_the_gallery_tests_the_siren_and_records(self, console):
+        body = tunnel_client(console, "owner").get("/api/session").json()
+        assert {"gallery_write", "siren_test", "record", "verdict", "sos", "mode"} <= set(
+            body["capabilities"])
+        assert body["lan_admin"] is False, "the admin's views stay on the LAN"
+        assert body["sos"]["demo_trigger"] is False
+
+    def test_a_member_sees_the_gallery_read_only(self, console):
+        caps = capabilities_of(tunnel_client(console, "member"))
+        assert {"gallery_view", "verdict", "sos", "dispatch", "mode"} <= caps
+        assert not caps & {"gallery_write", "siren_test", "record"}
+
+    def test_the_desk_operator_gets_nothing_to_act_on(self, console):
+        body = tunnel_client(console, "operator").get("/api/session").json()
+        assert body["capabilities"] == [] and body["lan_admin"] is False
+        assert body["media"] == {"snapshots": False, "evidence": False, "faces": False}
+        assert body["sos"]["demo_close_incident"] is False
+
+    def test_portal_users_sign_out_on_the_portal(self, console):
+        owner = tunnel_client(console)
+        body = owner.get("/api/session").json()
+        assert body["via"] == "portal" and body["user"]["name"] == "Riya Sharma"
+        assert owner.post("/api/logout").status_code == 404
+
+    def test_the_scripted_trigger_offers_what_the_service_accepts(self, console, monkeypatch):
+        """An intrusion opens a request only with SENTRIX_SOS_INTRUSION=1, so
+        the app offers it only then (D8, D15)."""
+        import dataclasses
+        from sentrix.web import api_routes
         client, _ = lc_client(console)
-        first = client.get("/dashboard").headers["content-security-policy"]
-        second = client.get("/dashboard").headers["content-security-policy"]
-        assert first != second
-
-    def test_templates_have_no_inline_code(self):
-        for template in TEMPLATES.glob("*.html"):
-            text = template.read_text(encoding="utf-8")
-            assert not re.search(r"\son[a-z]+\s*=", text), f"inline handler in {template.name}"
-            assert not re.search(r"<script(?![^>]*\ssrc=)", text), f"inline script in {template.name}"
-            assert " style=" not in text, f"inline style in {template.name}"
-            assert "fonts.googleapis" not in text and "https://" not in text, template.name
-
-    def test_scripts_use_no_html_sinks_and_build_every_url_from_the_base(self):
-        sinks = re.compile(r"\.innerHTML\b|\.outerHTML\s*=|insertAdjacentHTML|document\.write|"
-                           r"\beval\(|new Function\(")
-        literal = re.compile(r"""(["'`])/[A-Za-z]""")
-        allowed = re.compile(r"(?:\burl|\bapi)\(\s*$")
-        for script in STATIC_JS.glob("*.js"):
-            text = script.read_text(encoding="utf-8")
-            assert not sinks.search(text), f"HTML sink in {script.name}"
-            for match in literal.finditer(text):
-                before = text[max(0, match.start() - 40):match.start()]
-                line = text[:match.start()].count("\n") + 1
-                assert allowed.search(before), \
-                    f"{script.name}:{line}: a path literal not built with url()/api()"
-            assert "WebSocket(`${scheme}//${window.location.host}${url(" in text \
-                or "WebSocket" not in text, f"websocket URL in {script.name} ignores the base"
-
-    def test_no_script_holds_an_emergency_number(self):
-        # "Call 112 now" is a link the server builds (the Desk in test mode);
-        # no script builds a tel:/sms: link or holds the number itself.
-        for script in STATIC_JS.glob("*.js"):
-            text = script.read_text(encoding="utf-8")
-            assert not re.search(r"(tel|sms):", text), script.name
-            code = re.sub(r'("[^"\n]*"|`[^`]*`)', "", text)      # prose in messages
-            assert "112" not in code, script.name
+        off = dataclasses.replace(api_routes.settings, sos=dataclasses.replace(
+            api_routes.settings.sos, intrusion_requests=False))
+        monkeypatch.setattr(api_routes, "settings", off)
+        assert client.get("/api/session").json()["sos"]["intrusion_requests"] is False
+        on = dataclasses.replace(off, sos=dataclasses.replace(off.sos, intrusion_requests=True))
+        monkeypatch.setattr(api_routes, "settings", on)
+        assert client.get("/api/session").json()["sos"]["intrusion_requests"] is True
 
 
-# ── tests: device data renders inert ──────────────────────────────────────────
-class TestXssPayloadsAreInert:
-    def test_incident_reason_note_and_type_are_escaped(self, console):
-        add_incident(id="inc-x", reason=XSS, incident_type="weapon", verdict="FALSE",
-                     verdict_note=XSS, verdict_by="portal:" + XSS[:20])
-        for client in (lc_client(console)[0], tunnel_client(console)):
-            page = client.get("/events")
-            assert page.status_code == 200
-            assert "<script>alert(1)" not in page.text
-            assert "onerror=alert" not in page.text.replace("onerror=alert(2)&gt;", "")
-            assert "&lt;script&gt;alert(1)&lt;/script&gt;" in page.text
-            assert not inspect_html(page.text).handlers
-
-    def test_face_file_names_are_inert(self, console):
-        name = "x' onerror='alert(1).jpg"
-        (console.faces / name).write_bytes(b"\xff\xd8\xff")
-        page = lc_client(console)[0].get("/authorized")
-        assert page.status_code == 200
-        assert not inspect_html(page.text).handlers
-        # The name is an attribute value and a URL-encoded path, never markup or code.
-        assert "data-delete-face=\"x&#39; onerror=&#39;alert(1).jpg\"" in page.text
-        assert "/media/face/x%27%20onerror%3D%27alert%281%29.jpg" in page.text
-
-    def test_package_and_evidence_fields_are_escaped(self, console):
-        add_incident()
-        add_package(user_address=XSS, incident_type="weapon")
-        add_evidence(console, detections=[{"label": XSS, "conf": 0.5}, XSS])
-        client = tunnel_client(console)
-        for path in ("/dispatch", "/evidence"):
-            page = client.get(path)
-            assert "<script>alert(1)" not in page.text, path
-            assert not inspect_html(page.text).handlers, path
-
-    def test_snapshot_names_are_url_encoded(self, console):
-        (console.snapshots / "a b'c.jpg").write_bytes(b"\xff\xd8\xff")
-        page = tunnel_client(console).get("/alerts")
-        assert f'data-lightbox="{BASE}/media/snapshot/a%20b%27c.jpg"' in page.text
-
-
-# ── tests: roles ──────────────────────────────────────────────────────────────
-class TestRoles:
-    def test_owner_and_device_admin_may_edit_the_gallery(self, console):
-        populate(console)
-        for client in (lc_client(console)[0], tunnel_client(console, "owner")):
-            page = client.get("/authorized")
-            assert 'id="capture-toggle"' in page.text and "data-delete-face=" in page.text
-
-    def test_member_sees_the_gallery_read_only(self, console):
-        populate(console)
-        page = tunnel_client(console, "member").get("/authorized")
-        assert page.status_code == 200
-        assert 'id="capture-toggle"' not in page.text and "data-delete-face=" not in page.text
-        assert 'id="gallery-view-only"' in page.text
-        assert 'id="siren-test-btn"' not in tunnel_client(console, "member").get("/node").text
-
-    def test_owner_may_test_the_siren(self, console):
-        assert 'id="siren-test-btn"' in tunnel_client(console, "owner").get("/node").text
-        assert 'id="siren-test-btn"' in lc_client(console)[0].get("/node").text
-
-    def test_desk_operator_gets_the_live_views_only(self, console):
-        page = tunnel_client(console, "operator").get("/dashboard")
-        assert page.status_code == 200
-        nav = re.findall(r'<a href="([^"]+)" class="nav-link', page.text)
-        assert [n for n in nav if n not in PORTAL_LINKS] == [f"{BASE}/dashboard", f"{BASE}/live"]
-        assert "/desk" in nav, "the operator's way back to the Desk"
-        assert 'data-caps=""' in page.text
-        assert "data-dispatch-authority" not in page.text
-        assert 'data-sos-action="approve"' not in page.text
-
-    def test_the_device_admin_and_the_owner_record_for_training(self, console):
-        """D20 as amended on 2026-10-28: the card and its script are the
-        device admin's and the owner's (who starts and stops through the
-        Portal; the path table keeps the files on the LAN); members and the
-        Desk never see it."""
-        lan = lc_client(console)[0].get("/dashboard").text
-        owner = tunnel_client(console, "owner").get("/dashboard").text
-        assert 'id="record-card"' in lan and "/static/js/recording.js" in lan
-        assert 'id="record-card"' in owner and f"{BASE}/static/js/recording.js" in owner
-        for page in (lan, owner):
-            assert "record" in re.search(r'data-caps="([^"]*)"', page).group(1).split()
-        for role in ("member", "operator"):
-            page = tunnel_client(console, role).get("/dashboard").text
-            assert 'id="record-card"' not in page and "recording.js" not in page, role
-            assert "data-record-" not in page, role
-            assert "record" not in re.search(r'data-caps="([^"]*)"', page).group(1).split()
-
-    def test_portal_users_have_no_console_logout(self, console):
-        page = tunnel_client(console).get("/dashboard")
-        assert 'id="logout-link"' not in page.text and "Riya Sharma" in page.text
-        assert 'id="logout-link"' in lc_client(console)[0].get("/dashboard").text
-
-
-# ── tests: banners, indicators and the SOS prompt ─────────────────────────────
-class TestBannersAndSos:
-    def test_test_mode_banner_on_every_page(self, console):
-        client, _ = lc_client(console)
-        for path in PAGES:
-            assert 'id="test-mode-banner"' in client.get(path).text, path
-
-    def test_no_test_mode_banner_outside_test_mode(self, console, monkeypatch):
+# ── tests: test mode and the call button ──────────────────────────────────────
+class TestTestModeAndTheCallButton:
+    def test_the_session_says_test_mode(self, console, monkeypatch):
         from sentrix.web import routes
+        client, _ = lc_client(console)
+        assert client.get("/api/session").json()["test_mode"] is True
         monkeypatch.setattr(routes, "_test_mode", lambda: False)
-        assert 'id="test-mode-banner"' not in lc_client(console)[0].get("/dashboard").text
+        assert client.get("/api/session").json()["test_mode"] is False
 
     def test_call_112_never_dials_112_in_test_mode(self, console, monkeypatch):
         monkeypatch.setenv("SENTRIX_DESK_NUMBER", "+919812345678")
-        for path in ("/dashboard", "/sos", "/live"):
-            text = lc_client(console)[0].get(path).text
-            assert 'href="tel:+919812345678"' in text, path
-            assert "tel:112" not in text and "sms:112" not in text, path
+        for client in (lc_client(console)[0], tunnel_client(console),
+                       tunnel_client(console, "member")):
+            response = client.get("/api/session")
+            call = response.json()["call"]
+            assert call["href"] == "tel:+919812345678" and call["desk"] is True
+            assert "tel:112" not in response.text and "sms:112" not in response.text
         monkeypatch.setenv("SENTRIX_DESK_NUMBER", "")
-        text = lc_client(console)[0].get("/dashboard").text
-        assert "tel:" not in text and 'aria-disabled="true" data-sos-call' in text
+        call = lc_client(console)[0].get("/api/session").json()["call"]
+        assert call["enabled"] is False and call["href"] is None and call["number"] is None
+
+    def test_an_emergency_number_is_never_the_desk_number(self, console, monkeypatch):
+        monkeypatch.setenv("SENTRIX_DESK_NUMBER", "112")
+        response = lc_client(console)[0].get("/api/session")
+        assert response.json()["call"]["enabled"] is False and "tel:112" not in response.text
 
     def test_call_112_outside_test_mode(self, console, monkeypatch):
         from sentrix.web import routes
         monkeypatch.setattr(routes, "_test_mode", lambda: False)
-        assert 'href="tel:112"' in lc_client(console)[0].get("/dashboard").text
+        call = lc_client(console)[0].get("/api/session").json()["call"]
+        assert call["href"] == "tel:112" and call["desk"] is False
 
-    def test_an_emergency_number_is_never_the_desk_number(self, console, monkeypatch):
-        monkeypatch.setenv("SENTRIX_DESK_NUMBER", "112")
-        assert "tel:112" not in lc_client(console)[0].get("/dashboard").text
 
-    def test_prompt_banner_chip_and_panel_on_every_page(self, console):
-        client, _ = lc_client(console)
-        for path in PAGES:
-            text = client.get(path).text
-            for marker in ('id="sos-prompt"', 'id="sos-banner"', 'id="sos-chip"',
-                           'id="sos-prompt-minimise"', 'id="channels-banner"',
-                           'id="remote-view"', 'id="dot-link"', 'id="dot-modem"'):
-                assert marker in text, (path, marker)
-        dashboard = client.get("/dashboard").text
-        for marker in ('id="dispatch-panel"', 'id="dp-incident"', 'id="dp-tci"',
-                       'id="dp-address"', 'id="dp-authority"', 'id="dp-dismiss"',
-                       'data-dispatch-authority="POLICE"', 'data-dispatch-authority="FIRE"',
-                       'data-dispatch-authority="MEDICAL"', 'id="dp-countdown"',
-                       'id="video-overlay" data-sos-countdown',
-                       'data-sos-pin-for="decline"', 'data-sos-action="checking"'):
-            assert marker in dashboard, marker
+# ── tests: the SOS contract's wording in the apps (docs/7 §7.10) ──────────────
+SOS_CONTRACT = ("Alert my contacts and the SENTRIX desk", "Call 112 now", "I'm checking",
+                "False alarm (PIN)", "I'm safe now (PIN)", "Request help now",
+                "SENTRIX does not contact 112 itself.")
 
-    def test_prompt_wording(self, console):
-        text = lc_client(console)[0].get("/dashboard").text
-        for words in ("Alert my contacts and the SENTRIX desk", "Call 112 now",
-                      "I'm checking", "False alarm (PIN)", "SENTRIX does not contact 112 itself"):
-            assert words.replace("'", "&#39;") in text or words in text, words
 
-    def test_remote_view_and_channel_banner_follow_the_state(self, console):
+class TestSosWording:
+    @pytest.mark.parametrize("app", ["device", "portal"])
+    def test_the_contract_labels_are_in_the_app(self, app):
+        text = app_sources(app)
+        for words in SOS_CONTRACT:
+            assert words in text, (app, words)
+        lowered = text.lower()
+        assert "possible (one camera check)" in lowered, app
+        assert "confirmed by two different models" in lowered, app
+
+    def test_the_portal_alert_screen_has_every_answer(self):
+        screen = (APP_SOURCES[1] / "features" / "alert" / "AlertScreen.tsx").read_text(
+            encoding="utf-8").replace("&apos;", "'")
+        for words in SOS_CONTRACT:
+            if words != "Call 112 now":           # its label comes from lib/data.ts
+                assert words in screen, words
+
+    def test_the_device_alert_takeover_has_every_answer(self):
+        takeover = (APP_SOURCES[0] / "components" / "AlertTakeover.tsx").read_text(
+            encoding="utf-8").replace("&apos;", "'")
+        for words in SOS_CONTRACT:
+            if words != "Call 112 now":           # its label comes from lib/api.ts
+                assert words in takeover, words
+
+
+# ── tests: live indicators ────────────────────────────────────────────────────
+class TestLiveIndicators:
+    def test_remote_viewers_and_the_channels_warning_follow_the_state(self, console):
         from sentrix.pipeline.state import CHANNELS_IDLE, state
         client, _ = lc_client(console)
-        text = client.get("/dashboard").text
-        assert 'class="nav-remote hidden"' in text and 'class="alert-banner hidden"' in text
+        live = client.get("/api/state").json()
+        assert live["remote_viewers"] == 0 and live["channels"]["warn"] is False
         state.set_remote_viewers(2)
         state.update(channels={**CHANNELS_IDLE, "warn": True})
-        text = client.get("/dashboard").text
-        assert 'class="nav-remote" id="remote-view"' in text
-        assert '<span id="remote-view-count">2</span>' in text
-        assert 'class="alert-banner" id="channels-banner"' in text
+        live = client.get("/api/state").json()
+        assert live["remote_viewers"] == 2 and live["channels"]["warn"] is True
+        assert client.get("/api/session").json()["link"]["remote_viewers"] == 2
 
-    def test_engine_scores_show_text_and_label_missing_models(self, console):
-        text = lc_client(console)[0].get("/dashboard").text
-        assert 'id="score-weapon-value">0%' in text
-        assert 'id="score-theft-value"' in text and "n/a (no model)" in text
-        assert 'id="score-is_night"' in text
+    def test_the_sos_block_reaches_owner_and_member_alike(self, console):
+        from sentrix.pipeline.state import SOS_IDLE, state
+        state.update(sos={**SOS_IDLE, "active": True, "request_id": "r1", "short_id": "SX-R1",
+                          "state": "PENDING", "label": "Waiting for your answer",
+                          "actions": ["call_112", "approve", "checking", "decline"]})
+        for client in (lc_client(console)[0], tunnel_client(console, "member")):
+            sos = client.get("/api/state").json()["sos"]
+            assert sos["active"] is True and sos["actions"][0] == "call_112"
 
 
-# ── tests: the parity fixes on each page ──────────────────────────────────────
-class TestPageParityFixes:
-    def test_events_stats_note_and_who_when(self, console):
-        add_incident(id="inc-a", verdict="TRUE", verdict_note="seen it", verdict_by="lc:device_admin",
-                     verdict_at=datetime(2026, 10, 14, 9, 5))
+# ── tests: device data comes back as data ─────────────────────────────────────
+class TestDeviceDataIsInert:
+    def test_incident_reason_and_note_are_plain_json_strings(self, console):
+        add_incident(id="inc-x", reason=XSS, incident_type="weapon", verdict="FALSE",
+                     verdict_note=XSS, verdict_by="portal:" + XSS[:20])
+        for client in (lc_client(console)[0], tunnel_client(console)):
+            response = client.get("/api/activity")
+            assert response.headers["content-type"].startswith("application/json")
+            assert response.headers["x-content-type-options"] == "nosniff"
+            row = response.json()["items"][0]
+            assert row["reason"] == XSS and row["verdict_note"] == XSS
+
+    def test_face_file_names_become_encoded_urls(self, console):
+        name = "x' onerror='alert(1).jpg"
+        (console.faces / name).write_bytes(b"\xff\xd8\xff")
+        item = lc_client(console)[0].get("/api/authorized").json()["items"][0]
+        assert item["filename"] == name
+        assert item["url"] == "/media/face/x%27%20onerror%3D%27alert%281%29.jpg"
+
+    def test_snapshot_names_become_encoded_urls(self, console):
+        (console.snapshots / "a b'c.jpg").write_bytes(b"\xff\xd8\xff")
+        item = lc_client(console)[0].get("/api/snapshots").json()["items"][0]
+        assert item["url"] == "/media/snapshot/a%20b%27c.jpg"
+
+    def test_package_and_evidence_fields_stay_strings(self, console):
+        add_incident()
+        add_package(user_address=XSS, incident_type="weapon")
+        add_evidence(console, detections=[{"label": XSS, "conf": 0.5}, XSS])
+        client, _ = lc_client(console)
+        assert client.get("/api/dispatch").json()["items"][0]["location"] == XSS
+        detections = client.get("/api/evidence").json()["items"][0]["detections"]
+        assert detections[0]["label"] == XSS[:40]
+
+
+# ── tests: what the old pages showed, from the API ────────────────────────────
+class TestActivityData:
+    def test_stats_note_and_who_when(self, console):
+        add_incident(id="inc-a", verdict="TRUE", verdict_note="seen it",
+                     verdict_by="lc:device_admin", verdict_at=datetime(2026, 10, 14, 9, 5))
         add_incident(id="inc-b", started_at=datetime(2026, 10, 14, 10, 0), verdict="FALSE")
         add_incident(id="inc-c", started_at=datetime(2026, 10, 14, 11, 0))
-        text = lc_client(console)[0].get("/events").text
-        assert 'id="events-stats"' in text
-        assert re.search(r"Confirmed real</div><div class=\"stat-value\">1<", text)
-        assert re.search(r"False alarms</div><div class=\"stat-value\">1<", text)
-        assert re.search(r"Unreviewed</div><div class=\"stat-value\">1<", text)
-        assert ">50%<" in text
-        assert 'value="seen it" data-verdict-note' in text
-        assert "Real · device admin" in text
-        assert 'data-iso="2026-10-14T09:05:00+00:00"' in text
-
-    def test_events_filters_and_paging(self, console):
-        for n in range(5):
-            add_incident(id=f"inc-{n}", started_at=datetime(2026, 10, 10 + n, 12, 0),
-                         incident_type="fire" if n % 2 else "weapon", peak_level=3 + n % 3)
-        client, _ = lc_client(console)
-        page = client.get("/events", params={"incident_type": "fire"})
-        assert page.text.count('data-incident="') == 2 and "2 incidents match" in page.text
-        page = client.get("/events", params={"level": 5})
-        assert page.text.count('data-incident="') == 1
-        page = client.get("/events", params={"limit": 2})
-        assert page.text.count('data-incident="') == 2
-        assert 'id="events-next"' in page.text and 'id="events-prev"' not in page.text
-        assert 'href="/events?limit=2&amp;offset=2"' in page.text
-        page = client.get("/events", params={"limit": 2, "offset": 4})
-        assert page.text.count('data-incident="') == 1 and 'id="events-prev"' in page.text
-        page = tunnel_client(console).get("/events", params={"limit": 2, "incident_type": "weapon"})
-        assert f'href="{BASE}/events?incident_type=weapon&amp;limit=2&amp;offset=2"' in page.text
-
-    def test_events_show_the_request_in_the_owner_view(self, console):
-        from sentrix.storage import requests
-        add_incident(id="inc-r", request_id="req-duress")
-        requests.create_request("req-duress", incident_id="inc-r", incident_type="weapon",
-                                level=3, evidence_state="confirmed", policy={},
-                                expires_at=None, test_mode=True, flags={"duress": True})
-        requests.transition("req-duress", "approve", actor_type="owner")
-        text = lc_client(console)[0].get("/events").text
-        assert "SX-REQ-DU" in text
-        assert "Marked as false alarm" in text, "duress must look like a decline"
-        assert "Help requested" not in text
-        assert 'href="/sos?request=req-duress"' in text
-
-    def test_evidence_chain_badge_objects_and_view_link(self, console):
-        add_evidence(console)
-        text = tunnel_client(console).get("/evidence").text
-        assert "Chain: no manifest yet" in text
-        assert "pistol 0.82" in text and "{&#39;label&#39;" not in text
-        assert f'href="{BASE}/media/evidence/L3_bundle_1"' in text
+        body = lc_client(console)[0].get("/api/activity").json()
+        assert body["stats"] == {"total": 3, "confirmed": 1, "false_alarms": 1,
+                                 "unreviewed": 1, "false_alarm_rate": 0.5}
+        reviewed = next(row for row in body["items"] if row["id"] == "inc-a")
+        assert reviewed["verdict"] == "TRUE" and reviewed["verdict_note"] == "seen it"
+        assert reviewed["verdict_by"] == "device admin"
+        assert reviewed["verdict_at"] == "2026-10-14T09:05:00Z"
 
     def test_evidence_chain_verified(self, console, monkeypatch):
         monkeypatch.setattr(console.vault, "verify_chain",
                             lambda: {"ok": True, "entries": 3, "problems": []})
-        assert "Chain verified: 3 entries, 0 problems" in lc_client(console)[0].get("/evidence").text
+        chain = lc_client(console)[0].get("/api/evidence").json()["chain"]
+        assert chain["ok"] is True and chain["entries"] == 3 and chain["problem_count"] == 0
 
-    def test_evidence_chain_problems_are_shown(self, console, monkeypatch):
-        monkeypatch.setattr(console.vault, "verify_chain", lambda: {
-            "ok": False, "entries": 3, "problems": [{"line": 2, "bundle": "b", "error": "bad signature"}]})
-        text = lc_client(console)[0].get("/evidence").text
-        assert "Chain check failed: 3 entries, 1 problem" in text and "bad signature" in text
-
-    def test_alerts_empty_state_says_level_3(self, console):
-        text = lc_client(console)[0].get("/alerts").text
-        assert "Level 3+" in text and "Level 2+" not in text
-
-    def test_dispatch_statuses_local_time_and_actions(self, console):
+    def test_dispatch_statuses_and_what_can_still_be_sent(self, console):
         add_incident()
-        add_package("p-pend", status="PENDING")
-        add_package("p-sent", status="SENT")
-        add_package("p-canc", status="CANCELLED")
-        add_package("p-exp", status="EXPIRED")
-        add_package("p-fail", status="FAILED")
-        text = lc_client(console)[0].get("/dispatch").text
-        assert "Dispatch &amp; SOS" in text
-        for status in ("PENDING", "SENT", "CANCELLED", "EXPIRED", "FAILED"):
-            assert f'class="status-tag {status.lower()}">{status}<' in text
-        assert 'data-send-package="p-pend"' in text and 'data-send-package="p-fail"' in text
-        for refused in ("p-sent", "p-canc", "p-exp"):
-            assert f'data-send-package="{refused}"' not in text
-        assert ">Cancelled<" in text and "Dispatched" not in text
-        assert 'data-iso="2026-10-14T09:00:05+00:00"' in text
-        assert 'value="MEDICAL"' in text
-        assert "Level 3+" not in text or "assistance request" in text
+        for pid, status in (("p-pend", "PENDING"), ("p-sent", "SENT"), ("p-canc", "CANCELLED"),
+                            ("p-exp", "EXPIRED"), ("p-fail", "FAILED")):
+            add_package(pid, status=status)
+        body = lc_client(console)[0].get("/api/dispatch").json()
+        shown = {item["id"]: item for item in body["items"]}
+        assert {pid: item["status"] for pid, item in shown.items()} == {
+            "p-pend": "PENDING", "p-sent": "SENT", "p-canc": "CANCELLED", "p-exp": "EXPIRED",
+            "p-fail": "FAILED"}
+        assert {pid for pid, item in shown.items() if item["sendable"]} == {"p-pend", "p-fail"}
+        assert shown["p-pend"]["created_at"] == "2026-10-14T09:00:05Z"
+        assert "MEDICAL" in body["authorities"]
 
-    def test_dispatch_offers_help_now_on_a_lapsed_request(self, console):
+    def test_dispatch_names_a_lapsed_request_for_request_help_now(self, console):
         from sentrix.storage import requests
         add_incident(request_id="req-exp")
         requests.create_request("req-exp", incident_id="inc-1", incident_type="weapon", level=3,
@@ -612,11 +608,13 @@ class TestPageParityFixes:
         requests.transition("req-exp", "prompted")
         requests.transition("req-exp", "expire")
         add_package("p-exp", status="EXPIRED", request_id="req-exp")
-        text = lc_client(console)[0].get("/dispatch").text
-        assert 'data-help-now="req-exp"' in text and "Unanswered" in text
+        item = lc_client(console)[0].get("/api/dispatch").json()["items"][0]
+        assert item["request"] == {"id": "req-exp", "short_id": "SX-REQ-EX",
+                                   "state": "EXPIRED", "label": "Unanswered"}
 
-    def test_dispatch_hides_a_duress_package_and_drops_a_silent_one(self, console):
-        import json as _json
+    def test_the_sos_panel_shows_a_duress_package_as_cancelled(self, console):
+        """Duress parity (docs/7 §7.8): the alert screen's package of a duress
+        request reads like a decline's; a silent request's is never shown."""
         from sentrix.storage import database, requests
         from sentrix.storage.models import DispatchRecord
         add_incident(request_id="req-dur")
@@ -633,23 +631,12 @@ class TestPageParityFixes:
         with database.session_scope() as session:
             row = session.get(DispatchRecord, "p-dur")
             row.chosen_authority, row.sent_by = "POLICE", "lc:admin"
-            row.sent_to_json = _json.dumps(["SENTRIX Desk", "Aman 98xxxxx611"])
-        client = lc_client(console)[0]
-        text = client.get("/dispatch").text
-        assert 'class="status-tag sent">SENT<' not in text
-        assert "Aman 98" not in text and "DURESS" not in text and "p-sil" not in text
-        assert 'class="status-tag cancelled">CANCELLED<' in text
-        latest = client.get("/api/dispatch/latest").json()
-        assert latest == {}, "a silent request's PENDING package is never shown"
-        mine = client.get("/api/dispatch/latest?request_id=req-dur").json()
-        assert mine["status"] == "CANCELLED" and mine["sent_to"] == []
-
-    def test_the_tunnelled_console_links_back_to_the_portal(self, console):
-        owner = tunnel_client(console).get("/dashboard").text
-        assert 'href="/home"' in owner and 'href="/account"' in owner
-        desk = tunnel_client(console, role="operator").get("/live")
-        assert desk.status_code != 200 or 'href="/desk"' in desk.text
-        assert 'href="/home"' not in lc_client(console)[0].get("/dashboard").text
+            row.sent_to_json = json.dumps(["SENTRIX Desk", "Aman 98xxxxx611"])
+        for client in (lc_client(console)[0], tunnel_client(console, "member")):
+            assert client.get("/api/dispatch/latest").json() == {}, "silent: never shown"
+            mine = client.get("/api/dispatch/latest?request_id=req-dur")
+            assert mine.json()["status"] == "CANCELLED" and mine.json()["sent_to"] == []
+            assert "Aman" not in mine.text
 
     def test_the_sos_panel_gets_its_package_in_any_status(self, console):
         from sentrix.storage import requests
@@ -662,43 +649,3 @@ class TestPageParityFixes:
         assert client.get("/api/dispatch/latest").json() == {}
         package = client.get("/api/dispatch/latest?request_id=req-ok").json()
         assert package["id"] == "p-ok" and package["user_address"] == "12 Model Town"
-
-    def test_access_page_shows_the_identity_backend(self, console):
-        client, _ = lc_client(console)
-        assert "Face recognition: insightface" in client.get("/authorized").text
-        console.pipeline.identity.backend = None
-        assert "identity fails closed" in client.get("/authorized").text
-
-    def test_live_page_uses_the_shared_socket(self, console):
-        text = lc_client(console)[0].get("/live").text
-        assert 'id="ls-status">SECURE<' in text
-        assert "new WebSocket" not in text and "/static/js/live.js" in text
-        assert "WebSocket" not in (STATIC_JS / "live.js").read_text(encoding="utf-8")
-
-    def test_sos_page_and_selection(self, console):
-        text = tunnel_client(console).get("/sos", params={"request": "req-1"}).text
-        assert 'data-selected="req-1"' in text and 'id="sos-history"' in text
-        assert 'id="sos-preview"' in text and 'id="sos-audit-card"' in text
-        assert "The SOS service is off" in text
-        assert 'data-selected=""' in lc_client(console)[0].get(
-            "/sos", params={"request": "<x>"}).text
-
-    def test_scripted_trigger_offers_what_the_service_accepts(self, console, monkeypatch):
-        """A fight is an alarm class (D15); an intrusion opens a request only
-        with SENTRIX_SOS_INTRUSION=1, so it is offered only then."""
-        import dataclasses
-        from sentrix.web import setup_routes
-        text = lc_client(console)[0].get("/sos").text
-        if 'id="sos-demo-trigger-type"' not in text:
-            pytest.skip("the scripted trigger box needs the SOS capability here")
-        assert 'value="assault"' in text and 'value="intrusion"' not in text
-        on = dataclasses.replace(setup_routes.settings, sos=dataclasses.replace(
-            setup_routes.settings.sos, intrusion_requests=True))
-        monkeypatch.setattr(setup_routes, "settings", on)
-        assert 'value="intrusion"' in lc_client(console)[0].get("/sos").text
-
-    def test_static_assets_are_versioned(self, console):
-        text = lc_client(console)[0].get("/dashboard").text
-        assert re.search(r'href="/static/css/style\.css\?v=[0-9a-f]{10}"', text)
-        assert re.search(r'src="/static/js/dashboard\.js\?v=[0-9a-f]{10}"', text)
-        assert lc_client(console)[0].get("/static/js/app.js").status_code == 200

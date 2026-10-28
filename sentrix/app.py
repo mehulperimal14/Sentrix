@@ -185,7 +185,7 @@ async def lifespan(app: FastAPI):
     _stop.clear()
     _thread = threading.Thread(target=_loop, daemon=True, name="sentrix-pipeline")
     _thread.start()
-    log.info("dashboard: http://%s:%s/dashboard", os.getenv("SENTRIX_HOST", "127.0.0.1"),
+    log.info("console: http://%s:%s/", os.getenv("SENTRIX_HOST", "127.0.0.1"),
              os.getenv("SENTRIX_PORT", "8000"))
 
     yield
@@ -227,6 +227,10 @@ def create_app() -> FastAPI:
     app.include_router(stream_router)
     # Track routers (/api/sos, /api/node, ...) and the hardening middleware.
     extensions.install(app)
+    # The device app's shell (D22) last: every API, websocket, video, media,
+    # static and docs path above wins over its catch-all.
+    from sentrix.web.spa_routes import router as spa_router
+    app.include_router(spa_router)
     return app
 
 

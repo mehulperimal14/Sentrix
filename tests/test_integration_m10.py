@@ -46,7 +46,9 @@ class TestDefaults:
         from fastapi.testclient import TestClient
         from sentrix.app import create_app
         client = TestClient(create_app())      # no lifespan: no pipeline, no camera
-        assert client.get("/login").status_code == 200
+        login = client.get("/login")             # the device app's sign-in screen
+        assert login.status_code == 200 and b'id="root"' in login.content
+        assert client.get("/api/session").json()["signed_in"] is False
         for path in ("/api/health", "/api/sos", "/api/node", "/api/link", "/api/channels"):
             assert client.get(path).status_code == 401, path
 

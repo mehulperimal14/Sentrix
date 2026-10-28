@@ -1,4 +1,4 @@
-"""nmcli wrapper for /setup/wifi and the Node page (T-HW). A fake nmcli answers;
+"""nmcli wrapper for /api/setup/wifi and the Hardware page (T-HW). A fake nmcli answers;
 no network is touched and the pre-shared key never reaches a log."""
 
 from __future__ import annotations

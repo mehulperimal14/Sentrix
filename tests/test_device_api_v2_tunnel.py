@@ -3,8 +3,9 @@
 * The path table (``sentrix/link/policy.py``) classifies every new path:
   owner and member read ``/api/session``, ``/api/state`` and
   ``/api/activity``; the admin lists are LC-only for every role; sign-in and
-  Wi-Fi setup are never tunnelled; the Desk keeps exactly its four paths; the
-  existing rows are unchanged.
+  Wi-Fi setup are never tunnelled; the Desk keeps exactly its two API paths;
+  no page or static file is tunnelled (the device app is the LAN's); the API
+  rows are unchanged.
 * The real tunnel executor replays requests into the real console app, so the
   path table, the hardening and the routes answer together.
 * No response of a new endpoint carries the console password, the session
@@ -65,12 +66,15 @@ class TestPathTable:
         assert classify("POST", "/api/dispatch/p/send/POLICE") == "sos_write"
         assert classify("GET", "/api/authorized/preview.jpg") == "media"
         assert classify("POST", "/api/authorized/capture") == "gallery_write"
+        assert classify("POST", "/api/authorized/upload") == "gallery_write"
+        assert classify("POST", "/authorized/upload") == "gallery_write"
         assert classify("DELETE", "/api/authorized/alice.jpg") == "gallery_delete"
         assert classify("POST", "/api/mode") == "mode"
         assert classify("GET", "/api/recordings") == "record_status"
         assert classify("POST", "/api/recordings/start") == "record"
-        assert classify("GET", "/authorized") == "page"
-        assert DESK_PATHS == frozenset({"/dashboard", "/live", "/api/health", "/api/metrics"})
+        assert DESK_PATHS == frozenset({"/api/health", "/api/metrics"})
+        for page in ("/", "/dashboard", "/authorized", "/admin/faces", "/static/app/index.html"):
+            assert classify("GET", page) == "unknown", page
 
     def test_owner_and_member_read_the_app_data_the_desk_does_not(self):
         p = policy(ALL, help_path=True)

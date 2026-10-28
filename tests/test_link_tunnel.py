@@ -20,7 +20,7 @@ from sentrix.actor import Actor
 from sentrix.link.policy import TunnelPolicy
 from sentrix.link.tunnel import TunnelExecutor
 
-from test_link_support import FakePipeline, lc_app
+from test_link_support import FakePipeline, lc_app, shell_last
 
 DEVICE = "0b6f9d4e-58a1-4c2a-9a34-1f2e3d4c5b6a"
 BASE = f"/d/{DEVICE}"
@@ -80,13 +80,15 @@ class TestTunnelExecutor:
         body = json.loads(run(app, request("/api/test-whoami", headers=forged)).body)
         assert body["actor"] == "portal:u1" and body["base"] == BASE
 
-    def test_the_dashboard_renders_through_the_tunnel(self, app):
-        result = run(app, request("/dashboard", headers=[["accept", "text/html"]]))
-        assert result.status == 200
-        assert "text/html" in result.header("content-type")
-        html = result.body.decode()
-        for dom_id in ("incident-badge", "gauge-svg", "level-badge", "live-feed"):
-            assert f'id="{dom_id}"' in html
+    def test_the_device_app_is_never_served_through_the_tunnel(self, app):
+        """Owners use the Portal app; the device app (D22) is the LAN's. The
+        path table refuses its paths, and the console would too."""
+        for path in ("/", "/dashboard", "/admin/activity", "/static/app/index.html"):
+            refused = run(app, request(path, headers=[["accept", "text/html"]]))
+            assert refused.status == 404, path
+            assert json.loads(refused.body)["code"] == "not_found"
+        session = run(app, request("/api/session"))
+        assert session.status == 200 and json.loads(session.body)["via"] == "portal"
 
     def test_cookies_and_hop_by_hop_headers_never_leave(self, app):
         result = run(app, request("/api/test-redirect"))
@@ -171,6 +173,8 @@ class TestTunnelExecutor:
         async def big(size: int):
             return Response(b"x" * size, media_type="application/octet-stream")
 
+        shell_last(app)
+
         fits = run(app, request("/api/test-big", query=f"size={limit}"))
         assert fits.status == 200 and len(fits.body) == limit
         over = run(app, request("/api/test-big", query=f"size={limit + 1}"))
@@ -183,12 +187,15 @@ class TestTunnelExecutor:
             await asyncio.sleep(2)
             return {}
 
+        shell_last(app)
+
         result = run(app, request("/api/test-slow"), tunnel_timeout_seconds=0.2)
         assert result.status == 504 and json.loads(result.body)["code"] == "timeout"
         ex = executor(app)
         assert ex.timeout_for({"timeout_ms": 1000}, "GET", "/dashboard") == 1.0
         assert ex.timeout_for({}, "GET", "/dashboard") == 20.0
         assert ex.timeout_for({}, "POST", "/api/authorized/capture") == 60.0
+        assert ex.timeout_for({}, "POST", "/api/authorized/upload") == 60.0
         upload = {"headers": [["content-type", "multipart/form-data; boundary=x"]]}
         assert ex.timeout_for(upload, "POST", "/authorized/upload") == 60.0
 
@@ -197,6 +204,8 @@ class TestTunnelExecutor:
         async def forever():
             await asyncio.sleep(30)
             return {}
+
+        shell_last(app)
 
         async def go():
             ex = executor(app)

@@ -39,7 +39,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import signal
 import subprocess
 import sys
@@ -247,10 +246,9 @@ def banner(demo: dict[str, Any]) -> str:
         f"console {portal}/admin",
         f"  Desk console                {portal}/desk   as {users['operator']} (TOTP)",
         f"  customer                    {users['owner']}  ({demo['customer_name']})",
-        f"Local Console (laptop A)      {lc}/login   device admin password "
+        f"Local Console (laptop A)      {lc}/   device admin password "
         f"{demo['device_secrets']['lc_password']}",
-        f"  same console via the tunnel {portal}/d/{demo['device_id']}/dashboard",
-        f"  SOS page (close / scripted)  {lc}/sos",
+        f"  SOS page (close / scripted)  {lc}/admin/sos",
         "",
         f"Demo window {demo['window_seconds']} s; safety net "
         f"{'on' if demo['safety_net'] else 'off'}; live wizard steps "
@@ -285,7 +283,7 @@ def start(directory: Path) -> int:
             return 1
         device = _spawn([python, "-m", "sentrix"], device_env(demo, reel),
                         logs / "device.log")
-        if not _wait_http(f"{demo['lc_url']}/login", device, 240):
+        if not _wait_http(f"{demo['lc_url']}/api/session", device, 240):
             print(f"the device did not start: see {logs / 'device.log'}", file=sys.stderr)
             return 1
         print(banner(demo), flush=True)
@@ -319,22 +317,19 @@ def scene(directory: Path, name: str) -> int:
     return 0
 
 
-_CSRF = re.compile(r'<meta name="csrf-token" content="([^"]*)"')
-
-
 def _lc_client(demo: dict[str, Any]):
-    """An httpx client signed in to the demo console as the device admin."""
+    """An httpx client signed in to the demo console as the device admin
+    (``POST /api/login`` answers the session with its CSRF token)."""
     import httpx
     client = httpx.Client(base_url=demo["lc_url"], timeout=20.0, follow_redirects=False)
-    response = client.post("/login", data={"password": demo["device_secrets"]["lc_password"]})
-    if response.status_code not in (302, 303):
+    response = client.post("/api/login",
+                           json={"password": demo["device_secrets"]["lc_password"]})
+    if response.status_code != 200:
         raise RuntimeError(f"console login failed ({response.status_code})")
-    page = client.get("/sos")
-    found = _CSRF.search(page.text)
-    if not found or not found.group(1):
-        raise RuntimeError("no CSRF token on the console's SOS page")
-    client.headers.update({"X-CSRF-Token": found.group(1), "X-Requested-With": "fetch",
-                           "Accept": "application/json"})
+    csrf = response.json().get("csrf_token")
+    if not csrf:
+        raise RuntimeError("the console's sign-in gave no CSRF token")
+    client.headers.update({"X-CSRF-Token": csrf, "Accept": "application/json"})
     return client
 
 

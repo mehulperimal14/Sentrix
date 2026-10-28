@@ -54,7 +54,7 @@ DROPPED_RESPONSE_HEADERS = frozenset({
     "content-length", "content-encoding"})
 _BASE = re.compile(r"^/d/[A-Za-z0-9_-]{1,64}$")
 #: Paths whose handler may legitimately take long (enrolment from the camera).
-_SLOW_PATHS = ("/authorized/upload", "/api/authorized/capture")
+_SLOW_PATHS = ("/api/authorized/upload", "/authorized/upload", "/api/authorized/capture")
 
 
 @dataclass

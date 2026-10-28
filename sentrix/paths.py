@@ -30,7 +30,6 @@ DOCS_DIR = ROOT_DIR / "docs"
 # Web assets ship with the package.
 WEB_DIR = PACKAGE_DIR / "web"
 STATIC_DIR = WEB_DIR / "static"
-TEMPLATES_DIR = WEB_DIR / "templates"
 
 # Runtime output — gitignored, never web-mounted. ``SENTRIX_VAR_DIR`` moves the
 # whole tree (tests, demos and measurement runs use a temporary one so they
@@ -73,7 +72,7 @@ def model_path(*parts: str) -> Path:
 
 __all__ = [
     "ROOT_DIR", "PACKAGE_DIR", "MODELS_DIR", "TRAINING_DIR", "DOCS_DIR",
-    "WEB_DIR", "STATIC_DIR", "TEMPLATES_DIR",
+    "WEB_DIR", "STATIC_DIR",
     "VAR_DIR", "EVIDENCE_DIR", "SNAPSHOT_DIR", "EVENTLOG_DIR", "FACES_DIR",
     "LOG_DIR", "CALIBRATION_DIR", "DB_PATH", "LINK_DIR", "PORTAL_VAR_DIR",
     "RECORDINGS_DIR", "ensure_runtime_dirs", "model_path",

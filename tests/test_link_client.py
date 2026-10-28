@@ -366,6 +366,9 @@ class TestSession:
         async def large():
             return Response(payload, media_type="application/octet-stream")
 
+        from test_link_support import shell_last
+        shell_last(app)
+
         start_claimed(rig)
         actor = Actor("owner", id=rig.seeded.owner_id).to_dict()
         reply = run_on(rig.service._loop, rig.network.hub.tunnel(

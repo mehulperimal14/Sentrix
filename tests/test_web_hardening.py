@@ -3,9 +3,9 @@
 Tunnel identity accepted only with the in-process secret (bridge headers from
 the network are stripped), CSRF on every state-changing request of an LC
 session, cross-site requests refused, paths the tunnel never carries refused
-for tunnel identities, the strict CSP with a per-response nonce and the other
-security headers, the websocket Origin check, the ``lc_session`` cookie and
-the POST logout.
+for tunnel identities, the strict ``'self'``-only CSP and the other security
+headers (on the device app's shell too), the websocket Origin check, the
+``lc_session`` cookie of ``POST /api/login`` and the POST sign-out.
 """
 
 from __future__ import annotations
@@ -32,8 +32,7 @@ def _probe_app():
         return {"identity": identity.actor if identity else None,
                 "base": tunnel_auth.base_for(request),
                 "bridge": sorted(k for k in request.headers.keys()
-                                 if k in tunnel_auth.BRIDGE_HEADERS),
-                "nonce": request.state.csp_nonce}
+                                 if k in tunnel_auth.BRIDGE_HEADERS)}
 
     extensions._install_error_handler(app)
     hardening.install(app)
@@ -56,7 +55,7 @@ class TestTunnelBridge:
                                            base="/d/dev-9", csrf="c")
         forged[tunnel_auth.HEADER_SECRET] = "guessed"
         body = TestClient(_probe_app()).get("/echo", headers=forged).json()
-        assert body == {"identity": None, "base": "", "bridge": [], "nonce": body["nonce"]}
+        assert body == {"identity": None, "base": "", "bridge": []}
 
     def test_forged_identity_never_reaches_a_console_route(self, console):
         from sentrix.link import tunnel_auth
@@ -64,13 +63,18 @@ class TestTunnelBridge:
         forged[tunnel_auth.HEADER_SECRET] = "nope"
         client = TestClient(console.app, follow_redirects=False)
         assert client.get("/api/incidents", headers=forged).status_code == 401
-        assert client.get("/events", headers={**forged, "accept": "text/html"}).status_code == 307
+        assert client.get("/api/session", headers=forged).json()["signed_in"] is False
+        # A LAN caller with forged headers is a LAN caller: the shell, no data.
+        shell = client.get("/events", headers={**forged, "accept": "text/html"})
+        assert shell.status_code == 200 and b'id="root"' in shell.content
 
     @pytest.mark.parametrize("method,path", [("GET", "/login"), ("POST", "/login"),
                                              ("GET", "/logout"), ("POST", "/logout"),
                                              ("GET", "/setup/wifi"), ("POST", "/setup/wifi"),
                                              ("GET", "/video"), ("GET", "/docs"),
-                                             ("GET", "/openapi.json")])
+                                             ("GET", "/openapi.json"), ("POST", "/api/login"),
+                                             ("POST", "/api/logout"), ("GET", "/api/setup/wifi"),
+                                             ("POST", "/api/setup/wifi/scan")])
     def test_paths_the_tunnel_never_carries_are_refused(self, console, method, path):
         response = tunnel_client(console).request(method, path)
         assert response.status_code == 404
@@ -100,7 +104,7 @@ class TestCsrf:
         assert (console.faces / "bob.jpg").exists()
         assert client.post("/api/incidents/i/verdict", data={"verdict": "TRUE"}).status_code == 403
         assert client.post("/api/dispatch/p/send/POLICE").status_code == 403
-        assert client.post("/logout").status_code == 403
+        assert client.post("/api/logout").status_code == 403
         assert client.delete("/api/authorized/bob.jpg",
                              headers={"X-CSRF-Token": csrf}).status_code == 200
 
@@ -127,11 +131,11 @@ class TestCsrf:
 
     def test_login_from_another_site_is_refused(self, console):
         client = TestClient(console.app, follow_redirects=False)
-        forged = client.post("/login", data={"password": PASSWORD},
+        forged = client.post("/api/login", json={"password": PASSWORD},
                              headers={"Origin": "https://evil.example"})
-        assert forged.status_code == 403
-        assert client.post("/login", data={"password": PASSWORD},
-                           headers={"Origin": "http://testserver"}).status_code == 302
+        assert forged.status_code == 403 and "set-cookie" not in forged.headers
+        assert client.post("/api/login", json={"password": PASSWORD},
+                           headers={"Origin": "http://testserver"}).status_code == 200
 
     def test_legacy_cookie_is_not_a_session(self, console):
         # Retired at integration: it used to skip the CSRF header.
@@ -158,34 +162,39 @@ class TestCsrf:
 
 # ── response headers ──────────────────────────────────────────────────────────
 class TestHeaders:
-    def test_pages_and_apis_carry_the_security_headers(self, console):
+    @pytest.mark.parametrize("path", ["/", "/admin/activity", "/login", "/api/incidents",
+                                      "/api/session"])
+    def test_the_shell_and_apis_carry_the_security_headers(self, console, path):
         client, _ = lc_client(console)
-        for path in ("/dashboard", "/api/incidents", "/login"):
-            headers = client.get(path).headers
-            csp = headers["content-security-policy"]
-            assert "script-src 'self' 'nonce-" in csp and "'unsafe-inline'" not in csp
-            assert "style-src 'self' 'nonce-" in csp and "frame-ancestors 'none'" in csp
-            assert "object-src 'none'" in csp and "base-uri 'none'" in csp
-            assert "connect-src 'self' ws://testserver wss://testserver" in csp
-            assert headers["x-frame-options"] == "DENY"
-            assert headers["x-content-type-options"] == "nosniff"
-            assert headers["referrer-policy"] == "same-origin"
-            assert "camera=()" in headers["permissions-policy"]
-            assert headers["cache-control"] == "no-store"
+        headers = client.get(path).headers
+        csp = headers["content-security-policy"]
+        assert "script-src 'self';" in csp and "style-src 'self';" in csp
+        assert "'unsafe-inline'" not in csp and "nonce-" not in csp
+        assert "frame-ancestors 'none'" in csp
+        assert "object-src 'none'" in csp and "base-uri 'none'" in csp
+        assert "connect-src 'self' ws://testserver wss://testserver" in csp
+        assert headers["x-frame-options"] == "DENY"
+        assert headers["x-content-type-options"] == "nosniff"
+        assert headers["referrer-policy"] == "same-origin"
+        assert "camera=()" in headers["permissions-policy"]
+        expected = "no-store" if path.startswith("/api/") else "no-cache, must-revalidate"
+        assert headers["cache-control"] == expected
 
     def test_static_files_stay_cacheable(self, console):
-        response = lc_client(console)[0].get("/static/css/style.css")
+        from test_web_console import shell_urls
+        script = next(url for url in shell_urls() if url.endswith(".js"))
+        response = lc_client(console)[0].get(script)
         assert response.status_code == 200 and "no-store" not in response.headers.get(
             "cache-control", "")
 
     def test_tunnelled_csp_relies_on_self_only(self, console):
-        csp = tunnel_client(console).get("/dashboard").headers["content-security-policy"]
+        csp = tunnel_client(console).get("/api/session").headers["content-security-policy"]
         assert "connect-src 'self';" in csp
 
     def test_csp_can_be_switched_off(self, console, monkeypatch):
         from sentrix.web import hardening
         monkeypatch.setattr(hardening, "csp_enabled", lambda: False)
-        headers = lc_client(console)[0].get("/dashboard").headers
+        headers = lc_client(console)[0].get("/").headers
         assert "content-security-policy" not in headers and headers["x-frame-options"] == "DENY"
 
     def test_a_route_keeps_its_own_cache_header(self, console):
@@ -242,31 +251,44 @@ class TestSessionCookies:
     def test_login_sets_lc_session_and_drops_the_legacy_cookie(self, console):
         client = TestClient(console.app, follow_redirects=False)
         client.cookies.set("session_token", "old")
-        response = client.post("/login", data={"password": PASSWORD})
-        assert response.status_code == 302 and response.headers["location"] == "/dashboard"
+        response = client.post("/api/login", json={"password": PASSWORD})
+        assert response.status_code == 200 and response.json()["signed_in"] is True
         cookies = response.headers.get_list("set-cookie")
         session = next(c for c in cookies if c.startswith("lc_session="))
         assert "HttpOnly" in session and "SameSite=lax" in session
+        assert "Max-Age=43200" in session and "Secure" not in session
         assert any(c.startswith("session_token=") and "Max-Age=0" in c for c in cookies)
+
+    def test_secure_cookies_when_asked(self, console, monkeypatch):
+        monkeypatch.setenv("SENTRIX_SECURE_COOKIES", "1")
+        response = TestClient(console.app).post("/api/login", json={"password": PASSWORD})
+        session = next(c for c in response.headers.get_list("set-cookie")
+                       if c.startswith("lc_session="))
+        assert "Secure" in session
 
     def test_wrong_password_and_missing_password(self, console, monkeypatch):
         client = TestClient(console.app)
-        assert client.post("/login", data={"password": "nope"}).status_code == 401
+        wrong = client.post("/api/login", json={"password": "nope"})
+        assert wrong.status_code == 401 and "set-cookie" not in wrong.headers
         monkeypatch.setenv("SENTRIX_PASSWORD", "")
-        page = client.get("/login")
-        assert "Set SENTRIX_PASSWORD in .env" in page.text
+        assert client.get("/api/session").json()["password_configured"] is False
+        missing = client.post("/api/login", json={"password": "admin"})
+        assert missing.status_code == 503 and missing.json()["error"]["code"] == "not_configured"
 
     def test_logout_is_a_post_with_csrf(self, console):
         client, csrf = lc_client(console)
-        response = client.post("/logout", headers={"X-CSRF-Token": csrf})
+        response = client.post("/api/logout", headers={"X-CSRF-Token": csrf})
         assert response.status_code == 200 and response.json()["ok"] is True
         cookies = response.headers.get_list("set-cookie")
         assert any(c.startswith("lc_session=") and "Max-Age=0" in c for c in cookies)
         assert any(c.startswith("session_token=") and "Max-Age=0" in c for c in cookies)
 
-    def test_logout_page_needs_a_session(self, console):
-        page = TestClient(console.app, follow_redirects=False).get("/logout")
-        assert page.status_code == 307 and page.headers["location"] == "/login"
+    def test_a_link_never_signs_anyone_out(self, console):
+        """GET /logout is only the app's page now: no cookie is touched."""
+        client, _ = lc_client(console)
+        page = client.get("/logout")
+        assert page.status_code == 200 and "set-cookie" not in page.headers
+        assert client.get("/api/session").json()["signed_in"] is True
 
     def test_video_needs_a_session(self, console):
         response = TestClient(console.app, follow_redirects=False).get("/video")
