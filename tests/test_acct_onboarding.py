@@ -271,6 +271,27 @@ class TestWizard:
         browser.post("/onboarding/7", {"consent_account_sos": "1"})
         assert _household(portal).medical_enc is None
 
+    def test_step7_defaults_survive_the_claims_remote_view_consent(self, portal):
+        """Claiming in step 5 grants remote_view; step 7 must still offer
+        the defaults (account and SOS, SOS snapshot) for undecided purposes,
+        and keep what the owner did decide."""
+        home = add_household(portal, complete=True)
+        now = accounts.utcnow()
+        with portal.state.db.session() as db:
+            hid, uid = home["household_id"], home["owner_id"]
+            db.query(Consent).filter_by(household_id=hid).delete()
+            db.add(Consent(household_id=hid, subject_type="user", subject_id=uid,
+                           purpose="remote_view", notice_version="2026-10-1", granted_at=now))
+            db.add(Consent(household_id=hid, subject_type="user", subject_id=uid,
+                           purpose="sos_snapshot", notice_version="2026-10-1",
+                           granted_at=now, withdrawn_at=now))
+        with portal.state.db.session() as db:
+            shown = accounts.consent_choices(db, hid)
+        assert shown["account_sos"] is True, "undecided: its default"
+        assert shown["remote_view"] is True, "granted at the claim"
+        assert shown["sos_snapshot"] is False, "withdrawn by the owner: stays off"
+        assert shown["face_recognition"] is False and shown["desk_live_view"] is False
+
     def test_changing_pins_later_needs_step_up(self, portal):
         add_household(portal, complete=True)
         browser = owner_browser(portal)

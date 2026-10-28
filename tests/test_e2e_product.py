@@ -394,6 +394,11 @@ def test_unanswered_request_expires_and_help_now_opens_a_linked_request(world):
         world.pump_portal()
     world.tick(opened + window - 5 - world.clock.now)   # 5 s before the end
     assert device_state(world, rid) == "PENDING"
+    # The lapse warning reaches the Portal over the link, then its worker sends
+    # it (what is still queued at the lapse is withdrawn: a stale warning).
+    wait_for(lambda: world.pump_portal() is not None and any(
+        n.step == "lapse" and n.status in ("SENT", "DELIVERED")
+        for n in world.notifications(rid)), what="lapse warning sent")
     world.tick(10)
     request = world.device_request(rid)
     assert request["state"] == "EXPIRED"

@@ -1535,6 +1535,21 @@ def _active_consent(db: Session, household_id: str, purpose: str) -> Consent | N
             .order_by(Consent.granted_at.desc()).first())
 
 
+def consent_choices(db: Session, household_id: str) -> dict[str, bool]:
+    """What the consent form shows: each purpose's current state where the
+    household has ever decided it (granted or withdrawn), else its default.
+    Claiming the device in step 5 grants ``remote_view`` on its own; that
+    must not wipe the defaults of every other purpose in step 7."""
+    decided = {purpose for (purpose,) in
+               db.query(Consent.purpose)
+               .filter(Consent.household_id == household_id, Consent.subject_type == "user")
+               .distinct()}
+    states = consent_states(db, household_id)
+    return {purpose: states[purpose] if purpose in decided
+            else bool(DEFAULT_CONSENTS.get(purpose, False))
+            for purpose in CONSENT_PURPOSES}
+
+
 def consent_states(db: Session, household_id: str) -> dict[str, bool]:
     """purpose -> currently granted (the household's own consents)."""
     return {purpose: _active_consent(db, household_id, purpose) is not None
@@ -2130,6 +2145,7 @@ __all__ = ["build_profile", "confirmed_contacts", "bump_profile_version",
            "issue_activation_code", "complete_activation", "send_activation_email",
            "profile_changed", "push_profile", "add_contact", "update_contact",
            "remove_contact", "decide_contact_consent", "set_consent", "consent_states",
+           "consent_choices",
            "render_sos_preview", "export_household", "schedule_erasure",
            "cancel_erasure", "erase_household", "household_audit", "onboarding_done",
            "PURPOSES", "ONBOARDING_STEPS"]

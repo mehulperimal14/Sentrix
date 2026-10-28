@@ -140,9 +140,7 @@ def _extra(db: Session, principal, user, household, step: int) -> dict[str, Any]
                 "duress_digits": accounts.sos_config().duress_min_digit_difference,
                 "bot_configured": bool(accounts.portal_config().telegram_bot_name)}
     if step == 7:
-        consents = accounts.consent_states(db, household.id)
-        if not any(consents.values()):
-            consents = dict(accounts.DEFAULT_CONSENTS)
+        consents = accounts.consent_choices(db, household.id)
         consents["medical_notes"] = consents["medical_notes"] or bool(household.medical_enc)
         profile = accounts.preview_profile(db, household)
         pending = [c for c in accounts.active_contacts(db, household.id)
