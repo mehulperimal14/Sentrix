@@ -240,6 +240,12 @@ async def _step1(request, db, principal, user, household, form):
                                      accounts.LANGUAGES, label="Language")
     if not form.get("adult"):
         errors.add("adult", "Only an adult (18 or older) can set up the household.")
+    # The e-mail is the recovery channel: once set up, changing it here needs
+    # the same fresh password as /account (a held phone must not take it over).
+    if (email and email != user.email and household.onboarding_completed_at is not None
+            and not principal.stepped_up()):
+        errors.add("email", "Confirm your password in Account settings before changing "
+                            "the e-mail.")
     if errors:
         return _page(request, db, principal, user, household, 1, values=dict(form),
                      errors=errors, status_code=400)

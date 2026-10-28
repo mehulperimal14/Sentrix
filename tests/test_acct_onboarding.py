@@ -292,6 +292,20 @@ class TestWizard:
         assert shown["sos_snapshot"] is False, "withdrawn by the owner: stays off"
         assert shown["face_recognition"] is False and shown["desk_live_view"] is False
 
+    def test_changing_the_email_later_needs_step_up(self, portal):
+        """Step 1 stays reachable after onboarding: the recovery e-mail may
+        not change there without a fresh password, as on /account."""
+        add_household(portal, complete=True)
+        browser = owner_browser(portal)
+        with portal.state.db.session() as db:
+            for row in db.query(UserSession):
+                row.step_up_at = (row.step_up_at or accounts.utcnow()) - timedelta(minutes=10)
+        browser.get("/onboarding/1")
+        refused = browser.post("/onboarding/1", {**STEP1, "email": "thief@example.com"})
+        assert refused.status_code == 400 and "Confirm your password" in refused.text
+        with portal.state.db.session() as db:
+            assert "thief@example.com" not in {u.email for u in db.query(User)}
+
     def test_changing_pins_later_needs_step_up(self, portal):
         add_household(portal, complete=True)
         browser = owner_browser(portal)
