@@ -21,7 +21,7 @@ if str(ROOT_DIR / "tools") not in sys.path:
 
 import demo_reset  # noqa: E402
 import demo_run  # noqa: E402
-from test_acct_support import Browser  # noqa: E402
+from test_portal_api_v2_support import Api  # noqa: E402
 from test_sos_routes import tunnel, world  # noqa: E402,F401  (fixture)
 
 
@@ -79,23 +79,18 @@ class TestDemoReset:
         assert (demo.directory / "label.html").exists()
 
     def test_people_sign_in_with_the_printed_credentials(self, demo):
-        import pyotp
-
         from sentrix_portal import security
         app = portal_for(demo)
-        owner = Browser(app)
+        owner = Api(app)
         response = owner.login(demo.secrets["owner"]["username"],
                                demo.secrets["owner"]["password"])
-        assert response.status_code == 303 and response.headers["location"].endswith("/home")
+        assert response.status_code == 200 and response.json()["next"] == "/home"
         for key in ("admin", "operator"):
             staff = demo.secrets[key]
-            browser = Browser(app, ip=f"10.0.0.{len(key)}")
-            browser.login(staff["username"], staff["password"])
+            api = Api(app, ip=f"10.0.0.{len(key)}")
             security._totp_last_step.clear()
-            browser.get("/account/2fa")
-            done = browser.post("/account/2fa", {"action": "verify",
-                                                 "code": pyotp.TOTP(staff["totp_secret"]).now()})
-            assert done.status_code == 303, done.text
+            done = api.login_staff(staff["username"], staff["totp_secret"], staff["password"])
+            assert done.status_code == 200, done.text
 
     def test_secrets_are_shown_once_not_stored(self, demo):
         stored = (demo.directory / "demo.json").read_text(encoding="utf-8")

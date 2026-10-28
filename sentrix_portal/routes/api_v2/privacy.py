@@ -118,8 +118,10 @@ def export(request: Request, db: Session = DB, principal=Depends(OWNER)) -> Resp
     if outcome.code == "not_found":
         raise ApiError("not_found", "There is no household on this account.")
     raise_for(outcome, db)
-    from sentrix_portal.routes.privacy import export_response
-    return export_response(outcome)
+    filename = outcome.data["filename"]
+    return Response(outcome.data["body"], media_type="application/json",
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"',
+                             "Cache-Control": "no-store"})
 
 
 @router.post("/privacy/erase", response_model=ErasureOut)

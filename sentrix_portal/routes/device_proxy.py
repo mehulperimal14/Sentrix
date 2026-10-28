@@ -12,10 +12,11 @@ its own console. The device enforces its own path table on top
 Portal adds none on ``/d/``) and lose every cookie; ``Location: /x`` becomes
 ``/d/<id>/x``; ``/api/*`` and ``/media/*`` are ``no-store``.
 
-While the device is offline: pages show the mirror (incidents, packages, open
-requests) with "Device offline" and verdict buttons that queue a
-``verdict.set`` command ("queued, will sync"); APIs answer 503
-``device_offline``.
+Console pages are drawn by the Portal app: any path that is not an API,
+media or static file answers 303 to ``/live/<device_id>``. While the device
+is offline APIs answer 503 ``device_offline``; a verdict is queued as a
+``verdict.set`` command ("queued, will sync"); the mirror is
+``GET /api/v2/devices/<id>/mirror``.
 
 Owner: track T-LINK.
 """
@@ -24,7 +25,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import time
 from datetime import timezone
 from urllib.parse import parse_qs, urlsplit
 
@@ -37,7 +37,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from sentrix_portal import security
 from sentrix_portal.db import DB
-from sentrix_portal.models import AssistanceRequest, Device, utcnow
+from sentrix_portal.models import AssistanceRequest, Device
 from sentrix_portal.services import sos as sos_service
 from sentrix_portal.services.hub import UUID_RE, Viewer, hub_for
 
@@ -102,15 +102,16 @@ def _open_request(db: Session, device_id: str) -> bool:
     return sos_service.open_request_for(db, device_id) is not None
 
 
-def _wants_html(request: Request) -> bool:
-    return request.method == "GET" and "text/html" in request.headers.get("accept", "")
-
-
 # ── entry points ──────────────────────────────────────────────────────────────
 @router.get("/d/{device_id}", include_in_schema=False)
 @router.get("/d/{device_id}/", include_in_schema=False)
 async def device_root(device_id: str) -> RedirectResponse:
-    return RedirectResponse(f"/d/{device_id}/dashboard", status_code=307)
+    return RedirectResponse(f"/live/{device_id}", status_code=303)
+
+
+#: Inner paths the tunnel still forwards; any other path was a console page,
+#: now drawn by the Portal app (``/live/<device_id>``).
+FORWARDED_PREFIXES = ("/api/", "/media/", "/static/")
 
 
 @router.get("/d/{device_id}/video")
@@ -259,12 +260,15 @@ class TunnelRoute(APIRoute):
         return match, child_scope
 
 
-async def tunnel(device_id: str, path: str, request: Request,
-                 db: Session = DB,
-                 principal: security.Principal = Depends(_tunnel_role)):
-    """Every other console route, replayed by the device in-process."""
-    device = authorize_device(db, principal, device_id)
+async def tunnel(device_id: str, path: str, request: Request, db: Session = DB):
+    """Every other console route, replayed by the device in-process. A
+    console page (signed in or not: a bookmark) goes to the app's
+    ``/live/<device_id>``, which signs in first when it has to."""
     inner = "/" + path
+    if not inner.startswith(FORWARDED_PREFIXES):
+        return RedirectResponse(f"/live/{device_id}", status_code=303)
+    principal = await _tunnel_role(request, db)
+    device = authorize_device(db, principal, device_id)
     if inner in NEVER_EXACT or inner.startswith(NEVER_PREFIXES):
         return JSONResponse({"detail": "not available through the Portal",
                              "code": "not_found"}, status_code=404)
@@ -342,8 +346,6 @@ async def _offline(request: Request, db: Session, principal: security.Principal,
     if (request.method == "POST" and len(parts) == 4 and parts[:2] == ["api", "incidents"]
             and parts[3] == "verdict" and principal.role in ("owner", "member")):
         return await _queue_verdict(request, principal, device, parts[2])
-    if _wants_html(request):
-        return _offline_page(request, db, principal, device)
     return JSONResponse({"detail": "the device is offline", "code": "device_offline"},
                         status_code=503, headers={"Cache-Control": "no-store"})
 
@@ -377,17 +379,6 @@ async def _queue_verdict(request: Request, principal, device: Device,
                              "command_id": result.get("command_id")}, status_code=202)
     return JSONResponse({"detail": result.get("message"), "code": result.get("code")},
                         status_code=result.get("status") or 503)
-
-
-def _offline_page(request: Request, db: Session, principal, device: Device) -> Response:
-    from sentrix_portal.services.sos_views import device_mirror
-    mirror = device_mirror(db, principal, device)
-    return request.app.state.templates.TemplateResponse(
-        request=request, name="device/offline.html", status_code=503,
-        context={"principal": principal, "active_page": "home", "device": device,
-                 "incidents": mirror["incidents"], "packages": mirror["packages"],
-                 "requests": mirror["requests"], "can_label": mirror["can_label"],
-                 "now": utcnow(), "monotonic": time.monotonic()})
 
 
 __all__ = ["router", "authorize_device", "actor_of", "FORWARD_HEADERS", "TunnelRoute"]

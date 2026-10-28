@@ -26,7 +26,6 @@ from sentrix_portal.routes.api_v2.common import (ADMIN, ApiError, Ok, clean_deta
                                                  form_values, ip_of, raise_for, z)
 from sentrix_portal.services import accounts
 from sentrix_portal.services import admin_flows as flows
-from sentrix_portal.services.hub import hub_for
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 StaffRole = Literal["operator", "company_admin"]
@@ -269,7 +268,8 @@ class AdminAuditOut(BaseModel):
 
 # ── converters ────────────────────────────────────────────────────────────────
 def _online(request: Request):
-    return hub_for(request.app).online
+    """The flows' own default (``hub.is_online``), as the old pages used."""
+    return None
 
 
 def _chain(db: Session) -> ChainOut:

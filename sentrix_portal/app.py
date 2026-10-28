@@ -1,8 +1,7 @@
 """Portal application factory.
 
 ``create_app(settings)`` builds a self-contained app: its own database (tables
-created on build, idempotent; missing columns added), templates, static
-files, every router listed in ``sentrix_portal.routes.ROUTER_MODULES``, the
+created on build, idempotent; missing columns added), the app's static files (``static/app``), every router listed in ``sentrix_portal.routes.ROUTER_MODULES``, the
 middleware in :data:`MIDDLEWARE_MODULES`, ``GET /healthz`` and a lifespan that
 starts :data:`BACKGROUND_MODULES` when ``settings.workers`` (``PORTAL_WORKERS=1``;
 off in tests). Tests pass ``PortalSettings.for_tests(tmp_path)``.
@@ -32,7 +31,6 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import text
 
 from sentrix_portal import settings as portal_settings
@@ -43,7 +41,6 @@ from sentrix_portal.settings import PortalSettings
 log = logging.getLogger("sentrix_portal.app")
 
 PACKAGE_DIR = Path(__file__).resolve().parent
-TEMPLATES_DIR = PACKAGE_DIR / "templates"
 STATIC_DIR = PACKAGE_DIR / "static"
 
 #: Started in this order when ``settings.workers``; owners in docs/7 §2.
@@ -57,10 +54,6 @@ BACKGROUND_MODULES: tuple[str, ...] = (
 MIDDLEWARE_MODULES: tuple[str, ...] = (
     "sentrix_portal.hardening",           # T-ACCT  CSP nonce + security headers (not on /d/*)
 )
-
-
-def _template_context(request) -> dict:
-    return {"csp_nonce": getattr(request.state, "csp_nonce", "")}
 
 
 async def _start_background(app: FastAPI) -> list[tuple[str, object]]:
@@ -157,13 +150,8 @@ def create_app(settings: PortalSettings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.db = database
     app.state.background = []
-    templates = Jinja2Templates(directory=str(TEMPLATES_DIR),
-                                context_processors=[_template_context])
-    templates.env.globals.update(test_mode=settings.test_mode,
-                                 desk_number=settings.desk_number)
-    app.state.templates = templates
-
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR), check_dir=False),
+              name="static")
     for name in ROUTER_MODULES:
         module = importlib.import_module(name)
         app.include_router(module.router)
@@ -185,8 +173,10 @@ def create_app(settings: PortalSettings | None = None) -> FastAPI:
                              "version": app.version},
                             status_code=200 if db_state == "ok" else 503)
 
+    # The single-page app answers every other path: registered last.
+    app.include_router(importlib.import_module("sentrix_portal.routes.spa").router)
     return app
 
 
-__all__ = ["create_app", "TEMPLATES_DIR", "STATIC_DIR", "BACKGROUND_MODULES",
+__all__ = ["create_app", "STATIC_DIR", "BACKGROUND_MODULES",
            "MIDDLEWARE_MODULES", "lifespan"]

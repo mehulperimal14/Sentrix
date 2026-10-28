@@ -1,28 +1,14 @@
-"""Portal routers, one module per area, included in this order by
-``create_app``. Owners: docs/7 §2. Each module exports ``router`` (and may
-export ``install(app)``, called after it is included: the API's error model).
+"""Portal routers, included in this order by ``create_app``. Each module
+exports ``router`` (and may export ``install(app)``, called after it is
+included: the API's error model). The pages are the single-page app
+(``routes/spa.py``, included last by ``create_app``, after ``/healthz``).
 """
 
 ROUTER_MODULES: tuple[str, ...] = (
-    # T-ACCT: accounts, onboarding, household, settings, privacy, home, admin
-    "sentrix_portal.routes.auth",
-    "sentrix_portal.routes.home",
-    "sentrix_portal.routes.onboarding",
-    "sentrix_portal.routes.household",
-    "sentrix_portal.routes.settings",
-    "sentrix_portal.routes.privacy",
-    "sentrix_portal.routes.admin",
-    "sentrix_portal.routes.consent",      # /consent/{token} (contact consent)
-    # T-LINK: device link, tunnel parity, SOS, Desk, contact pages
-    "sentrix_portal.routes.link_hub",
-    "sentrix_portal.routes.device_proxy",
-    "sentrix_portal.routes.sos",
-    "sentrix_portal.routes.desk",
-    "sentrix_portal.routes.contacts",     # /c/{token} (SOS contact pages only)
-    # T-CH: provider webhooks
-    "sentrix_portal.routes.hooks",
-    # The single-page app's JSON API (docs/9): /api/v2, every area above
-    "sentrix_portal.routes.api_v2",
+    "sentrix_portal.routes.link_hub",     # /link (device WebSocket)
+    "sentrix_portal.routes.device_proxy", # /d/{id}/api|media|static, video, ws
+    "sentrix_portal.routes.hooks",        # provider webhooks
+    "sentrix_portal.routes.api_v2",       # the app's JSON API (docs/9)
 )
 
 __all__ = ["ROUTER_MODULES"]

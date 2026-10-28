@@ -833,6 +833,10 @@ class TestPortalSkeleton:
         def probe_post(p=Depends(security.require_role("owner"))):
             return {"ok": True}
 
+        # Ahead of the app's catch-all (routes/spa.py), as real API routes are.
+        routes = portal.router.routes
+        routes[:0] = [routes.pop(), routes.pop()]
+
         with portal.state.db.session() as db:
             owner = User(username="o", role="owner", status="active")
             admin = User(username="a", role="company_admin", status="active")

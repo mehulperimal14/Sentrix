@@ -128,13 +128,16 @@ def _event(item: dict[str, Any], *, restricted: bool) -> TimelineEvent:
 def owner_events(db: Session, row: AssistanceRequest) -> list[TimelineEvent]:
     """The owner's timeline. For a duress request only what a decline would
     show: the events up to the answer (the export's rule, docs/7 §7.8)."""
-    items = sos_service.events_view(db, row.id, "owner")
+    # "Request help now" is shown by the linked request it opens, not by an
+    # event on this one (a duress request cannot record that event).
+    items = [item for item in sos_service.events_view(db, row.id, "owner")
+             if item["event"] != S.HELP_REQUESTED_LATER]
     if (row.flags or {}).get("duress"):
         items = [item for item in items
                  if item["event"] == S.DECLINE
                  or {item.get("from_state"), item.get("to_state")} <= _PROMPTING]
-        for n, item in enumerate(items, 1):
-            item["seq"] = n
+    for n, item in enumerate(items, 1):
+        item["seq"] = n
     return [_event(item, restricted=False) for item in items]
 
 

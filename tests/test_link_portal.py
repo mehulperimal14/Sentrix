@@ -739,7 +739,9 @@ class TestReviewCloudAuthority:
         assert row.flags["duress"] and row.flags["contacts_notified"]
         assert any(s == "duress" for _r, _c, s in rig.outbox.steps("contact:"))
         again = self._answer(rig, request["id"], "help_now")
-        assert again["ok"] and again["message"] == "Help requested"
+        assert again["ok"], again
+        linked = again["request"]
+        assert linked["id"] != request["id"] and linked["parent_request_id"] == request["id"],             "answered as a real decline would be: a new linked request"
 
     def test_duress_on_a_closed_request_opens_a_silent_linked_one(self, rig):
         from sentrix_portal.models import AssistanceRequest

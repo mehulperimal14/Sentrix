@@ -14,7 +14,11 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse
 
-router = APIRouter()
+from sentrix_portal.routes.device_proxy import TunnelRoute
+
+#: Its routes yield to every other route (a partial match, like the tunnel's
+#: catch-all), so the tunnel and the API always win over the app.
+router = APIRouter(route_class=TunnelRoute)
 
 APP_DIR = Path(__file__).resolve().parent.parent / "static" / "app"
 INDEX = APP_DIR / "index.html"
@@ -35,15 +39,23 @@ def app_index() -> FileResponse | JSONResponse:
     return FileResponse(INDEX, media_type="text/html", headers=_NO_STORE)
 
 
-@router.get("/", include_in_schema=False)
+@router.get("/", include_in_schema=False, response_model=None)
 async def spa_root() -> FileResponse | JSONResponse:
     return app_index()
 
 
-@router.get("/{path:path}", include_in_schema=False)
+@router.get("/{path:path}", include_in_schema=False, response_model=None)
 async def spa_path(path: str, request: Request) -> FileResponse | JSONResponse:
     first = path.split("/", 1)[0]
     if first in SERVER_PREFIXES:
         return JSONResponse({"error": {"code": "not_found", "message": "Not found."}},
                             status_code=404)
     return app_index()
+
+
+@router.api_route("/{path:path}", methods=["POST", "PUT", "PATCH", "DELETE"],
+                  include_in_schema=False, response_model=None)
+async def spa_write(path: str) -> JSONResponse:
+    """A write to a path nothing claims is a JSON 404, never the app."""
+    return JSONResponse({"error": {"code": "not_found", "message": "Not found."}},
+                        status_code=404)

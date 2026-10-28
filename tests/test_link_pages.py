@@ -87,80 +87,89 @@ def no_inline_script(html: str) -> bool:
             and not re.search(r"\son[a-z]+=", html))
 
 
+def call(client, csrf, method, path, body=None):
+    """The app's JSON API (``/api/v2``) with the session's CSRF header."""
+    headers = {"X-CSRF-Token": csrf} if csrf else {}
+    kwargs = {"json": body} if body is not None else {}
+    return client.request(method, "/api/v2" + path, headers=headers, **kwargs)
+
+
+def page_token(client, path):
+    """A token page's double-submit CSRF value (``csrf_token`` in its JSON)."""
+    page = client.get("/api/v2" + path)
+    return page, page.json().get("csrf_token") if page.status_code == 200 else None
+
+
 # ── owner SOS pages ───────────────────────────────────────────────────────────
 class TestSosPages:
     def test_access_rules(self, portal):
         app, seeded, _ = portal
         rid, _ = open_request(app, seeded)
         anonymous = TestClient(app, follow_redirects=False)
-        page = anonymous.get("/sos", headers={"accept": "text/html"})
-        assert page.status_code == 303 and page.headers["location"].split("?")[0] == "/login"
-        assert anonymous.get("/sos/api/open").status_code == 401
+        assert anonymous.get(f"/api/v2/sos/{rid}").status_code == 401
+        assert anonymous.get("/api/v2/sos/open").status_code == 401
         desk, _ = client_for(app, seeded.operator_id, totp=True)
-        assert desk.get("/sos").status_code == 403
+        assert desk.get("/api/v2/sos").status_code == 403
         stranger, _ = client_for(app, seeded.extra["stranger_id"])
-        assert stranger.get(f"/sos/{rid}").status_code == 404
-        assert stranger.get(f"/sos/api/requests/{rid}").status_code == 404
-        assert stranger.get("/sos/api/open").json() == {"requests": []}
+        assert stranger.get(f"/api/v2/sos/{rid}").status_code == 404
+        assert stranger.get("/api/v2/sos/open").json() == {"requests": []}
 
     def test_the_prompt_page(self, portal):
         from sentrix_portal.models import AssistanceRequest
         app, seeded, _ = portal
         rid, _ = open_request(app, seeded, snapshot=True)
         owner, _ = client_for(app, seeded.owner_id)
-        page = owner.get(f"/sos/{rid}")
+        page = owner.get(f"/api/v2/sos/{rid}")
         assert page.status_code == 200
-        html = page.text
-        assert "Do you need assistance?" in html
-        assert "Alert my contacts and the SENTRIX desk" in html
-        assert "I'm checking" in html and "False alarm (PIN)" in html
-        assert f'href="tel:{DESK_PHONE}"' in html and "tel:112" not in html, \
+        data = page.json()
+        assert data["request"]["label"] == "Waiting for your answer"
+        assert data["request"]["actions"] == ["approve", "call_112", "checking", "decline"]
+        assert data["call"]["href"] == f"tel:{DESK_PHONE}" and "tel:112" not in page.text, \
             "test mode: the Desk number, never 112"
-        assert "SENTRIX does not contact 112 itself." in html
-        assert f'src="/sos/{rid}/snapshot.jpg"' in html
-        assert no_inline_script(html)
-        assert "content-security-policy" in page.headers
+        assert data["footer"] == "SENTRIX does not contact 112 itself."
+        assert data["snapshot_url"] == f"/api/v2/sos/{rid}/snapshot.jpg"
         with app.state.db.session() as db:
             assert db.get(AssistanceRequest, rid).seen_at is not None, "opening it is 'seen'"
-        assert owner.get(f"/sos/{rid}/snapshot.jpg").content == b"\xff\xd8jpeg"
-        listing = owner.get("/sos").text
-        assert f'href="/sos/{rid}"' in listing
-        banner = owner.get("/sos/api/open").json()["requests"]
+        assert owner.get(data["snapshot_url"]).content == b"\xff\xd8jpeg"
+        banner = owner.get("/api/v2/sos/open").json()["requests"]
         assert [r["id"] for r in banner] == [rid] and banner[0]["state"] == "PENDING"
 
     def test_answers_need_csrf_and_take_the_cloud_path_offline(self, portal):
         app, seeded, _ = portal
         rid, _ = open_request(app, seeded)
         owner, csrf = client_for(app, seeded.owner_id)
-        assert owner.post(f"/sos/{rid}/approve", data={"authority": "POLICE"}).status_code == 403
-        checking = owner.post(f"/sos/{rid}/checking", data={"csrf_token": csrf})
-        assert checking.status_code == 303 and checking.headers["location"] == f"/sos/{rid}?m=ok"
-        approved = owner.post(f"/sos/{rid}/approve",
-                              data={"csrf_token": csrf, "authority": "FIRE"},
-                              headers={"x-requested-with": "fetch"})
-        assert approved.status_code == 200 and approved.json()["request"]["state"] == "DISPATCHED"
+        assert call(owner, None, "POST", f"/sos/{rid}/answer",
+                    {"action": "approve"}).status_code == 403
+        assert call(owner, csrf, "POST", f"/sos/{rid}/answer",
+                    {"action": "checking"}).status_code == 200
+        approved = call(owner, csrf, "POST", f"/sos/{rid}/answer",
+                        {"action": "approve", "authority": "FIRE"})
+        assert approved.status_code == 200 and approved.json()["request"]["state"] == \
+            "DISPATCHED"
         assert state_of(app, rid) == "DISPATCHED"
-        assert owner.post(f"/sos/{rid}/dance", data={"csrf_token": csrf}).status_code == 404
+        assert call(owner, csrf, "POST", f"/sos/{rid}/answer",
+                    {"action": "dance"}).status_code == 422
 
     def test_decline_with_the_pin_and_duress(self, portal):
         app, seeded, outbox = portal
         rid, _ = open_request(app, seeded)
         member, csrf = client_for(app, seeded.member_id)
-        wrong = member.post(f"/sos/{rid}/decline", data={"csrf_token": csrf, "pin": "000000"})
-        assert wrong.headers["location"] == f"/sos/{rid}?m=pin_invalid"
-        assert "That PIN is not right." in member.get(wrong.headers["location"]).text
-        coerced = member.post(f"/sos/{rid}/decline", data={"csrf_token": csrf,
-                                                           "pin": DURESS_PIN})
-        assert coerced.headers["location"] == f"/sos/{rid}?m=ok"
-        page = member.get(f"/sos/{rid}").text
-        assert "Marked as false alarm" in page and "duress" not in page.lower()
-        api = member.get(f"/sos/api/requests/{rid}").json()
-        assert api["request"]["state"] == "DECLINED" and "duress" not in api["request"]["flags"]
-        assert all(e["event"] != "approve" for e in api["events"]), "the restricted row is hidden"
+        wrong = call(member, csrf, "POST", f"/sos/{rid}/answer",
+                     {"action": "decline", "pin": "000000"})
+        assert wrong.json()["error"]["fields"] == {"pin": "That PIN is not right."}
+        coerced = call(member, csrf, "POST", f"/sos/{rid}/answer",
+                       {"action": "decline", "pin": DURESS_PIN})
+        assert coerced.status_code == 200
+        view = member.get(f"/api/v2/sos/{rid}")
+        assert view.json()["request"]["label"] == "Marked as false alarm"
+        assert "duress" not in view.text.lower()
+        assert view.json()["request"]["state"] == "DECLINED"
+        assert all(e["event"] != "approve" for e in view.json()["events"]), \
+            "the restricted row is hidden"
         assert state_of(app, rid) == "DISPATCHED", "help is on its way"
         rid2, _ = open_request(app, seeded)
-        declined = member.post(f"/sos/{rid2}/decline", data={"csrf_token": csrf, "pin": PIN})
-        assert declined.headers["location"] == f"/sos/{rid2}?m=ok"
+        assert call(member, csrf, "POST", f"/sos/{rid2}/answer",
+                    {"action": "decline", "pin": PIN}).status_code == 200
         assert state_of(app, rid2) == "DECLINED"
 
     def test_request_help_now_opens_a_linked_request(self, portal):
@@ -168,9 +177,9 @@ class TestSosPages:
         app, seeded, _ = portal
         rid, _ = open_request(app, seeded)
         owner, csrf = client_for(app, seeded.owner_id)
-        owner.post(f"/sos/{rid}/decline", data={"csrf_token": csrf, "pin": PIN})
-        later = owner.post(f"/sos/{rid}/help_now", data={"csrf_token": csrf})
-        new_id = later.headers["location"].split("/sos/")[1].split("?")[0]
+        call(owner, csrf, "POST", f"/sos/{rid}/answer", {"action": "decline", "pin": PIN})
+        later = call(owner, csrf, "POST", f"/sos/{rid}/answer", {"action": "help_now"})
+        new_id = later.json()["request_id"]
         assert new_id != rid
         with app.state.db.session() as db:
             new = db.get(AssistanceRequest, new_id)
@@ -194,17 +203,16 @@ class TestActionLinks:
         rid, _ = open_request(app, seeded)
         raw = self._token(app, rid, seeded.owner_id)
         browser = TestClient(app, follow_redirects=False)
-        page = browser.get(f"/a/{raw}")
-        assert page.status_code == 200 and "Alert my contacts and the SENTRIX desk" in page.text
-        assert "False alarm" in page.text and 'action="/a/' in page.text
+        page, csrf = page_token(browser, f"/action/{raw}")
+        assert page.status_code == 200 and page.json()["can_act"] is True
         assert state_of(app, rid) == "PENDING", "a link scanner's GET changes nothing"
-        csrf = re.search(r'name="csrf_token" value="([^"]+)"', page.text).group(1)
-        assert browser.post(f"/a/{raw}", data={"action": "approve"}).status_code == 403
-        done = browser.post(f"/a/{raw}", data={"action": "approve", "authority": "POLICE",
-                                               "csrf_token": csrf})
-        assert done.status_code == 200 and "Thank you" in done.text
+        assert call(browser, None, "POST", f"/action/{raw}",
+                    {"action": "approve"}).status_code == 403
+        done = call(browser, csrf, "POST", f"/action/{raw}",
+                    {"action": "approve", "authority": "POLICE"})
+        assert done.status_code == 200 and done.json()["message"] == "Done."
         assert state_of(app, rid) == "DISPATCHED"
-        again = browser.post(f"/a/{raw}", data={"action": "approve", "csrf_token": csrf})
+        again = call(browser, csrf, "POST", f"/action/{raw}", {"action": "approve"})
         assert again.status_code == 404, "single use"
         with app.state.db.session() as db:
             token = db.query(ActionToken).filter_by(token_hash=digest(app, raw)).one()
@@ -217,11 +225,10 @@ class TestActionLinks:
         rid, _ = open_request(app, seeded)
         raw = self._token(app, rid, seeded.owner_id)
         browser = TestClient(app, follow_redirects=False)
-        page = browser.get(f"/a/{raw}")
-        csrf = re.search(r'name="csrf_token" value="([^"]+)"', page.text).group(1)
-        assert browser.post(f"/a/{raw}", data={"action": "decline",
-                                               "csrf_token": csrf}).status_code == 400
-        assert browser.get("/a/not-a-token").status_code == 404
+        _, csrf = page_token(browser, f"/action/{raw}")
+        assert call(browser, csrf, "POST", f"/action/{raw}",
+                    {"action": "decline"}).status_code == 422
+        assert browser.get("/api/v2/action/not-a-token").status_code == 404
 
 
 # ── the Desk ──────────────────────────────────────────────────────────────────
@@ -229,45 +236,42 @@ class TestDesk:
     def test_operator_with_totp_only(self, portal):
         app, seeded, _ = portal
         no_totp, _ = client_for(app, seeded.operator_id, totp=False)
-        page = no_totp.get("/desk", headers={"accept": "text/html"})
-        assert page.status_code == 303 and page.headers["location"] == "/account/2fa"
+        refused = no_totp.get("/api/v2/desk/queue", headers={"accept": "text/html"})
+        assert refused.status_code == 403
+        assert refused.json()["error"]["code"] == "totp_required"
         owner, _ = client_for(app, seeded.owner_id)
-        assert owner.get("/desk").status_code == 403
+        assert owner.get("/api/v2/desk/queue").status_code == 403
 
     def test_queue_only_shows_the_help_path(self, portal):
         app, seeded, _ = portal
         pending, _ = open_request(app, seeded)
         approved, _ = open_request(app, seeded, state="DISPATCHED")
         desk, _ = client_for(app, seeded.operator_id, totp=True)
-        queue = desk.get("/desk/api/queue").json()
+        queue = desk.get("/api/v2/desk/queue").json()
         assert [c["id"] for c in queue["requests"]] == [approved]
         assert queue["unacknowledged"] == 1 and queue["requests"][0]["city"] == "Patiala"
-        assert desk.get(f"/desk/requests/{pending}").status_code == 404
-        html = desk.get("/desk").text
-        assert f'href="/desk/requests/{approved}"' in html and no_inline_script(html)
-        assert '/static/desk/desk.js' in html
+        assert desk.get(f"/api/v2/desk/requests/{pending}").status_code == 404
 
     def test_card_acknowledge_called_112_resolve(self, portal):
         from sentrix_portal.models import AssistanceRequest, AuditLog, IncidentMirror
         app, seeded, outbox = portal
         rid, incident = open_request(app, seeded, state="DISPATCHED", snapshot=True)
         desk, csrf = client_for(app, seeded.operator_id, totp=True)
-        card = desk.get(f"/desk/requests/{rid}").text
-        assert "H.No. 212" in card and "maps.google.com/?q=30.3398,76.3869" in card
-        assert "Riya Sharma (demo)" in card and 'href="tel:+919812345610"' in card
-        assert f"/desk/requests/{rid}/snapshot.jpg" in card
-        assert f"/d/{seeded.device_id}/live" not in card, "the device is offline"
-        assert desk.post(f"/desk/requests/{rid}/acknowledge").status_code == 403
-        ack = desk.post(f"/desk/requests/{rid}/acknowledge", data={"csrf_token": csrf})
-        assert ack.headers["location"] == f"/desk/requests/{rid}?m=ok"
-        note = desk.post(f"/desk/requests/{rid}/called-112", data={"csrf_token": csrf})
-        assert note.status_code == 303
-        bad = desk.post(f"/desk/requests/{rid}/resolve", data={"csrf_token": csrf,
-                                                               "outcome": "shrug"})
-        assert bad.headers["location"].endswith("m=invalid_args")
-        done = desk.post(f"/desk/requests/{rid}/resolve",
-                         data={"csrf_token": csrf, "outcome": "help_arrived", "note": "ok"})
-        assert done.headers["location"].endswith("m=ok")
+        card = desk.get(f"/api/v2/desk/requests/{rid}").json()
+        assert card["address"].startswith("H.No. 212")
+        assert card["map_url"] == "https://maps.google.com/?q=30.3398,76.3869"
+        assert card["resident"] == "Riya Sharma (demo)"
+        assert card["resident_phone"] == "+919812345610"
+        assert card["snapshot_url"] == f"/api/v2/desk/requests/{rid}/snapshot.jpg"
+        assert card["live_url"] is None, "the device is offline"
+        assert call(desk, None, "POST", f"/desk/requests/{rid}/acknowledge").status_code == 403
+        assert call(desk, csrf, "POST", f"/desk/requests/{rid}/acknowledge").status_code == 200
+        assert call(desk, csrf, "POST", f"/desk/requests/{rid}/called-112").status_code == 200
+        bad = call(desk, csrf, "POST", f"/desk/requests/{rid}/resolve", {"outcome": "shrug"})
+        assert bad.status_code == 422
+        done = call(desk, csrf, "POST", f"/desk/requests/{rid}/resolve",
+                    {"outcome": "help_arrived", "note": "ok"})
+        assert done.status_code == 200
         with app.state.db.session() as db:
             row = db.get(AssistanceRequest, rid)
             assert row.state == "CLOSED" and row.outcome == "help_arrived"
@@ -277,7 +281,7 @@ class TestDesk:
             assert {"desk.acknowledged", "desk.resolved", "desk.note"} <= events
         assert ("owner", "telegram", "acknowledged") in outbox.steps("owner")
         assert ("owner", "email", "resolved") in outbox.steps("owner")
-        assert desk.get(f"/desk/requests/{rid}").status_code == 200, "closed: visible 2 h"
+        assert desk.get(f"/api/v2/desk/requests/{rid}").status_code == 200, "closed: 2 h"
 
     def test_duress_banner_and_no_call_resident(self, portal):
         from sentrix_portal.models import AssistanceRequest
@@ -287,10 +291,9 @@ class TestDesk:
             row = db.get(AssistanceRequest, rid)
             row.flags = {**row.flags, "duress": True}
         desk, _ = client_for(app, seeded.operator_id, totp=True)
-        card = desk.get(f"/desk/requests/{rid}").text
-        assert f"Do not go to the home. Call {DESK_PHONE}." in card
-        assert "Call 112." not in card, "test mode: never call 112 (D13)"
-        assert "Call resident" not in card
+        card = desk.get(f"/api/v2/desk/requests/{rid}")
+        assert card.json()["request"]["banner"] == f"Do not go to the home. Call {DESK_PHONE}."
+        assert "Call 112." not in card.text, "test mode: never call 112 (D13)"
 
 
 # ── contact pages (/c/) ───────────────────────────────────────────────────────
@@ -310,17 +313,15 @@ class TestContactPages:
         rid, _ = open_request(app, seeded, state="DISPATCHED", snapshot=True)
         raw = self._token(app, rid, seeded.contact_id)
         browser = TestClient(app, follow_redirects=False)
-        page = browser.get(f"/c/{raw}")
-        assert page.status_code == 200
-        html = page.text
-        assert "Arjun (demo)" in html and "H.No. 212" in html and "I'm handling it" in html
-        assert f'href="tel:{DESK_PHONE}"' in html and "tel:112" not in html
-        assert f'src="/c/{raw}/snapshot.jpg"' in html and no_inline_script(html)
+        page, csrf = page_token(browser, f"/contact-page/{raw}")
+        data = page.json()
+        assert data["contact_name"] == "Arjun (demo)" and data["address"].startswith("H.No. 212")
+        assert data["can_acknowledge"] is True
+        assert data["call"]["href"] == f"tel:{DESK_PHONE}" and "tel:112" not in page.text
         assert page.headers["referrer-policy"] == "no-referrer"
-        assert browser.get(f"/c/{raw}/snapshot.jpg").content == b"\xff\xd8jpeg"
-        csrf = re.search(r'name="csrf_token" value="([^"]+)"', html).group(1)
-        acted = browser.post(f"/c/{raw}", data={"action": "acknowledge", "csrf_token": csrf})
-        assert acted.headers["location"] == f"/c/{raw}?m=ok"
+        assert browser.get(data["snapshot_url"]).content == b"\xff\xd8jpeg"
+        acted = call(browser, csrf, "POST", f"/contact-page/{raw}", {"action": "acknowledge"})
+        assert acted.status_code == 200
         assert state_of(app, rid) == "ACKNOWLEDGED"
         with app.state.db.session() as db:
             assert db.query(ActionToken).filter_by(
@@ -332,12 +333,11 @@ class TestContactPages:
         rid, _ = open_request(app, seeded)
         raw = self._token(app, rid, seeded.contact_id)
         browser = TestClient(app, follow_redirects=False)
-        page = browser.get(f"/c/{raw}").text
-        assert "Alert the SENTRIX desk" in page, "the cloud's policy has safety defaults on"
-        csrf = re.search(r'name="csrf_token" value="([^"]+)"', page).group(1)
-        assert browser.post(f"/c/{raw}", data={"action": "decline",
-                                               "csrf_token": csrf}).status_code == 400
-        browser.post(f"/c/{raw}", data={"action": "approve", "csrf_token": csrf})
+        page, csrf = page_token(browser, f"/contact-page/{raw}")
+        assert page.json()["can_approve"] is True, "the cloud's policy has safety defaults on"
+        assert call(browser, csrf, "POST", f"/contact-page/{raw}",
+                    {"action": "decline"}).status_code == 422
+        call(browser, csrf, "POST", f"/contact-page/{raw}", {"action": "approve"})
         assert state_of(app, rid) == "DISPATCHED"
 
     @pytest.mark.parametrize("state,actions", [("PENDING", ["open"]),
@@ -375,8 +375,8 @@ class TestContactPages:
         assert {"t0", "lapse", "r120", "rise4"} <= set(answered[0][2])
         assert "contacts_t0" not in answered[0][2], "the help path's messages stay"
         desk, dcsrf = client_for(app, seeded.operator_id, totp=True)
-        desk.post(f"/desk/requests/{rid}/resolve", data={"csrf_token": dcsrf,
-                                                         "outcome": "no_action_needed"})
+        call(desk, dcsrf, "POST", f"/desk/requests/{rid}/resolve",
+             {"outcome": "no_action_needed"})
         closed = [c for c in calls if c[0] == rid and c[1].startswith("request ")]
         assert closed and closed[-1][2] is None, "a closed request withdraws everything"
 
@@ -388,38 +388,38 @@ class TestContactPages:
         rid, _ = open_request(app, seeded)
         raw = self._token(app, rid, seeded.contact_id)
         owner, csrf = client_for(app, seeded.owner_id)
-        owner.post(f"/sos/{rid}/decline", data={"csrf_token": csrf, "pin": PIN})
-        assert TestClient(app).get(f"/c/{raw}").status_code == 404, "revoked on decline"
+        call(owner, csrf, "POST", f"/sos/{rid}/answer", {"action": "decline", "pin": PIN})
+        assert TestClient(app).get(f"/api/v2/contact-page/{raw}").status_code == 404,             "revoked on decline"
         rid2, _ = open_request(app, seeded, state="DISPATCHED")
         raw2 = self._token(app, rid2, seeded.contact_id)
         desk, dcsrf = client_for(app, seeded.operator_id, totp=True)
-        desk.post(f"/desk/requests/{rid2}/resolve", data={"csrf_token": dcsrf,
-                                                          "outcome": "no_action_needed"})
+        call(desk, dcsrf, "POST", f"/desk/requests/{rid2}/resolve",
+             {"outcome": "no_action_needed"})
         with app.state.db.session() as db:
             token = db.query(ActionToken).filter_by(token_hash=digest(app, raw2)).one()
             limit = utcnow() + timedelta(seconds=7200)
             assert portal_sos._aware(token.expires_at) <= limit + timedelta(seconds=5)
             token.expires_at = utcnow() - timedelta(seconds=1)
-        assert TestClient(app).get(f"/c/{raw2}").status_code == 404
-        assert TestClient(app).get("/c/garbage").status_code == 404
+        assert TestClient(app).get(f"/api/v2/contact-page/{raw2}").status_code == 404
+        assert TestClient(app).get("/api/v2/contact-page/garbage").status_code == 404
 
 
 # ── the device proxy while the device is offline ──────────────────────────────
 class TestOfflineProxy:
-    def test_pages_show_the_mirror_and_apis_say_offline(self, portal):
+    def test_pages_go_to_the_app_and_apis_say_offline(self, portal):
         app, seeded, _ = portal
         rid, incident = open_request(app, seeded)
         owner, csrf = client_for(app, seeded.owner_id)
         page = owner.get(f"/d/{seeded.device_id}/events", headers={"accept": "text/html"})
-        assert page.status_code == 503 and "is offline" in page.text
-        assert f'data-incident="{incident}"' in page.text and f"/sos/{rid}" in page.text
-        assert no_inline_script(page.text)
+        assert page.status_code == 303 and page.headers["location"] == f"/live/{seeded.device_id}"
+        mirror = owner.get(f"/api/v2/devices/{seeded.device_id}/mirror").json()
+        assert mirror["online"] is False and mirror["incidents"][0]["id"] == incident
+        assert [r["id"] for r in mirror["requests"]] == [rid]
         api = owner.get(f"/d/{seeded.device_id}/api/health")
         assert api.status_code == 503 and api.json()["code"] == "device_offline"
         assert owner.get(f"/d/{seeded.device_id}/video").status_code == 503
-        assert owner.get(f"/d/{seeded.device_id}/login").status_code == 404
         root = owner.get(f"/d/{seeded.device_id}/")
-        assert root.headers["location"] == f"/d/{seeded.device_id}/dashboard"
+        assert root.headers["location"] == f"/live/{seeded.device_id}"
 
     def test_verdicts_are_queued_without_the_pin(self, portal):
         from sentrix_portal.models import DeviceCommand
@@ -446,24 +446,24 @@ class TestOfflineProxy:
         assert stranger.get(f"/d/{uuid.uuid4()}/api/health").status_code == 404
         assert stranger.get("/d/not-a-uuid/api/health").status_code == 404
         desk, _ = client_for(app, seeded.operator_id, totp=True)
-        assert desk.get(f"/d/{seeded.device_id}/live").status_code == 403, \
+        assert desk.get(f"/d/{seeded.device_id}/api/health").status_code == 403, \
             "the Desk sees a home only while its request is on the help path"
         _rid, incident = open_request(app, seeded, state="DISPATCHED")
         assert desk.get(f"/d/{seeded.device_id}/api/health").status_code == 503, \
             "allowed now (and the device is offline)"
-        assert desk.get(f"/d/{seeded.device_id}/events").status_code == 403, \
+        assert desk.get(f"/d/{seeded.device_id}/api/incidents").status_code == 403, \
             "the Desk may view the live console only"
         token = login(app, seeded.operator_id, totp=True)
         desk.cookies.set("portal_session", token[0])
         assert desk.post(f"/d/{seeded.device_id}/api/mode", json={"armed": False},
                          headers={"X-CSRF-Token": token[1]}).status_code == 403
-        offline = desk.get(f"/d/{seeded.device_id}/live", headers={"accept": "text/html"})
-        assert offline.status_code == 503 and incident not in offline.text, \
+        offline = desk.get(f"/api/v2/devices/{seeded.device_id}/mirror")
+        assert offline.status_code == 200 and offline.json()["incidents"] == [], \
             "no incident history for the Desk"
         anonymous = TestClient(app, follow_redirects=False)
         bookmark = anonymous.get(f"/d/{seeded.device_id}/dashboard",
                                  headers={"accept": "text/html"})
-        assert bookmark.status_code == 303 and bookmark.headers["location"].split("?")[0] == "/login"
+        assert bookmark.status_code == 303 and bookmark.headers["location"] == f"/live/{seeded.device_id}", "the app signs in"
         assert anonymous.get(f"/d/{seeded.device_id}/api/health").status_code == 401
 
     def test_the_state_relay_needs_a_session_and_the_same_origin(self, portal):

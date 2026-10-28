@@ -4,16 +4,17 @@ The whole product runs here: the Portal app on a temporary SQLite database,
 a device (the Local Console app with a fake pipeline, the real SOS engine on
 an injected clock, the real link client and a fake modem), the device link
 over an in-memory pipe into the Portal's real hub, and fake Telegram and
-e-mail transports on the Portal. Browsers are ASGI clients. See
+e-mail transports on the Portal. Browsers are ASGI clients that drive the app's JSON API (/api/v2). See
 ``tests/e2e/world.py``.
 
 Covered: provisioning -> welcome letter -> single-use activation -> the
 seven-step wizard with the contact's confirmation -> device claim -> link
-online -> tunnelled console parity on every LC page -> an L3 weapon request
+online -> the tunnel (device APIs forwarded, console pages handed to the
+app's /live page) -> an L3 weapon request
 from DRAFTED to CLOSED with the Desk, and the decline (PIN), expiry,
 "Request help now", safety-default, duress, device-offline, internet-down and
 cross-household paths, answers from Telegram buttons and e-mail action links,
-hostile text on every page, the admin's view of credentials and test mode.
+hostile text as JSON data only, the admin's view of credentials and test mode.
 
 Nothing is sent: every transport is a fake and the conftest socket guard
 records any attempt to leave the machine (asserted empty per test).
@@ -27,7 +28,7 @@ import pytest
 
 from e2e.world import (CONTACT_EMAIL, CONTACT_PHONE, DESK_PHONE, DURESS_PIN, OWNER_CHAT,
                        OWNER_EMAIL, OWNER_PHONE, PASSWORD, SOS_PIN, activate, build_world,
-                       dom_ids, onboard, profile_ready, provision,
+                       onboard, profile_ready, provision,
                        ready_world, staff, teardown_world, wait_for)
 
 
@@ -100,11 +101,11 @@ def test_product_flow_end_to_end(world):
     # 3. activation: single use, then the password is set
     owner = activate(world, facts)
     again = world.browser(ip="203.0.113.11")
-    again.get("/activate")
-    reused = again.post("/activate", {"username": "riya", "code": facts["activation"],
-                                      "password": "another good phrase",
-                                      "password_confirm": "another good phrase"})
-    assert reused.status_code == 400, "an activation code works once"
+    again.session()
+    reused = again.call("POST", "/auth/activate", {
+        "username": "riya", "code": facts["activation"], "password": "another good phrase",
+        "password_confirm": "another good phrase"})
+    assert reused.status_code == 422, "an activation code works once"
     with world.db() as db:
         user = db.query(User).filter_by(username="riya").one()
         assert user.status == "active" and security.verify_password(user.password_hash,
@@ -147,10 +148,13 @@ def test_product_flow_end_to_end(world):
     world.tg.sent.clear()
     world.mail.sent.clear()
 
-    # 5. the console through the tunnel (parity is its own test below)
+    # 5. the device through the tunnel: its APIs answer, its pages are the app's
+    health = owner.get(f"/d/{facts['device_id']}/api/health")
+    assert health.status_code == 200 and health.headers["content-type"].startswith(
+        "application/json")
     dashboard = owner.get(f"/d/{facts['device_id']}/dashboard")
-    assert dashboard.status_code == 200 and f'data-base="/d/{facts["device_id"]}"' in \
-        dashboard.text
+    assert dashboard.status_code == 303
+    assert dashboard.headers["location"] == f"/live/{facts['device_id']}"
 
     # 6. L3 weapon: DRAFTED -> PENDING, text pre-filled from the profile
     incident_id = world.trigger("weapon", 3)
@@ -188,12 +192,12 @@ def test_product_flow_end_to_end(world):
              what="delivery feedback reached the device")
 
     # 8. the owner approves on the Portal: APPROVED -> DISPATCHED
-    page = owner.get(f"/sos/{rid}")
-    assert page.status_code == 200 and "Do you need assistance?" in page.text
-    assert f'href="tel:{DESK_PHONE}"' in page.text and "tel:112" not in page.text
-    approved = owner.post(f"/sos/{rid}/approve", {"authority": "POLICE"})
-    assert approved.status_code == 303 and approved.headers["location"].endswith("m=ok"), \
-        approved.headers.get("location")
+    page = owner.call("GET", f"/sos/{rid}")
+    assert page.status_code == 200 and page.json()["request"]["state"] == "PENDING"
+    assert page.json()["call"]["href"] == f"tel:{DESK_PHONE}" and "tel:112" not in page.text
+    approved = owner.call("POST", f"/sos/{rid}/answer",
+                          {"action": "approve", "authority": "POLICE"})
+    assert approved.status_code == 200, approved.text
     wait_for(lambda: device_state(world, rid) == "DISPATCHED", what="DISPATCHED on the device")
     mirrored(world, rid, "DISPATCHED")
     world.pump_portal()
@@ -204,17 +208,17 @@ def test_product_flow_end_to_end(world):
 
     # 9. the Desk acknowledges and resolves; the verdict becomes TRUE
     desk = staff(world, "desk1", "operator")
-    queue = desk.get("/desk/api/queue", headers={"accept": "application/json"}).json()
+    queue = desk.call("GET", "/desk/queue").json()
     assert [c["id"] for c in queue["requests"]] == [rid]
-    card = desk.get(f"/desk/requests/{rid}")
-    assert card.status_code == 200 and "Mall Road" in card.text
-    ack = desk.post(f"/desk/requests/{rid}/acknowledge")
-    assert ack.status_code == 303 and ack.headers["location"].endswith("m=ok")
+    card = desk.call("GET", f"/desk/requests/{rid}")
+    assert card.status_code == 200 and "Mall Road" in card.json()["address"]
+    ack = desk.call("POST", f"/desk/requests/{rid}/acknowledge")
+    assert ack.status_code == 200, ack.text
     wait_for(lambda: device_state(world, rid) == "ACKNOWLEDGED", what="ACKNOWLEDGED")
     mirrored(world, rid, "ACKNOWLEDGED")
-    resolved = desk.post(f"/desk/requests/{rid}/resolve",
+    resolved = desk.call("POST", f"/desk/requests/{rid}/resolve",
                          {"outcome": "real_threat", "note": "simulated"})
-    assert resolved.headers["location"].endswith("m=ok"), resolved.headers["location"]
+    assert resolved.status_code == 200, resolved.text
     wait_for(lambda: device_state(world, rid) == "CLOSED", what="CLOSED on the device")
     mirrored(world, rid, "CLOSED")
     final = world.device_request(rid)
@@ -232,73 +236,28 @@ def test_product_flow_end_to_end(world):
     assert "resolved" in closed, "the owner hears it was closed"
 
 
-# ── parity: every console page, directly and through the tunnel ──────────────
-def _routes(routes, prefix=""):
-    """(path, methods) of every HTTP route, through included routers."""
-    for route in routes:
-        inner = getattr(route, "original_router", None)
-        if inner is not None:                      # FastAPI >= 0.140 include wrapper
-            context = getattr(route, "include_context", None)
-            yield from _routes(inner.routes, prefix + (getattr(context, "prefix", "") or ""))
-        elif getattr(route, "methods", None):
-            yield prefix + route.path, route.methods
+# ── the tunnel: device APIs forwarded, console pages drawn by the app ───────
+#: Paths that used to be console pages: the app's /live/<id> draws them now.
+CONSOLE_PAGES = ("/dashboard", "/live", "/events", "/alerts", "/evidence", "/dispatch",
+                 "/sos", "/authorized", "/node")
 
 
-def lc_page_routes(app) -> set[str]:
-    """Every HTML page the Local Console serves to a signed-in user."""
-    skip = ("/api/", "/media/", "/static", "/setup", "/video", "/ws/")
-    return {path for path, methods in _routes(app.routes)
-            if "GET" in methods and not path.startswith(skip) and "{" not in path
-            and path not in ("/login", "/logout", "/")}
-
-
-#: Controls only the device admin on the LAN has: signing out of the LC
-#: session and the disclosed scripted trigger (docs/7 §9.2). The training
-#: recordings card (D20) renders for the owner too, with the same ids; only
-#: its Download and Delete buttons stay on the LAN (drawn by its script).
-LAN_ONLY_IDS = frozenset({"logout-link", "sos-demo-trigger", "sos-demo-trigger-box",
-                          "sos-demo-trigger-type"})
-
-
-def test_tunnel_parity_on_every_console_page(world):
-    from fastapi.testclient import TestClient
-    from sentrix.link import policy
-    from sentrix.web import auth
-    from sentrix.web.security import generate_token
-    from e2e.world import LC_PASSWORD
+def test_the_tunnel_forwards_apis_and_hands_pages_to_the_app(world):
     owner = ready_world(world)
     device_id = world.facts["device_id"]
     base = f"/d/{device_id}"
-    pages = lc_page_routes(world.lc)
-    assert pages == set(policy.PAGES) - {"/"}, \
-        "a console page is missing from the tunnel table (or the reverse)"
-    world.trigger("weapon", 3)                     # an SOS card on the pages too
-    cookie = generate_token(LC_PASSWORD)
-    direct = TestClient(world.lc, follow_redirects=False)
-    direct.cookies.set("lc_session", cookie)
-    for path in sorted(pages):
-        lan = direct.get(path, headers={"accept": "text/html"})
-        remote = owner.get(base + path)
-        assert lan.status_code == remote.status_code == 200, (path, lan.status_code,
-                                                              remote.status_code)
-        lan_ids, remote_ids = dom_ids(lan.text), dom_ids(remote.text)
-        assert lan_ids - LAN_ONLY_IDS == remote_ids, (path, sorted(lan_ids ^ remote_ids))
-        assert len(remote_ids) > 5, path
-        # production CSP and CSRF on both sides, the URLs under the base
-        for response in (lan, remote):
-            csp = response.headers["content-security-policy"]
-            assert "script-src 'self' 'nonce-" in csp and "unsafe-inline" not in \
-                csp.split("script-src")[1].split(";")[0]
-            assert re.search(r'<meta name="csrf-token" content="[^"]+">', response.text)
-        assert f'data-base="{base}"' in remote.text and 'data-base=""' in lan.text
-        # The tunnelled nav links back to the Portal's own pages on purpose.
-        hrefs = [h for h in re.findall(r'(?:href|src|action)="(/[^"]*)"', remote.text)
-                 if h not in ("/home", "/desk", "/account")]
-        assert hrefs and all(h.startswith(base + "/") for h in hrefs), \
-            (path, [h for h in hrefs if not h.startswith(base + "/")][:5])
-    # The tunnel refuses what is never tunnelled.
-    for path in ("/login", "/logout", "/setup/wifi", "/docs", "/openapi.json"):
-        assert owner.get(base + path).status_code in (403, 404), path
+    for path in ("", "/", *CONSOLE_PAGES, "/login", "/docs", "/openapi.json"):
+        response = owner.get(base + path)
+        assert response.status_code == 303, (path, response.status_code)
+        assert response.headers["location"] == f"/live/{device_id}", path
+    health = owner.get(base + "/api/health")
+    assert health.status_code == 200 and health.json()
+    assert health.headers["cache-control"] == "no-store"
+    # Never tunnelled, whatever the user asks.
+    for path in ("/setup/wifi", "/api/../setup/wifi"):
+        assert owner.get(base + path).status_code in (303, 403, 404), path
+    stranger = world.browser(ip="192.0.2.50")
+    assert stranger.get(base + "/api/health").status_code == 401
 
 
 # ── helpers for the scenarios ─────────────────────────────────────────────────
@@ -355,19 +314,20 @@ def test_decline_with_the_pin_cancels_the_package(world):
     mirrored(world, rid, "PENDING")
     assert package_of(world.device_request(rid))["status"] == "PENDING"
 
-    wrong = owner.post(f"/sos/{rid}/decline", {"pin": "000000"})
-    assert wrong.headers["location"].endswith("m=pin_invalid"), wrong.headers["location"]
+    wrong = owner.call("POST", f"/sos/{rid}/answer", {"action": "decline", "pin": "000000"})
+    assert wrong.status_code == 422 and wrong.json()["error"]["fields"] == {
+        "pin": "That PIN is not right."}, wrong.text
     assert device_state(world, rid) == "PENDING", "a wrong PIN changes nothing"
 
-    done = owner.post(f"/sos/{rid}/decline", {"pin": SOS_PIN})
-    assert done.headers["location"].endswith("m=ok"), done.headers["location"]
+    done = owner.call("POST", f"/sos/{rid}/answer", {"action": "decline", "pin": SOS_PIN})
+    assert done.status_code == 200, done.text
     request = world.device_request(rid)
     assert request["state"] == "DECLINED"
     assert package_of(request)["status"] == "CANCELLED"
     assert verdict_of(incident_id) == "FALSE"
     mirrored(world, rid, "DECLINED")
-    page = owner.get(f"/sos/{rid}")
-    assert "Marked as false alarm" in page.text
+    page = owner.call("GET", f"/sos/{rid}").json()
+    assert page["request"]["label"] == "Marked as false alarm"
     assert requests.verify_chain(rid)["ok"]
     with world.db() as db:
         stored = [repr(c.args) for c in db.query(DeviceCommand).all()]
@@ -409,13 +369,13 @@ def test_unanswered_request_expires_and_help_now_opens_a_linked_request(world):
     assert {"t0", "lapse", "lapsed"} <= reminders, reminders
     lapsed = sent_to(world, OWNER_EMAIL, "lapsed")[0]
     assert "unanswered" in lapsed and "Nobody was told the home is safe" in lapsed
-    page = owner.get(f"/sos/{rid}")
-    assert "Unanswered" in page.text
+    page = owner.call("GET", f"/sos/{rid}").json()
+    assert page["request"]["label"] == "Unanswered"
 
-    help_now = owner.post(f"/sos/{rid}/help_now", {"authority": "POLICE"})
-    assert help_now.status_code == 303 and "m=ok" in help_now.headers["location"], \
-        help_now.headers["location"]
-    new_id = help_now.headers["location"].split("/sos/")[1].split("?")[0]
+    help_now = owner.call("POST", f"/sos/{rid}/answer",
+                          {"action": "help_now", "authority": "POLICE"})
+    assert help_now.status_code == 200, help_now.text
+    new_id = help_now.json()["request_id"]
     assert new_id != rid
     linked = world.device_request(new_id)
     assert linked["parent_request_id"] == rid
@@ -441,8 +401,8 @@ def test_safety_defaults_alert_confirmed_contacts(world):
     assert request["state"] == "PENDING" and request["urgency"] == "HIGH"
 
     # Close it, then a confirmed fire: contacts at T+2 min, not before.
-    assert owner.post(f"/sos/{rid}/decline", {"pin": SOS_PIN}).headers["location"] \
-        .endswith("m=ok")
+    assert owner.call("POST", f"/sos/{rid}/answer",
+                      {"action": "decline", "pin": SOS_PIN}).status_code == 200
     world.tg.sent.clear()
     world.mail.sent.clear()
     world.trigger("fire", 3)
@@ -466,13 +426,14 @@ def test_duress_pin_looks_like_a_false_alarm_but_sends_help(world):
     world.trigger("weapon", 3)
     rid = rid_of(world)
     mirrored(world, rid, "PENDING")
-    done = owner.post(f"/sos/{rid}/decline", {"pin": DURESS_PIN})
-    assert done.headers["location"].endswith("m=ok"), done.headers["location"]
+    done = owner.call("POST", f"/sos/{rid}/answer", {"action": "decline", "pin": DURESS_PIN})
+    assert done.status_code == 200 and done.json()["message"] == "Done.", done.text
     request = world.device_request(rid)
     assert request["state"] in ("APPROVED", "DISPATCHED") and request["flags"].get("duress")
     mirrored(world, rid, "DISPATCHED")
-    page = owner.get(f"/sos/{rid}")
-    assert "Marked as false alarm" in page.text and "duress" not in page.text.lower()
+    page = owner.call("GET", f"/sos/{rid}")
+    assert page.json()["request"]["label"] == "Marked as false alarm"
+    assert "duress" not in page.text.lower()
     restricted = [e for e in requests.events(rid, include_restricted=True) if e["restricted"]]
     assert restricted and restricted[0]["detail"].get("duress")
     assert all(not e.get("restricted") for e in requests.events(rid))
@@ -485,12 +446,12 @@ def test_duress_pin_looks_like_a_false_alarm_but_sends_help(world):
     assert not [t for t in sent_to(world, OWNER_EMAIL) + sent_to(world, f"tg:{OWNER_CHAT}")
                 if "DURESS" in t.upper()], "the owner's channels never say duress"
     desk = staff(world, "desk1", "operator")
-    queue = desk.get("/desk/api/queue", headers={"accept": "application/json"}).json()
+    queue = desk.call("GET", "/desk/queue").json()
     assert [c["id"] for c in queue["requests"]] == [rid]
-    card = desk.get(f"/desk/requests/{rid}")
-    assert f"Do not go to the home. Call {DESK_PHONE}." in card.text
+    card = desk.call("GET", f"/desk/requests/{rid}")
+    assert card.json()["request"]["banner"] == f"Do not go to the home. Call {DESK_PHONE}."
     assert "Call 112." not in card.text
-    view = owner.get(f"/sos/api/requests/{rid}", headers={"accept": "application/json"})
+    view = owner.call("GET", f"/sos/{rid}")
     assert view.status_code == 200 and "duress" not in view.text.lower()
     shown = [e["event"] for e in view.json()["events"]]
     assert "decline" in shown and "approve" not in shown,         "the owner's timeline reads as the decline the screen shows"
@@ -520,10 +481,13 @@ def test_device_offline_mid_request_hands_authority_to_the_cloud(world):
     assert sent_to(world, CONTACT_EMAIL, "contacts_t0")
 
     # The owner answers while the device is away: the cloud decides.
-    page = owner.get(f"/d/{world.facts['device_id']}/dashboard")
-    assert page.status_code in (502, 503, 504) or "offline" in page.text.lower()
-    approved = owner.post(f"/sos/{rid}/approve", {"authority": "POLICE"})
-    assert approved.headers["location"].endswith("m=ok"), approved.headers["location"]
+    page = owner.get(f"/d/{world.facts['device_id']}/api/health")
+    assert page.status_code == 503 and "offline" in page.text.lower()
+    mirror = owner.call("GET", f"/devices/{world.facts['device_id']}/mirror").json()
+    assert mirror["online"] is False and [r["id"] for r in mirror["requests"]] == [rid]
+    approved = owner.call("POST", f"/sos/{rid}/answer",
+                          {"action": "approve", "authority": "POLICE"})
+    assert approved.status_code == 200, approved.text
     assert world.mirror_state(rid) in ("APPROVED", "DISPATCHED")
     world.run_cloud_timers(later=1)
     assert world.mirror_state(rid) == "DISPATCHED"
@@ -543,7 +507,7 @@ def test_device_offline_mid_request_hands_authority_to_the_cloud(world):
         assert portal_sos.verify_chains(db, rid)["ok"]
     # the device carries on from here: the Desk closes it on the device
     desk = staff(world, "desk1", "operator")
-    assert desk.post(f"/desk/requests/{rid}/acknowledge").headers["location"].endswith("m=ok")
+    assert desk.call("POST", f"/desk/requests/{rid}/acknowledge").status_code == 200
     wait_for(lambda: device_state(world, rid) == "ACKNOWLEDGED", what="ACK on the device")
 
 
@@ -604,41 +568,36 @@ def test_a_second_household_cannot_reach_the_first(world):
     other = add_household(world.app, code="SX-0099", owner="other", email="o@example.com",
                           phone="+919811111111", complete=True)
     stranger = world.browser(ip="192.0.2.99")
-    assert stranger.login("other").status_code == 303
+    assert stranger.login("other").status_code == 200
     with world.db() as db:
         contact_id = db.query(EmergencyContact).filter_by(
             household_id=world.facts["household_id"]).one().id
 
-    for path in (f"/d/{device_id}/dashboard", f"/d/{device_id}/live",
-                 f"/d/{device_id}/api/health", f"/d/{device_id}/sos",
-                 f"/sos/{rid}", f"/sos/api/requests/{rid}", f"/sos/{rid}/snapshot.jpg"):
+    for path in (f"/d/{device_id}/api/health", f"/d/{device_id}/api/sos",
+                 f"/api/v2/sos/{rid}", f"/api/v2/sos/{rid}/snapshot.jpg",
+                 f"/api/v2/devices/{device_id}/mirror"):
         response = stranger.get(path)
         assert response.status_code in (403, 404), (path, response.status_code)
         assert "Mall Road" not in response.text and "Riya" not in response.text, path
-    assert stranger.get("/sos/api/open", headers={"accept": "application/json"}).json() == \
-        {"requests": []}
-    stranger.get("/home")
-    for action, data in (("approve", {"authority": "POLICE"}), ("decline", {"pin": SOS_PIN}),
-                         ("help_now", {})):
-        response = stranger.post(f"/sos/{rid}/{action}", data)
-        assert response.status_code in (403, 404), (action, response.status_code)
+    assert stranger.call("GET", "/sos/open").json() == {"requests": []}
+    for body in ({"action": "approve", "authority": "POLICE"},
+                 {"action": "decline", "pin": SOS_PIN}, {"action": "help_now"}):
+        response = stranger.call("POST", f"/sos/{rid}/answer", body)
+        assert response.status_code in (403, 404), (body, response.status_code)
     tunnelled = stranger.api("POST", f"/d/{device_id}/api/mode", json={"armed": True})
     assert tunnelled.status_code in (403, 404)
     assert device_state(world, rid) == "PENDING", "nothing the stranger did reached it"
     # the Desk card and queue are staff-only
-    assert stranger.get(f"/desk/requests/{rid}").status_code == 403
-    assert stranger.get("/desk/api/queue", headers={"accept": "application/json"}) \
-        .status_code == 403
+    assert stranger.call("GET", f"/desk/requests/{rid}").status_code == 403
+    assert stranger.call("GET", "/desk/queue").status_code == 403
     # the first household's contacts are not the stranger's
-    page = stranger.get("/household/contacts")
+    page = stranger.call("GET", "/household/contacts")
     assert page.status_code == 200 and contact_id not in page.text
-    removed = stranger.post("/household/contacts", {"action": "remove_contact",
-                                                    "contact_id": contact_id})
-    assert removed.status_code == 404
+    assert stranger.call("DELETE", f"/household/contacts/{contact_id}").status_code == 404
     with world.db() as db:
         assert db.get(EmergencyContact, contact_id).consent_status == "CONFIRMED"
     # the stranger's own device is not the first one, and vice versa
-    assert owner.get(f"/d/{other['device_id']}/dashboard").status_code in (403, 404)
+    assert owner.get(f"/d/{other['device_id']}/api/health").status_code in (403, 404)
 
 
 # ── the company never sees a password; staff never reach the console ─────────
@@ -649,28 +608,29 @@ def test_admin_never_sees_a_password_or_a_pin(world):
     household_id = world.facts["household_id"]
     with world.db() as db:
         hashed = db.query(User).filter_by(username="riya").one().password_hash
-    pages = [admin.get(p) for p in ("/admin", "/admin/customers",
-                                    f"/admin/customers/{household_id}", "/admin/devices",
-                                    "/admin/audit")]
+    pages = [admin.call("GET", p) for p in ("/admin/overview", "/admin/customers",
+                                            f"/admin/customers/{household_id}",
+                                            "/admin/devices", "/admin/audit")]
     for page in pages:
         assert page.status_code == 200, page.url
         for secret in (PASSWORD, hashed, SOS_PIN, DURESS_PIN, "$argon2"):
             assert secret not in page.text, (str(page.url), secret[:8])
     # "reset" re-sends an activation e-mail; the admin's page never shows the code
-    admin.get(f"/admin/customers/{household_id}")
-    reset = admin.post(f"/admin/customers/{household_id}/resend", {})
-    assert reset.status_code in (200, 303), reset.text[:300]
+    reset = admin.call("POST", f"/admin/customers/{household_id}/resend")
+    assert reset.status_code == 200, reset.text[:300]
     world.pump_portal()
     codes = [c for t in sent_to(world, OWNER_EMAIL) for c in
              __import__("re").findall(r"[A-Z]{4}-[A-Z]{4}-[A-Z]{4}", t)]
     assert codes, "the owner got a fresh activation code"
-    follow = admin.get(f"/admin/customers/{household_id}")
+    follow = admin.call("GET", f"/admin/customers/{household_id}")
     assert not any(code in follow.text or code in reset.text for code in codes)
     # staff are not tunnel roles
     device_id = world.facts["device_id"]
-    assert admin.get(f"/d/{device_id}/dashboard").status_code == 403
+    assert admin.get(f"/d/{device_id}/api/health").status_code == 403
     desk = staff(world, "desk1", "operator")
-    assert desk.get(f"/d/{device_id}/events").status_code in (403, 404)
+    assert desk.get(f"/d/{device_id}/api/health").status_code in (403, 404), \
+        "the Desk only while a request is on the help path"
+
     # the profile on the device never carries Portal credentials
     pushed = repr(profile_ready(world))
     assert hashed not in pushed and "password" not in pushed
@@ -700,10 +660,12 @@ def test_test_mode_refuses_live_sends(world):
     assert not guard.may_send("modem_sms", "+919800000000", policy=on)
     assert guard.may_send("modem_sms", OWNER_PHONE, policy=on)
     assert not guard.may_send("modem_sms", OWNER_PHONE, policy=guard.SendPolicy.from_env())
-    # Nothing on any page offers 112 as a link in test mode.
-    for path in (f"/sos/{rid}", "/home", f"/d/{world.facts['device_id']}/sos"):
-        page = owner.get(path)
+    # Nothing the app is given offers 112 as a link in test mode.
+    for path in (f"/sos/{rid}", "/home", "/session"):
+        page = owner.call("GET", path)
+        assert page.status_code == 200, path
         assert "tel:112" not in page.text and "sms:112" not in page.text, path
+    assert owner.call("GET", f"/sos/{rid}").json()["call"]["href"] == f"tel:{DESK_PHONE}" 
 
 
 # ── hostile text stays inert on the Desk, the SOS page and the console ───────
@@ -730,18 +692,25 @@ def test_xss_in_household_data_is_inert_everywhere(world):
     rid = rid_of(world)
     assert "<script>" in world.device_request(rid)["sos_text_full"], "the text carries it"
     mirrored(world, rid, "PENDING")
-    assert owner.post(f"/sos/{rid}/approve", {"authority": "POLICE"}).headers["location"] \
-        .endswith("m=ok")
+    assert owner.call("POST", f"/sos/{rid}/answer",
+                      {"action": "approve", "authority": "POLICE"}).status_code == 200
     mirrored(world, rid, "DISPATCHED")
     desk = staff(world, "desk1", "operator")
-    pages = [desk.get(f"/desk/requests/{rid}"), desk.get("/desk"), owner.get(f"/sos/{rid}"),
-             owner.get("/home"), owner.get("/household"),
-             owner.get(f"/d/{world.facts['device_id']}/sos"),
-             owner.get(f"/d/{world.facts['device_id']}/dashboard")]
-    for page in pages:
-        assert page.status_code == 200, page.url
-        assert "<script>alert(1)" not in page.text, page.url
-        assert "onerror=alert(2)>" not in page.text, page.url
+    # Hostile text travels only as JSON data (the app renders it as text, its
+    # CSP allows no inline script): never as markup in a page the server draws.
+    answers = [desk.call("GET", f"/desk/requests/{rid}"), desk.call("GET", "/desk/queue"),
+               owner.call("GET", f"/sos/{rid}"), owner.call("GET", "/home"),
+               owner.call("GET", "/household"),
+               owner.get(f"/d/{world.facts['device_id']}/api/sos")]
+    for answer in answers:
+        assert answer.status_code == 200, answer.url
+        assert answer.headers["content-type"].startswith("application/json"), answer.url
+    assert any(XSS == answer.json().get("values", {}).get("landmark")
+               for answer in answers[4:5]), "stored as typed, shown as text"
+    app_page = owner.get("/household", headers={"accept": "text/html"})
+    assert "<script>alert(1)" not in app_page.text and "onerror=alert(2)" not in app_page.text
+    csp = app_page.headers["content-security-policy"]
+    assert "unsafe-inline" not in csp.split("script-src")[1].split(";")[0]
 
 
 # ── answers from Telegram buttons and e-mail action links ────────────────────
@@ -766,14 +735,17 @@ def test_owner_answers_from_telegram_and_the_email_link(world):
     token = [m for t in sent_to(world, OWNER_EMAIL, "t0")
              for m in re.findall(r"/a/([A-Za-z0-9_\-]+)", t)][0]
     stranger_mail = world.browser(ip="203.0.113.77")
-    page = stranger_mail.get(f"/a/{token}")
+    page = stranger_mail.call("GET", f"/action/{token}")
     assert page.status_code == 200 and device_state(world, rid) == "PENDING"
-    forged = world.browser(ip="203.0.113.78").post(f"/a/{token}", {"action": "approve"})
+    stranger_mail.csrf = page.json()["csrf_token"]
+    forged = world.browser(ip="203.0.113.78").call("POST", f"/action/{token}",
+                                                    {"action": "approve"})
     assert forged.status_code == 403, "no CSRF, no action"
-    done = stranger_mail.post(f"/a/{token}", {"action": "approve", "authority": "POLICE"})
+    done = stranger_mail.call("POST", f"/action/{token}",
+                              {"action": "approve", "authority": "POLICE"})
     assert done.status_code == 200, done.text[:300]
     wait_for(lambda: device_state(world, rid) == "DISPATCHED", what="approved by link")
-    again = stranger_mail.post(f"/a/{token}", {"action": "approve"})
+    again = stranger_mail.call("POST", f"/action/{token}", {"action": "approve"})
     assert again.status_code == 404, "the link is single use"
     telegram_press(world, buttons["approve"])          # a late tap is idempotent
     assert events_of(rid).count("approve") == 1 and device_state(world, rid) == "DISPATCHED"

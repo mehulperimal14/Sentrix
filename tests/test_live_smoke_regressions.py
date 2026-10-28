@@ -55,7 +55,7 @@ def _asgi_call(app, method: str, path: str, *, body: bytes = b"", headers=(),
 
 
 def test_the_sign_in_session_exists_before_the_redirect_is_sent(portal_app):
-    from urllib.parse import urlencode
+    import json
 
     from sentrix_portal.models import UserSession
     from test_acct_support import PASSWORD, add_user
@@ -67,14 +67,13 @@ def test_the_sign_in_session_exists_before_the_redirect_is_sent(portal_app):
         with portal_app.state.db.session() as db:      # another connection
             seen.append(db.query(UserSession).count())
 
-    body = urlencode({"username": "riya", "password": PASSWORD,
-                      "csrf_token": token}).encode()
-    messages = _asgi_call(portal_app, "POST", "/login", body=body, headers=[
-        (b"content-type", b"application/x-www-form-urlencoded"),
-        (b"accept", b"text/html"), (b"cookie", f"portal_csrf={token}".encode())],
+    body = json.dumps({"username": "riya", "password": PASSWORD}).encode()
+    messages = _asgi_call(portal_app, "POST", "/api/v2/auth/login", body=body, headers=[
+        (b"content-type", b"application/json"), (b"x-csrf-token", token.encode()),
+        (b"cookie", f"portal_csrf={token}".encode())],
         on_start=count_sessions)
     start = next(m for m in messages if m["type"] == "http.response.start")
-    assert start["status"] == 303, start
+    assert start["status"] == 200, start
     assert seen == [1], "the session row must be committed when the redirect leaves"
 
 

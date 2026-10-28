@@ -1011,18 +1011,20 @@ def _cloud_answer(db, row: AssistanceRequest, action: str, who, channel: str,
                           request_view(row, view))
         return result("ok", "", request_view(row, view))
     if action == "help_now":
-        if (row.flags or {}).get("duress"):
-            # Looks declined to the household: answer as a declined request
-            # would, and page the Desk and contacts again with the banner.
+        duress = bool((row.flags or {}).get("duress"))
+        if duress:
+            # Looks declined to the household, so it answers exactly as a
+            # declined request does (a new linked request, a new id), and the
+            # Desk and contacts are paged again with the banner.
             _cloud_event(db, row, S.NOTIFICATION, actor_type=actor_type, actor_id=actor_id,
                          channel=channel, restricted=True,
                          detail={"step": f"help_now{int(row.repage_count or 0) + 1}",
                                  "duress": True})
-            return result("ok", "Help requested", request_view(row, view))
-        if row.state not in (S.EXPIRED, S.DECLINED, S.CANCELLED):
+        elif row.state not in (S.EXPIRED, S.DECLINED, S.CANCELLED):
             return result("conflict", "this request is still open", request_view(row, view))
-        _cloud_event(db, row, S.HELP_REQUESTED_LATER, actor_type=actor_type,
-                     actor_id=actor_id, channel=channel)
+        else:
+            _cloud_event(db, row, S.HELP_REQUESTED_LATER, actor_type=actor_type,
+                         actor_id=actor_id, channel=channel)
         device = db.get(Device, row.device_id) if row.device_id else None
         new = create_cloud_request(db, device, row.household_id,
                                    incident_type=row.incident_type or "unknown",

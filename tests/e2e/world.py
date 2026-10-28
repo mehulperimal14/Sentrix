@@ -46,8 +46,6 @@ CONTACT_PHONE = "+919876543210"
 CONTACT_EMAIL = "arjun@example.com"
 DESK_PHONE = "+919812345699"
 
-CSRF_META = re.compile(r'<meta name="csrf-token" content="([^"]+)"')
-CSRF_INPUT = re.compile(r'name="csrf_token" value="([^"]+)"')
 #: A claim / setup code (8 letters), not a piece of a 12-letter activation code.
 CODE8 = re.compile(r"(?<![A-Z-])[B-DF-HJ-NP-TV-XZ]{4}-[B-DF-HJ-NP-TV-XZ]{4}(?![A-Z-])")
 DOM_ID = re.compile(r'\sid="([^"]+)"')
@@ -93,61 +91,62 @@ class LoopThread:
 
 
 class PortalBrowser:
-    """A browser on the Portal: cookies, the page's CSRF token on every form."""
+    """The Portal app in a browser: cookies, JSON through ``/api/v2`` with the
+    session's (or before sign-in the login) CSRF token as ``X-CSRF-Token``."""
 
     def __init__(self, world: "World", ip: str = "198.51.100.7") -> None:
         self.world = world
         transport = httpx.ASGITransport(app=world.app, client=(ip, 50000))
         self.client = httpx.AsyncClient(
             transport=transport, base_url="http://testserver", follow_redirects=False,
-            headers={"accept": "text/html,application/xhtml+xml"}, timeout=30)
+            headers={"accept": "application/json"}, timeout=30)
         self.csrf: str | None = None
         world.browsers.append(self)
 
-    def _remember(self, response) -> None:
-        if "text/html" in response.headers.get("content-type", ""):
-            found = CSRF_META.search(response.text) or CSRF_INPUT.search(response.text)
-            if found:
-                self.csrf = found.group(1)
-
     def request(self, method: str, path: str, **kwargs):
-        response = self.world.loop.run(self.client.request(method, path, **kwargs))
-        self._remember(response)
-        return response
+        return self.world.loop.run(self.client.request(method, path, **kwargs))
 
     def get(self, path: str, **kwargs):
+        """A raw GET (tunnel paths, images, the app's own pages)."""
         return self.request("GET", path, **kwargs)
 
-    def post(self, path: str, data: dict | None = None, *, csrf: bool = True, **kwargs):
-        body = dict(data or {})
-        if csrf and self.csrf and "csrf_token" not in body:
-            body["csrf_token"] = self.csrf
-        return self.request("POST", path, data=body, **kwargs)
-
-    def form(self, path: str, data: dict | None = None, **kwargs):
-        """GET the page (for its token), then POST to it."""
-        self.get(path)
-        return self.post(path, data, **kwargs)
-
     def api(self, method: str, path: str, **kwargs):
-        """A page script's fetch: JSON, the CSRF header."""
+        """A raw request with the CSRF header (the tunnelled device API)."""
         headers = {"accept": "application/json", **kwargs.pop("headers", {})}
         if self.csrf and method.upper() != "GET":
             headers["X-CSRF-Token"] = self.csrf
         return self.request(method, path, headers=headers, **kwargs)
 
+    def call(self, method: str, path: str, body: Any = None, *, csrf: bool = True):
+        """The app's JSON API: ``/api/v2`` + ``path``."""
+        headers = {}
+        if csrf and self.csrf and method.upper() != "GET":
+            headers["X-CSRF-Token"] = self.csrf
+        kwargs = {"json": body} if body is not None else {}
+        return self.request(method, "/api/v2" + path, headers=headers, **kwargs)
+
+    def session(self) -> dict:
+        data = self.call("GET", "/session").json()
+        self.csrf = data.get("csrf_token") or data.get("login_csrf_token")
+        return data
+
+    def signed_in(self, response) -> None:
+        if response.status_code == 200 and "session" in response.json():
+            self.csrf = response.json()["session"]["csrf_token"]
+
     def login(self, username: str, password: str = PASSWORD):
-        self.get("/login")
-        return self.post("/login", {"username": username, "password": password})
+        self.session()
+        response = self.call("POST", "/auth/login", {"username": username,
+                                                     "password": password})
+        self.signed_in(response)
+        return response
 
     def login_staff(self, username: str, secret: str, password: str = PASSWORD):
         import pyotp
         from sentrix_portal import security
         self.login(username, password)
         security._totp_last_step.clear()
-        self.get("/account/2fa")
-        return self.post("/account/2fa", {"action": "verify",
-                                          "code": pyotp.TOTP(secret).now()})
+        return self.call("POST", "/account/2fa/verify", {"code": pyotp.TOTP(secret).now()})
 
     async def aclose(self) -> None:
         await self.client.aclose()
@@ -530,13 +529,8 @@ def staff(world: World, username: str, role: str) -> PortalBrowser:
     secret = add_staff(world, username=username, role=role)
     browser = world.browser(ip="198.51.100.20")
     response = browser.login_staff(username, secret)
-    assert response.status_code == 303, response.text[:300]
+    assert response.status_code == 200, response.text[:300]
     return browser
-
-
-def parse_identity(label_html: str) -> dict:
-    raw = re.search(r'id="identity-json">(.*?)</pre>', label_html, re.S).group(1)
-    return json.loads(raw.replace("&#34;", '"').replace("&quot;", '"'))
 
 
 def provision(world: World, admin: PortalBrowser, *, username: str = "riya",
@@ -544,44 +538,40 @@ def provision(world: World, admin: PortalBrowser, *, username: str = "riya",
               phone: str = "98123 45610") -> dict:
     """Admin: provision a device, create the customer with it, print the
     welcome letter. Returns what the letter and the label carry."""
-    label = admin.form("/admin/devices", {"name": "Living room unit"})
-    assert label.status_code == 200 and label.headers["cache-control"] == "no-store"
-    identity = parse_identity(label.text)
-    created = admin.form("/admin/customers", {"name": name, "username": username,
-                                              "email": email, "phone": phone,
-                                              "city": "Patiala",
-                                              "serial": identity["serial"]})
-    assert created.status_code == 303, created.text[:500]
-    household_id = created.headers["location"].split("/")[3].split("?")[0]
-    admin.get(f"/admin/customers/{household_id}/letter")
-    letter = admin.post(f"/admin/customers/{household_id}/letter", {"new_claim_codes": "1"})
+    label = admin.call("POST", "/admin/devices", {"name": "Living room unit"})
+    assert label.status_code == 201 and label.headers["cache-control"] == "no-store"
+    identity = label.json()["identity"]
+    created = admin.call("POST", "/admin/customers", {
+        "name": name, "username": username, "email": email, "phone": phone,
+        "city": "Patiala", "serial": identity["serial"]})
+    assert created.status_code == 201, created.text[:500]
+    household_id = created.json()["id"]
+    letter = admin.call("POST", f"/admin/customers/{household_id}/letter",
+                        {"new_claim_codes": True})
     assert letter.status_code == 200 and letter.headers["cache-control"] == "no-store"
-    activation = re.search(r'class="code-big">([A-Z]{4}-[A-Z]{4}-[A-Z]{4})<',
-                           letter.text).group(1)
-    claim = CODE8.findall(letter.text)[0]
+    data = letter.json()
     return {"identity": identity, "household_id": household_id, "serial": identity["serial"],
-            "device_id": identity["device_id"], "activation": activation, "claim": claim,
-            "letter": letter.text, "username": username, "email": email}
+            "device_id": identity["device_id"], "activation": data["activation_code"],
+            "claim": data["devices"][0]["claim_code"], "letter": letter.text,
+            "username": username, "email": email}
 
 
 STEP1 = {"display_name": "Riya Sharma", "phone": "+91 98123 45610", "email": OWNER_EMAIL,
-         "language": "en", "adult": "1"}
+         "language": "en", "adult": True}
 STEP2 = {"house": "12-B", "building": "Green Park", "street": "Mall Road",
          "locality": "Sector 4", "landmark": "opposite the SBI ATM", "city": "Patiala",
          "district": "Patiala", "state": "Punjab", "pincode": "147001", "floor": "2",
-         "lat": "30.33980", "lon": "76.38690", "entry_note": "Gate 2, guard cabin on the left",
+         "lat": 30.3398, "lon": 76.3869, "entry_note": "Gate 2, guard cabin on the left",
          "police_name": "Civil Lines PS", "police_phone": "0175 2212345"}
-STEP3 = {"action": "save", "adults": "2", "children": "1", "seniors": "1",
-         "pets": "one dog", "medical": "", "medical_consent": ""}
-CONTACT = {"action": "add_contact", "name": "Arjun Sharma", "relation": "brother",
-           "phone": "98765 43210", "email": CONTACT_EMAIL, "priority": "1",
-           "can_reach_30min": "1"}
-STEP6 = {"action": "save", "window": "1800", "safety_defaults": "1", "channel_email": "1",
-         "channel_telegram": "1", "channel_sms": "1", "sos_pin": SOS_PIN,
-         "sos_pin_confirm": SOS_PIN, "duress_pin": DURESS_PIN,
+STEP3 = {"adults": 2, "children": 1, "seniors": 1, "pets": "one dog"}
+CONTACT = {"name": "Arjun Sharma", "relation": "brother", "phone": "98765 43210",
+           "email": CONTACT_EMAIL, "priority": 1, "can_reach_30min": True}
+STEP6 = {"window": 1800, "safety_defaults": True,
+         "channels": {"email": True, "telegram": True, "sms": True},
+         "sos_pin": SOS_PIN, "sos_pin_confirm": SOS_PIN, "duress_pin": DURESS_PIN,
          "duress_pin_confirm": DURESS_PIN}
-CONSENTS = {"consent_account_sos": "1", "consent_sos_snapshot": "1",
-            "consent_remote_view": "1", "consent_desk_live_view": "1"}
+CONSENTS = {"consent_account_sos": True, "consent_sos_snapshot": True,
+            "consent_remote_view": True, "consent_desk_live_view": True}
 
 
 def links_in(world: World, address: str, path: str) -> list[str]:
@@ -607,24 +597,24 @@ def queued_links(world: World, address: str, path: str) -> list[str]:
 
 def activate(world: World, facts: dict, password: str = PASSWORD) -> PortalBrowser:
     owner = world.browser(ip="203.0.113.10")
-    owner.get(f"/activate?u={facts['username']}")
-    done = owner.post("/activate", {"username": facts["username"],
-                                    "code": facts["activation"], "password": password,
-                                    "password_confirm": password})
-    assert done.status_code == 303 and done.headers["location"] == "/onboarding", done.text[:300]
+    owner.session()
+    done = owner.call("POST", "/auth/activate", {"username": facts["username"],
+                                                 "code": facts["activation"],
+                                                 "password": password,
+                                                 "password_confirm": password})
+    assert done.status_code == 200 and done.json()["next"] == "/onboarding", done.text[:300]
+    owner.signed_in(done)
     return owner
 
 
 def link_owner_telegram(world: World, owner: PortalBrowser, chat_id: int = OWNER_CHAT) -> None:
-    page = owner.post("/onboarding/6", {"action": "telegram"})
-    assert page.status_code == 200, page.text[:300]
-    code = re.search(r"/start ([A-Za-z0-9_\-]+)", page.text).group(1)
+    made = owner.call("POST", "/telegram/link-code")
+    assert made.status_code == 201, made.text[:300]
+    code = made.json()["code"]
     telegram_update(world, {"update_id": int(time.time() * 1000) % 10**9 + chat_id % 1000,
                             "message": {"message_id": 1, "text": f"/start {code}",
                                         "chat": {"id": chat_id, "type": "private"},
                                         "from": {"id": chat_id, "first_name": "Riya"}}})
-
-
 class _NoTelegramApi:
     """Inbound handling never needs the Bot API here; refuse loudly if it does."""
 
@@ -660,10 +650,15 @@ def telegram_press(world: World, button, chat_id: int = OWNER_CHAT) -> dict:
 def confirm_contact(world: World, address: str = CONTACT_EMAIL) -> None:
     token = queued_links(world, address, "/consent/")[-1]
     contact = world.browser(ip="203.0.113.50")
-    page = contact.get(f"/consent/{token}")
+    page = contact.call("GET", f"/consent/{token}")
     assert page.status_code == 200, page.text[:300]
-    done = contact.post(f"/consent/{token}", {"decision": "confirm"})
+    contact.csrf = page.json()["csrf_token"]
+    done = contact.call("POST", f"/consent/{token}", {"decision": "confirm"})
     assert done.status_code == 200, done.text[:300]
+
+
+def _next(response) -> str | None:
+    return response.json().get("next") if response.status_code == 200 else None
 
 
 def onboard(world: World, owner: PortalBrowser, facts: dict, *,
@@ -672,47 +667,39 @@ def onboard(world: World, owner: PortalBrowser, facts: dict, *,
     ``check(step, world)`` runs after each step (the scenario test asserts)."""
     from sentrix_portal.services import hub
     check = check or (lambda step, w: None)
-    owner.get("/onboarding/1")
-    assert owner.post("/onboarding/1", STEP1).headers["location"] == "/onboarding/2"
+    assert _next(owner.call("PUT", "/onboarding/1", STEP1)) == "/onboarding/2"
     check(1, world)
-    owner.get("/onboarding/2")
-    assert owner.post("/onboarding/2", STEP2).headers["location"] == "/onboarding/3"
+    assert _next(owner.call("PUT", "/onboarding/2", STEP2)) == "/onboarding/3"
     check(2, world)
-    owner.get("/onboarding/3")
-    step3 = owner.post("/onboarding/3", STEP3)
-    assert step3.headers.get("location") == "/onboarding/4", step3.text[:800]
+    step3 = owner.call("PUT", "/onboarding/3", STEP3)
+    assert _next(step3) == "/onboarding/4", step3.text[:800]
     check(3, world)
-    owner.get("/onboarding/4")
-    added = owner.post("/onboarding/4", CONTACT)
-    assert added.status_code == 200 and "/consent/" in added.text, added.text[:500]
+    added = owner.call("POST", "/household/contacts", CONTACT)
+    assert added.status_code == 201 and "/consent/" in added.json()["share_link"], \
+        added.text[:500]
     confirm_contact(world)
-    assert owner.post("/onboarding/4", {"action": "continue"}).headers["location"] == \
-        "/onboarding/5"
+    assert _next(owner.call("POST", "/onboarding/4")) == "/onboarding/5"
     check(4, world)
-    owner.get("/onboarding/5")
-    claimed = owner.post("/onboarding/5", {"action": "claim", "serial": facts["serial"],
-                                           "claim_code": facts["claim"]})
-    assert claimed.status_code == 200 and "is now yours" in claimed.text, claimed.text[:500]
+    claimed = owner.call("POST", "/onboarding/5/claim", {"serial": facts["serial"],
+                                                         "claim_code": facts["claim"]})
+    assert claimed.status_code == 200 and "is now yours" in claimed.json()["message"], \
+        claimed.text[:500]
     wait_for(lambda: hub.is_online(facts["device_id"]), timeout=15,
              what="the claimed device online on its token")
-    view = owner.get(f"/d/{facts['device_id']}/live")
+    view = owner.get(f"/d/{facts['device_id']}/api/health")
     assert view.status_code == 200, view.text[:300]
-    done5 = owner.post("/onboarding/5", {"action": "device", "device_id": facts["device_id"],
-                                         "name": "Living room unit",
-                                         "room_label": "Living room", "floor": "Ground",
-                                         "mode": "home", "view_checked": "1"})
-    assert done5.headers.get("location") == "/onboarding/6", done5.text[:500]
+    done5 = owner.call("PUT", f"/onboarding/5/devices/{facts['device_id']}",
+                       {"name": "Living room unit", "room_label": "Living room",
+                        "floor": "Ground", "mode": "home", "view_checked": True})
+    assert _next(done5) == "/onboarding/6", done5.text[:500]
     check(5, world)
-    owner.get("/onboarding/6")
     link_owner_telegram(world, owner)
-    owner.get("/onboarding/6")
-    done6 = owner.post("/onboarding/6", STEP6)
-    assert done6.headers.get("location") == "/onboarding/7", done6.text[:800]
+    done6 = owner.call("PUT", "/onboarding/6", STEP6)
+    assert _next(done6) == "/onboarding/7", done6.text[:800]
     check(6, world)
-    review = owner.get("/onboarding/7")
-    assert review.status_code == 200
-    finish = owner.post("/onboarding/7", CONSENTS)
-    assert finish.headers.get("location") == "/home?welcome=1", finish.text[:500]
+    assert owner.call("GET", "/onboarding/7").status_code == 200
+    finish = owner.call("PUT", "/onboarding/7", CONSENTS)
+    assert _next(finish) == "/home?welcome=1", finish.text[:500]
     check(7, world)
 
 

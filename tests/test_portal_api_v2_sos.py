@@ -338,3 +338,23 @@ def test_device_mirror(sos_world):
         "the Desk only while a request is on the help path"
     stranger = api_as(app, seeded.extra["stranger_id"])
     assert stranger.get(f"/devices/{seeded.device_id}/mirror").status_code == 404
+
+
+def test_help_now_after_duress_opens_a_new_request_like_a_decline(sos_world):
+    app, seeded, _ = sos_world
+    owner = api_as(app, seeded.owner_id)
+    real = open_request(app, seeded)
+    owner.post(f"/sos/{real}/answer", {"action": "decline", "pin": PIN})
+    real_later = owner.post(f"/sos/{real}/answer", {"action": "help_now"}).json()
+    coerced = open_request(app, seeded)
+    owner.post(f"/sos/{coerced}/answer", {"action": "decline", "pin": DURESS_PIN})
+    later = owner.post(f"/sos/{coerced}/answer", {"action": "help_now"})
+    assert later.status_code == 200
+    body = later.json()
+    assert body["request_id"] != coerced, "a new linked request, as after a real decline"
+    assert body["request"]["parent_request_id"] == coerced
+    assert body["request"]["state"] == real_later["request"]["state"] == "DISPATCHED"
+    assert [e["event"] for e in owner.get(f"/sos/{coerced}").json()["events"]] == \
+        [e["event"] for e in owner.get(f"/sos/{real}").json()["events"]]
+    desk = api_as(app, seeded.operator_id, totp=True)
+    assert desk.get(f"/desk/requests/{coerced}").json()["request"]["duress"] is True

@@ -144,7 +144,8 @@ def test_claim_tunnel_relays_sos_desk_end_to_end(world):
     assert session.headers["x-frame-options"] == "DENY"
     assert "script-src 'self';" in session.headers["content-security-policy"]
     shell = browser.get(f"/d/{device_id}/dashboard", headers={"accept": "text/html"})
-    assert shell.status_code == 404 and b'id="root"' not in shell.content
+    assert shell.status_code == 303 and shell.headers["location"] == f"/live/{device_id}", \
+        "console pages are the Portal app's /live page"
     who = browser.get(f"/d/{device_id}/api/test-whoami").json()
     assert who == {"role": "owner", "actor": f"portal:{seeded.owner_id}", "csrf": owner_csrf,
                    "base": f"/d/{device_id}", "cookies": [], "forwarded_for": None}
@@ -192,13 +193,14 @@ def test_claim_tunnel_relays_sos_desk_end_to_end(world):
     rid = request["id"]
     wait_for(lambda: mirror_state(app, rid) == "PENDING", timeout=15, what="PENDING mirrored")
     wait_for(lambda: ("owner", "telegram", "t0") in outbox.steps("owner"), what="owner prompt")
-    sos_page = browser.get(f"/sos/{rid}")
-    assert sos_page.status_code == 200 and "Do you need assistance?" in sos_page.text
+    sos_page = browser.get(f"/api/v2/sos/{rid}")
+    assert sos_page.status_code == 200 and sos_page.json()["request"]["state"] == "PENDING"
 
     # ── 7. the owner approves on the Portal: the device decides ───────────────
-    approved = browser.post(f"/sos/{rid}/approve", data={"csrf_token": owner_csrf,
-                                                         "authority": "POLICE"})
-    assert approved.status_code == 303 and approved.headers["location"].endswith("m=ok")
+    approved = browser.post(f"/api/v2/sos/{rid}/answer",
+                            json={"action": "approve", "authority": "POLICE"},
+                            headers={"X-CSRF-Token": owner_csrf})
+    assert approved.status_code == 200, approved.text
     wait_for(lambda: mirror_state(app, rid) == "DISPATCHED", timeout=15,
              what="approve applied on the device, delivered by the Desk queue")
     assert ("respond", rid, "approve", "owner", "portal", "POLICE", False) in sos.calls
@@ -209,14 +211,15 @@ def test_claim_tunnel_relays_sos_desk_end_to_end(world):
     desk_raw, desk_csrf = login(app, seeded.operator_id, totp=True)
     desk = httpx.Client(base_url=server.url, cookies={"portal_session": desk_raw}, timeout=15,
                         follow_redirects=False)
-    queue = desk.get("/desk/api/queue").json()
+    queue = desk.get("/api/v2/desk/queue").json()
     assert [c["id"] for c in queue["requests"]] == [rid] and queue["unacknowledged"] == 1
     assert desk.get(f"/d/{device_id}/api/metrics").status_code == 200
-    assert desk.get(f"/d/{device_id}/events").status_code in (403, 404), \
+    assert desk.get(f"/d/{device_id}/api/incidents").status_code in (403, 404), \
         "the Desk sees the live state only"
     assert desk.get(f"/d/{device_id}/api/session").status_code in (403, 404)
-    ack = desk.post(f"/desk/requests/{rid}/acknowledge", data={"csrf_token": desk_csrf})
-    assert ack.status_code == 303 and ack.headers["location"].endswith("m=ok")
+    ack = desk.post(f"/api/v2/desk/requests/{rid}/acknowledge",
+                    headers={"X-CSRF-Token": desk_csrf})
+    assert ack.status_code == 200, ack.text
     wait_for(lambda: mirror_state(app, rid) == "ACKNOWLEDGED", timeout=15, what="acknowledged")
     with app.state.db.session() as db:
         row = db.get(AssistanceRequest, rid)
@@ -225,10 +228,10 @@ def test_claim_tunnel_relays_sos_desk_end_to_end(world):
              what="owner told")
 
     # ── 9. the Desk resolves: the outcome becomes the verdict on the device ───
-    resolved = desk.post(f"/desk/requests/{rid}/resolve",
-                         data={"csrf_token": desk_csrf, "outcome": "help_arrived",
-                               "note": "simulated"})
-    assert resolved.headers["location"].endswith("m=ok")
+    resolved = desk.post(f"/api/v2/desk/requests/{rid}/resolve",
+                         json={"outcome": "help_arrived", "note": "simulated"},
+                         headers={"X-CSRF-Token": desk_csrf})
+    assert resolved.status_code == 200, resolved.text
     wait_for(lambda: mirror_state(app, rid) == "CLOSED", timeout=15, what="closed")
     device_row = requests.get_request(rid)
     assert device_row["state"] == "CLOSED" and device_row["outcome"] == "help_arrived"

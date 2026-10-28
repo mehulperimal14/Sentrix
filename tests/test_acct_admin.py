@@ -14,25 +14,24 @@ import pytest
 from sentrix_portal import security
 from sentrix_portal.models import (ActivationCode, AuditLog, Camera, Device, Household,
                                    User, UserSession)
-from test_acct_support import (PASSWORD, Browser, add_device, add_household,  # noqa: F401
-                               add_user, fake_hub, outbox, owner_browser, portal, query,
-                               staff_browser)
+from test_acct_support import (PASSWORD, add_device, add_household,  # noqa: F401
+                               add_user, fake_hub, outbox, portal, query)
+from test_portal_api_v2_support import Api, api_as, staff_api
 
-#: A claim / setup code (8 letters), not a piece of a 12-letter activation code.
-CODE8 = re.compile(r"(?<![A-Z-])[B-DF-HJ-NP-TV-XZ]{4}-[B-DF-HJ-NP-TV-XZ]{4}(?![A-Z-])")
+#: A claim / setup code (8 letters).
+CODE8 = re.compile(r"[B-DF-HJ-NP-TV-XZ]{4}-[B-DF-HJ-NP-TV-XZ]{4}")
 
 
-def _create(admin: Browser, **overrides):
+def _create(admin: Api, **overrides):
     data = {"name": "Riya Sharma", "username": "riya", "email": "riya@example.com",
             "phone": "98123 45610", "city": "Patiala", **overrides}
-    return admin.form("/admin/customers", data)
+    return admin.post("/admin/customers", data)
 
 
 class TestCustomers:
     def test_create_customer_makes_a_pending_owner_without_password(self, portal):
-        admin = staff_browser(portal)
-        response = _create(admin)
-        assert response.status_code == 303
+        admin = staff_api(portal)
+        assert _create(admin).status_code == 201
         owner = query(portal, User, username="riya")[0]
         assert owner.role == "owner" and owner.status == "pending_activation"
         assert owner.password_hash is None
@@ -42,186 +41,172 @@ class TestCustomers:
         assert query(portal, AuditLog, event="admin.customer_created")
 
     def test_validation_and_unique_username(self, portal):
-        admin = staff_browser(portal)
-        assert _create(admin, username="Bad Name!").status_code == 400
-        assert _create(admin, email="not-an-email").status_code == 400
-        assert _create(admin, phone="12345").status_code == 400
-        assert _create(admin).status_code == 303
+        admin = staff_api(portal)
+        assert _create(admin, username="Bad Name!").status_code == 422
+        assert _create(admin, email="not-an-email").status_code == 422
+        assert _create(admin, phone="12345").status_code == 422
+        assert _create(admin).status_code == 201
         taken = _create(admin, email="other@example.com")
-        assert taken.status_code == 400 and "taken" in taken.text
+        assert taken.status_code == 422 and "taken" in taken.json()["error"]["fields"]["username"]
 
     def test_create_with_a_device_and_print_the_letter(self, portal):
-        admin = staff_browser(portal)
+        admin = staff_api(portal)
         add_device(portal, serial="SX5-000123", claim_code="KTRW-BQXL")
-        response = _create(admin, serial="SX5-000123")
-        household_id = response.headers["location"].split("/")[3].split("?")[0]
+        household_id = _create(admin, serial="SX5-000123").json()["id"]
         device = query(portal, Device, serial="SX5-000123")[0]
         assert device.state == "ASSIGNED" and device.household_id == household_id
-        admin.get(f"/admin/customers/{household_id}/letter")
         letter = admin.post(f"/admin/customers/{household_id}/letter",
-                            {"new_claim_codes": "1"})
-        text = letter.text
-        assert "riya" in text and "http://portal.localhost:8100" in text
-        assert "SX5-000123" in text and text.count('<svg class="qr"') == 2
-        claim = CODE8.findall(text)
-        assert claim and claim[0] != "KTRW-BQXL", "a fresh claim code replaces the label's"
+                            {"new_claim_codes": True}).json()
+        assert letter["username"] == "riya"
+        assert letter["portal_url"] == "http://portal.localhost:8100"
+        (row,) = letter["devices"]
+        assert row["serial"] == "SX5-000123"
+        claim = row["claim_code"]
+        assert CODE8.fullmatch(claim) and claim != "KTRW-BQXL", "a fresh claim code"
+        assert row["qr_url"] == row["claim_url"] + f"#code={claim}"
         device = query(portal, Device, serial="SX5-000123")[0]
-        assert device.claim_code_hash == security.code_digest(claim[0])
-        assert "claim?sn=SX5-000123#code=" not in text.split("<svg")[0]
+        assert device.claim_code_hash == security.code_digest(claim)
 
     def test_letter_can_keep_the_label_claim_code(self, portal):
-        admin = staff_browser(portal)
+        admin = staff_api(portal)
         add_device(portal, serial="SX5-000124", claim_code="KTRW-BQXL")
-        household_id = _create(admin, serial="SX5-000124").headers["location"].split("/")[3]
-        household_id = household_id.split("?")[0]
-        admin.get(f"/admin/customers/{household_id}/letter")
-        letter = admin.post(f"/admin/customers/{household_id}/letter", {})
-        assert "on the device label" in letter.text
+        household_id = _create(admin, serial="SX5-000124").json()["id"]
+        letter = admin.post(f"/admin/customers/{household_id}/letter", {}).json()
+        assert letter["devices"][0]["claim_code"] is None, "the label code stays"
         assert query(portal, Device, serial="SX5-000124")[0].claim_code_hash == \
             security.code_digest("KTRW-BQXL")
 
     def test_deactivate_ends_sessions_and_blocks_sign_in(self, portal):
         home = add_household(portal, complete=True)
-        owner = owner_browser(portal)
-        admin = staff_browser(portal)
-        admin.get(f"/admin/customers/{home['household_id']}")
+        owner = api_as(portal, home["owner_id"])
+        admin = staff_api(portal)
         admin.post(f"/admin/customers/{home['household_id']}/status",
                    {"action": "deactivate"})
-        assert owner.get("/home").headers["location"].split("?")[0] == "/login"
-        again = Browser(portal)
-        again.get("/login")
-        assert again.post("/login", {"username": "riya",
-                                     "password": PASSWORD}).status_code == 401
-        admin.get(f"/admin/customers/{home['household_id']}")
+        assert owner.get("/home").status_code == 401
+        assert Api(portal).login("riya").status_code == 403
         admin.post(f"/admin/customers/{home['household_id']}/status",
                    {"action": "reactivate"})
-        assert owner_browser(portal).get("/home").status_code == 200
+        assert Api(portal).login("riya").status_code == 200
 
     def test_resend_without_email_is_refused(self, portal, outbox):
-        admin = staff_browser(portal)
+        admin = staff_api(portal)
         home = add_household(portal, email=None)
-        admin.get(f"/admin/customers/{home['household_id']}")
-        response = admin.post(f"/admin/customers/{home['household_id']}/resend", {})
+        response = admin.post(f"/admin/customers/{home['household_id']}/resend")
         assert response.status_code == 409 and not outbox.sent
 
     def test_owners_and_operators_cannot_use_the_console(self, portal):
         home = add_household(portal, complete=True)
-        owner = owner_browser(portal)
-        desk = staff_browser(portal, role="operator", username="desk1")
-        for browser in (owner, desk):
-            assert browser.get("/admin").status_code == 403
-            assert browser.get(f"/admin/customers/{home['household_id']}").status_code == 403
-            assert browser.post("/admin/customers", {"name": "x"}).status_code == 403
+        owner = api_as(portal, home["owner_id"])
+        desk = staff_api(portal, role="operator", username="desk1")
+        for api in (owner, desk):
+            assert api.get("/admin/overview").status_code == 403
+            assert api.get(f"/admin/customers/{home['household_id']}").status_code == 403
+            assert api.post("/admin/customers", {"name": "x"}).status_code == 403
 
 
 class TestDevices:
     def test_provision_shows_secrets_once_and_stores_digests(self, portal):
-        admin = staff_browser(portal)
-        label = admin.form("/admin/devices", {"name": "Bench unit"})
-        assert label.status_code == 200 and label.headers["cache-control"] == "no-store"
-        identity = json.loads(re.search(r'id="identity-json">(.*?)</pre>', label.text,
-                                        re.S).group(1).replace("&#34;", '"'))
+        admin = staff_api(portal)
+        response = admin.post("/admin/devices", {"name": "Bench unit"})
+        assert response.status_code == 201 and response.headers["cache-control"] == "no-store"
+        label = response.json()
+        identity = label["identity"]
         device = query(portal, Device, id=identity["device_id"])[0]
         assert device.serial == identity["serial"] == "SX5-000001"
         assert device.state == "UNASSIGNED"
         assert device.bootstrap_hash == security.token_digest(identity["bootstrap_secret"])
-        claim = CODE8.findall(label.text)[0]
-        assert device.claim_code_hash == security.code_digest(claim)
-        setup = re.search(r"Wi-Fi setup code</th><td class=\"mono\">([A-Z-]+)<",
-                          label.text).group(1)
+        assert device.claim_code_hash == security.code_digest(label["claim_code"])
         assert identity["setup_code_digest"] == hashlib.sha256(
-            setup.replace("-", "").encode()).hexdigest()
+            label["setup_code"].replace("-", "").encode()).hexdigest()
         assert re.fullmatch(r"[0-9a-f-]{36}", identity["device_id"])
-        # Nothing to see later: the label page needs a reprint (a new claim code).
+        # Nothing to see later: the label needs a reprint (a new claim code).
         page = admin.get(f"/admin/devices/{device.id}/label")
-        assert claim not in page.text and identity["bootstrap_secret"] not in page.text
+        assert label["claim_code"] not in page.text
+        assert identity["bootstrap_secret"] not in admin.get("/admin/devices").text
 
     def test_serials_are_unique_and_well_formed(self, portal):
-        admin = staff_browser(portal)
+        admin = staff_api(portal)
         add_device(portal, serial="SX5-000007")
-        assert admin.form("/admin/devices", {"serial": "SX5-000007"}).status_code == 400
-        assert admin.form("/admin/devices", {"serial": "ABC"}).status_code == 400
-        assert admin.form("/admin/devices", {}).status_code == 200
+        assert admin.post("/admin/devices", {"serial": "SX5-000007"}).status_code == 422
+        assert admin.post("/admin/devices", {"serial": "ABC"}).status_code == 422
+        assert admin.post("/admin/devices", {}).status_code == 201
         assert query(portal, Device, serial="SX5-000008")
 
     def test_reprint_rotates_the_claim_code(self, portal):
-        admin = staff_browser(portal)
+        admin = staff_api(portal)
         device_id = add_device(portal, serial="SX5-000010", claim_code="KTRW-BQXL")
-        admin.get(f"/admin/devices/{device_id}/label")
-        reprint = admin.post(f"/admin/devices/{device_id}/label", {})
-        code = CODE8.findall(reprint.text)[0]
+        code = admin.post(f"/admin/devices/{device_id}/label").json()["claim_code"]
         assert code != "KTRW-BQXL"
         assert query(portal, Device, id=device_id)[0].claim_code_hash == \
             security.code_digest(code)
 
     def test_assign_transfer_and_retire(self, portal, fake_hub):
         home = add_household(portal, complete=True)
-        admin = staff_browser(portal)
+        admin = staff_api(portal)
         spare = add_device(portal, serial="SX5-000050")
-        admin.get("/admin/devices")
         assert admin.post(f"/admin/devices/{spare}/assign",
-                          {"customer_code": "SX-0001"}).status_code == 303
+                          {"customer_code": "SX-0001"}).status_code == 200
         assert query(portal, Device, id=spare)[0].state == "ASSIGNED"
         assert admin.post(f"/admin/devices/{spare}/assign",
                           {"customer_code": "SX-0001"}).status_code == 409
-        admin.get("/admin/devices")
-        transfer = admin.post(f"/admin/devices/{home['device_id']}/transfer", {})
-        assert transfer.status_code == 200 and CODE8.findall(transfer.text)
+        transfer = admin.post(f"/admin/devices/{home['device_id']}/transfer")
+        assert transfer.status_code == 200 and transfer.json()["claim_code"]
         assert fake_hub.unpaired and fake_hub.unpaired[0][0] == home["device_id"]
         assert fake_hub.unpaired[0][1]["type"] == "cloud"
         device = query(portal, Device, id=home["device_id"])[0]
         assert device.state == "UNASSIGNED" and device.household_id is None
         assert device.token_hash is None
         assert not query(portal, Camera, device_id=home["device_id"]), "room labels go"
-        admin.get("/admin/devices")
-        admin.post(f"/admin/devices/{spare}/retire", {})
+        admin.post(f"/admin/devices/{spare}/retire")
         retired = query(portal, Device, id=spare)[0]
         assert retired.state == "RETIRED" and retired.claim_code_hash is None
 
     def test_fleet_status_reads_the_hub(self, portal, fake_hub):
         home = add_household(portal, complete=True)
-        admin = staff_browser(portal)
-        assert "offline" in admin.get("/admin/devices").text
+        admin = staff_api(portal)
+        (row,) = admin.get("/admin/devices").json()["rows"]
+        assert row["online"] is False
         fake_hub.online.add(home["device_id"])
-        page = admin.get("/admin/devices?state=CLAIMED")
-        assert "online" in page.text and home["serial"] in page.text
-        assert "1 of 1 claimed" in admin.get("/admin").text
+        page = admin.get("/admin/devices", params={"state": "CLAIMED"})
+        assert page.json()["rows"][0]["online"] is True
+        overview = admin.get("/admin/overview").json()
+        assert overview["online"] == 1 and overview["claimed"] == 1
         assert f"/d/{home['device_id']}" not in page.text, "no console link for staff"
 
 
 class TestStaff:
     def test_create_operator_then_activate_and_set_up_totp(self, portal, outbox):
         import pyotp
-        admin = staff_browser(portal)
-        page = admin.form("/admin/operators", {"role": "operator", "username": "desk1",
+        admin = staff_api(portal)
+        page = admin.post("/admin/operators", {"role": "operator", "username": "desk1",
                                                "display_name": "Desk One",
                                                "email": "desk1@example.com"})
-        assert page.status_code == 200 and page.headers["cache-control"] == "no-store"
-        code = re.search(r'class="code-big">([A-Z-]{14})<', page.text).group(1)
+        assert page.status_code == 201 and page.headers["cache-control"] == "no-store"
+        code = page.json()["activation_code"]
         assert outbox.codes("desk1@example.com") == [code]
-        desk = Browser(portal)
-        desk.get("/activate")
-        activated = desk.post("/activate", {"username": "desk1", "code": code,
-                                            "password": PASSWORD,
-                                            "password_confirm": PASSWORD})
-        assert activated.headers["location"] == "/account/2fa"
-        assert desk.get("/account").headers["location"] == "/account/2fa"
+        desk = Api(portal)
+        desk.session()
+        activated = desk.post("/auth/activate", {"username": "desk1", "code": code,
+                                                 "password": PASSWORD,
+                                                 "password_confirm": PASSWORD})
+        assert activated.json()["next"] == "/account/2fa"
+        desk.csrf = activated.json()["session"]["csrf_token"]
+        assert desk.get("/account").status_code == 403
         desk.get("/account/2fa")
         secret = security.unseal(query(portal, User, username="desk1")[0].totp_secret_enc)
         security._totp_last_step.clear()
-        assert desk.post("/account/2fa", {"action": "setup",
-                                          "code": pyotp.TOTP(secret).now()}).status_code == 200
+        assert desk.post("/account/2fa/setup",
+                         {"code": pyotp.TOTP(secret).now()}).status_code == 200
         assert desk.get("/account").status_code == 200
 
     def test_disable_and_reset_totp(self, portal):
-        admin = staff_browser(portal)
-        desk = staff_browser(portal, role="operator", username="desk2")
+        admin = staff_api(portal)
+        desk = staff_api(portal, role="operator", username="desk2")
         desk_id = query(portal, User, username="desk2")[0].id
-        admin.get("/admin/operators")
         admin.post(f"/admin/operators/{desk_id}", {"action": "reset_2fa"})
         user = query(portal, User, id=desk_id)[0]
         assert not user.totp_enabled and user.totp_secret_enc is None
-        assert desk.get("/account").headers["location"].split("?")[0] == "/login", "signed out"
+        assert desk.get("/account").status_code == 401, "signed out"
         admin.post(f"/admin/operators/{desk_id}", {"action": "disable"})
         assert query(portal, User, id=desk_id)[0].status == "disabled"
         me = query(portal, User, username="admin1")[0].id
@@ -229,19 +214,20 @@ class TestStaff:
 
 
 class TestAudit:
-    def test_audit_page_verifies_the_chain(self, portal):
-        admin = staff_browser(portal)
+    def test_audit_verifies_the_chain(self, portal):
+        admin = staff_api(portal)
         _create(admin)
-        page = admin.get("/admin/audit?event=admin.")
-        assert "chain verified" in page.text and "admin.customer_created" in page.text
+        page = admin.get("/admin/audit", params={"event": "admin."}).json()
+        assert page["chain"]["ok"] is True
+        assert "admin.customer_created" in {r["event"] for r in page["rows"]}
 
     def test_tampering_is_reported(self, portal):
-        admin = staff_browser(portal)
+        admin = staff_api(portal)
         _create(admin)
         with portal.state.db.session() as db:
             row = db.query(AuditLog).filter_by(event="admin.customer_created").first()
             row.detail = {"customer_code": "SX-9999"}
-        assert "chain broken" in admin.get("/admin/audit").text
+        assert admin.get("/admin/audit").json()["chain"]["ok"] is False
 
 
 # ── tools/provision_device.py ─────────────────────────────────────────────────
@@ -314,6 +300,6 @@ class TestProvisionTool:
 
 def test_sessions_are_server_side(portal):
     add_household(portal)
-    owner_browser(portal)
+    assert Api(portal).login("riya").status_code == 200
     rows = query(portal, UserSession)
     assert len(rows) == 1 and rows[0].csrf_token

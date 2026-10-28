@@ -301,14 +301,13 @@ class TestPortalSeams:
         assert rendered == {"full": expected["full"], "sms": expected["sms"]}
         assert "SENTRIX does not contact 112 itself" in rendered["full"]
 
-    def test_base_page_has_the_banner_and_the_account_link(self, portal_app):
-        template = portal_app.state.templates.get_template("base.html")
-        owner = SimpleNamespace(role="owner", csrf_token="t", display_name="Riya")
-        html = template.render(principal=owner, csp_nonce="n0nce", test_mode=True)
-        assert html.count("/static/sos/sos.js") == 1 and 'nonce="n0nce"' in html
-        assert 'href="/account"' in html and "/static/sos/sos.css" in html
-        operator = SimpleNamespace(role="operator", csrf_token="t", display_name="Desk")
-        assert "/static/sos/sos.js" not in template.render(principal=operator, csp_nonce="n")
+    def test_the_app_has_the_banner_and_the_account_link(self, portal_app):
+        """The test-mode banner and the owner's SOS banner are the app's own
+        (from ``GET /api/v2/session`` and ``/api/v2/sos/open``)."""
+        from fastapi.testclient import TestClient
+        session = TestClient(portal_app).get("/api/v2/session").json()
+        assert session["test_mode"]["on"] and "TEST MODE" in session["test_mode"]["banner"]
+        assert TestClient(portal_app).get("/api/v2/sos/open").status_code == 401
 
 
 # ── tools ─────────────────────────────────────────────────────────────────────
