@@ -495,6 +495,25 @@ def test_duress_pin_looks_like_a_false_alarm_but_sends_help(world):
     shown = [e["event"] for e in view.json()["events"]]
     assert "decline" in shown and "approve" not in shown,         "the owner's timeline reads as the decline the screen shows"
     assert [e["seq"] for e in view.json()["events"]] == list(range(1, len(shown) + 1))
+    # The household's activity log and its data export read the same way: no
+    # approve/delivered/Desk/contact rows for a duress request.
+    from sentrix_portal import security
+    from sentrix_portal.models import AssistanceRequest
+    from sentrix_portal.services import accounts
+    with world.app.state.db.session() as db:
+        household = db.get(AssistanceRequest, rid).household_id
+        # What the Desk's note writes (services/sos.py, "desk.note").
+        security.audit(db, "desk.note", actor_type="user", actor_id="op",
+                       household_id=household, target_type="request", target_id=rid,
+                       detail={"kind": "desk_called_112"})
+        log = accounts.household_audit(db, household, limit=1000)
+        export = accounts.export_household(db, household)
+    events = [r["event"] for r in log]
+    assert "sos.created" in events, events
+    leaked = [e for e in events if e in ("sos.approve", "sos.delivered", "sos.dispatch")
+              or e.startswith(("desk.", "contact_page."))]
+    assert not leaked, leaked
+    assert not [r for r in export["audit"] if r["event"] in ("sos.approve", "sos.delivered")]
 
 
 # ── the device drops mid-request: cloud authority, tamper, reconnect rule ────

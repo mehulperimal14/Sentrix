@@ -395,7 +395,9 @@ def _apply_device(db, device: Device, payload: dict) -> list[tuple[str, dict]] |
                    target_type="request", target_id=request_id,
                    detail={"origin": "device", "seq": fields["seq"],
                            "to_state": fields["to_state"],
-                           "actor": f"{fields['actor_type']}:{fields['actor_id'] or ''}"})
+                           "actor": f"{fields['actor_type']}:{fields['actor_id'] or ''}",
+                           # A duress help path: never in the household's log.
+                           **({"restricted": True} if fields["restricted"] else {})})
     return _after_event(db, row, event_dict_from(fields, event["hash"], prev), "device")
 
 
@@ -523,7 +525,8 @@ def _cloud_event(db, row: AssistanceRequest, event: str, *, actor_type: str = "c
     db.flush()
     security.audit(db, f"sos.{event}", actor_type=actor_type, actor_id=actor_id,
                    household_id=row.household_id, target_type="request", target_id=row.id,
-                   detail={"origin": "cloud", "seq": seq, "to_state": to_state})
+                   detail={"origin": "cloud", "seq": seq, "to_state": to_state,
+                           **({"restricted": True} if restricted else {})})
     ev = {**record, "prev_hash": prev, "hash": digest}
     _after_event(db, row, ev, "cloud")
     return ev

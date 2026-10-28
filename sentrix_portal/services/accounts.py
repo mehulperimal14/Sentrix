@@ -1872,9 +1872,22 @@ def advance_onboarding(household: Household, step: int) -> None:
 # ── the household's own audit trail ──────────────────────────────────────────
 #: Rows an owner or member never sees: restricted SOS rows and anything that
 #: would reveal a duress approval (docs/7 §7.8).
-def _hidden_from_household(row: AuditLog) -> bool:
+def _hidden_from_household(row: AuditLog, duress_requests: frozenset = frozenset()) -> bool:
+    """A duress help path never shows to the household (it may be read by
+    whoever coerced the resident): restricted events, and for a duress
+    request everything but its owner-visible ``sos.*`` rows (created,
+    prompted, the "false alarm"). The Desk's and contacts' rows go too."""
     detail = row.detail or {}
-    return bool(detail.get("restricted") or detail.get("duress"))
+    if detail.get("restricted") or detail.get("duress"):
+        return True
+    return (row.target_type == "request" and row.target_id in duress_requests
+            and not str(row.event or "").startswith("sos."))
+
+
+def _duress_requests(db: Session, household_id: str) -> frozenset:
+    return frozenset(r.id for r in db.query(AssistanceRequest)
+                     .filter_by(household_id=household_id)
+                     if (r.flags or {}).get("duress"))
 
 
 def household_audit(db: Session, household_id: str, *, limit: int = 100,
@@ -1886,8 +1899,9 @@ def household_audit(db: Session, household_id: str, *, limit: int = 100,
     rows = (db.query(AuditLog).filter_by(household_id=household_id)
             .order_by(AuditLog.id.desc()))
     out, skipped = [], 0
+    duress = _duress_requests(db, household_id)
     for row in rows:
-        if _hidden_from_household(row):
+        if _hidden_from_household(row, duress):
             continue
         if skipped < offset:
             skipped += 1
