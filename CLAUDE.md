@@ -347,6 +347,31 @@ from the Scalebee USB microphone (arrives 2026-11-03).
 
 ---
 
+### Bug sweep and code audit (2026-10-28, `sentrix/portal`, not pushed)
+
+Twelve bugs from a review in another chat, then a five-way audit
+(ponytail-audit rules: a concrete failing case for every finding; aimed by
+a graphify code graph) of Portal auth, Portal SOS/hub, device SOS/alerts,
+link/LC and the runtime. Every confirmed finding was fixed with a
+regression test, one commit each (`f935082` .. `96ab1ae`). The main ones:
+duress texts never say "Call 112" in test mode, and a duress help path
+never shows in the household's activity log, export, `/api/channels` or
+through a false-alarm verdict; admin/erasure unpair reaches an online
+device; queued messages are withdrawn when a request is answered or closes
+(device and Portal; a first version stalled the Portal on SQLite's lock and
+was fixed); an alarm that grows after its request was answered prompts
+again (per-class SOS claim); stale device timers after a cloud takeover act
+on nothing; raw `device_events` are pruned (30 d) and lose their JPEGs; the
+client address on Render comes from `CF-Connecting-IP`
+(`PORTAL_CLIENT_IP_HEADER`, needs a Blueprint sync); an e-mailed action
+link survives a timeout; live relays re-check access every 30 s; the clip
+preview no longer shows AI STALLED all the time and draws boxes at full
+scale; identity re-checks before its verdict goes stale; event logs and
+telemetry rotate daily with a retention; the modem keeps 8 segments for an
+alarm's first SMS. Full suite after the sweep: **2097 passed** (388 s, laptop;
+the guards blocked only the camera/mic and network attempts of the tests
+that check them).
+
 ## 3. Git history
 
 | Branch | Head | Contents |
@@ -710,6 +735,8 @@ log-only, gunshot/glass-break data track (non-gating).
 ### Open questions for the team
 
 **Owner decisions surfaced by M1–M5:** (1) CUDA torch in the app env (Python 3.14 needs a cp314 CUDA wheel, or move the app env to 3.11/3.12) — moves DINOv2 to the RTX 4060; not needed for 5 Hz on CPU. (2) A folder of ≥ 3 h normal footage from the demo room for `--negatives` (G3). (3) Pre-roll evidence clips need a multi-frame vault format (M3 deferral). (4) Re-test live on the real webcam: video should now run at camera rate and the TCI should match the level.
+
+**Owner decisions surfaced by the 2026-10-28 audit:** (8) The `face_recognition` consent is not enforced on the device: withdrawing it should stop recognition, but with it off by default every resident would become an L2 "unrecognised person" on the demo unit - enforce it (and set the consent for the demo household), or reword the consent text. (9) Under duress the LC's "remote view: N" badge and `/api/link/remote-audit` still show the Desk watching after the screen says "Marked as false alarm" (D10's "visible in the room" against duress secrecy). (10) Sync the Render Blueprint (`PORTAL_CLIENT_IP_HEADER`) and check one request's logged address.
 
 **Owner decisions surfaced by M11:** (5) Home mode now raises an L2 "unrecognised person" after 10 s (D2 as amended, owner requirement 4): every unenrolled guest becomes an L2 incident on the dashboard - keep it, lengthen `SENTRIX_UNKNOWN_HOME_DWELL`, or set `SENTRIX_UNKNOWN_ALERT_HOME=0` (logged only). (6) ~~Talk-down speaker hardware~~ - decided: no speaker and no buzzer (D19). (7) Record the audio sessions of ROADMAP §15.1 (play-fighting vs staged fights with sound, laughter, shouting, TV, alarm beeps, gunshot/glass sounds from a speaker) before any fight or audio claim is made.
 
