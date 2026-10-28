@@ -1342,10 +1342,16 @@ def _send_contacts(db, row: AssistanceRequest, *, step: str, template: str,
             html_body = None
             if recipient.channel in ("telegram", "whatsapp"):
                 text = short
-                if token is not None and row.state in DESK_STATES | S.PROMPTING_STATES:
+                # The same rule as the contact page's "I'm handling it".
+                if token is not None and row.state in (S.APPROVED, S.DISPATCHED, S.FAILED):
                     buttons = (Button("I'm handling it", "acknowledge",
                                       callback_data=callback_data(token.nonce, "acknowledge")),
                                Button("Open", "open", url=page))
+                elif page:
+                    # e.g. a safety default alerted the contacts while the owner
+                    # has not answered: acknowledging exists only on the help
+                    # path, so "I'm handling it" would answer "already answered".
+                    buttons = (Button("Open", "open", url=page),)
             else:
                 text = full
                 html_body = _html(full, [("Open the SOS page", page)] if page else [])

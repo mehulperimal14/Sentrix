@@ -340,6 +340,26 @@ class TestContactPages:
         browser.post(f"/c/{raw}", data={"action": "approve", "csrf_token": csrf})
         assert state_of(app, rid) == "DISPATCHED"
 
+    @pytest.mark.parametrize("state,actions", [("PENDING", ["open"]),
+                                               ("DISPATCHED", ["acknowledge", "open"])])
+    def test_contact_buttons_follow_the_contact_page(self, portal, state, actions):
+        """While the owner has not answered (a safety default alerted the
+        contacts) "I'm handling it" cannot work: only "Open" is offered."""
+        from sentrix_portal.models import AssistanceRequest
+        from sentrix_portal.services import sos as portal_sos
+        app, seeded, outbox = portal
+        rid, _ = open_request(app, seeded, state=state)
+        before = len(outbox.messages)
+        with app.state.db.session() as db:
+            row = db.get(AssistanceRequest, rid)
+            portal_sos._send_contacts(db, row, step="test_step", template="sos.full",
+                                      text_for=lambda c, p: ("short", "full"),
+                                      subject="SENTRIX test")
+        chat = [m for r, m in outbox.messages[before:]
+                if r.channel in ("telegram", "whatsapp")]
+        assert chat, "the seeded contact has a chat channel"
+        assert all([b.action for b in m.buttons] == actions for m in chat)
+
     def test_answering_and_closing_withdraw_queued_messages(self, portal, monkeypatch):
         """Queued owner reminders stop once the owner answers; everything
         queued stops once the request closes (before the closing event's
