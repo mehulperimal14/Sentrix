@@ -1878,13 +1878,17 @@ def _hidden_from_household(row: AuditLog) -> bool:
 
 
 def household_audit(db: Session, household_id: str, *, limit: int = 100,
-                    offset: int = 0) -> list[dict[str, Any]]:
+                    offset: int = 0, before_id: int | None = None) -> list[dict[str, Any]]:
+    """The household's own rows, newest first (``before_id``: older than
+    that row, the API's cursor; ``offset``: the page's paging)."""
     names = {u.id: u.display_name or u.username
              for u in db.query(User).filter_by(household_id=household_id)}
     names.update({c.id: c.name for c in db.query(EmergencyContact)
                   .filter_by(household_id=household_id)})
     rows = (db.query(AuditLog).filter_by(household_id=household_id)
             .order_by(AuditLog.id.desc()))
+    if before_id is not None:
+        rows = rows.filter(AuditLog.id < before_id)
     out, skipped = [], 0
     for row in rows:
         if _hidden_from_household(row):

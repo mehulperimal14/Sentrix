@@ -1,5 +1,6 @@
 """Portal routers, one module per area, included in this order by
-``create_app``. Owners: docs/7 §2. Each module exports ``router``.
+``create_app``. Owners: docs/7 §2. Each module exports ``router`` (and may
+export ``install(app)``, called after it is included: the API's error model).
 """
 
 ROUTER_MODULES: tuple[str, ...] = (
@@ -20,6 +21,8 @@ ROUTER_MODULES: tuple[str, ...] = (
     "sentrix_portal.routes.contacts",     # /c/{token} (SOS contact pages only)
     # T-CH: provider webhooks
     "sentrix_portal.routes.hooks",
+    # The single-page app's JSON API (docs/9): /api/v2, every area above
+    "sentrix_portal.routes.api_v2",
 )
 
 __all__ = ["ROUTER_MODULES"]

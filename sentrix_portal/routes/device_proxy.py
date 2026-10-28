@@ -35,12 +35,9 @@ from sqlalchemy.orm import Session
 from starlette.routing import Match
 from starlette.websockets import WebSocketDisconnect
 
-from sentrix.actor import Actor
-from sentrix.sos import states as S
 from sentrix_portal import security
 from sentrix_portal.db import DB
-from sentrix_portal.models import (AssistanceRequest, Device, DispatchMirror,
-                                   IncidentMirror, utcnow)
+from sentrix_portal.models import AssistanceRequest, Device, utcnow
 from sentrix_portal.services import sos as sos_service
 from sentrix_portal.services.hub import UUID_RE, Viewer, hub_for
 
@@ -72,9 +69,8 @@ def _cfg():
 
 
 def actor_of(principal: security.Principal) -> dict:
-    step = principal.step_up_at.timestamp() if principal.step_up_at else None
-    return Actor(type=principal.role, id=principal.user_id, name=principal.display_name,
-                 step_up_at=step).to_dict()
+    from sentrix_portal.services.sos_views import actor_of as shared
+    return shared(principal)
 
 
 def authorize_device(db: Session, principal: security.Principal, device_id: str) -> Device:
@@ -384,21 +380,13 @@ async def _queue_verdict(request: Request, principal, device: Device,
 
 
 def _offline_page(request: Request, db: Session, principal, device: Device) -> Response:
-    household = principal.role in ("owner", "member")      # the Desk sees no history
-    incidents = (db.query(IncidentMirror).filter_by(device_id=device.id)
-                 .order_by(IncidentMirror.started_at.desc()).limit(50).all()) if household else []
-    packages = (db.query(DispatchMirror).filter_by(device_id=device.id)
-                .order_by(DispatchMirror.created_at.desc()).limit(20).all()) if household else []
-    requests_open = [sos_service.request_view(r, "desk" if principal.role == "operator"
-                                              else "owner")
-                     for r in db.query(AssistanceRequest)
-                     .filter(AssistanceRequest.device_id == device.id,
-                             AssistanceRequest.state.in_(sorted(S.OPEN_STATES))).all()]
+    from sentrix_portal.services.sos_views import device_mirror
+    mirror = device_mirror(db, principal, device)
     return request.app.state.templates.TemplateResponse(
         request=request, name="device/offline.html", status_code=503,
         context={"principal": principal, "active_page": "home", "device": device,
-                 "incidents": incidents, "packages": packages, "requests": requests_open,
-                 "can_label": principal.role in ("owner", "member"),
+                 "incidents": mirror["incidents"], "packages": mirror["packages"],
+                 "requests": mirror["requests"], "can_label": mirror["can_label"],
                  "now": utcnow(), "monotonic": time.monotonic()})
 
 

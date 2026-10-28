@@ -165,7 +165,10 @@ def create_app(settings: PortalSettings | None = None) -> FastAPI:
 
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
     for name in ROUTER_MODULES:
-        app.include_router(importlib.import_module(name).router)
+        module = importlib.import_module(name)
+        app.include_router(module.router)
+        if callable(getattr(module, "install", None)):
+            module.install(app)                       # the API v2 error model
     for name in MIDDLEWARE_MODULES:
         importlib.import_module(name).install(app)        # fatal on failure
 

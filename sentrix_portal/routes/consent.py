@@ -19,7 +19,7 @@ Owner: track T-ACCT. The contact has no login:
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
@@ -27,22 +27,11 @@ from sentrix_portal import security
 from sentrix_portal.db import DB
 from sentrix_portal.routes.auth import message_page, render
 from sentrix_portal.services import accounts
+from sentrix_portal.services import household_flows as flows
 
 router = APIRouter()
 
-NOT_VALID = ("This link is not valid any more: it was used, replaced by a newer one, or "
-             "has expired. Ask the person who added you to send a new one.")
-
-
-def _context(db: Session, contact) -> dict:
-    owner = accounts.household_owner(db, contact.household_id)
-    from sentrix.config import settings
-    return {"contact": contact,
-            "owner_name": (owner.display_name or "A SENTRIX customer") if owner else
-            "A SENTRIX customer",
-            "purposes": accounts.PURPOSES,
-            "notice_version": accounts.portal_config().notice_version,
-            "declined_days": settings.retention.declined_contact_days}
+NOT_VALID = flows.CONSENT_LINK_NOT_VALID
 
 
 @router.get("/consent/{token}", response_class=HTMLResponse)
@@ -51,10 +40,10 @@ def consent_page(request: Request, token: str, db: Session = DB):
     if found is None:
         return message_page(request, "Link not valid", NOT_VALID, status_code=404)
     row, contact = found
-    row.opened_count = (row.opened_count or 0) + 1
+    flows.consent_opened(row)
     csrf = security.login_csrf_token(request)
     response = render(request, "consent/consent.html",
-                      {**_context(db, contact), "csrf_token": csrf})
+                      {**flows.consent_view(db, contact), "csrf_token": csrf})
     security.set_login_csrf(response, csrf)
     return response
 
@@ -69,23 +58,12 @@ async def consent_submit(request: Request, token: str, db: Session = DB):
     if found is None:
         return message_page(request, "Link not valid", NOT_VALID, status_code=404)
     row, contact = found
-    decision = form.get("decision")
-    if decision not in ("confirm", "decline"):
-        return message_page(request, "Choose an answer", "Confirm or opt out.",
-                            status_code=400)
-    context = _context(db, contact)
-    opt_out = accounts.decide_contact_consent(db, row, contact, decision,
-                                              ip=security.client_ip(request))
-    telegram = None
-    if decision == "confirm" and accounts.portal_config().telegram_bot_name:
-        telegram = accounts.telegram_deep_link(accounts.mint_telegram_link(
-            db, subject_type="contact", subject_id=contact.id,
-            household_id=contact.household_id))
-    db.commit()
-    await accounts.push_profile(db, contact.household_id)
-    return render(request, "consent/done.html", {
-        **context, "decision": decision, "telegram_link": telegram,
-        "opt_out_link": accounts.consent_url(opt_out) if opt_out else None})
+    context = flows.consent_view(db, contact)
+    outcome = await flows.decide_consent(db, row, contact, form.get("decision"),
+                                         ip=security.client_ip(request))
+    if not outcome.ok:
+        return message_page(request, "Choose an answer", outcome.message, status_code=400)
+    return render(request, "consent/done.html", {**context, **outcome.data})
 
 
 __all__ = ["router"]
