@@ -85,14 +85,15 @@ WS_REAUTH_SECONDS = 60.0
 #: role can use; tunnelled requests are *enforced* by the link's path table
 #: (``sentrix/link/policy.py``) before they reach these routes, and are never
 #: restated here. A Desk operator sees the dashboard and the live view only.
-#: ``record`` (training recordings, D20) is the device admin's alone: the path
-#: table refuses its routes to every tunnelled role.
+#: ``record`` (training recordings, D20): the device admin, and the owner, who
+#: starts and stops them through the Portal (step-up); downloads and deletes
+#: stay on the LAN (the path table refuses them to every tunnelled role).
 ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
     "device_admin": frozenset({"pages", "media", "gallery_view", "gallery_write",
                                "verdict", "sos", "dispatch", "mode", "siren_test",
                                "record"}),
     "owner": frozenset({"pages", "media", "gallery_view", "gallery_write",
-                        "verdict", "sos", "dispatch", "mode", "siren_test"}),
+                        "verdict", "sos", "dispatch", "mode", "siren_test", "record"}),
     "member": frozenset({"pages", "media", "gallery_view", "verdict", "sos",
                          "dispatch", "mode"}),
     "operator": frozenset(),

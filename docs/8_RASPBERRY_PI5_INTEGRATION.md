@@ -124,8 +124,9 @@ python -m sentrix  (systemd: Type=notify, Restart=always, WatchdogSec=30)
 │   └─ fast-lane thread   YOLO @320 on every 4th buffered frame, may raise L3
 ├─ identity worker     face recognition off the hot path (M2)
 ├─ preview / MJPEG     every captured frame composited with the latest overlay
-├─ recorder (D20)      only while the device admin records: raw main frames (1280×720, 15 fps)
-│                      + the USB microphone at 16 kHz → var/recordings (MJPEG AVI, ffmpeg mux)
+├─ recorder (D20)      only while the device admin (or the owner through the Portal) records:
+│                      raw main frames (1280×720, 15 fps) + the USB microphone at 16 kHz
+│                      → var/recordings (MJPEG AVI, ffmpeg mux)
 ├─ decision            evidence → TCI → level policy → incidents → side effects (unchanged)
 ├─ web (FastAPI)       Local Console on the LAN :8000, /api/node, /api/health
 ├─ services            gpio (LEDs, inputs), node (telemetry, watchdog),
@@ -540,7 +541,7 @@ Intel NCS2.
 | Local Console API: `GET /api/node`, `POST /api/node/siren-test`; Node page (telemetry, inputs, relay, clip status, test siren) | `sentrix/web/node_routes.py`, templates | built |
 | Clip engine, fast lane, runtimes, exports, bench | `pipeline/clip.py`, `pipeline/fastlane.py`, `sentrix/runtime/`, `tools/export_models.py`, `tools/bench_clip.py`, `replay_custom_videos.py --mode clip` | built; laptop only; NCNN untested |
 | Modem SMS and ringing call | `sentrix/alerting/channels/modem.py` | built; fake serial port only |
-| Training recordings ("record normal session"): the dashboard's *Record video* card, raw frames as constant-frame-rate MJPEG AVI + the microphone's 16 kHz track muxed by ffmpeg (installed by `install_pi.sh`), caps 10 min / 2 GB free / 20 GB / 14 days, LAN only (D20) | `sentrix/io/recorder.py`, `web/recording_routes.py`, `static/js/recording.js` | built; laptop and a synthetic camera only. Still to check on the Pi: the MJPEG encode cost at 1280 px next to the clip engine, and the writer's lower priority |
+| Training recordings ("record normal session"): the dashboard's *Record video* card, raw frames as constant-frame-rate MJPEG AVI + the microphone's 16 kHz track muxed by ffmpeg (installed by `install_pi.sh`), caps 10 min / 2 GB free / 20 GB / 14 days; files on the LAN only, the owner starts through the Portal with a step-up and stops without one (D20) | `sentrix/io/recorder.py`, `web/recording_routes.py`, `static/js/recording.js` | built; laptop and a synthetic camera only. Still to check on the Pi: the MJPEG encode cost at 1280 px next to the clip engine, and the writer's lower priority |
 | USB microphone in any port at any time: ranked inputs, `plughw`, resampling to 16 kHz, rebuilds when `/proc/asound/cards` changes, `microphone` on the Node page and `/api/health` (D21) | `sentrix/perception/audio.py` | built; fake `sounddevice` only |
 | Doctor hardware section (venv, camera enumerated not opened, OpenCV, temperature, throttling, EXT5V, config.txt lines, `PSU_MAX_CURRENT`, unit, network) | `tools/doctor.py`, `node.hardware_report` | built; one "skipped" row on a laptop |
 | Installer, systemd unit, journald caps, watchdog, config.txt snippet, Pi env, NetworkManager, polkit, firewall | `deploy/pi5/`, `run.sh` (Pi path), `requirements-pi.txt` | built; checked by `tests/test_hw_deploy.py` |

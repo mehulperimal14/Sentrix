@@ -253,10 +253,11 @@ def lc_page_routes(app) -> set[str]:
 
 
 #: Controls only the device admin on the LAN has: signing out of the LC
-#: session, the disclosed scripted trigger (docs/7 §9.2) and the training
-#: recordings card (D20; its parts are data-* hooks, not ids).
+#: session and the disclosed scripted trigger (docs/7 §9.2). The training
+#: recordings card (D20) renders for the owner too, with the same ids; only
+#: its Download and Delete buttons stay on the LAN (drawn by its script).
 LAN_ONLY_IDS = frozenset({"logout-link", "sos-demo-trigger", "sos-demo-trigger-box",
-                          "sos-demo-trigger-type", "record-card"})
+                          "sos-demo-trigger-type"})
 
 
 def test_tunnel_parity_on_every_console_page(world):

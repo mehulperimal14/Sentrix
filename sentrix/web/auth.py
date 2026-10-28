@@ -17,7 +17,9 @@ place only: the link's path table (``sentrix/link/policy.py``), before the
 in-process call.** Console routes enforce only their own business rules (the
 SOS PIN, 409 on a sent package, and ``require_lc("device_admin")`` for the
 few LC-only routes: ``/api/link/reconnect``, ``/api/channels/test``); they
-never restate the path table.
+never restate the path table, except the training recordings (D20), whose
+list, start and stop restate their ``record_status`` / ``record`` rows
+(``recording_routes``).
 
 Unauthenticated: an LC page answers 307 to ``/login`` (as before); an API,
 media or fetch request, and anything tunnelled, answers 401 JSON
@@ -165,7 +167,9 @@ def require_lc(*roles: str, step_up_seconds: float | None = None) -> Callable[..
     tunnelled role rules live in ``sentrix/link/policy.py``. ``step_up_seconds``
     applies to tunnel principals (the device admin's session counts as a
     step-up) and exists for the same LC-only cases; the path table enforces
-    step-up for tunnelled routes. Sets ``request.state.lc_principal``.
+    step-up for tunnelled routes. The one exception is the training
+    recordings (D20), whose routes restate their path-table rows
+    (``recording_routes``). Sets ``request.state.lc_principal``.
     """
     unknown = set(roles) - set(LC_ROLES)
     if unknown:

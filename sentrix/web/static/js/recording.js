@@ -1,9 +1,13 @@
 // static/js/recording.js
 // The dashboard's "Record video" card (D20): the device admin on the
 // LAN records the camera's raw frames, with the microphone's sound while one
-// is connected, then downloads or deletes the finished files. The Portal's
-// tunnel refuses every one of these routes (sentrix/link/policy.py).
-//   GET    /api/recordings          every 1 s while recording or saving, else 10 s
+// is connected, then downloads or deletes the finished files. The owner
+// through the Portal starts, stops and lists recordings (start and stop need
+// a fresh step-up); the tunnel refuses downloads and deletes
+// (sentrix/link/policy.py), so there the list has no Download or Delete
+// buttons (download_here and can_delete false) and the note names the
+// console's address on the home Wi-Fi (lan_url).
+//   GET    /api/recordings          every 1 s (Portal: 2 s) while recording or saving, else 10 s
 //   POST   /api/recordings/start    {label}
 //   POST   /api/recordings/stop
 //   DELETE /api/recordings/<name>   after a confirm click
@@ -17,7 +21,10 @@
 
 (() => {
     const S = window.Sentrix;
-    const FAST_MS = 1000;
+    // Through the Portal every poll is a tunnel round trip and a row in the
+    // device's remote audit: every 2 s while recording there, 1 s on the LAN.
+    const TUNNELLED = document.body && document.body.dataset.tunnelled === "1";
+    const FAST_MS = TUNNELLED ? 2000 : 1000;
     const SLOW_MS = 10000;
     const CONFIRM_MS = 5000;
     // Why a recording stopped by itself (the recorder's stop reasons).
@@ -57,6 +64,11 @@
     function failureText(result) {
         if (result.status === 404 && !result.code) return "Recording is not installed on this build.";
         if (result.code === "rate_limited") return "Too many starts: wait a minute.";
+        if (result.code === "step_up_required") return "Re-enter your password on the SENTRIX Portal first.";
+        if (result.code === "forbidden_role" || result.code === "lc_only") {
+            return "Not allowed from here: through the Portal only the owner starts and stops "
+                + "recordings, and downloads and deletes happen on the home Wi-Fi.";
+        }
         return result.detail || "The request failed.";
     }
 
@@ -83,6 +95,8 @@
     }
 
     function laptopAddress(data) {
+        // The server's URL first: through the Portal this page's own port is the Portal's.
+        if (data.lan_url) return data.lan_url;
         const port = window.location.port || "8000";
         return data.device_address ? `http://${data.device_address}:${port}` : "this device's address";
     }
@@ -91,6 +105,11 @@
         const days = Number(data.keep_days || 0);
         const kept = days > 0 ? `Recordings are deleted after ${days} days.`
                               : "Recordings are kept until you delete them.";
+        if (data.via === "portal") {
+            return "Start and stop recordings here. Download and delete them on the home Wi-Fi: open "
+                + laptopAddress(data) + " on a computer there and sign in with the device password. "
+                + kept;
+        }
         if (data.download_here === false) {
             return "Downloads are off in this browser: it runs on the device itself, and the videos "
                 + "would fill its SD card. To download, open " + laptopAddress(data)
@@ -104,8 +123,8 @@
                           class: "btn btn-sm btn-outline", text });
     }
 
-    function renderList(items, downloadHere) {
-        const key = JSON.stringify([items, pendingDelete, downloadHere]);
+    function renderList(items, downloadHere, canDelete) {
+        const key = JSON.stringify([items, pendingDelete, downloadHere, canDelete]);
         if (key === listKey) return;
         listKey = key;
         const list = part("list");
@@ -125,9 +144,11 @@
                 S.h("div", { class: "record-actions" },
                     files.video && downloadHere ? download(files.video, "Download video") : null,
                     files.audio && downloadHere ? download(files.audio, "Download sound") : null,
-                    S.h("button", { type: "button", dataset: { recordDelete: item.name },
-                                    class: "btn btn-sm btn-danger-outline" + (confirming ? " armed" : ""),
-                                    text: confirming ? "Confirm delete" : "Delete" })));
+                    canDelete ? S.h("button", { type: "button", dataset: { recordDelete: item.name },
+                                                class: "btn btn-sm btn-danger-outline"
+                                                    + (confirming ? " armed" : ""),
+                                                text: confirming ? "Confirm delete" : "Delete" })
+                              : null));
         }));
     }
 
@@ -143,7 +164,8 @@
         part("status").textContent = statusText(data);
         part("status").classList.toggle("recording", !!status.recording);
         part("note").textContent = noteText(data);
-        renderList(Array.isArray(data.items) ? data.items : [], data.download_here !== false);
+        renderList(Array.isArray(data.items) ? data.items : [], data.download_here !== false,
+                   data.can_delete !== false);
     }
 
     async function refresh() {

@@ -48,9 +48,10 @@
     </div>
 
     {% if 'record' in caps %}
-    <!-- Training recordings (D20): the device admin on the LAN only. The
-         Portal's tunnel refuses /api/recordings and /media/recording/
-         (sentrix/link/policy.py); the files stay on the device. -->
+    <!-- Training recordings (D20): the device admin on the LAN; the owner
+         through the Portal starts, stops and lists them (step-up), while the
+         tunnel refuses deletes and /media/recording/ (sentrix/link/policy.py):
+         the files stay on the device. -->
     <div class="card record-card" id="record-card" data-record-root>
       <div class="card-label">Record video</div>
       <div class="record-controls">
@@ -62,8 +63,13 @@
       <div class="record-status" data-record-status role="status" aria-live="polite">Loading…</div>
       <div class="sos-message" data-record-message role="status" aria-live="polite"></div>
       <ul class="record-list" data-record-list aria-label="Finished recordings"></ul>
+      {% if tunnelled %}
+      <p class="sos-note mt-1" data-record-note>Start and stop recordings here. Download and delete
+        them on the home Wi-Fi, at the device's address.</p>
+      {% else %}
       <p class="sos-note mt-1" data-record-note>Download from a computer on the same network as the
         device; not through the Portal.</p>
+      {% endif %}
     </div>
     {% endif %}
 

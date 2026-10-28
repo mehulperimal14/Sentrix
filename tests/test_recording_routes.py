@@ -2,12 +2,15 @@
 ``/media/recording/*``.
 
 The device admin on the LAN starts, stops, lists, downloads and deletes
-recordings; anyone signed out gets 401; a Portal user is refused before any
-handler runs (the link's path table: ``lc_only``) and, if a request got past
-it, by the route's own ``require_lc("device_admin")``. Files are served only
-by their exact finished name, as attachments. The pipeline is a real
-``Pipeline`` without models or a camera (frames are handed to the recorder
-directly); the app is the real console with its hardening.
+recordings; anyone signed out gets 401. Since 2026-10-28 the owner starts and
+stops them through the Portal with a fresh step-up and lists them without one;
+downloads and deletes are refused to every Portal user before any handler runs
+(the link's path table: ``lc_only``) and, if a request got past it, by the
+route's own ``require_lc("device_admin")``; members and the Desk get nothing.
+Files are served only by their exact finished name, as attachments. The
+pipeline is a real ``Pipeline`` without models or a camera (frames are handed
+to the recorder directly); the app is the real console with its hardening, and
+Portal requests go through the link's real tunnel executor and path table.
 """
 
 from __future__ import annotations
@@ -23,6 +26,7 @@ import numpy as np
 import pytest
 
 from sentrix import paths
+from sentrix.actor import Actor
 from sentrix.config import settings
 from sentrix.io.recorder import RecorderError
 from sentrix.io.sources import FrameSource
@@ -32,6 +36,9 @@ from sentrix.web.security import RateLimiter
 from test_web_console import console, lc_client, tunnel_client  # noqa: F401
 
 FPS = 10.0
+#: Every consent granted and a request on the help path: the most a Portal
+#: user can ever have, so a refusal below is the recording rules' own.
+EVERYTHING = {"remote_view": True, "face_recognition": True, "desk_live_view": True}
 
 
 class Camera(FrameSource):
@@ -98,6 +105,39 @@ def record_one(rec, label: str = "take") -> dict:
 
 def audits(rec, event: str) -> list[dict]:
     return [detail for name, detail in rec.events.rows if name == event]
+
+
+def owner(step_up_at: float | None = None) -> Actor:
+    return Actor("owner", id="u1", name="Riya", step_up_at=step_up_at)
+
+
+def through_portal(rec, method: str, path: str, actor: Actor, body: bytes = b""):
+    """One request as the Portal forwards it: the link's tunnel executor with
+    the real path table (every consent granted), replayed into the console."""
+    from sentrix.link.policy import TunnelPolicy
+    from sentrix.link.tunnel import TunnelExecutor
+
+    async def go():
+        executor = TunnelExecutor(rec.console.app, cfg=settings.link, audit=lambda **_: None,
+                                  policy=TunnelPolicy(media_per_minute=60,
+                                                      consents=lambda: EVERYTHING,
+                                                      help_path_open=lambda: True))
+        try:
+            return await executor.execute({
+                "id": "r1", "method": method, "path": path, "query": "", "headers": [],
+                "actor": actor.to_dict(), "base": "/d/abc", "csrf": "c", "timeout_ms": 5000,
+                "body_b64": base64.b64encode(body).decode()})
+        finally:
+            await executor.close()
+
+    return asyncio.run(go())
+
+
+def stepped_up(client):
+    """A tunnelled test client whose Portal user re-entered the password now."""
+    from sentrix.link import tunnel_auth
+    client.headers[tunnel_auth.HEADER_STEP_UP] = str(int(time.time()))
+    return client
 
 
 class TestDeviceAdmin:
@@ -200,58 +240,61 @@ class TestRefusals:
             assert response.json()["code"] == "unauthorised"
         assert rec.pipeline.recorder is None, "no handler ran"
 
-    def test_portal_users_are_refused_by_the_path_table(self):
-        from sentrix.actor import Actor
+    def test_the_path_table_keeps_the_files_on_the_lan(self):
         from sentrix.link.policy import TunnelPolicy, classify
-        everything = {"remote_view": True, "face_recognition": True, "desk_live_view": True}
-        policy = TunnelPolicy(media_per_minute=60, consents=lambda: everything,
+        policy = TunnelPolicy(media_per_minute=60, consents=lambda: EVERYTHING,
                               help_path_open=lambda: True)
-        owner = Actor("owner", id="u1", name="Riya", step_up_at=time.time())
-        for method, path in (("GET", "/api/recordings"), ("POST", "/api/recordings/start"),
-                             ("POST", "/api/recordings/stop"),
-                             ("DELETE", "/api/recordings/rec_20261028_101010"),
+        member, desk = Actor("member", id="m1"), Actor("operator", id="o1")
+        fresh = owner(time.time())
+        mine = {("GET", "/api/recordings"): "record_status",
+                ("POST", "/api/recordings/start"): "record",
+                ("POST", "/api/recordings/stop"): "record_stop"}
+        for (method, path), path_class in mine.items():
+            assert classify(method, path) == path_class, (method, path)
+            assert policy.check_request(method, path, fresh), (method, path)
+            for actor in (member, desk):
+                decision = policy.check_request(method, path, actor)
+                assert not decision and decision.code == "forbidden_role", (actor.type, path)
+        for method, path in (("DELETE", "/api/recordings/rec_20261028_101010"),
                              ("GET", "/media/recording/rec_20261028_101010.avi"),
                              ("HEAD", "/media/recording/rec_20261028_101010.wav")):
             assert classify(method, path) == "lc_only", (method, path)
-            for actor in (owner, Actor("member", id="m1"), Actor("operator", id="o1")):
+            for actor in (fresh, member, desk):
                 decision = policy.check_request(method, path, actor)
                 assert not decision and decision.code == "forbidden_role", (method, path)
 
-    def test_the_tunnel_never_reaches_the_handler(self, rec):
-        from sentrix.actor import Actor
-        from sentrix.link.policy import TunnelPolicy
-        from sentrix.link.tunnel import TunnelExecutor
-        everything = {"remote_view": True, "face_recognition": True, "desk_live_view": True}
-        owner = Actor("owner", id="u1", name="Riya", step_up_at=time.time())
-
-        async def go(method, path):
-            executor = TunnelExecutor(rec.console.app, cfg=settings.link, audit=lambda **_: None,
-                                      policy=TunnelPolicy(media_per_minute=60,
-                                                          consents=lambda: everything,
-                                                          help_path_open=lambda: False))
-            try:
-                return await executor.execute({
-                    "id": "r1", "method": method, "path": path, "query": "", "headers": [],
-                    "actor": owner.to_dict(), "base": "/d/abc", "csrf": "c", "timeout_ms": 5000,
-                    "body_b64": base64.b64encode(b"").decode()})
-            finally:
-                await executor.close()
-
-        for method, path in (("GET", "/api/recordings"), ("POST", "/api/recordings/start"),
-                             ("GET", "/media/recording/rec_20261028_101010.avi")):
-            result = asyncio.run(go(method, path))
-            assert result.status == 403 and json.loads(result.body)["code"] == "forbidden_role"
-        assert rec.pipeline.recorder is None, "refused before any handler ran"
-
     def test_a_tunnel_principal_past_the_table_is_still_refused(self, rec):
-        for role in ("owner", "member", "operator"):
-            client = tunnel_client(rec.console, role)
-            for method, path in (("GET", "/api/recordings"), ("POST", "/api/recordings/start"),
-                                 ("GET", "/media/recording/rec_20261028_101010.avi")):
+        """The routes restate the table: if a request got past it, members
+        and the Desk get nothing, the owner no file, and no start without a
+        fresh step-up (a stop never needs one)."""
+        item = record_one(rec)
+        files = (("GET", "/media/recording/" + item["files"]["video"]),
+                 ("HEAD", "/media/recording/" + item["files"]["meta"]),
+                 ("DELETE", "/api/recordings/" + item["name"]))
+        control = (("POST", "/api/recordings/start"), ("POST", "/api/recordings/stop"))
+        for role in ("member", "operator"):
+            client = stepped_up(tunnel_client(rec.console, role))
+            for method, path in files + control + (("GET", "/api/recordings"),):
                 response = client.request(method, path)
                 assert response.status_code == 403, (role, method, path)
+                if method != "HEAD":
+                    assert response.json()["code"] == "forbidden_role"
+        fresh = stepped_up(tunnel_client(rec.console, "owner"))
+        for method, path in files:
+            response = fresh.request(method, path)
+            assert response.status_code == 403, (method, path)
+            if method != "HEAD":
                 assert response.json()["code"] == "forbidden_role"
-        assert rec.pipeline.recorder is None
+        stale = tunnel_client(rec.console, "owner")                 # never stepped up
+        response = stale.post("/api/recordings/start")
+        assert response.status_code == 403 and response.json()["code"] == "step_up_required"
+        stop = stale.post("/api/recordings/stop")
+        assert stop.status_code == 409 and stop.json()["code"] == "conflict", \
+            "a stop reaches the recorder without a step-up (nothing records: 409)"
+        assert stale.get("/api/recordings").status_code == 200, "looking needs no step-up"
+        assert audits(rec, "recording_downloaded") == [] and audits(rec, "recording_deleted") == []
+        assert not rec.pipeline.recorder.active
+        assert [i["name"] for i in rec.pipeline.recorder.list()] == [item["name"]]
 
     def test_traversal_part_files_and_unknown_names_are_404(self, rec):
         item = record_one(rec)
@@ -328,6 +371,105 @@ class TestRefusals:
         stopped = rec.client.post("/api/recordings/stop")
         assert stopped.status_code == 200, stopped.text
         assert rec.pipeline.recorder.wait(10.0) and not rec.pipeline.recorder.active
+
+
+class TestThroughThePortal:
+    """D20 as amended on 2026-10-28: the owner starts and stops recordings
+    through the Portal with a fresh step-up (the siren test's rule) and lists
+    them; downloads and deletes stay on the LAN."""
+
+    def test_the_owner_with_a_fresh_step_up_starts_and_stops(self, rec):
+        fresh = owner(time.time())
+        started = through_portal(rec, "POST", "/api/recordings/start", fresh,
+                                 json.dumps({"label": "From the Portal"}).encode())
+        assert started.status == 200, started.body
+        status = json.loads(started.body)
+        assert status["recording"] and status["name"].endswith("_from_the_portal")
+        feed(rec.pipeline)
+        stopped = through_portal(rec, "POST", "/api/recordings/stop", fresh)
+        assert stopped.status == 200 and not json.loads(stopped.body)["recording"]
+        assert rec.pipeline.recorder.wait(10.0)
+        assert [item["name"] for item in rec.pipeline.recorder.list()] == [status["name"]]
+        assert [row["by"] for row in audits(rec, "recording_started")] == ["portal:u1"]
+        assert [row["by"] for row in audits(rec, "recording_stopped")] == ["portal:u1"]
+
+    @pytest.mark.parametrize("step_up_at", [None, -3600.0, -301.0])
+    def test_without_a_fresh_step_up_nothing_starts(self, rec, step_up_at):
+        actor = owner(None if step_up_at is None else time.time() + step_up_at)
+        result = through_portal(rec, "POST", "/api/recordings/start", actor)
+        assert result.status == 403, step_up_at
+        assert json.loads(result.body)["code"] == "step_up_required"
+        assert rec.pipeline.recorder is None, "refused before any handler ran"
+
+    def test_the_owner_stops_a_recording_without_a_step_up(self, rec):
+        """A step-up lasts 5 min and a recording up to 10: stopping the filming
+        of the room is never blocked, whoever started it."""
+        assert rec.client.post("/api/recordings/start", json={}).status_code == 200
+        stopped = through_portal(rec, "POST", "/api/recordings/stop", owner())
+        assert stopped.status == 200, stopped.body
+        assert rec.pipeline.recorder.wait(10.0) and not rec.pipeline.recorder.active
+        assert [row["by"] for row in audits(rec, "recording_stopped")] == ["portal:u1"]
+
+    def test_downloads_and_deletes_are_refused(self, rec):
+        item = record_one(rec)                                   # recorded on the LAN
+        for actor in (owner(time.time()), Actor("member", id="m1"),
+                      Actor("operator", id="o1")):
+            for method, path in (("GET", "/media/recording/" + item["files"]["video"]),
+                                 ("HEAD", "/media/recording/" + item["files"]["meta"]),
+                                 ("DELETE", "/api/recordings/" + item["name"])):
+                result = through_portal(rec, method, path, actor)
+                assert result.status == 403, (actor.type, method, path)
+                assert json.loads(result.body)["code"] == "forbidden_role"
+        assert audits(rec, "recording_downloaded") == [] and audits(rec, "recording_deleted") == []
+        assert [i["name"] for i in rec.pipeline.recorder.list()] == [item["name"]]
+
+    def test_members_and_the_desk_get_nothing(self, rec):
+        for actor in (Actor("member", id="m1", step_up_at=time.time()),
+                      Actor("operator", id="o1", step_up_at=time.time())):
+            for method, path in (("GET", "/api/recordings"), ("POST", "/api/recordings/start"),
+                                 ("POST", "/api/recordings/stop")):
+                result = through_portal(rec, method, path, actor)
+                assert result.status == 403, (actor.type, method, path)
+                assert json.loads(result.body)["code"] == "forbidden_role"
+        assert rec.pipeline.recorder is None, "refused before any handler ran"
+
+    def test_the_listing_says_where_the_files_are(self, rec, monkeypatch):
+        from sentrix.web import recording_routes
+        monkeypatch.setattr(recording_routes, "_device_address", lambda: "192.168.29.9")
+        monkeypatch.setenv("SENTRIX_PORT", "8080")
+        item = record_one(rec)
+        result = through_portal(rec, "GET", "/api/recordings", owner())   # no step-up needed
+        assert result.status == 200, result.body
+        assert "hunter2" not in result.body.decode()
+        body = json.loads(result.body)
+        assert [i["name"] for i in body["items"]] == [item["name"]]
+        assert body["via"] == "portal"
+        assert body["download_here"] is False and body["can_delete"] is False
+        assert body["device_address"] == "192.168.29.9"
+        assert body["lan_url"] == "http://192.168.29.9:8080", "the device's port, not the Portal's"
+        lan = rec.client.get("/api/recordings").json()
+        assert lan["via"] == "lan" and lan["can_delete"] is True and lan["download_here"] is True
+        assert lan["device_address"] is None and lan["lan_url"] is None
+
+    def test_an_unknown_address_has_no_url(self, rec, monkeypatch):
+        from sentrix.web import recording_routes
+        monkeypatch.setattr(recording_routes, "_device_address", lambda: None)
+        body = json.loads(through_portal(rec, "GET", "/api/recordings", owner()).body)
+        assert body["device_address"] is None and body["lan_url"] is None
+        assert body["download_here"] is False and body["can_delete"] is False
+
+    @pytest.mark.parametrize("address, port, url", [
+        ("192.168.29.9", None, "http://192.168.29.9:8000"),
+        ("192.168.29.9", "9000", "http://192.168.29.9:9000"),
+        ("fe80::1", None, "http://[fe80::1]:8000"),
+        (None, None, None), ("", "9000", None)])
+    def test_lan_url(self, monkeypatch, address, port, url):
+        from sentrix.web import recording_routes
+        if port is None:
+            monkeypatch.delenv("SENTRIX_PORT", raising=False)
+        else:
+            monkeypatch.setenv("SENTRIX_PORT", port)
+        assert recording_routes.lan_url(address) == url
 
 
 def request_from(client_host, server_host="192.168.29.9"):
@@ -425,11 +567,16 @@ class TestHealthAndNode:
 
 
 class TestDashboardCard:
-    def test_only_the_device_admin_gets_the_card(self, rec):
+    def test_the_device_admin_and_the_owner_get_the_card(self, rec):
         page = rec.client.get("/dashboard").text
         assert 'id="record-card"' in page and "js/recording.js" in page
-        assert "Record video" in page
-        for role in ("owner", "member", "operator"):
+        assert "Record video" in page and "not through the Portal" in page
+        remote = tunnel_client(rec.console, "owner").get("/dashboard")
+        assert remote.status_code == 200
+        assert 'id="record-card"' in remote.text and "js/recording.js" in remote.text
+        assert "Start and stop recordings here" in remote.text
+        assert "on the home Wi-Fi" in remote.text and "not through the Portal" not in remote.text
+        for role in ("member", "operator"):
             remote = tunnel_client(rec.console, role).get("/dashboard")
             assert remote.status_code == 200
             assert 'id="record-card"' not in remote.text and "recording.js" not in remote.text

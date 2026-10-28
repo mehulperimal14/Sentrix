@@ -264,9 +264,10 @@ will guard it (ROADMAP.md §15). The device records it itself (decision D20):
    running SENTRIX, open `http://127.0.0.1:8000` on that laptop: the console
    binds loopback only by default (`SENTRIX_HOST=127.0.0.1`), and opening it
    to the network needs `SENTRIX_HOST` set deliberately plus a firewall rule
-   (`docs/4_DEPLOYMENT_AND_RUNBOOK.md` §4.1). Recording is for the device
-   admin on the local network only; the Portal never offers it or carries
-   the files.
+   (`docs/4_DEPLOYMENT_AND_RUNBOOK.md` §4.1). The owner can also start and
+   stop a recording on the Portal's dashboard (after re-entering the Portal
+   password), but downloads and deletes happen here on the local network
+   only: the Portal never carries the files.
 2. Dashboard → **Record video** → a label (optional) → **Start
    recording**. A red **REC** badge shows on the live video for everyone
    watching (it is not in the file). Get the consent of everyone filmed first.

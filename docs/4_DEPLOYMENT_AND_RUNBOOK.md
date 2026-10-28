@@ -165,7 +165,7 @@ timers, notification worker, retention); they are off by default and in tests.
 | URL | Page |
 |---|---|
 | `/login`, `/logout` (POST; GET shows a confirm page) | sign-in |
-| `/dashboard` | TCI gauge, engine scores, scene card, pipeline rates, evidence state, event log, SOS panel; for the device admin signed in on the LAN, the *Record video* card (start, stop, download, delete; never through the Portal, D20) |
+| `/dashboard` | TCI gauge, engine scores, scene card, pipeline rates, evidence state, event log, SOS panel; the *Record video* card: the device admin signed in on the LAN starts, stops, downloads and deletes; the owner through the Portal starts and stops (after a step-up) and sees the list, while downloads and deletes stay on the LAN (D20) |
 | `/live` | full-screen video with the HUD |
 | `/events` | incidents with filters, paging, Real / False verdicts |
 | `/alerts` | snapshot gallery |
@@ -180,7 +180,7 @@ The JSON API, with methods and error codes, is doc 7 §9.2 (new routes) and
 `sentrix/web/routes.py`; the main reads are `GET /api/health`,
 `/api/metrics`, `/api/config`, `/api/incidents`, `/api/evidence/verify`,
 `/api/sos`, `/api/node`, `/api/link`, `/api/channels`, and `/api/recordings`
-(the device admin only). `/docs` exists only with
+(the device admin, and the owner through the Portal). `/docs` exists only with
 `SENTRIX_API_DOCS=1`. Every state-changing request needs the
 `X-CSRF-Token` header that the pages send.
 
@@ -322,8 +322,10 @@ missing, and a `.json` sidecar).
   only unless `SENTRIX_HOST` is set deliberately, §4.1) → dashboard →
   *Record video* → a label → *Start recording*; *Stop recording*, wait
   for "Finishing the files…" to clear, then *Download video* (and *Download
-  sound* when there is a separate `.wav`) and *Delete*. The Portal never shows
-  this card and refuses its routes.
+  sound* when there is a separate `.wav`) and *Delete*. Through the Portal
+  the owner sees the same card with *Start* / *Stop* (after re-entering the
+  Portal password) and the list, without *Download* or *Delete*: the Portal
+  refuses those routes and never carries the files.
 - **Limits that stop or refuse a recording** (`SENTRIX_RECORD_*`, doc 7
   §3.4): 10 min each; 2 GB free kept for evidence, snapshots and logs (no start
   below it, and a running recording stops at it); 20 GB for all recordings
@@ -366,7 +368,9 @@ missing, and a `.json` sidecar).
 | Siren test answers 409 | siren line disarmed (`SENTRIX_SIREN_ARMED=0` or the arming key) | Arm it |
 | Siren does nothing | `ConsoleSiren` selected | `siren_is_real` in `/api/health` |
 | High TCI in an empty room | should not happen | `doctor` asserts empty-scene TCI < 0.10; the TCI leaves 0 only on confirmed evidence, so read the reason on the dashboard |
-| No *Record video* card | not signed in as the device admin on the LAN (the Portal never shows it) | Sign in on the device's console with the device password (§9 "Recordings and disk") |
+| No *Record video* card | signed in as a member or the Desk on the Portal (only the owner and the device admin get it), or the device runs a build from before 2026-10-28 | Sign in as the owner, or on the device's console with the device password (§9 "Recordings and disk"); update the device |
+| *Start recording* on the Portal says to re-enter your password | the owner's step-up is older than 5 minutes (a start needs a fresh one; a stop never does) | Re-enter the password on the Portal's *Account* page (`/account`), then press it again |
+| No *Download* or *Delete* buttons | the card is open through the Portal (the files never go through it) | Open the device's console on the home Wi-Fi at the address the card names |
 | The card says recording is turned off | `SENTRIX_RECORDING_ENABLED=0` | Set it to `1` and restart |
 | *Start recording* refused | camera offline or no frame yet; already recording or saving; under 2 GB free; recordings over 20 GB | The message names which; download and delete old recordings |
 | A recording has no sound | no microphone delivered sound while it ran, or ffmpeg is missing (the sound is then the separate `.wav`) | Node page "Microphone"; `tools/doctor.py` ffmpeg and microphone rows |

@@ -21,23 +21,33 @@ verdict / SOS / dispatch   owner, member
 HOME/ARMED (``/api/mode``) owner, member     the route checks the SOS PIN
 siren test                 owner             step-up (the 1/min limit is
                                              ``actuators.siren_test``'s)
+recording status           owner             ``GET /api/recordings`` (status and
+                                             list; no step-up; D20)
+recording start            owner             step-up; ``POST
+                                             /api/recordings/start`` (D20)
+recording stop             owner             ``POST /api/recordings/stop``; no
+                                             step-up: stopping the filming of
+                                             the room is never blocked (D20)
 Desk view                  operator          only while a request of this device
                                              is on the help path *and* consent
                                              ``desk_live_view``
-training recordings        none (LC only)    ``/api/recordings*``,
-                                             ``/media/recording/*``: the device
-                                             admin on the LAN (D20)
+recording files            none (LC only)    ``DELETE /api/recordings/*`` and
+                                             every other ``/api/recordings*``
+                                             path, ``/media/recording/*``: the
+                                             device admin on the LAN (D20)
 =========================  ================  =====================================
 
 Never tunnelled (refused even if the Portal forwarded them): ``/login``,
 ``/logout``, ``/setup/*``, ``/docs``, ``/redoc``, ``/openapi.json``, ``/video``
 and ``/ws/*`` (the last two are relayed from frame and state messages). The
 LC-only routes (``/api/link/reconnect``, ``/api/channels/test``, and every
-method on ``/api/recordings*`` and ``/media/recording/*``) belong to the device
-admin. Training recordings stay on the LAN: continuous video never leaves the
-device (D12) and a recording is far over the tunnel's 16 MiB response cap
-(D20). Anything not in the table is refused. ``company_admin`` never reaches
-the device: it is not a tunnel role and :class:`Actor` refuses it.
+``/api/recordings*`` and ``/media/recording/*`` path the two recording rows do
+not name) belong to the device admin. The owner may start, stop and list
+training recordings through the Portal, but the files stay on the LAN:
+continuous video never leaves the device (D12) and a recording is far over the
+tunnel's 16 MiB response cap (D20). Anything not in the table is refused.
+``company_admin`` never reaches the device: it is not a tunnel role and
+:class:`Actor` refuses it.
 
 Consents come from the profile the Portal pushed (``sentrix.link.profile``);
 a device without one (standalone) grants none of them.
@@ -68,8 +78,16 @@ NEVER_PREFIXES = ("/setup/", "/ws/", "/docs/", "/redoc/")
 #: Routes only the device admin (LC password, on the LAN) may use.
 LC_ONLY = frozenset({"/api/link/reconnect", "/api/channels/test"})
 #: Path prefixes only the device admin may use, whatever the method: the
-#: training recordings and their downloads (D20).
+#: training recordings' files, their downloads and deletes (D20), except the
+#: owner's status and start/stop (:data:`RECORD_STATUS_PATH`,
+#: :data:`RECORD_CONTROL`), which :func:`classify` picks out first.
 LC_ONLY_PREFIXES = ("/api/recordings", "/media/recording/")
+#: The recorder's status and list (GET/HEAD): the owner through the Portal.
+RECORD_STATUS_PATH = "/api/recordings"
+#: Starting and stopping a training recording (POST): the owner; starting
+#: needs a step-up, stopping never does (a stop only ends the filming).
+RECORD_CONTROL = frozenset({"/api/recordings/start", "/api/recordings/stop"})
+RECORD_STOP_PATH = "/api/recordings/stop"
 READ_METHODS = frozenset({"GET", "HEAD"})
 TUNNEL_METHODS = frozenset({"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"})
 
@@ -77,6 +95,7 @@ TUNNEL_METHODS = frozenset({"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"})
 NEVER, PAGE, READ_API, STATIC, MEDIA, FACES = "never", "page", "read_api", "static", "media", "faces"
 GALLERY_WRITE, GALLERY_DELETE = "gallery_write", "gallery_delete"
 SOS_WRITE, MODE, SIREN, LC_ADMIN, UNKNOWN = "sos_write", "mode", "siren_test", "lc_only", "unknown"
+RECORD, RECORD_STOP, RECORD_STATUS = "record", "record_stop", "record_status"
 
 
 @dataclass(frozen=True)
@@ -124,6 +143,13 @@ def classify(method: str, path: str) -> str:
     method = method.upper()
     if path in NEVER_EXACT or path.startswith(NEVER_PREFIXES):
         return NEVER
+    # Before the LC-only prefixes: the owner's two recording rows (D20).
+    if method in READ_METHODS and path == RECORD_STATUS_PATH:
+        return RECORD_STATUS
+    if method == "POST" and path == RECORD_STOP_PATH:
+        return RECORD_STOP
+    if method == "POST" and path in RECORD_CONTROL:
+        return RECORD
     if path in LC_ONLY or path.startswith(LC_ONLY_PREFIXES):
         return LC_ADMIN
     if method in READ_METHODS:
@@ -270,6 +296,15 @@ class TunnelPolicy:
             if not actor.stepped_up_within(STEP_UP_SECONDS, self._clock()):
                 return _refuse("step_up_required", "re-enter your password first", path_class)
             return _allow(path_class)
+        if path_class in (RECORD_STATUS, RECORD, RECORD_STOP):
+            # The files never: deletes and downloads are lc_only above (D20).
+            if actor.type != "owner":
+                return _refuse("forbidden_role", "only the owner may record training videos",
+                               path_class)
+            if path_class == RECORD and not actor.stepped_up_within(
+                    STEP_UP_SECONDS, self._clock()):
+                return _refuse("step_up_required", "re-enter your password first", path_class)
+            return _allow(path_class)
         return _refuse("forbidden_role", "not in the tunnel path table", path_class)
 
     # ── relays ────────────────────────────────────────────────────────────────
@@ -293,5 +328,6 @@ class TunnelPolicy:
 
 
 __all__ = ["Decision", "TunnelPolicy", "classify", "normalise_path", "STEP_UP_SECONDS",
-           "PAGES", "DESK_PATHS", "LC_ONLY", "LC_ONLY_PREFIXES", "NEVER_EXACT",
-           "NEVER_PREFIXES", "TUNNEL_METHODS"]
+           "PAGES", "DESK_PATHS", "LC_ONLY", "LC_ONLY_PREFIXES", "RECORD_STATUS_PATH",
+           "RECORD_CONTROL", "RECORD_STOP_PATH", "NEVER_EXACT", "NEVER_PREFIXES",
+           "TUNNEL_METHODS"]

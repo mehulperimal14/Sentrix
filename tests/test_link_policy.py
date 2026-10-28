@@ -57,9 +57,15 @@ class TestPathTable:
         assert classify("POST", "/api/mode") == "mode"
         assert classify("POST", "/api/node/siren-test") == "siren_test"
         assert classify("POST", "/api/link/reconnect") == "lc_only"
-        assert classify("GET", "/api/recordings") == "lc_only"
-        assert classify("POST", "/api/recordings/start") == "lc_only"
+        assert classify("GET", "/api/recordings") == "record_status"
+        assert classify("HEAD", "/api/recordings") == "record_status"
+        assert classify("POST", "/api/recordings/start") == "record"
+        assert classify("POST", "/api/recordings/stop") == "record_stop"
         assert classify("DELETE", "/api/recordings/rec_20261028_101010") == "lc_only"
+        assert classify("DELETE", "/api/recordings/start") == "lc_only", "a recording's name"
+        assert classify("GET", "/api/recordings/start") == "lc_only"
+        assert classify("POST", "/api/recordings") == "lc_only"
+        assert classify("GET", "/api/recordings/") == "lc_only"
         assert classify("GET", "/media/recording/rec_20261028_101010.avi") == "lc_only"
         assert classify("HEAD", "/media/recording/rec_20261028_101010.wav") == "lc_only"
         assert classify("GET", "/ws/threat") == "never"
@@ -127,19 +133,56 @@ class TestPathTable:
         assert p.check_request("TRACE", "/dashboard", OWNER).code == "invalid_args"
 
     @pytest.mark.parametrize("method, path", [
-        ("GET", "/api/recordings"), ("POST", "/api/recordings/start"),
-        ("POST", "/api/recordings/stop"), ("DELETE", "/api/recordings/rec_20261028_101010"),
+        ("DELETE", "/api/recordings/rec_20261028_101010"),
+        ("DELETE", "/api/recordings/start"), ("PUT", "/api/recordings/start"),
+        ("GET", "/api/recordings/rec_20261028_101010"), ("POST", "/api/recordings"),
         ("GET", "/media/recording/rec_20261028_101010.avi"),
         ("HEAD", "/media/recording/rec_20261028_101010.json"),
         ("GET", "/media/recording/rec%5F20261028%5F101010.avi")])
-    def test_training_recordings_stay_on_the_lan(self, method, path):
-        """D20: neither the read API nor the media class lets a recording out,
-        whatever the role, consent or step-up (D12, the 16 MiB response cap)."""
+    def test_training_recording_files_stay_on_the_lan(self, method, path):
+        """D20: no download and no delete through the tunnel, whatever the
+        role, consent or step-up (D12, the 16 MiB response cap)."""
         p = policy(ALL, help_path=True)
         for actor in (OWNER, MEMBER, DESK):
             decision = p.check_request(method, path, actor)
             assert not decision and decision.code == "forbidden_role", (actor.type, path)
             assert decision.path_class == "lc_only" and decision.status == 403
+
+    def test_recording_start_owner_with_step_up_stop_owner_always(self):
+        """D20 as amended on 2026-10-28: the owner starts a training recording
+        through the Portal with a fresh step-up (the siren test's rule) and
+        stops it without one (stopping is never blocked); members and the
+        Desk never."""
+        p = policy(ALL, help_path=True)
+        never = Actor("owner", id="u1", name="Riya")
+        edge = Actor("owner", id="u1", name="Riya", step_up_at=NOW - 300)
+        for owner in (OWNER, edge):
+            allowed = p.check_request("POST", "/api/recordings/start", owner)
+            assert allowed and allowed.path_class == "record"
+        for owner in (STALE_OWNER, never):
+            stale = p.check_request("POST", "/api/recordings/start", owner)
+            assert stale.code == "step_up_required" and stale.status == 403
+            assert stale.path_class == "record"
+        for owner in (OWNER, edge, STALE_OWNER, never):
+            stop = p.check_request("POST", "/api/recordings/stop", owner)
+            assert stop and stop.path_class == "record_stop", "a stop is never blocked"
+        for path in ("/api/recordings/start", "/api/recordings/stop"):
+            for actor in (MEMBER, DESK):
+                refused = p.check_request("POST", path, actor)
+                assert refused.code == "forbidden_role", (actor.type, path)
+
+    def test_recording_status_owner_only_without_step_up(self):
+        """The status and list (no file in them) need no step-up; members
+        and the Desk are refused."""
+        p = policy(ALL, help_path=True)
+        for method in ("GET", "HEAD"):
+            for owner in (OWNER, STALE_OWNER, Actor("owner", id="u1")):
+                listing = p.check_request(method, "/api/recordings", owner)
+                assert listing and listing.path_class == "record_status", method
+            for actor in (MEMBER, DESK):
+                refused = p.check_request(method, "/api/recordings", actor)
+                assert refused.code == "forbidden_role", (actor.type, method)
+                assert refused.path_class == "record_status"
 
     def test_desk_only_on_the_help_path_with_consent(self):
         assert policy(ALL, help_path=False).check_request("GET", "/live", DESK).code == \

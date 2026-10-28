@@ -418,16 +418,22 @@ class TestRoles:
         assert "data-dispatch-authority" not in page.text
         assert 'data-sos-action="approve"' not in page.text
 
-    def test_only_the_device_admin_records_for_training(self, console):
-        """D20: the card and its script are the device admin's; the tunnel's
-        path table refuses the routes to every Portal role anyway."""
+    def test_the_device_admin_and_the_owner_record_for_training(self, console):
+        """D20 as amended on 2026-10-28: the card and its script are the
+        device admin's and the owner's (who starts and stops through the
+        Portal; the path table keeps the files on the LAN); members and the
+        Desk never see it."""
         lan = lc_client(console)[0].get("/dashboard").text
+        owner = tunnel_client(console, "owner").get("/dashboard").text
         assert 'id="record-card"' in lan and "/static/js/recording.js" in lan
-        assert "record" in re.search(r'data-caps="([^"]*)"', lan).group(1).split()
-        for role in ("owner", "member", "operator"):
+        assert 'id="record-card"' in owner and f"{BASE}/static/js/recording.js" in owner
+        for page in (lan, owner):
+            assert "record" in re.search(r'data-caps="([^"]*)"', page).group(1).split()
+        for role in ("member", "operator"):
             page = tunnel_client(console, role).get("/dashboard").text
             assert 'id="record-card"' not in page and "recording.js" not in page, role
             assert "data-record-" not in page, role
+            assert "record" not in re.search(r'data-caps="([^"]*)"', page).group(1).split()
 
     def test_portal_users_have_no_console_logout(self, console):
         page = tunnel_client(console).get("/dashboard")

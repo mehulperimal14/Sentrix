@@ -8,7 +8,9 @@ the local network and deletes them.
 
 * ``GET /api/recordings`` - the recorder's status (with the microphone), the
   finished recordings (newest first), free space, whether ffmpeg is installed
-  and how long recordings are kept.
+  and how long recordings are kept; ``via`` ("lan" or "portal"),
+  ``can_delete``, ``download_here`` and, when known, the device's address on
+  its network and the console's URL there (``lan_url``).
 * ``POST /api/recordings/start`` - JSON ``{"label"?}``. 409 ``conflict`` while
   recording or saving, before the camera's first frame, short of disk or over
   the recordings' quota; 400 ``invalid_args`` for a bad body.
@@ -32,11 +34,19 @@ evidence lives on, so such downloads are refused (409) and the card names the
 address to open on a laptop instead (``SENTRIX_RECORD_DOWNLOAD_ON_DEVICE``,
 :func:`downloads_allowed`).
 
-**The device admin on the LAN only** (``require_lc("device_admin")`` on every
-route): a tunnelled principal is never the device admin, and the link's path
-table already refuses these paths as ``lc_only`` before any handler runs
-(``sentrix/link/policy.py``). Continuous video stays on the device (D12) and a
-recording is far over the tunnel's 16 MiB response cap.
+**Who.** The device admin on the LAN does everything. Since 2026-10-28 the
+owner may also start, stop and list recordings through the Portal
+(``require_lc("device_admin", "owner")``; a start also needs a step-up within
+:data:`~sentrix.link.policy.STEP_UP_SECONDS`, which the link's path table
+checks first and the route checks again; a stop never does: a step-up lasts
+5 min, a recording up to 10, and stopping the filming is never blocked). Downloads and deletes stay the
+device admin's on the LAN (``require_lc("device_admin")``; the path table
+refuses them to every tunnelled role as ``lc_only`` before any handler runs,
+``sentrix/link/policy.py``): continuous video stays on the device (D12) and a
+recording is far over the tunnel's 16 MiB response cap. A tunnelled listing
+therefore says ``download_here`` and ``can_delete`` false and names the
+console's address on the home network instead. Members and the Desk are
+refused all of it.
 """
 
 from __future__ import annotations
@@ -44,6 +54,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import json
+import os
 import re
 import time
 from typing import Any
@@ -52,6 +63,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from sentrix.io.recorder import RecorderError
+from sentrix.link.policy import STEP_UP_SECONDS
 from sentrix.utils.logging import get_logger
 from sentrix.utils.redact import redact_tree
 from sentrix.web.auth import LcError, LcPrincipal, rate_key, require_lc
@@ -80,7 +92,14 @@ _pruned_at: float | None = None
 ADDRESS_TTL_SECONDS = 60.0
 _address_cache: tuple[float, str | None] | None = None
 
+#: Downloads and deletes: the device admin on the LAN only.
 device_admin = require_lc("device_admin")
+#: The status and list: the device admin, or the owner through the Portal.
+owner_or_admin = require_lc("device_admin", "owner")
+#: Start: the same, the owner with a fresh step-up (the path table's ``record``
+#: row, restated so a request past the table is refused all the same). Stop
+#: uses :data:`owner_or_admin`: it is never blocked.
+controller = require_lc("device_admin", "owner", step_up_seconds=STEP_UP_SECONDS)
 
 
 def _pipeline() -> Any:
@@ -153,6 +172,17 @@ def _device_address() -> str | None:
         address = None
     _address_cache = (now, address)
     return address
+
+
+def lan_url(address: str | None) -> str | None:
+    """The console's URL on the home network (``SENTRIX_PORT``, default 8000),
+    or None when the address is unknown. A page served through the Portal
+    cannot work it out: its own port is the Portal's."""
+    if not address:
+        return None
+    port = os.getenv("SENTRIX_PORT", "").strip() or "8000"
+    host = f"[{address}]" if ":" in address else address
+    return f"http://{host}:{port}"
 
 
 def _starts_a_download(request: Request) -> bool:
@@ -231,19 +261,25 @@ async def _label(request: Request) -> str:
 
 @router.get("/api/recordings")
 async def api_recordings(request: Request,
-                         _principal: LcPrincipal = Depends(device_admin)) -> JSONResponse:
+                         principal: LcPrincipal = Depends(owner_or_admin)) -> JSONResponse:
     pipeline = await asyncio.to_thread(_pipeline)
     payload = await asyncio.to_thread(recordings_payload, pipeline)
     recorder = await asyncio.to_thread(pipeline.get_recorder)
-    payload["download_here"] = downloads_allowed(request, recorder.cfg)
-    payload["device_address"] = (None if payload["download_here"]
-                                 else await asyncio.to_thread(_device_address))
+    # Through the Portal the files are out of reach (D12, the 16 MiB cap): the
+    # card hides Download and Delete and names the console on the home network.
+    remote = principal.kind == "tunnel"
+    payload["via"] = "portal" if remote else "lan"
+    payload["can_delete"] = not remote
+    payload["download_here"] = not remote and downloads_allowed(request, recorder.cfg)
+    address = None if payload["download_here"] else await asyncio.to_thread(_device_address)
+    payload["device_address"] = address
+    payload["lan_url"] = lan_url(address)
     return JSONResponse(redact_tree(payload), headers=_NO_STORE)
 
 
 @router.post("/api/recordings/start")
 async def api_recording_start(request: Request,
-                              principal: LcPrincipal = Depends(device_admin)) -> JSONResponse:
+                              principal: LcPrincipal = Depends(controller)) -> JSONResponse:
     _limit(request)
     label = await _label(request)
     pipeline = await asyncio.to_thread(_pipeline)
@@ -256,9 +292,10 @@ async def api_recording_start(request: Request,
 
 
 @router.post("/api/recordings/stop")
-async def api_recording_stop(principal: LcPrincipal = Depends(device_admin)) -> JSONResponse:
-    # Not rate limited: a stop must never be refused while the room is being
-    # filmed, and when nothing records it is a 409 that changes nothing.
+async def api_recording_stop(principal: LcPrincipal = Depends(owner_or_admin)) -> JSONResponse:
+    # Neither rate limited nor behind a step-up: a stop must never be refused
+    # while the room is being filmed (a step-up lasts 5 min, a recording up to
+    # 10), and when nothing records it is a 409 that changes nothing.
     pipeline = await asyncio.to_thread(_pipeline)
     try:
         status = await asyncio.to_thread(pipeline.stop_recording, by=principal.actor)
@@ -305,4 +342,4 @@ async def media_recording(request: Request, filename: str,
 
 
 __all__ = ["router", "recordings_payload", "control_limiter", "CONTROL_PER_MINUTE",
-           "same_machine", "downloads_allowed"]
+           "same_machine", "downloads_allowed", "lan_url"]

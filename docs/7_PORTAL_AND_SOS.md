@@ -117,7 +117,7 @@ same process runs with the Pi camera (docs/8).
 | Channels: router and outbox, Telegram, e-mail (Brevo, Resend), modem SMS, Twilio wrapper | Built; tested with fake transports only | `tests/test_ch_*.py`. No real bot, provider account or modem has been used yet (§17) |
 | Pi 5 hardware I/O and deployment files | Built; tested against fakes only | `tests/test_hw_*.py`; docs/8 |
 | 4 s clip engine, fast lane, ONNX runtime | Built. Replay meets its gate; the laptop bench misses the compute budget | docs/6 §6.10; docs/8 T1 |
-| Training recordings on the LC (D20), a USB microphone in any port (D21) | Built; laptop, a synthetic camera and a fake `sounddevice` only | `tests/test_recorder.py`, `tests/test_recording_live.py`, `tests/test_recording_routes.py`, `tests/test_mic_hotplug.py`. Not run on the Pi or with a real microphone |
+| Training recordings on the LC (D20; the owner starts and stops them through the Portal since 2026-10-28), a USB microphone in any port (D21) | Built; laptop, a synthetic camera, the in-process tunnel and a fake `sounddevice` only | `tests/test_recorder.py`, `tests/test_recording_live.py`, `tests/test_recording_routes.py`, `tests/test_mic_hotplug.py`. Not run on the Pi or with a real microphone |
 | Portal deployment (Docker, Caddy, Postgres) | Files written and checked; Docker and a live Postgres not run | `deploy/portal/`, `tests/test_deploy_portal.py`, `tools/portal_pg_check.py` |
 | Device retention caps and vault tombstones, Alembic baseline, `tools/bench_link.py` | Not built | §15 items 3, 4, 6 |
 | Gates P1–P8 | Not measured as a set | §15 item 7 |
@@ -185,7 +185,7 @@ responder console) + confirmed emergency contacts → Desk resolves.
 |---|---|---|---|
 | Detection, levels, incidents, siren, evidence vault, `EVIDENCE_AES_KEY` | yes (authority) | metadata mirror only | edge first |
 | Face gallery, embeddings, evidence images, continuous video | **only here** | streamed on demand through the tunnel, never stored | D12 |
-| Training recordings (raw video + sound, `var/recordings/`) | **only here**, until the device admin downloads them on the LAN; deleted after 14 days | never: the tunnel refuses their paths to every role | D12, D20 |
+| Training recordings (raw video + sound, `var/recordings/`) | **only here**, until the device admin downloads them on the LAN; deleted after 14 days | never: the tunnel refuses downloads and deletes to every role (the owner may start, stop and list them, §5.7) | D12, D20 |
 | SOS snapshot | yes | **one** consented snapshot per request, 30 days, may show faces | D12 amended |
 | Profile, household, contacts, consents | encrypted cache (for offline SOS) | **authority** | |
 | SOS requests | creates them; authority until the cloud has the request *and* the heartbeat is lost | mirror; authority while the device is offline | §7.6 |
@@ -252,9 +252,10 @@ function `audio_status`; the live loop writes `mic_delivering`),
 (`mic_listening`)), `web/extensions.py` (`recording_routes` in
 `ROUTER_MODULES`), `tests/conftest.py` (`sounddevice.check_input_settings`
 blocked: it opens the device on ALSA), `tests/test_foundation.py`. Outside the
-list: `link/policy.py` (`LC_ONLY_PREFIXES`, §5.7) and `web/routes.py`
+list: `link/policy.py` (`LC_ONLY_PREFIXES`; since the same day's amendment
+the `record` and `record_status` classes, §5.7) and `web/routes.py`
 (`health_payload` gains `microphone` and `recording`, §9.3; the `record`
-capability, §10).
+capability, device admin and owner, §10).
 
 Frozen names in other files (keep them working and keep their signatures):
 `storage/requests.py` (`REQUEST_LOCK`, `append_event`, `create_request`,
@@ -277,7 +278,7 @@ Frozen names in other files (keep them working and keep their signatures):
 | `sentrix/io/sources.py`, `demo_reel.py` | `picamera:`, `demo-reel:` and the other camera specs; source names are redacted |
 | `sentrix/web/node_routes.py` | `GET /api/node` (with `microphone`), `POST /api/node/siren-test` (via `actuators.siren_test`) |
 | `sentrix/io/recorder.py` | `Recorder` (`start`, `stop`, `wait`, `close`; the O(1) taps `on_frame`, `on_audio`; `status`, `list`, `path_for`, `delete`, `prune`, `recover`), `RecorderError(code, message, status)`: constant-frame-rate MJPEG AVI, the 16 kHz track muxed by ffmpeg (else a `.wav`), sidecar, caps, crash recovery (D20) |
-| `sentrix/web/recording_routes.py`, `templates/dashboard.html` (*Record video* card), `static/js/recording.js` | `/api/recordings*`, `/media/recording/{file}` (§9.2), device admin only |
+| `sentrix/web/recording_routes.py`, `templates/dashboard.html` (*Record video* card), `static/js/recording.js` | `/api/recordings*`, `/media/recording/{file}` (§9.2): the device admin; start, stop and the list also the owner through the Portal (§5.7) |
 | `sentrix/perception/audio.py` | The microphone chooser (D21): `rank_inputs`, `devices_fingerprint`, `is_usb`, `Resampler`, `AudioEngine.status()`; sample listeners (`add_sample_listener`) feed the clip buffer and the recorder 16 kHz mono blocks |
 | `run.sh` (Pi path), `requirements-pi.txt`, `deploy/pi5/**`, `tools/doctor.py` | Pi install and service; doctor hardware rows; services print through `preflight`; doctor rows for ffmpeg, the recordings directory and the microphones PortAudio lists, none opened (D20, D21) |
 | `sentrix/pipeline/clip.py`, `fastlane.py`, `sentrix/runtime/**` | `ClipBuffer`, `ClipScheduler`, `ClipEngine`, `ClipScores`, `build_strategy(pipeline) -> InferenceStrategy`, `prepare_eval_pipeline(pipeline) -> Pipeline`; the fast lane; exported-model backends |
@@ -927,9 +928,13 @@ Never tunnelled (refused by both sides): `/login`, `/logout`, `/setup/*`,
 LC-only (refused by the device to every tunnelled role as `lc_only`, code
 `forbidden_role`, before any handler runs): the exact paths `LC_ONLY`
 (`/api/link/reconnect`, `/api/channels/test`) and, whatever the method, the
-prefixes `LC_ONLY_PREFIXES` (`/api/recordings`, `/media/recording/`). The
-training recordings stay on the LAN: continuous video never leaves the device
-(D12) and a recording is far over the 16 MiB response cap (D20).
+prefixes `LC_ONLY_PREFIXES` (`/api/recordings`, `/media/recording/`), except
+the owner's two recording rows, which `classify` picks out first: `GET` or
+`HEAD` on `/api/recordings` (`record_status`) and `POST` on
+`/api/recordings/start` and `/api/recordings/stop` (`record`,
+`RECORD_CONTROL`). The recording files stay on the LAN: continuous video
+never leaves the device (D12) and a recording is far over the 16 MiB
+response cap (D20).
 
 Request handling on the Portal proxy (T-LINK): the route uses
 `security.require_role("owner", "member", "operator", csrf="header")` — only
@@ -941,7 +946,10 @@ tunnel serves). A logged-out HTML GET of `/d/<id>/<page>` is redirected to
 answer from the console is rewritten to `/d/<id>/x`. Role, consent, step-up
 and rate-limit rules for tunnelled requests are enforced **only** by
 `sentrix/link/policy.py` on the device, before the in-process call; console
-routes enforce only their business rules (§5.8).
+routes enforce only their business rules (§5.8). The one exception is the
+training recordings (D20): their list, start and stop also restate their
+`record_status` / `record` rows, so a request past the table is refused all
+the same.
 
 Relays:
 * `/d/{id}/video` → `video.subscribe`; the device pushes FRAME messages from
@@ -968,8 +976,11 @@ call; every request → `remote_audit`):
 | `POST /api/incidents/*/verdict`, `POST /api/sos/*`, `POST /api/dispatch/*` | owner, member | |
 | HOME/ARMED (`POST /api/mode`) | owner, member | the route checks the SOS PIN |
 | `POST /api/node/siren-test` | owner | step-up; 1/min |
+| recording status: `GET /api/recordings` (status and list) | owner | no step-up (D20) |
+| recording start: `POST /api/recordings/start` | owner | step-up (D20) |
+| recording stop: `POST /api/recordings/stop` | owner | no step-up: stopping is never blocked (D20) |
 | Desk view: `GET /dashboard`, `/live`, `/static/*`, `/api/health`, `/api/metrics`, video and state relays | operator | only while a request of this device is on the help path **and** consent `desk_live_view` |
-| training recordings (`/api/recordings*`, `/media/recording/*`, every method) | none (LC only) | the device admin on the LAN (D20) |
+| recording files: `DELETE /api/recordings/*` and every other `/api/recordings*` path, `/media/recording/*` (every method) | none (LC only) | the device admin on the LAN (D20) |
 | anything | company_admin | always refused |
 
 ### 5.8 Tunnel auth bridge *(`sentrix/link/tunnel_auth.py`)*
@@ -1014,8 +1025,10 @@ call; every request → `remote_audit`):
   requests. Use `require_lc()` with no roles on every console route; pass
   roles only for LC-only routes (`require_lc("device_admin")` on
   `/api/link/reconnect`, `/api/channels/test`, `/api/sos/demo/trigger` and
-  every recordings route, D20). The device admin's password
-  session counts as stepped up.
+  the recordings' delete and download, D20). The recordings' list, start and
+  stop restate their path-table rows (`require_lc("device_admin", "owner")`,
+  start and stop with `step_up_seconds=STEP_UP_SECONDS`). The device admin's
+  password session counts as stepped up.
 * If the hardening module fails to load, `extensions.install` installs a
   fail-closed middleware: every POST/PUT/PATCH/DELETE answers 503 while pages,
   video and reads keep working; tunnel identities never exist without it.
@@ -1738,11 +1751,11 @@ leave).
 | GET | `/sos`, `/node` | T-WEB | pages |
 | GET/POST | `/setup/wifi`, POST `/setup/wifi/scan` | T-WEB (+ T-HW `io/network.py`) | only while `SENTRIX_SETUP_MODE=1`; the label's one-time code checked against `identity.json` `setup_code_digest`; rate limited |
 | GET | `/api/incidents?limit&offset` + filters | T-WEB | limit ≤ 500 (database caps it); type, level, verdict, date filters |
-| GET | `/api/recordings` | D20 | device admin only (every recordings route: `require_lc("device_admin")`, and `lc_only` in the path table); `{status, items, free_bytes, ffmpeg, microphone, keep_days, total_bytes, max_total_bytes}`: the recorder's status (recording / finalizing, name, seconds, frames, duplicated, dropped, fps, size, audio, stop_reason, last_error), the finished recordings newest first (name, label, created_at, seconds, bytes, has_audio, interrupted, files); prunes past `keep_days` at most hourly |
-| POST | `/api/recordings/start` | D20 | JSON `{"label"?}` (≤ 200 characters; the file name keeps `a-z 0-9 _ -`, 40 at most); 400 `invalid_args` for a bad body; 409 `conflict` before the camera's first frame or while it is offline, while recording or saving, short of free space, over the total quota, or with recording off; at most 10 starts a minute per caller, refused ones included (429 `rate_limited`, `Retry-After: 60`); a stop is never rate limited |
-| POST | `/api/recordings/stop` | D20 | 409 when nothing is recording; never rate limited; the files are saved on the recorder's thread (`finalizing` until done) |
-| DELETE | `/api/recordings/{name}` | D20 | `{status: "ok", name}`; 404 `not_found`; 409 for the recording in progress |
-| GET, HEAD | `/media/recording/{file}` | D20 | a finished `<name>.avi`, `.wav` or `.json` as an attachment (`Range` supported, `Cache-Control: no-store`); 404 for anything else, a `.part` file or a path; every GET is audited `recording_downloaded` except a single `bytes=N-` range with N > 0 and no `If-Range` (a later part of a download) |
+| GET | `/api/recordings` | D20 | device admin, or the owner through the Portal without a step-up (`require_lc("device_admin", "owner")`; path-table class `record_status`; members and the Desk 403 `forbidden_role`); `{status, items, free_bytes, ffmpeg, microphone, keep_days, total_bytes, max_total_bytes, via, can_delete, download_here, device_address, lan_url}`: `via` is `lan` or `portal`; through the Portal `can_delete` and `download_here` are false and `device_address` / `lan_url` (`http://<address>:<SENTRIX_PORT>`, null when unknown) name the console on the home network; on the LAN `can_delete` is true and the address is given only when `download_here` is false (a browser on the device itself); the recorder's status (recording / finalizing, name, seconds, frames, duplicated, dropped, fps, size, audio, stop_reason, last_error), the finished recordings newest first (name, label, created_at, seconds, bytes, has_audio, interrupted, files); prunes past `keep_days` at most hourly |
+| POST | `/api/recordings/start` | D20 | device admin, or the owner through the Portal with a step-up ≤ 300 s (class `record`; 403 `step_up_required` without one, checked by the path table and again by the route); audited with `by` = `lc:device_admin` or `portal:<user>`; JSON `{"label"?}` (≤ 200 characters; the file name keeps `a-z 0-9 _ -`, 40 at most); 400 `invalid_args` for a bad body; 409 `conflict` before the camera's first frame or while it is offline, while recording or saving, short of free space, over the total quota, or with recording off; at most 10 starts a minute per caller, refused ones included (429 `rate_limited`, `Retry-After: 60`); a stop is never rate limited |
+| POST | `/api/recordings/stop` | D20 | device admin, or the owner through the Portal without a step-up (class `record_stop`: stopping the filming is never blocked); 409 when nothing is recording; never rate limited; the files are saved on the recorder's thread (`finalizing` until done) |
+| DELETE | `/api/recordings/{name}` | D20 | device admin only (`require_lc("device_admin")`; `lc_only` in the path table); `{status: "ok", name}`; 404 `not_found`; 409 for the recording in progress |
+| GET, HEAD | `/media/recording/{file}` | D20 | device admin only (as delete); a finished `<name>.avi`, `.wav` or `.json` as an attachment (`Range` supported, `Cache-Control: no-store`); 404 for anything else, a `.part` file or a path; every GET is audited `recording_downloaded` except a single `bytes=N-` range with N > 0 and no `If-Range` (a later part of a download) |
 
 ### 9.3 `/api/health` additions
 
@@ -1824,7 +1837,7 @@ is left alone). A test renders every page through the tunnel and asserts every
 | Dispatch send (approve with authority) | ✓ | ✓ | ✓ | ✗ | ✗ |
 | HOME/ARMED | ✓ (disarm: PIN) | ✓ (disarm: PIN) | ✓ (disarm: PIN) | ✗ | ✗ |
 | Test siren | ✓ | ✓ step-up | ✗ | ✗ | ✗ |
-| Training recordings: start, stop, list, download, delete (D20) | ✓ (on the LAN; capability `record`) | ✗ (refused by the path table) | ✗ | ✗ | ✗ |
+| Training recordings: start / stop, list, download / delete (D20) | ✓ (on the LAN; capability `record`) | ✓ step-up / ✓ / ✗ (capability `record`; files on the LAN only) | ✗ | ✗ | ✗ |
 | Profile, contacts, PINs, settings, privacy | — | ✓ (step-up for safety settings/PINs) | view | ✗ | ✗ |
 | Members (invite/remove) | — | ✓ | ✗ | ✗ | ✗ |
 | Desk queue, acknowledge, resolve | — | ✗ | ✗ | ✓ (TOTP) | ✗ |
@@ -1902,8 +1915,9 @@ and the relays get 401), `audit`, `verify_audit_chain`.
 * Minors' faces are never enrolled in the capstone; demo data uses fictional
   people and consenting team members.
 * Training recordings (D20) are raw video and sound of the room: the device
-  admin starts each one by hand, a red **REC** badge is on the live preview
-  for everyone watching (never in the file), they stay in `var/recordings/` on
+  admin (or the owner through the Portal, after a step-up) starts each one by
+  hand, a red **REC** badge is on the live preview for everyone watching
+  (never in the file), they stay in `var/recordings/` on
   the device until downloaded on the LAN (never through the Portal), and are
   deleted after 14 days. Everyone filmed gives written consent first
   (ROADMAP §15.1); a person who withdraws has their recordings deleted.
