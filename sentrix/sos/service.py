@@ -1350,6 +1350,12 @@ class SosEngine:
     def _open_request_of(self, incident_id: str) -> dict | None:
         from sentrix.storage import requests
         for request in requests.requests_for_incident(incident_id):
+            flags = request.get("flags") or {}
+            if flags.get("silent") or flags.get("duress"):
+                # A duress help path is invisible to the household: a "False
+                # alarm" on its incident must answer as if no request existed
+                # (no PIN demanded) and cannot touch it.
+                continue
             if request["state"] in S.OPEN_STATES:
                 return request
         return None

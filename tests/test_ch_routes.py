@@ -132,3 +132,19 @@ class TestChannelTest:
 def test_the_router_is_registered_as_an_lc_extension():
     from sentrix.web import extensions
     assert "sentrix.web.channel_routes" in extensions.ROUTER_MODULES
+
+
+def test_recent_messages_of_a_duress_request_are_hidden(monkeypatch):
+    """/api/channels is readable by the household (and through the Portal);
+    a duress request's "sos.duress" rows would reveal what the owner's
+    screens hide as a false alarm."""
+    from sentrix.storage import requests
+    from sentrix.web.channel_routes import _without_duress
+    flags = {"r-duress": {"duress": True}, "r-silent": {"silent": True}, "r-plain": {}}
+    monkeypatch.setattr(requests, "get_request",
+                        lambda rid: {"id": rid, "flags": flags.get(rid, {})})
+    rows = [{"id": 1, "request_id": "r-duress", "template": "sos.duress"},
+            {"id": 2, "request_id": "r-silent", "template": "sos.full"},
+            {"id": 3, "request_id": "r-plain", "template": "sos.prompt"},
+            {"id": 4, "request_id": None, "template": "channel.test"}]
+    assert [r["id"] for r in _without_duress(rows)] == [3, 4]

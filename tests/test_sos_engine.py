@@ -1312,3 +1312,26 @@ class TestTheSameIncidentGrows:
                                     pin=SOS_PIN)["ok"]
         fire_trigger(world, incident_id=incident)          # a repeated weapon trigger
         assert len(requests.list_requests(5)) == 1
+
+
+def test_a_false_alarm_never_reveals_or_touches_a_silent_duress_request(world):
+    """Disarmed with the duress PIN while an L2 incident is live: a silent
+    request opens. A "False alarm" on that incident must answer as if there
+    were no request (no PIN asked) and leave its package alone."""
+    from types import SimpleNamespace
+    world.holder["reach"] = OFFLINE
+    mode.set_armed(True, by="test")
+    try:
+        incident = new_incident("intrusion", 2)
+        world.pipeline.incidents = SimpleNamespace(current=SimpleNamespace(
+            id=incident, snapshot_path=None, evidence_bundle=None, evidence_hash=None))
+        assert world.engine.set_mode(False, pin=DURESS_PIN, actor=OWNER)["ok"]
+        req = the_request()
+        before = package_of(req["id"])["status"]
+        no_pin = world.engine.false_verdict(incident, pin=None, actor=OWNER, channel="lc")
+        assert no_pin["ok"], "like an incident with no request: labelled without a PIN"
+        world.engine.drain()
+        assert package_of(req["id"])["status"] == before
+        assert requests.get_request(req["id"])["state"] == req["state"]
+    finally:
+        mode.set_armed(False, by="test")
