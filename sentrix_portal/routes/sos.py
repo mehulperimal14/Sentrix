@@ -222,11 +222,14 @@ async def action_link_post(token: str, request: Request, action: str = Form(...)
                                           status_code=404, context={"principal": None})
     if action not in LINK_ACTIONS:
         raise HTTPException(400, detail="invalid_args")
-    found.used_at = utcnow()
     actor = Actor(type=user.role if user.role in ("owner", "member") else "owner",
                   id=user.id, name=user.display_name or user.username).to_dict()
     outcome = await sos_service.respond(db, row.id, action, actor=actor, channel="email",
                                         authority=authority)
+    # As the Telegram buttons: only a help request that went through uses the
+    # link up. A timeout ("try again") or "I'm checking" leaves it usable.
+    if outcome["ok"] and action == "approve":
+        found.used_at = utcnow()
     security.audit(db, "action_link.used", actor_type="user", actor_id=user.id,
                    household_id=row.household_id, target_type="request", target_id=row.id,
                    ip=security.client_ip(request),
