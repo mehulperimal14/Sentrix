@@ -144,8 +144,15 @@ async def video_relay(device_id: str, request: Request, db: Session = DB,
 
     async def frames():
         # Starlette cancels this generator when the viewer disconnects.
+        loop = asyncio.get_running_loop()
+        recheck = loop.time() + REAUTH_SECONDS
         try:
             while True:
+                if loop.time() >= recheck:
+                    recheck = loop.time() + REAUTH_SECONDS
+                    if not await asyncio.to_thread(_still_allowed, request, device.id,
+                                                   principal.session_id_hash):
+                        return               # access ended: the stream stops
                 try:
                     seq, _ts, jpeg = await asyncio.wait_for(viewer.queue.get(), timeout=5.0)
                 except asyncio.TimeoutError:
@@ -200,6 +207,19 @@ def _ws_device(websocket: WebSocket, principal, device_id: str) -> str | None:
             return None
 
 
+#: How often an open live relay re-checks that its viewer may still watch.
+REAUTH_SECONDS = 30.0
+
+
+def _still_allowed(conn, device_id: str, session_hash: str) -> bool:
+    """The same session may still see this device: signed in, role and
+    consent unchanged (``authorize_device``; e.g. the Desk loses the home
+    when the request closes or desk_live_view is withdrawn)."""
+    principal = _ws_principal(conn)
+    return (principal is not None and principal.session_id_hash == session_hash
+            and _ws_device(conn, principal, device_id) is not None)
+
+
 @router.websocket("/d/{device_id}/ws/threat")
 async def state_relay(websocket: WebSocket, device_id: str) -> None:
     """The console's live state: each device ``state`` payload as the same
@@ -229,8 +249,16 @@ async def state_relay(websocket: WebSocket, device_id: str) -> None:
                 return
 
     closer = asyncio.ensure_future(watch_client())
+    loop = asyncio.get_running_loop()
+    recheck = loop.time() + REAUTH_SECONDS
     try:
         while not closer.done():
+            if loop.time() >= recheck:
+                recheck = loop.time() + REAUTH_SECONDS
+                if not await asyncio.to_thread(_still_allowed, websocket, device_id,
+                                               principal.session_id_hash):
+                    await websocket.close(code=1008)
+                    break
             getter = asyncio.ensure_future(viewer.queue.get())
             done, _ = await asyncio.wait({getter, closer}, timeout=2.0,
                                          return_when=asyncio.FIRST_COMPLETED)
