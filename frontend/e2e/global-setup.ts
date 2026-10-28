@@ -9,8 +9,8 @@ import { join, resolve } from 'node:path';
  *  the camera, every live switch forced off). Credentials are parsed from the
  *  reset's one-time printout and kept in e2e/.world.json (git-ignored). */
 
-const REPO = resolve(__dirname, '..', '..');
-const PYTHON = process.env.E2E_PYTHON ?? resolve(REPO, '..', '..', '..', '.venv', 'Scripts', 'python.exe');
+export const REPO = resolve(__dirname, '..', '..');
+export const PYTHON = process.env.E2E_PYTHON ?? resolve(REPO, '..', '..', '..', '.venv', 'Scripts', 'python.exe');
 export const STATE_FILE = join(__dirname, '.world.json');
 
 function grab(text: string, re: RegExp): string {
@@ -46,9 +46,12 @@ export default async function globalSetup() {
     dir,
     portal: 'http://portal.localhost:8100',
     device: 'http://127.0.0.1:8000',
-    admin: { username: 'demo_admin', password: grab(out, /Company admin[\s\S]*?password\s+(\S+)/), totp: grab(out, /Company admin[\s\S]*?TOTP secret\s+(\S+)/) },
-    desk: { username: 'demo_desk', password: grab(out, /Desk operator[\s\S]*?password\s+(\S+)/), totp: grab(out, /Desk operator[\s\S]*?TOTP secret\s+(\S+)/) },
-    owner: { username: 'riya_demo', password: (out.match(/Customer[\s\S]*?password\s+(\S+)/) ?? [])[1] ?? null, activation: (out.match(/activation\s+([A-Z0-9-]{8,})/) ?? [])[1] ?? null },
+    admin: { username: grab(out, /Company admin \((\S+)\)/), password: grab(out, /Company admin[\s\S]*?password\s+(\S+)/), totp: grab(out, /Company admin[\s\S]*?TOTP secret\s+(\S+)/) },
+    desk: { username: grab(out, /Desk operator \((\S+)\)/), password: grab(out, /Desk operator[\s\S]*?password\s+(\S+)/), totp: grab(out, /Desk operator[\s\S]*?TOTP secret\s+(\S+)/) },
+    customer: grab(out, /^Customer (.+?) \(\S+\)\r?$/m),
+    serial: grab(out, /^Device (\S+) \(/m),
+    deviceId: grab(out, /^Device \S+ \((\S+)\)/m),
+    owner: { username: grab(out, /^Customer .+? \((\S+)\)\r?$/m), password: (out.match(/Customer[\s\S]*?password\s+(\S+)/) ?? [])[1] ?? null, activation: (out.match(/activation\s+([A-Z0-9-]{8,})/) ?? [])[1] ?? null },
     sosPin: (out.match(/SOS PIN\s+(\d{6})/) ?? [])[1] ?? null,
     duressPin: (out.match(/[Dd]uress PIN\s+(\d{6})/) ?? [])[1] ?? null,
     device_password: grab(out, /Local Console password \(device admin\)\s+(\S+)/),

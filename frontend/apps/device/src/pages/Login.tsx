@@ -22,14 +22,17 @@ export function Login() {
     setBusy(true);
     setError(undefined);
     try {
-      await api.post('/api/login', { password });
-      const s = normaliseSession(await api.get('/api/session'));
+      const s = normaliseSession(await api.post<Record<string, unknown>>('/api/login', { password }));
       setCsrf(s.csrf);
       qc.setQueryData(['session'], s);
       const next = params.get('next');
       navigate(next && next.startsWith('/') && !next.startsWith('//') ? next : '/', { replace: true });
     } catch (err) {
-      setError(err instanceof ApiError ? (err.code === 'rate_limited' ? 'Too many tries. Wait a few minutes.' : err.status === 401 || err.status === 403 ? 'That password is not right.' : err.message) : 'Could not sign in.');
+      if (!(err instanceof ApiError)) setError('Could not sign in.');
+      else if (err.code === 'rate_limited') setError('Too many tries. Wait a few minutes and try again.');
+      else if (err.code === 'wrong_password') setError('That password is not right.');
+      else if (err.code === 'not_configured') setError('This device has no password yet. Ask the installer.');
+      else setError(err.message);
     } finally {
       setBusy(false);
     }

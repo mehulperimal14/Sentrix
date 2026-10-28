@@ -20,33 +20,34 @@ export interface DeviceSession {
 
 type Raw = Record<string, any>;
 
+/** Maps GET /api/session (sentrix/web/api_models.py SessionInfo). */
 export function normaliseSession(raw: Raw | null | undefined): DeviceSession {
   const r = raw ?? {};
   const device = r.device ?? {};
-  const call = r.call ?? r.call_112 ?? {};
-  const role = r.role ?? r.principal?.role ?? null;
-  const signedIn = Boolean(r.signed_in ?? r.authenticated ?? role);
+  const call = r.call ?? {};
+  const role = r.role ?? null;
+  const testMode = r.test_mode !== false;
   return {
-    signedIn,
+    signedIn: Boolean(r.signed_in),
     role,
-    csrf: r.csrf_token ?? r.csrf ?? undefined,
-    tunnelled: Boolean(r.tunnelled),
-    testMode: Boolean(r.test_mode ?? true),
+    csrf: r.csrf_token ?? undefined,
+    tunnelled: r.via === 'portal',
+    testMode,
     call: {
-      label: call.label ?? (r.test_mode === false ? 'Call 112 now' : 'Call the SENTRIX Desk'),
-      number: call.number ?? call.href?.replace(/^tel:/, '') ?? null,
-      enabled: Boolean(call.enabled ?? call.number ?? call.href),
-      note: call.note ?? undefined,
+      label: call.desk ? 'Call the SENTRIX Desk' : 'Call 112 now',
+      number: call.enabled ? call.number ?? (call.href ? String(call.href).replace(/^tel:/, '') : null) : null,
+      enabled: Boolean(call.enabled),
+      note: call.note || undefined,
     },
     device: {
-      serial: device.serial ?? r.serial ?? null,
-      name: device.name ?? r.device_name ?? null,
-      room: device.room ?? r.room ?? null,
-      claimed: Boolean(device.claimed ?? r.link?.claimed ?? r.claimed),
+      serial: device.serial ?? null,
+      name: device.name ?? null,
+      room: device.room ?? null,
+      claimed: Boolean(r.claimed ?? r.link?.claimed),
     },
     setupMode: Boolean(r.setup_mode),
-    timezone: r.timezone ?? r.time_zone ?? 'Asia/Kolkata',
-    canAdmin: role === 'device_admin',
+    timezone: r.time_zone ?? 'Asia/Kolkata',
+    canAdmin: Boolean(r.lan_admin) || role === 'device_admin',
   };
 }
 

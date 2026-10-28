@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { STATE_FILE } from './global-setup';
+import { spawnSync } from 'node:child_process';
+import { PYTHON, REPO, STATE_FILE } from './global-setup';
 
 export interface World {
   dir: string;
@@ -8,11 +9,24 @@ export interface World {
   device: string;
   admin: { username: string; password: string; totp: string };
   desk: { username: string; password: string; totp: string };
+  customer: string;
+  serial: string;
+  deviceId: string;
   owner: { username: string; password: string | null; activation: string | null };
   sosPin: string | null;
   duressPin: string | null;
   device_password: string;
   claim: string | null;
+}
+
+/** Runs tools/demo_run.py against the running world (e.g. `trigger weapon`). */
+export function demo(...args: string[]): string {
+  const w = world();
+  const r = spawnSync(PYTHON, ['tools/demo_run.py', '--dir', w.dir, ...args], { cwd: REPO, encoding: 'utf-8', env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
+  if (r.status !== 0) throw new Error(`demo_run ${args.join(' ')} failed:
+${r.stdout}
+${r.stderr}`);
+  return r.stdout;
 }
 
 export function world(): World {
