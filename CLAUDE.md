@@ -253,6 +253,15 @@ the authorities. Evaluations: **2026-11-30** and the final panel on
   the Pi's `var/calibration/scene.json` (section 4.3). Still to check with
   the replica gun in that room before 2026-11-30: whether it reaches 0.75 or
   the detector; else lower toward 0.65.
+* **False fire L3s in the demo room** (2026-10-27, 23:04 and 23:48 IST): both
+  from the scene classifier alone (keyframe pairs 0.646/0.587 and up to
+  0.591/0.549 vs the 0.45 floor; the fire detector drew no fire box in 12 h).
+  The second one's SOS request was approved and dispatched and stayed open
+  (red LED slow blink) until resolved on the Desk. On 2026-10-28 the owner
+  approved **fire 0.70** for this room in the same file (section 4.3).
+  Cost: a small flame under 0.70 (the held-out vid04 peaks at 0.636 in
+  clip-320) no longer reaches L3 from the scene model alone; the
+  replica-flame test in that room is still to do before 2026-11-30.
 
 ### 3D-printed enclosure (2026-10-24, `hardware/enclosure/`)
 
@@ -485,6 +494,7 @@ validated** (2 videos / 1 event). Only two rooms are represented.
 | M11 live session `c27258a25457` re-decided (no audio in that log) | home: L2+/L3+/L4+ onsets 30/9/6 as logged → **5/0/0** (5 = unknown-person L2, D15); armed: → **9/0/0** (M1 had 9 L3 intrusions); unchanged by the review fixes | `training/runs/custom_eval/m11b/live_session_{home,armed}.json` (`ba0bf17`) |
 | Sound model | PANNs CNN10 (AudioSet, 527 classes, 25 MB) on its own onnxruntime session: **40.1 ms p50 / 42.3 ms p95** per 4 s window, laptop CPU, 2 intra-op threads; torch's threads untouched (DINOv2 97.9 → 96.4 ms/frame after building the audio engine; the first M11 version's `set_num_threads(2)` doubled it) | `AudioEngine.classify_window`, `SceneEngine.score_frames` (`ba0bf17`) |
 | Pi 5 live in the demo room (clip mode, 320 px, ONNX; 2026-10-23/24, ~10 h; no simulated alerts) | 8077 clips: scene p(weapon) per scored keyframe median 0.19, p99 0.53, p99.9 0.65, max 0.742; at the 0.50 floor **16 clips confirmed = the 16 weapon L3s** (scene alone; the weapon detector never confirmed; 5 of their SOS requests declined as false alarms on the Pi); at >= 0.60 none. Per-deployment threshold set to weapon 0.75 on the Pi (`var/calibration/scene.json`). Not yet measured: a replica gun in that room | the Pi's own event log (`var/events/`, private), read-only analysis 2026-10-24 |
+| Pi 5 demo room, fire (2026-10-23 and 10-27: 16,927 clips, 12.1 h; 5,435 scored by the scene model, 5.7 h, no flame in view) | scene p(fire) per keyframe median 0.073, p99 0.212, p99.9 0.494, max 0.646; the confirming second keyframe never above 0.587; confirmed clips at 0.45 / 0.50 / 0.55 / >= 0.60: 4 / 1 / 1 / 0 (the 2 false fire L3s); the fire detector drew no fire box. Per-deployment threshold **fire 0.70** (owner approved 2026-10-28) next to weapon 0.75 | the Pi's event log and database (read-only analysis 2026-10-28) |
 | Pi 5 clip engine (ONNX, fast lane, `buffalo_s`; `gun.mov` as a 30 fps camera) | clip compute p50 **8.0 s** at 640 px objects (74 % of clips dropped, decisions 9.3 s old) → **3.9 s at 320 px** (48 %, 4.3 s), 2.2 s at 320 px + 1 scene frame (10 %, 3.2 s); budget 1.6 s. Clip replay of the 9 train + val videos (`wa02` not replayed, partly in-sample): 640 / 320 / 320 + 1 scene frame → L3 weapon 9/9, 9/9, 8/9; fire 3/3, 3/3, 2/3; L4 weapon 6/8, 5/8, 3/8; 0 false onsets at L3+. The Pi profile uses 320 px (`SENTRIX_CLIP_IMGSZ=320`) | `training/runs/custom_eval/pi5/REPORT.md` (knobs `4503b0d`) |
 
 ---
