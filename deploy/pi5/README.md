@@ -25,6 +25,7 @@ its own switch, and then only to `SENTRIX_TEST_RECIPIENTS`. Keep it that way.
 | `systemd/sentrix.service.in` | `/etc/systemd/system/sentrix.service` | `Type=notify`, `Restart=always`, `WatchdogSec=30`; siren pin forced off before start and after any exit |
 | `systemd/10-sentrix-journald.conf` | `/etc/systemd/journald.conf.d/` | journal ≤ 200 MB, 1 GB kept free, one month |
 | `systemd/10-sentrix-watchdog.conf` | `/etc/systemd/system.conf.d/` | systemd pets the hardware watchdog (10 s) |
+| `systemd/sentrix-user.service` | `~/.config/systemd/user/sentrix.service` | the demo unit's way instead: a **user** service from `~/Sentrix` (`Restart=on-failure`, no watchdog, no siren `ExecStopPost`); see "The demo unit" below |
 | `config.txt.snippet` | appended to `/boot/firmware/config.txt` | `gpio=17=op,dl`, RTC charging, `kernel_watchdog_timeout=10`, camera, I2C, optional sensor overlays, the power note |
 | `networkmanager/20-sentrix-connectivity.conf` | `/etc/NetworkManager/conf.d/` | connectivity check: a link without Internet gets +20000 on its metric, so 4G takes over |
 | `networkmanager/sentrix-modem-gsm.nmconnection.in` | `system-connections/` (0600), `--modem-apn` | 4G through ModemManager, route metric 700 |
@@ -37,7 +38,7 @@ its own switch, and then only to `SENTRIX_TEST_RECIPIENTS`. Keep it that way.
 ## What you need
 
 The bench kit of docs/8 §8 (Pi 5 8 GB, 27 W supply, Active Cooler, High
-Endurance card, Camera Module 3 Wide with the 22-pin Standard–Mini cable,
+Endurance card, Camera Module 3 (standard lens; hardware/enclosure fits only it) with the 22-pin Standard–Mini cable,
 ML-2020 cell, USB microphone, relay parts, PIR, reed switch, LEDs), an
 LED + 1 kΩ resistor for the relay test, ear protection, and the laptop with
 the repository (for model exports and provisioning).
@@ -284,3 +285,22 @@ throttling. Criteria: docs/8 §7.
   unreadable).
 * Laptop development needs none of this: `./run.sh` detects a Pi and only then
   uses `--system-site-packages` and `requirements-pi.txt`.
+
+## The demo unit (a user service from the home directory)
+
+The team's demo Pi does not use `install_pi.sh`: the clone lives in
+`~/Sentrix` (user `sentrix`), and SENTRIX runs as a systemd **user** service
+with lingering on, so it starts at boot without a login:
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp ~/Sentrix/deploy/pi5/systemd/sentrix-user.service ~/.config/systemd/user/sentrix.service
+sudo loginctl enable-linger sentrix
+systemctl --user daemon-reload && systemctl --user enable --now sentrix.service
+```
+
+Logs: `journalctl --user -u sentrix -f`. Update: `git pull` in `~/Sentrix`, then
+`systemctl --user restart sentrix.service`. Unlike the system service it has no
+hardware watchdog and does not force the siren pin low after an exit, so it
+suits a unit without a siren relay; a box with the siren wired uses
+`install_pi.sh`.

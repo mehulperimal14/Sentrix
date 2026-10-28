@@ -1,0 +1,15 @@
+[Unit]
+Description=SENTRIX device (camera, AI, Local Console on 127.0.0.1:8000)
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Sentrix
+ExecStart=%h/Sentrix/.venv/bin/python -m sentrix
+Environment=PYTHONUNBUFFERED=1
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

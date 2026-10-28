@@ -113,7 +113,7 @@ never tuned on S4.
 ### 2.5 Hardware bring-up
 
 In order: the bench kit (doc 8 §8), the LED relay test, debounce checks on
-real PIR, door and mains signals, Picamera2 on the Camera Module 3 Wide, the
+real PIR, door and mains signals, Picamera2 on the Camera Module 3 (standard lens), the
 clip-mode gate on the Pi with the link running (Gate A, doc 8 §7), then the
 modem on the Pi and network failover with the actual 4G dongle.
 

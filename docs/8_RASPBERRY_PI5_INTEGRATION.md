@@ -46,7 +46,7 @@ sources at the end; "est." marks our own arithmetic.
 | False alarms in an ordinary home | 0 L4/L5 in ≥ 3 h normal footage, ≤ 1 L3/h | gate G3 |
 | Detect → alert (clip mode) | fast-lane L3 p95 ≤ 2 s; a clip decision every ≤ 2 s; L4/L5 p95 ≤ 6 s | CLAUDE.md M9 (G4 for clip mode) |
 | Autonomy | Detection, siren, evidence and SOS creation keep working with no Internet or PC | roadmap v2 §7 |
-| Inputs | Camera (Camera Module 3 Wide), USB microphone, PIR, door contact, mains sense; optional BME280 / DHT22 | roadmap v2 §10 |
+| Inputs | Camera (Camera Module 3, standard lens: the enclosure's window is built for it, the Wide does not fit), USB microphone, PIR, door contact, mains sense; optional BME280 / DHT22 | roadmap v2 §10 |
 | Outputs | 12 V siren via relay, three status LEDs, Local Console, SMS from a 4G modem (no buzzer, no speaker: D19) | roadmap v2 §10, docs/7 §8 |
 | Evidence | AES-256-GCM bundles, with the clip before the trigger; correct time offline (RTC cell) | M3, T1 |
 | Privacy | Faces, evidence and continuous video stay on the device; the Portal sees them only through the tunnel | D12 |
@@ -307,7 +307,7 @@ factory uses the same map, so a laptop run and the tests exercise it.
 | 3 / 5 | 2 / 3 (I2C1) | BME280 (optional) | Kernel IIO driver; `SENTRIX_SENSOR_BME280=1` |
 | 7 | 4 | DHT22 DATA (optional) | Kernel `dht11` overlay [55]; `SENTRIX_SENSOR_DHT22=1` |
 | 2 / 4, 1, GND | 5 V, 3.3 V | PIR power, relay power | An opto relay board instead of the NPN driver: VCC 3.3 V, JD-VCC 5 V, jumper off |
-| CAM/DISP 0 | — | Camera Module 3 Wide | Needs the **Standard–Mini 22-pin** cable; the camera's own cable does not fit a Pi 5 [24] |
+| CAM/DISP 0 | — | Camera Module 3 (standard lens) | Needs the **Standard–Mini 22-pin** cable; the camera's own cable does not fit a Pi 5 [24] |
 | USB | — | Microphone, 4G modem | Modem needs `PSU_MAX_CURRENT=5000` (§6.3) |
 
 Room sensors are telemetry only (Node page); they are not in the feature
@@ -634,7 +634,7 @@ Prices (roadmap v2 appendix, checked 2026-10-14): Pi 5 8 GB
 https://thingbits.in/products/raspberry-pi-5-computer · Active Cooler
 https://thingbits.in/products/official-active-cooler-for-raspberry-pi-5 · 27 W
 supply https://robocraze.com/products/raspberry-pi-5-27w-usb-c-power-supply-black-colour ·
-Camera Module 3 Wide https://robocraze.com/products/raspberry-pi-camera-module-3-wide ·
+Camera Module 3 (standard lens; the demo unit's, Robu SKU 1441079) ·
 camera cable https://www.thingbits.in/products/raspberry-pi-5-camera-cable-22-pin-to-15-pin ·
 XY-3606 https://robocraze.com/products/24v-12v-to-5v-5a-power-module-dc-dc-xy-3606-step-down-converter-with-usb-fast-charging ·
 router UPS https://www.flipkart.com/search?q=resonate+routerups · EC200U-CN

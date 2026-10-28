@@ -118,8 +118,8 @@ same process runs with the Pi camera (docs/8).
 | Pi 5 hardware I/O and deployment files | Built; tested against fakes only | `tests/test_hw_*.py`; docs/8 |
 | 4 s clip engine, fast lane, ONNX runtime | Built. Replay meets its gate; the laptop bench misses the compute budget | docs/6 §6.10; docs/8 T1 |
 | Training recordings on the LC (D20; the owner starts and stops them through the Portal since 2026-10-28), a USB microphone in any port (D21) | Built; laptop, a synthetic camera, the in-process tunnel and a fake `sounddevice` only | `tests/test_recorder.py`, `tests/test_recording_live.py`, `tests/test_recording_routes.py`, `tests/test_mic_hotplug.py`. Not run on the Pi or with a real microphone |
-| Portal deployment (Docker, Caddy, Postgres) | Files written and checked; Docker and a live Postgres not run | `deploy/portal/`, `tests/test_deploy_portal.py`, `tools/portal_pg_check.py` |
-| Device retention caps and vault tombstones, Alembic baseline, `tools/bench_link.py` | Not built | §15 items 3, 4, 6 |
+| Portal deployment (Docker, Caddy, Postgres) | The demo Portal runs on Render since 2026-10-24 (D18: `render.yaml`, `deploy/portal/Dockerfile`, SQLite on a disk); the Compose + Caddy + Postgres path is written and checked, not run | `deploy/portal/`, `tests/test_deploy_portal.py`, `tools/portal_pg_check.py` |
+| Device retention caps and vault tombstones, Alembic baseline, `tools/bench_link.py` | Event-log retention built (2026-10-28: 365 days and a 5 GB cap); snapshot/evidence caps, tombstones, Alembic and the bench not built | §15 items 3, 4, 6 |
 | Gates P1–P8 | Not measured as a set | §15 item 7 |
 
 The test suite has 1647 tests on this version
@@ -1546,8 +1546,9 @@ has a restricted `approve` with `detail.duress`.**
 Buttons: **"Alert my contacts and the SENTRIX desk"** (with Police / Fire /
 Medical context), **"Call 112 now"** (shown first for weapon/fire; the Desk
 number in test mode — never a `tel:112`/`sms:112` link in test mode),
-**"I'm checking"**, **"False alarm (PIN)"**. SMS can only approve or raise,
-never decline. Every SOS text ends "SENTRIX does not contact 112 itself."
+**"I'm checking"**, **"False alarm (PIN)"**. Answering by SMS is not built
+(inbound SMS parsing is Tier 2): the owner answers on the LC or the Portal, and
+an SMS can never decline. Every SOS text ends "SENTRIX does not contact 112 itself."
 Corroborated evidence is "confirmed by two different models" (never
 "independent camera checks"). Single-source L3: "possible (one camera check)".
 Degraded camera: "camera view degraded (dark), detection unreliable". Test
@@ -2088,7 +2089,8 @@ version.
    * The scripted trigger (`POST /api/sos/demo/trigger`, a button on the LC SOS
      page, `demo_run.py trigger`) is device-admin only and test mode only, and
      its request is marked `simulated` ("SIMULATED DETECTION" in the text).
-4. **Deploy** — files written and checked, not yet run.
+4. **Deploy** — the demo Portal runs on Render since 2026-10-24 (D18); the
+   self-hosted files below are written and checked, not yet run.
    * `deploy/portal/`: `Dockerfile` (python:3.12-slim, uid 10001, Portal
      packages plus `tools/provision_device.py` and `tools/portal_pg_check.py`;
      `Dockerfile.dockerignore` denies everything else), `requirements.txt`
