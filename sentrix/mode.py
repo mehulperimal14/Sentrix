@@ -98,23 +98,26 @@ def set_armed(armed: bool, by: str | None = None, *, persist: bool = True) -> di
 
 def load() -> dict:
     """Restore the persisted choice (app start-up only). A missing or
-    unreadable file keeps the configured value."""
+    unreadable file keeps the configured value. Either way the dashboard's
+    ``state.mode`` block is published, so a first start with
+    ``SENTRIX_ARMED=1`` shows ARMED, not the idle block's HOME."""
     global _override, _changed_by, _changed_at
+    data = None
     try:
         data = json.loads(Path(MODE_PATH).read_text(encoding="utf-8"))
-        armed = data["armed"]
-        if not isinstance(armed, bool):
+        if not isinstance(data.get("armed"), bool):
             raise ValueError("armed must be a boolean")
     except FileNotFoundError:
-        return snapshot()
-    except (OSError, ValueError, KeyError, TypeError) as exc:
+        data = None
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
         from sentrix.utils.logging import get_logger
         get_logger("mode").warning("ignoring %s: %s", MODE_PATH, exc)
-        return snapshot()
+        data = None
     with _lock:
-        _override = armed
-        _changed_by = data.get("by")
-        _changed_at = data.get("at")
+        if data is not None:
+            _override = data["armed"]
+            _changed_by = data.get("by")
+            _changed_at = data.get("at")
         block = snapshot()
     from sentrix.pipeline.state import state
     state.update(mode=block)

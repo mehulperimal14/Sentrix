@@ -482,6 +482,26 @@ class TestModePersistence:
         mode.clear_override(forget=True)
         assert not mode.MODE_PATH.exists() and mode.load()["source"] == "config"
 
+    def test_first_start_armed_by_config_shows_armed(self, monkeypatch):
+        """No mode.json and SENTRIX_ARMED=1: the dashboard's block must say
+        ARMED, not the idle block's HOME (load() used to return early)."""
+        import dataclasses
+        from sentrix import config, mode
+        from sentrix.pipeline.state import state
+        armed = dataclasses.replace(config.settings,
+                                    threat=dataclasses.replace(config.settings.threat,
+                                                               armed=True))
+        monkeypatch.setattr(config, "settings", armed)
+        assert not mode.MODE_PATH.exists()
+        state.update(mode={"armed": False, "source": "config", "changed_by": None,
+                           "changed_at": None})
+        block = mode.load()
+        assert block["armed"] is True and block["source"] == "config"
+        assert state.get()["mode"]["armed"] is True
+        mode.MODE_PATH.write_text("{not json", encoding="utf-8")
+        state.update(mode={"armed": False})
+        assert mode.load()["armed"] is True and state.get()["mode"]["armed"] is True
+
     def test_a_broken_file_keeps_the_configured_mode(self):
         from sentrix import mode
         mode.MODE_PATH.write_text("{not json", encoding="utf-8")
