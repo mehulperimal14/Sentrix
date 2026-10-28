@@ -89,7 +89,7 @@
         const result = await post(url("/setup/wifi"), { code: code(), ssid, psk });
         document.getElementById("setup-psk").value = "";
         if (result.ok && result.data.ok) {
-            say("Connected. The unit leaves setup mode when you press its setup button again.", true);
+            say("Connected. To leave setup mode, set SENTRIX_SETUP_MODE=0 in the unit's .env and restart SENTRIX.", true);
         } else {
             say(result.data.error || result.data.detail || "Could not connect.", false);
         }

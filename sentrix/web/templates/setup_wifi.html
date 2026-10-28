@@ -7,7 +7,7 @@
   <title>SENTRIX — Wi-Fi setup</title>
   <link rel="stylesheet" href="{{ static_url('css/style.css') }}">
 </head>
-{#- Physical setup mode only (SENTRIX_SETUP_MODE=1, the unit's setup button).
+{#- Physical setup mode only (SENTRIX_SETUP_MODE=1 in the unit's .env).
     The one-time code on the device label unlocks scanning and joining. -#}
 <body class="standalone" data-base="{{ base }}">
   {% if test_mode %}

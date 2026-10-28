@@ -194,4 +194,7 @@ class TestPiTemplate:
                     "SENTRIX_SOS_ENABLED", "SENTRIX_CHANNELS_ENABLED", "SENTRIX_TEST_MODE"):
             assert key in values, key
         assert values["SENTRIX_TEST_MODE"] == "1" and values["SENTRIX_LIVE_ALERTS"] == "0"
+        # Unwired door/mains inputs read "open" and "mains lost": the Pi
+        # profile lists none, the wired ones are added on the box.
+        assert values["SENTRIX_GPIO_INPUTS"] == "none"
         assert values["SENTRIX_LINK_ENABLED"] == "0" and values["SENTRIX_PORTAL_URL"] == ""
