@@ -1547,7 +1547,8 @@ class SosEngine:
                                  degraded=bool(flags.get("camera_degraded")))
         except Exception:
             text = request.get("sos_text_full")
-        banner = T.DURESS_BANNER if flags.get("duress") else None
+        banner = (T.duress_banner(T.call_number(profile, bool(request.get("test_mode", True))))
+                  if flags.get("duress") else None)
         if view == "desk":
             out = {k: v for k, v in request.items() if k not in ("snapshot_path", "session_id")}
             out.update(label=S.STATE_LABELS.get(request["state"], request["state"]),

@@ -85,15 +85,29 @@ class TestMandatedWording:
 
     def test_duress_banner_only_for_desk_and_contacts(self):
         duress = req(flags={"duress": True})
-        desk = T.render_full(PROFILE, duress, audience="desk")
+        desk = T.render_full(PROFILE, duress, audience="desk", test_mode=False)
         assert "Do not go to the home. Call 112." in desk
         owner = T.render_full(PROFILE, duress, audience="owner")
         assert "DURESS" not in owner and "Do not go to the home" not in owner
         with pytest.raises(ValueError):
             T.message_text("sos.duress", PROFILE, duress, audience="owner", channel="email")
         text, _ = T.message_text("sos.duress", PROFILE, duress, audience="contact",
-                                 channel="modem_sms")
+                                 channel="modem_sms", test_mode=False)
         assert "Do not go to the home. Call 112." in text
+
+    def test_duress_never_says_call_112_in_test_mode(self):
+        """D13: in test mode every duress text sends the reader to the Desk."""
+        duress = req(flags={"duress": True})
+        desk = T.render_full(PROFILE, duress, audience="desk", test_mode=True)
+        assert "Do not go to the home. Call +919800000001." in desk
+        for template, channel in (("sos.duress", "modem_sms"), ("sos.duress", "email"),
+                                  ("sos.duress", "telegram"), ("sos.short", "modem_sms")):
+            text, _ = T.message_text(template, PROFILE, duress, audience="contact",
+                                     channel=channel, test_mode=True)
+            assert "Call 112" not in text, (template, channel, text)
+        no_desk = {k: v for k, v in PROFILE.items() if k != "desk"}
+        text = T.render_full(no_desk, duress, audience="desk", test_mode=True)
+        assert "Call the SENTRIX desk." in text and "Call 112" not in text
 
 
 class TestChannels:

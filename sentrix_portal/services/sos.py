@@ -109,6 +109,12 @@ def _call_text() -> str:
     return templates.call_number({"desk": {"phone": desk or ""}}, test_mode)
 
 
+def duress_banner() -> str:
+    """The duress banner for the Desk and contacts: never "Call 112" in
+    test mode (D13), the Desk number instead."""
+    return f"Do not go to the home. Call {_call_text()}."
+
+
 def _aware(value: datetime | None) -> datetime | None:
     if value is None:
         return None
@@ -226,7 +232,7 @@ def request_view(row: AssistanceRequest, view: str = "owner") -> dict[str, Any]:
     }
     if view in ("desk", "contact", "full"):
         out["duress"] = bool(flags.get("duress"))
-        out["banner"] = DURESS_BANNER if flags.get("duress") else None
+        out["banner"] = duress_banner() if flags.get("duress") else None
     if view == "full":
         out["policy"] = row.policy or {}
     return out
@@ -1372,9 +1378,10 @@ def _after_event(db, row: AssistanceRequest, ev: dict, origin: str) -> list[tupl
     def sos_texts(contact, contact_page):
         link = f" Open: {contact_page}." if contact_page else ""
         if duress:
-            short_text = f"SENTRIX SOS {short} - DURESS: {DURESS_BANNER}{link} {FOOTER}"
+            banner = duress_banner()
+            short_text = f"SENTRIX SOS {short} - DURESS: {banner}{link} {FOOTER}"
             return short_text, (row.sos_text_full or short_text) + \
-                f"\n\nDURESS: {DURESS_BANNER}\n{FOOTER}"
+                f"\n\nDURESS: {banner}\n{FOOTER}"
         short_text = (f"SENTRIX SOS {short}: {owner_name} may need help ({what}, "
                       f"{_evidence(row)}).{link} {FOOTER}")
         full = row.sos_text_full or cloud_sos_text(db, row, db.get(Household, row.household_id))
@@ -1597,4 +1604,4 @@ __all__ = ["ACTIONS", "respond", "open_requests", "start", "ingest_device_event"
            "events_view", "desk_queue", "mint_token", "resolve_token", "mark_seen",
            "record_note", "create_cloud_request", "verify_chains", "chain_hash",
            "event_dict", "consent_active", "owner_actions", "DESK_STATES",
-           "DURESS_BANNER", "FOOTER", "reset_pin_limiter"]
+           "DURESS_BANNER", "duress_banner", "FOOTER", "reset_pin_limiter"]

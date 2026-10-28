@@ -522,7 +522,9 @@ class TestAnswers:
         assert ("contact:c1", "modem_sms", "duress") in keys
         assert not [k for k in keys if k[0] == "owner" and k[2] != "t0"]
         desk = world.engine.current("desk")
-        assert desk["duress_banner"].endswith("Do not go to the home. Call 112.")
+        # Test mode: the Desk, never 112 (D13).
+        assert "Do not go to the home. Call " in desk["duress_banner"]
+        assert "112" not in desk["duress_banner"]
         # Every later event is restricted; the chain still verifies.
         events = requests.events(req["id"], include_restricted=True)
         assert all(e["restricted"] for e in events[2:])

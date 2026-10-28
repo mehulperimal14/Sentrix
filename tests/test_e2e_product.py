@@ -471,14 +471,17 @@ def test_duress_pin_looks_like_a_false_alarm_but_sends_help(world):
     mirrored(world, rid, "DISPATCHED")
     world.pump_portal()
     contact = sent_to(world, CONTACT_EMAIL, "duress")
-    assert contact and "Do not go to the home. Call 112." in contact[0]
+    # Test mode: the duress banner sends readers to the Desk, never to 112 (D13).
+    assert contact and f"Do not go to the home. Call {DESK_PHONE}." in contact[0]
+    assert "Call 112" not in contact[0]
     assert not [t for t in sent_to(world, OWNER_EMAIL) + sent_to(world, f"tg:{OWNER_CHAT}")
                 if "DURESS" in t.upper()], "the owner's channels never say duress"
     desk = staff(world, "desk1", "operator")
     queue = desk.get("/desk/api/queue", headers={"accept": "application/json"}).json()
     assert [c["id"] for c in queue["requests"]] == [rid]
     card = desk.get(f"/desk/requests/{rid}")
-    assert "Do not go to the home. Call 112." in card.text
+    assert f"Do not go to the home. Call {DESK_PHONE}." in card.text
+    assert "Call 112." not in card.text
     view = owner.get(f"/sos/api/requests/{rid}", headers={"accept": "application/json"})
     assert view.status_code == 200 and "duress" not in view.text.lower()
     shown = [e["event"] for e in view.json()["events"]]

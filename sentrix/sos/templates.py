@@ -51,8 +51,17 @@ WORDING_CORROBORATED = "confirmed by two different models"
 WORDING_SINGLE_SOURCE = "possible (one camera check)"
 WORDING_DEGRADED = "camera view degraded (dark), detection unreliable"
 WORDING_SIMULATED = "SIMULATED DETECTION"
-DURESS_BANNER = ("DURESS: the resident may be under threat. "
-                 "Do not go to the home. Call 112.")
+
+
+def duress_banner(call: str = "112") -> str:
+    """The duress banner for the Desk and contacts. ``call`` is
+    :func:`call_number`'s answer: never "Call 112" in test mode (D13)."""
+    return ("DURESS: the resident may be under threat. "
+            f"Do not go to the home. Call {call}.")
+
+
+#: The live-mode banner (callers without a profile or a test-mode flag).
+DURESS_BANNER = duress_banner("112")
 
 #: Button labels the LC and the Portal show (names: ``sentrix.sos.SOS_ACTIONS``).
 BUTTONS = {
@@ -323,6 +332,7 @@ def build_context(profile: Mapping | None, request: Mapping, *, audience: str = 
         if end is not None and start is not None:
             remaining = str(max(0, int((end - start).total_seconds() // 60)))
     evidence_hash = clean(request.get("evidence_hash"), 64)
+    call = call_number(profile, test_mode)
     return {
         "banner": TEST_PREFIX + " " if test_mode else "",
         "test_mode": test_mode,
@@ -350,15 +360,15 @@ def build_context(profile: Mapping | None, request: Mapping, *, audience: str = 
         "authority": AUTHORITY_LABELS.get(str(request.get("authority") or ""), ""),
         "simulated": WORDING_SIMULATED if flags.get("simulated") else "",
         "degraded": WORDING_DEGRADED if degraded else "",
-        "duress": DURESS_BANNER if (flags.get("duress") and audience != "owner") else "",
-        "duress_banner": DURESS_BANNER,
+        "duress": duress_banner(call) if (flags.get("duress") and audience != "owner") else "",
+        "duress_banner": duress_banner(call),
         # Telegram drops the phone number, address and map (short text + link).
         "include_details": True,
         "resident_safe": bool(flags.get("resident_safe")),
         "help_open": request.get("state") in ("APPROVED", "DISPATCHED", "ACKNOWLEDGED",
                                               "FAILED"),
         "contacts_notified": bool(flags.get("contacts_notified")),
-        "call_number": call_number(profile, test_mode),
+        "call_number": call,
         "link": clean(link, 200) if link and link != "{link}" else (link or ""),
         "disclaimer": DISCLAIMER,
     }
@@ -389,7 +399,7 @@ ADDRESS: {{ address }}
 #: Short text: SMS to contacts and the Desk (with address), Telegram (without).
 SHORT = """\
 {{ banner }}SENTRIX SOS {{ short_id }}{% if simulated %} ({{ simulated }}){% endif %}: \
-{% if duress %}DURESS. Do not go to the home. Call 112. {% endif %}\
+{% if duress %}DURESS. Do not go to the home. Call {{ call_number }}. {% endif %}\
 {{ event }}, {{ room }} {{ time }}. {{ resident }}\
 {% if include_details and resident_phone %} {{ resident_phone }}{% endif %}.\
 {% if include_details and address_short %} {{ address_short }}.{% endif %}\
@@ -656,7 +666,7 @@ def render_preview(profile: Mapping | None, *, incident_type: str = "weapon",
 
 __all__ = ["render_preview", "TEMPLATE_VERSION", "IST", "DISCLAIMER", "WORDING_CORROBORATED",
            "WORDING_SINGLE_SOURCE", "WORDING_DEGRADED", "WORDING_SIMULATED",
-           "DURESS_BANNER", "BUTTONS", "AUTHORITY_LABELS", "EVENT_NAMES",
+           "DURESS_BANNER", "duress_banner", "BUTTONS", "AUTHORITY_LABELS", "EVENT_NAMES",
            "MESSAGE_TEMPLATES", "BUILTIN", "clean", "clock_time", "to_ist", "gsm_text",
            "is_gsm", "sms_length", "fits_sms", "call_number", "build_context", "render",
            "render_full", "render_short", "render_offline_prompt", "fit_sms",

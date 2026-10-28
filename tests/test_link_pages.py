@@ -288,7 +288,8 @@ class TestDesk:
             row.flags = {**row.flags, "duress": True}
         desk, _ = client_for(app, seeded.operator_id, totp=True)
         card = desk.get(f"/desk/requests/{rid}").text
-        assert "Do not go to the home. Call 112." in card
+        assert f"Do not go to the home. Call {DESK_PHONE}." in card
+        assert "Call 112." not in card, "test mode: never call 112 (D13)"
         assert "Call resident" not in card
 
 

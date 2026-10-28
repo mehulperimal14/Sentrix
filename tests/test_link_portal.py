@@ -416,7 +416,8 @@ class TestSosMirror:
             assert view["state"] == "DECLINED" and "duress" not in view["flags"]
             assert all(not e["restricted"] for e in portal_sos.events_view(db, row.id, "owner"))
             desk = portal_sos.request_view(db.get(type(row), row.id), "desk")
-            assert desk["duress"] and desk["banner"] == "Do not go to the home. Call 112."
+            assert desk["duress"] and desk["banner"] == portal_sos.duress_banner()
+            assert "112" not in desk["banner"], "test mode: never call 112 (D13)"
 
 
 class TestDeliveryFeedback:
