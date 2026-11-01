@@ -358,3 +358,6 @@ def test_help_now_after_duress_opens_a_new_request_like_a_decline(sos_world):
         [e["event"] for e in owner.get(f"/sos/{real}").json()["events"]]
     desk = api_as(app, seeded.operator_id, totp=True)
     assert desk.get(f"/desk/requests/{coerced}").json()["request"]["duress"] is True
+    # The new request looks ordinary to the household but carries the banner.
+    child = desk.get(f"/desk/requests/{body['request_id']}").json()["request"]
+    assert child["duress"] is True and child["banner"]

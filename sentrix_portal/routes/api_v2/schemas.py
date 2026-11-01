@@ -103,7 +103,8 @@ def owner_request(row: AssistanceRequest) -> OwnerRequest:
     approval from a decline: no authority, outcome or Desk acknowledgement,
     and the time of the answer as its last change."""
     view = _times(sos_service.request_view(row, "owner"))
-    if (row.flags or {}).get("duress"):
+    flags = row.flags or {}
+    if flags.get("duress") and not flags.get("duress_help_now"):
         view.update(authority=None, outcome=None, desk_acknowledged_at=None,
                     updated_at=z(row.responded_at) or view["updated_at"])
     return OwnerRequest(**view)
@@ -132,7 +133,8 @@ def owner_events(db: Session, row: AssistanceRequest) -> list[TimelineEvent]:
     # event on this one (a duress request cannot record that event).
     items = [item for item in sos_service.events_view(db, row.id, "owner")
              if item["event"] != S.HELP_REQUESTED_LATER]
-    if (row.flags or {}).get("duress"):
+    flags = row.flags or {}
+    if flags.get("duress") and not flags.get("duress_help_now"):
         items = [item for item in items
                  if item["event"] == S.DECLINE
                  or {item.get("from_state"), item.get("to_state")} <= _PROMPTING]

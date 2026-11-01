@@ -285,14 +285,11 @@ class TestWizard:
     def test_changing_the_email_later_needs_step_up(self, portal):
         """Step 1 stays reachable after onboarding: the recovery e-mail may
         not change there without a fresh password, as on /account."""
-        add_household(portal, complete=True)
-        browser = owner_browser(portal)
-        with portal.state.db.session() as db:
-            for row in db.query(UserSession):
-                row.step_up_at = (row.step_up_at or accounts.utcnow()) - timedelta(minutes=10)
-        browser.get("/onboarding/1")
-        refused = browser.post("/onboarding/1", {**STEP1, "email": "thief@example.com"})
-        assert refused.status_code == 400 and "Confirm your password" in refused.text
+        home = add_household(portal, complete=True)
+        api = api_as(portal, home["owner_id"])
+        expire_step_up(portal)
+        refused = api.put("/onboarding/1", {**STEP1, "email": "thief@example.com"})
+        assert refused.status_code == 422 and "Confirm your password" in refused.text
         with portal.state.db.session() as db:
             assert "thief@example.com" not in {u.email for u in db.query(User)}
 

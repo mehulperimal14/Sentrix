@@ -164,8 +164,10 @@ def test_help_now_under_duress_pages_the_contacts_each_time(portal):
             assert asyncio.run(portal_sos.respond(db, rid, "help_now", actor=owner,
                                                   channel="portal"))["ok"]
         paged = [(r.ref, m.step, m.text) for r, m in outbox.messages[before:]]
-        assert paged and all(ref.startswith("contact:") and step == f"help_now{press}"
-                             and "DURESS" in text.upper() for ref, step, text in paged), paged
+        # Each press opens a new linked request (as a real decline would) that
+        # carries the duress flag, so its contact page is the duress one.
+        assert paged and all(ref.startswith("contact:") and "DURESS" in text.upper()
+                             for ref, step, text in paged), paged
 
 
 def test_the_offline_l2_notice_names_the_owner_for_erasure_and_export(portal):

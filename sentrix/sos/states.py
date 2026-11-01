@@ -245,18 +245,27 @@ def reconcile(device_state: str, cloud_state: str) -> str:
     return max((device_state, cloud_state), key=lambda s: order.get(s, 0))
 
 
+def duress_hidden(flags: dict | None) -> bool:
+    """A duress approval the household must see as a decline (not the
+    ordinary-looking request "Request help now" opens after it)."""
+    flags = flags or {}
+    return bool(flags.get("duress")) and not flags.get("duress_help_now")
+
+
 def owner_view(state: str, flags: dict | None = None) -> dict:
     """What an owner, a member or the LC screen may see of a request.
 
     A duress approval is shown exactly like a decline: someone forcing the
-    resident to cancel must not learn that help is coming.
+    resident to cancel must not learn that help is coming. A request opened
+    by "Request help now" after a duress PIN (``duress_help_now``) is shown as
+    the help request it looks like, as after a real decline.
     """
     flags = flags or {}
-    shown = DECLINED if flags.get("duress") else state
-    visible = {k: v for k, v in flags.items() if k != "duress"}
+    shown = DECLINED if duress_hidden(flags) else state
+    visible = {k: v for k, v in flags.items() if k not in ("duress", "duress_help_now")}
     return {"state": shown, "label": STATE_LABELS.get(shown, shown), "flags": visible}
 
 
 __all__ = [name for name in dir() if name.isupper() and not name.startswith("_")] + [
-    "next_state", "is_terminal", "reconcile", "owner_view", "reminder_step",
+    "next_state", "is_terminal", "reconcile", "owner_view", "duress_hidden", "reminder_step",
     "repage_step", "owner_prompt_steps"]

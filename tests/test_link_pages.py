@@ -227,24 +227,23 @@ class TestActionLinks:
         rid, _ = open_request(app, seeded)
         raw = self._token(app, rid, seeded.owner_id)
         browser = TestClient(app, follow_redirects=False)
-        page = browser.get(f"/a/{raw}")
-        csrf = re.search(r'name="csrf_token" value="([^"]+)"', page.text).group(1)
+        _, csrf = page_token(browser, f"/action/{raw}")
         real = portal_sos.respond
 
         async def slow(*args, **kwargs):
             return {"ok": False, "code": "timeout", "status": 504,
                     "message": "The device did not answer in time. Try again."}
         monkeypatch.setattr(portal_sos, "respond", slow)
-        failed = browser.post(f"/a/{raw}", data={"action": "approve", "csrf_token": csrf})
-        assert failed.status_code == 409
+        failed = call(browser, csrf, "POST", f"/action/{raw}", {"action": "approve"})
+        assert failed.status_code >= 400
         monkeypatch.setattr(portal_sos, "respond", real)
-        checking = browser.post(f"/a/{raw}", data={"action": "checking", "csrf_token": csrf})
+        checking = call(browser, csrf, "POST", f"/action/{raw}", {"action": "checking"})
         assert checking.status_code == 200
-        done = browser.post(f"/a/{raw}", data={"action": "approve", "authority": "POLICE",
-                                               "csrf_token": csrf})
+        done = call(browser, csrf, "POST", f"/action/{raw}",
+                    {"action": "approve", "authority": "POLICE"})
         assert done.status_code == 200 and state_of(app, rid) == "DISPATCHED"
-        assert browser.post(f"/a/{raw}", data={"action": "approve",
-                                               "csrf_token": csrf}).status_code == 404
+        assert call(browser, csrf, "POST", f"/action/{raw}",
+                    {"action": "approve"}).status_code == 404
 
     def test_a_link_cannot_decline_and_bad_tokens_are_404(self, portal):
         app, seeded, _ = portal

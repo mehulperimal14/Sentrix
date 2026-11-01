@@ -428,8 +428,12 @@ def event_dict_from(fields: dict, digest: str, prev: str) -> dict:
     return {**fields, "prev_hash": prev, "hash": digest}
 
 
+#: A request "Request help now" opens after a duress PIN: the duress banner
+#: for the Desk and the contacts, an ordinary help request for the household.
+DURESS_HELP_NOW = {"duress": True, "duress_help_now": True}
+
 #: Flags the cloud sets itself; the device's snapshot cannot clear them.
-_CLOUD_SET_FLAGS = frozenset({"duress", "contacts_notified", "resident_safe", "stale",
+_CLOUD_SET_FLAGS = frozenset({"duress", "duress_help_now", "contacts_notified", "resident_safe", "stale",
                               "unacknowledged"})
 _MERGED = ("urgency", "trigger_level", "peak_level", "evidence_state", "authority",
            "responded_by", "response_channel", "sos_text_full", "sos_text_sms",
@@ -1043,13 +1047,10 @@ def _cloud_answer(db, row: AssistanceRequest, action: str, who, channel: str,
         duress = bool((row.flags or {}).get("duress"))
         if duress:
             # Looks declined to the household, so it answers exactly as a
-            # declined request does (a new linked request, a new id), and the
-            # Desk and contacts are paged again with the banner.
-            step = f"help_now{int(row.repage_count or 0) + 1}"
-            row.repage_count = int(row.repage_count or 0) + 1   # each press: its own step
-            _cloud_event(db, row, S.NOTIFICATION, actor_type=actor_type, actor_id=actor_id,
-                         channel=channel, restricted=True,
-                         detail={"step": step, "duress": True})
+            # declined request does (a new linked request, a new id). The new
+            # request carries the duress flag: the Desk and the contacts are
+            # paged with the banner, once per press, from that request.
+            row.repage_count = int(row.repage_count or 0) + 1
         elif row.state not in (S.EXPIRED, S.DECLINED, S.CANCELLED):
             return result("conflict", "this request is still open", request_view(row, view))
         else:
@@ -1060,9 +1061,14 @@ def _cloud_answer(db, row: AssistanceRequest, action: str, who, channel: str,
                                    incident_type=row.incident_type or "unknown",
                                    level=int(row.peak_level or 3),
                                    incident_ids=list(row.incident_ids or []), parent=row,
+                                   flags=DURESS_HELP_NOW if duress else None,
                                    text=row.sos_text_full)
+        # Under duress the approval is an ordinary one to the household (no
+        # duress detail, not restricted); the flags give the Desk and the
+        # contacts the banner.
         _cloud_event(db, new, S.APPROVE, actor_type=actor_type, actor_id=actor_id,
                      channel=channel, authority=authority or _default_authority(new),
+                     flags=DURESS_HELP_NOW if duress else None,
                      responded_at=utcnow(), responded_by=actor_id, response_channel=channel)
         _cloud_event(db, new, S.DELIVERED, detail={"target": "desk"})
         return result("ok", "", request_view(new, view))

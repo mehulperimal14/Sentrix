@@ -1890,7 +1890,7 @@ def _hidden_from_household(row: AuditLog, duress_requests: frozenset = frozenset
 def _duress_requests(db: Session, household_id: str) -> frozenset:
     return frozenset(r.id for r in db.query(AssistanceRequest)
                      .filter_by(household_id=household_id)
-                     if (r.flags or {}).get("duress"))
+                     if sos_states.duress_hidden(r.flags))
 
 
 def household_audit(db: Session, household_id: str, *, limit: int = 100,
@@ -1939,7 +1939,7 @@ def _owner_may_see(event: RequestEvent, duress_ids: set[str]) -> bool:
 
 def _owner_view_request(row: AssistanceRequest) -> dict[str, Any]:
     view = sos_states.owner_view(row.state or "", row.flags or {})
-    duress = bool((row.flags or {}).get("duress"))
+    duress = sos_states.duress_hidden(row.flags)
     return {"id": row.id, "device_id": row.device_id, "state": view["state"],
             "label": view["label"], "flags": view["flags"], "incident_ids": row.incident_ids,
             "incident_type": row.incident_type, "trigger_level": row.trigger_level,
@@ -1972,7 +1972,7 @@ def export_household(db: Session, household_id: str) -> dict[str, Any]:
               if request_ids else [])
     snapshots = (db.query(SosSnapshot).filter(SosSnapshot.request_id.in_(request_ids)).all()
                  if request_ids else [])
-    duress_ids = {r.id for r in requests if (r.flags or {}).get("duress")}
+    duress_ids = {r.id for r in requests if sos_states.duress_hidden(r.flags)}
     return {
         "format": "sentrix-portal-export", "version": 1, "exported_at": iso(utcnow()),
         "notice_version": portal_config().notice_version,
