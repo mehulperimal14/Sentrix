@@ -557,8 +557,26 @@ def _signed_in(request: Request, db: Session) -> Principal:
         if _wants_html(request):
             raise HTTPException(status.HTTP_303_SEE_OTHER,
                                 headers={"Location": login_url_for(request)})
+        if browser_form_post(request):
+            # A form sent after the session timed out (an alert answered after
+            # a quiet spell): sign in again and come back to the page, never
+            # {"detail": "not signed in"}.
+            from urllib.parse import quote, urlsplit
+            back =urlsplit(request.headers.get("referer") or "").path or "/home"
+            raise HTTPException(status.HTTP_303_SEE_OTHER,
+                                headers={"Location": "/login?next=" + quote(
+                                    safe_next(back), safe="/")})
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="not signed in")
     return principal
+
+
+def browser_form_post(request: Request) -> bool:
+    """A plain HTML form POST from a browser (not fetch, not an API)."""
+    return (request.method == "POST"
+            and "text/html" in request.headers.get("accept", "")
+            and "x-requested-with" not in request.headers
+            and "x-csrf-token" not in request.headers
+            and not _inner_path(request.url.path).startswith(("/api/", "/media/")))
 
 
 async def _check_csrf(request: Request, principal: Principal, csrf: bool | str) -> None:

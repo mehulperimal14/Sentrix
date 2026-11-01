@@ -2,6 +2,7 @@
 {% import "acct/macros.html" as ui %}
 {% block title %}Home · SENTRIX Portal{% endblock %}
 {% block page_content %}
+{% set what = {"intrusion": "Someone not recognised", "weapon": "Possible weapon", "fire": "Possible fire", "assault": "Possible fight", "robbery": "Possible robbery", "duress": "Alert"} %}
 <div class="row between">
   <h1>{{ household.display_name or 'Your home' }}</h1>
   <a class="small" href="/account">Account</a>
@@ -14,13 +15,13 @@
 {% endif %}
 
 {% if requests %}
-<div class="card sos-banner" role="alert">
+<div class="card sos-open" role="alert">
   <h2>Open assistance request{{ 's' if requests | length > 1 }}</h2>
   <ul class="plain stack">
   {% for r in requests %}
     <li><strong>{{ r.get('label') or r.get('state') }}</strong>
-      {% if r.get('incident_type') %}· {{ r.get('incident_type') }}{% endif %}
-      {% if r.get('expires_at') %}· answer by <time datetime="{{ r.get('expires_at') }}">{{ (r.get('expires_at') | string)[11:16] }} UTC</time>{% endif %}
+      {% if r.get('incident_type') %}· {{ what.get(r.get('incident_type'), r.get('incident_type')) }}{% endif %}
+      {% if r.get('expires_at') %}· answer by <time datetime="{{ r.get('expires_at') }}">{{ r.get('expires_at') | when('time') }}</time>{% endif %}
       <a class="btn btn-small" href="/sos/{{ r.get('id') }}">Open</a></li>
   {% endfor %}
   </ul>
@@ -43,12 +44,11 @@
       <dt>Serial</dt><dd class="mono">{{ card.serial }}</dd>
       {% if card.room %}<dt>Camera</dt><dd>{{ card.room }}</dd>{% endif %}
       {% if card.claimed %}
-      <dt>Mode</dt><dd>{% if card.armed %}<span class="badge badge-warn">ARMED</span>{% else %}<span class="badge badge-ok">HOME</span>{% endif %}</dd>
-      <dt>AI rate</dt><dd>{% if card.online and card.ai_hz is not none %}{{ '%.1f' | format(card.ai_hz) }} Hz{% else %}—{% endif %}</dd>
-      <dt>Last seen</dt><dd>{% if card.last_seen %}<time datetime="{{ card.last_seen }}">{{ card.last_seen[:16] | replace('T', ' ') }} UTC</time>{% else %}never{% endif %}</dd>
-      <dt>Last incident</dt><dd>{% if card.last_incident %}{{ card.last_incident.type or 'incident' }} · L{{ card.last_incident.level }}
-        · <time datetime="{{ card.last_incident.at }}">{{ (card.last_incident.at or '')[:16] | replace('T', ' ') }}</time>
-        {% if card.last_incident.verdict %}· {{ card.last_incident.verdict }}{% else %}· <span class="badge badge-warn">not reviewed</span>{% endif %}{% else %}none{% endif %}</dd>
+      <dt>Mode</dt><dd>{% if card.armed %}<span class="badge badge-warn">Away</span>{% else %}<span class="badge badge-ok">Home</span>{% endif %}</dd>
+      <dt>Last seen</dt><dd>{% if card.last_seen %}<time datetime="{{ card.last_seen }}">{{ card.last_seen | when }}</time>{% else %}never{% endif %}</dd>
+      <dt>Last event</dt><dd>{% if card.last_incident %}{{ what.get(card.last_incident.type, 'Event') }}
+        · <time datetime="{{ card.last_incident.at }}">{{ card.last_incident.at | when }}</time>
+        {% if card.last_incident.verdict %}· {{ {'TRUE': 'confirmed', 'FALSE': 'false alarm'}.get(card.last_incident.verdict, card.last_incident.verdict | lower) }}{% elif (card.last_incident.level or 0) >= 3 %}· <span class="badge badge-warn">not reviewed</span>{% endif %}{% else %}none{% endif %}</dd>
       {% endif %}
     </dl>
     {% for r in card.requests %}
@@ -56,9 +56,9 @@
     {% endfor %}
     <div class="links">
       {% if card.claimed %}
-        <a class="btn btn-small" href="/d/{{ card.id }}/dashboard">Dashboard</a>
-        <a class="btn btn-secondary btn-small" href="/d/{{ card.id }}/live">Live view</a>
+        <a class="btn btn-small" href="/d/{{ card.id }}/live">Live view</a>
         <a class="btn btn-secondary btn-small" href="/d/{{ card.id }}/events">Events</a>
+        <a class="btn btn-secondary btn-small" href="/d/{{ card.id }}/dashboard">Details</a>
       {% elif principal.role == 'owner' %}
         <a class="btn btn-small" href="/claim?sn={{ card.serial | urlencode }}">Claim this device</a>
       {% endif %}
@@ -69,6 +69,6 @@
     <p>Your SENTRIX device appears here once SENTRIX assigns it to your account.</p></section>
 {% endfor %}
 </div>
-<p class="small muted">The dashboard and live view open the device's own console through
+<p class="small muted">Live view, events and details open the device's own console through
   the SENTRIX server. Video passes through the server in memory and is never stored.</p>
 {% endblock %}

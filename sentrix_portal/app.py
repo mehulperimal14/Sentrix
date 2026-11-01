@@ -29,11 +29,13 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import text
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from sentrix_portal import settings as portal_settings
 from sentrix_portal.db import Database
@@ -57,6 +59,29 @@ BACKGROUND_MODULES: tuple[str, ...] = (
 MIDDLEWARE_MODULES: tuple[str, ...] = (
     "sentrix_portal.hardening",           # T-ACCT  CSP nonce + security headers (not on /d/*)
 )
+
+
+def when(value, style: str = "datetime") -> str:
+    """A time as people say it, in the home's time zone (the SOS texts' IST):
+    "28 Oct, 6:22 pm", or "6:22 pm" with ``style="time"``. One clock on every
+    page instead of UTC slices, raw ISO stamps and Python datetimes."""
+    from sentrix.sos.templates import to_ist
+    moment = to_ist(value)
+    if moment is None:
+        return "" if value in (None, "") else str(value)
+    clock = f"{moment.hour % 12 or 12}:{moment.minute:02d} {'am' if moment.hour < 12 else 'pm'}"
+    if style == "time":
+        return clock
+    return f"{moment.day} {moment:%b}, {clock}"
+
+
+#: Error pages for browsers (status -> title, text); 0 is the fallback.
+ERROR_PAGES: dict[int, tuple[str, str]] = {
+    0: ("Something went wrong", "Nothing was changed. Go back and try again in a moment."),
+    403: ("Not available to you", "This page belongs to another account or role."),
+    404: ("Not found", "This alert or page is no longer available to you."),
+    429: ("Too many tries", "Wait a minute, then try again."),
+}
 
 
 def _template_context(request) -> dict:
@@ -161,6 +186,10 @@ def create_app(settings: PortalSettings | None = None) -> FastAPI:
                                 context_processors=[_template_context])
     templates.env.globals.update(test_mode=settings.test_mode,
                                  desk_number=settings.desk_number)
+    templates.env.filters["when"] = when
+    from sentrix.sos.states import EVENT_LABELS
+    templates.env.globals["event_label"] = (
+        lambda name: EVENT_LABELS.get(name, str(name or "").replace("_", " ").capitalize()))
     app.state.templates = templates
 
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -168,6 +197,27 @@ def create_app(settings: PortalSettings | None = None) -> FastAPI:
         app.include_router(importlib.import_module(name).router)
     for name in MIDDLEWARE_MODULES:
         importlib.import_module(name).install(app)        # fatal on failure
+
+    @app.exception_handler(StarletteHTTPException)
+    async def error_page(request: Request, exc: StarletteHTTPException):
+        """A browser page gets a page (with a way on), never {"detail": ...};
+        APIs, the tunnel, hooks and fetch() calls keep FastAPI's JSON."""
+        path = request.url.path
+        if (exc.status_code < 400 or "text/html" not in request.headers.get("accept", "")
+                or "x-csrf-token" in request.headers
+                or "x-requested-with" in request.headers
+                or path.startswith(("/d/", "/api/", "/sos/api/", "/hooks/", "/media/",
+                                    "/static/", "/ws/"))):
+            return await http_exception_handler(request, exc)
+        from sentrix_portal.routes.auth import message_page
+        title, text = ERROR_PAGES.get(exc.status_code, ERROR_PAGES[0])
+        if exc.status_code == 403 and exc.detail == "csrf":
+            title, text = ("This page timed out",
+                           "Nothing was sent. Go back, reload the page and try again.")
+        signed_in = getattr(request.state, "principal", None) is not None
+        return message_page(request, title, text, status_code=exc.status_code,
+                            link=("/home", "Go to Home") if signed_in
+                            else ("/login", "Sign in"))
 
     @app.get("/healthz", include_in_schema=False)
     def healthz() -> JSONResponse:

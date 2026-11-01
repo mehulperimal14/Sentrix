@@ -42,17 +42,26 @@
   // Any Portal page that includes this script: a banner while a request of
   // the household waits for an answer.
   function banner() {
-    var bar = null;
+    var bar = null, shown = "";
     var here = (document.getElementById("sos-request") || {}).dataset;
+    var WHAT = { weapon: "possible weapon", fire: "possible fire", assault: "possible fight",
+                 intrusion: "someone not recognised", robbery: "possible robbery" };
     function show(requests) {
-      var waiting = requests.filter(function (r) {
+      // A help request that was not delivered comes first: the owner has to
+      // call for help themselves.
+      var failed = requests.filter(function (r) { return r.state === "FAILED"; });
+      var waiting = failed.concat(requests.filter(function (r) {
         return r.state === "PENDING" || r.state === "DRAFTED";
-      }).filter(function (r) { return !here || here.request !== r.id; });
+      })).filter(function (r) { return !here || here.request !== r.id; });
       if (!waiting.length) {
-        if (bar) { bar.remove(); bar = null; }
+        if (bar) { bar.remove(); bar = null; shown = ""; }
         return;
       }
       var r = waiting[0];
+      // Rebuilt only when it changes, so a screen reader announces it once.
+      var key = r.id + "|" + r.state;
+      if (bar && key === shown) { return; }
+      shown = key;
       if (!bar) {
         bar = document.createElement("div");
         bar.className = "sos-banner";
@@ -61,11 +70,12 @@
       }
       bar.textContent = "";
       var text = document.createElement("span");
-      text.textContent = "Do you need assistance? " + r.short_id + ": " + r.label +
-        " (" + r.incident_type + ")";
+      text.textContent = (r.state === "FAILED" ? "Help request not delivered. "
+                                               : "Do you need assistance? ") +
+        r.short_id + ": " + (WHAT[r.incident_type] || r.label);
       var link = document.createElement("a");
       link.href = "/sos/" + encodeURIComponent(r.id);
-      link.textContent = "Answer now";
+      link.textContent = r.state === "FAILED" ? "Open it" : "Answer now";
       bar.appendChild(text);
       bar.appendChild(link);
     }

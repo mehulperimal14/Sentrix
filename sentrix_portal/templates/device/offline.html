@@ -5,7 +5,7 @@
 <div id="device-offline" data-device="{{ device.id }}">
   <h1 class="page-title">{{ device.name or device.serial }} is offline</h1>
   <p class="notice" role="status">The device has not been heard from since
-    <time datetime="{{ device.last_seen_at.isoformat() if device.last_seen_at else '' }}">{{ device.last_seen_at or 'never' }}</time>.
+    <time datetime="{{ device.last_seen_at.isoformat() if device.last_seen_at else '' }}">{{ (device.last_seen_at | when) or 'never' }}</time>.
     Detection, the siren and the evidence vault keep working on the device; this page shows
     the copy the Portal keeps. Verdicts you set here are queued and sync when it is back.</p>
 
@@ -25,9 +25,9 @@
       <tbody>
       {% for i in incidents %}
         <tr data-incident="{{ i.id }}">
-          <td>{{ i.started_at or '' }}</td><td>{{ i.incident_type }}</td><td>{{ i.peak_level }}</td>
+          <td>{{ i.started_at | when }}</td><td>{{ i.incident_type }}</td><td>{{ i.peak_level }}</td>
           <td>{{ i.reason or '' }}</td>
-          <td>{{ i.verdict or 'unreviewed' }}
+          <td>{{ {'TRUE': 'Real', 'FALSE': 'False alarm'}.get(i.verdict, 'Not reviewed') }}
             {% if can_label %}
             <button type="button" class="btn btn-ghost js-verdict" data-incident="{{ i.id }}" data-verdict="TRUE">Real</button>
             <button type="button" class="btn btn-ghost js-verdict" data-incident="{{ i.id }}" data-verdict="FALSE">False alarm</button>
@@ -45,7 +45,7 @@
     <h2>Dispatch packages</h2>
     <table class="sos-table">
       <thead><tr><th>Created</th><th>Status</th><th>Authority</th></tr></thead>
-      <tbody>{% for p in packages %}<tr><td>{{ p.created_at or '' }}</td><td>{{ p.status }}</td><td>{{ p.chosen_authority or p.authority or '' }}</td></tr>{% endfor %}</tbody>
+      <tbody>{% for p in packages %}<tr><td>{{ p.created_at | when }}</td><td>{{ p.status }}</td><td>{{ p.chosen_authority or p.authority or '' }}</td></tr>{% endfor %}</tbody>
     </table>
   </section>
   {% endif %}

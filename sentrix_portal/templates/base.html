@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0b0f19">
   <title>{% block title %}SENTRIX Portal{% endblock %}</title>
   {# Session CSRF token: page scripts send it back as X-CSRF-Token (docs/7 §11). #}
   {% if principal %}<meta name="csrf-token" content="{{ principal.csrf_token }}">{% endif %}
@@ -14,6 +15,7 @@
   {% block extra_head %}{% endblock %}
 </head>
 <body data-base="" data-active="{{ active_page | default('') }}">
+  <a class="skip-link" href="#main">Skip to content</a>
   {% if test_mode %}
   <div class="test-banner" role="status">
     SENTRIX DEMO &ndash; TEST MODE, NOT A REAL EMERGENCY SERVICE.
@@ -22,7 +24,7 @@
   {% endif %}
 
   <nav class="nav">
-    <a class="nav-brand" href="/home"><span class="nav-icon">&#x2B21;</span> SENTRIX</a>
+    <a class="nav-brand" href="/home"><span class="nav-icon" aria-hidden="true">&#x2B21;</span> SENTRIX</a>
     {% block nav %}
     {% if principal %}
     <div class="nav-links">
@@ -50,7 +52,7 @@
     {% endblock %}
   </nav>
 
-  <main class="main">
+  <main class="main" id="main" tabindex="-1">
     {% block content %}{% endblock %}
   </main>
 

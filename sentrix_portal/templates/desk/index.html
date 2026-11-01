@@ -19,12 +19,12 @@
           <td><a class="mono" href="/desk/requests/{{ c.id }}">{{ c.short_id }}</a>{% if c.duress %} <strong class="tag-duress">DURESS</strong>{% endif %}</td>
           <td>{{ c.label }}</td><td>{{ c.incident_type }}</td><td>{{ c.peak_level }}</td>
           <td>{{ c.locality or '' }} {{ c.city or '' }}</td><td>{{ c.resident or '' }}</td>
-          <td><time datetime="{{ c.created_at }}">{{ c.created_at }}</time></td>
+          <td><time datetime="{{ c.created_at }}">{{ c.created_at | when }}</time></td>
         </tr>
       {% endfor %}
       </tbody>
     </table>
-    {% if not cards %}<p class="muted" id="desk-empty">The queue is empty.</p>{% endif %}
+    <p class="muted" id="desk-empty"{% if cards %} hidden{% endif %}>The queue is empty.</p>
   </section>
 </div>
 {% endblock %}

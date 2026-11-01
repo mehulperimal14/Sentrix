@@ -9,7 +9,7 @@
   margin-bottom: 1rem;
 }
 .banner-duress {
-  background: var(--danger);
+  background: var(--danger-fill);
   color: #fff;
   font-weight: 700;
   padding: 0.75rem 1rem;
@@ -40,6 +40,8 @@
 }
 
 .sos-actions { display: flex; flex-direction: column; gap: 0.9rem; }
+.sos-actions .btn { width: 100%; min-height: 48px; font-weight: 600; }
+.sos-message summary { cursor: pointer; color: var(--text-muted); }
 .sos-form { display: flex; flex-direction: column; gap: 0.4rem; max-width: 28rem; }
 .btn-call { text-align: center; text-decoration: none; font-weight: 700; padding: 0.7rem 1rem; }
 .btn-disabled { opacity: 0.6; cursor: default; }
@@ -61,7 +63,7 @@
   position: sticky;
   top: 0;
   z-index: 50;
-  background: var(--level-4);
+  background: var(--danger-fill);
   color: #fff;
   padding: 0.7rem 1rem;
   display: flex;
@@ -73,6 +75,7 @@
 .sos-banner a { color: #fff; text-decoration: underline; }
 
 @media (max-width: 640px) {
+  .sos-form { max-width: none; }
   .sos-table { font-size: 0.8rem; }
   .sos-table th:nth-child(n+5), .sos-table td:nth-child(n+5) { display: none; }
 }

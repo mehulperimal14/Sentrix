@@ -30,6 +30,18 @@
     }
   }
 
+  // The Portal's one clock ("1 Nov, 6:22 pm", IST), as the page renders it.
+  var CLOCK = new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", day: "numeric",
+    month: "short", hour: "numeric", minute: "2-digit", hour12: true });
+  function when(iso) {
+    var t = Date.parse(iso);
+    if (isNaN(t)) { return iso || ""; }
+    var p = {};
+    CLOCK.formatToParts(new Date(t)).forEach(function (x) { p[x.type] = x.value; });
+    return p.day + " " + p.month + ", " + p.hour + ":" + p.minute + " " +
+      String(p.dayPeriod || "").toLowerCase();
+  }
+
   function cell(text) {
     var td = document.createElement("td");
     td.textContent = text == null ? "" : String(text);
@@ -60,7 +72,7 @@
       tr.appendChild(cell(c.peak_level));
       tr.appendChild(cell([c.locality, c.city].filter(Boolean).join(" ")));
       tr.appendChild(cell(c.resident));
-      tr.appendChild(cell(c.created_at));
+      tr.appendChild(cell(when(c.created_at)));
       body.appendChild(tr);
     });
     var empty = document.getElementById("desk-empty");
@@ -83,7 +95,34 @@
       .catch(function () { status.textContent = "Queue unavailable"; });
   }
 
+  // One request's page: reload when it moves on or leaves the queue (the
+  // resident is safe, another operator resolved it, delivery failed).
+  function watchCard(card) {
+    var seen = false;
+    setInterval(function () {
+      fetch("/desk/api/queue", { credentials: "same-origin",
+                                 headers: { "Accept": "application/json",
+                                            "X-Requested-With": "fetch" } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          if (!data) { return; }
+          var mine = (data.requests || []).filter(function (c) {
+            return c.id === card.dataset.request;
+          })[0];
+          // A closed request is not in the queue: reload once it leaves, never
+          // over and over for one that was never there.
+          if (mine) { seen = true; }
+          if ((mine && mine.state !== card.dataset.state) || (!mine && seen)) {
+            window.location.reload();
+          }
+        })
+        .catch(function () {});
+    }, 3000);
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
+    var card = document.getElementById("desk-card");
+    if (card) { watchCard(card); }
     var root = document.getElementById("desk");
     if (!root) { return; }
     var table = document.getElementById("desk-queue");

@@ -14,7 +14,7 @@
 </fieldset>
 <fieldset>
   <legend>Safety defaults</legend>
-  {{ ui.checkbox('safety_defaults', 'On (recommended): alert my confirmed contacts at once for a corroborated threat or an armed-mode intrusion, after 2 minutes for a confirmed fire, and when the device goes offline during an alert, while I am still being asked.', values.get('safety_defaults'), errors=errors, disabled=disabled) }}
+  {{ ui.checkbox('safety_defaults', 'On (recommended): alert my confirmed contacts at once for a corroborated threat, after 2 minutes for a confirmed fire, and when the device goes offline during an alert, while I am still being asked.', values.get('safety_defaults'), errors=errors, disabled=disabled) }}
   {{ ui.checkbox('safety_off_ack', 'I understand that with safety defaults off, my contacts hear nothing until I answer.', False, errors=errors, disabled=disabled) }}
   <p class="help">A possible weapon seen by one camera check alerts only you.</p>
 </fieldset>
@@ -23,6 +23,6 @@
   <p class="help">The Portal and the device's own screen always show the prompt.</p>
   {{ ui.checkbox('channel_email', 'E-mail', values.get('channels', {}).get('email'), disabled=disabled) }}
   {{ ui.checkbox('channel_telegram', 'Telegram (link it below)', values.get('channels', {}).get('telegram'), disabled=disabled) }}
-  {{ ui.checkbox('channel_whatsapp', 'WhatsApp to my mobile number (answer with the buttons, no sign-in)', values.get('channels', {}).get('whatsapp'), disabled=disabled) }}
+  {% if whatsapp_configured %}{{ ui.checkbox('channel_whatsapp', 'WhatsApp to my mobile number (answer with the buttons, no sign-in)', values.get('channels', {}).get('whatsapp'), disabled=disabled) }}{% endif %}
   {{ ui.checkbox('channel_sms', 'SMS from the device when it is offline or you have not seen the prompt for 10 minutes', values.get('channels', {}).get('sms'), disabled=disabled) }}
 </fieldset>

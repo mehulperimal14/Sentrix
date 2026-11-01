@@ -21,9 +21,11 @@
           headers: { "X-CSRF-Token": meta.content, "Accept": "application/json" }
         }).then(function (r) { return r.json().catch(function () { return {}; }); })
           .then(function (data) {
-            if (status) { status.textContent = data.status || data.detail || "not saved"; }
+            if (!status) { return; }
+            status.textContent = data.queued ? "Saved; it reaches the device when it is back."
+              : data.status === "ok" ? "Saved." : "Not saved. Try again.";
           })
-          .catch(function () { if (status) { status.textContent = "not saved"; } });
+          .catch(function () { if (status) { status.textContent = "Not saved. Try again."; } });
       });
     });
   });

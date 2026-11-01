@@ -67,7 +67,7 @@
     <h2>Timeline</h2>
     <ol class="timeline">
       {% for e in events %}
-      <li><time datetime="{{ e.at }}">{{ e.at }}</time> <strong>{{ e.event }}</strong>
+      <li><time datetime="{{ e.at }}">{{ e.at | when }}</time> <strong>{{ event_label(e.event) }}</strong>
         <span class="muted">{{ e.actor_type }}{% if e.channel %} via {{ e.channel }}{% endif %}{% if e.origin == 'cloud' %} (Portal){% endif %}{% if e.restricted %} &middot; restricted{% endif %}</span></li>
       {% endfor %}
     </ol>

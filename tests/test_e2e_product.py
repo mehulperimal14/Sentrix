@@ -282,6 +282,11 @@ def test_tunnel_parity_on_every_console_page(world):
         assert lan.status_code == remote.status_code == 200, (path, lan.status_code,
                                                               remote.status_code)
         lan_ids, remote_ids = dom_ids(lan.text), dom_ids(remote.text)
+        if path == "/authorized" and "gallery-no-consent" in remote_ids:
+            # No face_recognition consent: the Portal shows a note instead
+            # of face controls the path table would refuse.
+            assert not remote_ids & {"faces-grid", "capture-toggle", "upload-btn"}
+            lan_ids = (lan_ids & remote_ids) | {"gallery-no-consent"}
         assert lan_ids - LAN_ONLY_IDS == remote_ids, (path, sorted(lan_ids ^ remote_ids))
         assert len(remote_ids) > 5, path
         # production CSP and CSRF on both sides, the URLs under the base
@@ -620,7 +625,9 @@ def test_a_second_household_cannot_reach_the_first(world):
     rid = rid_of(world)
     mirrored(world, rid, "PENDING")
     world.pump_portal()
+    # Its own name: pages now show the signed-in person's name in the menu.
     other = add_household(world.app, code="SX-0099", owner="other", email="o@example.com",
+                          name="Other Home (demo)",
                           phone="+919811111111", complete=True)
     stranger = world.browser(ip="192.0.2.99")
     assert stranger.login("other").status_code == 303

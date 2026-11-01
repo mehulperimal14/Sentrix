@@ -78,15 +78,16 @@ pre.text { white-space: pre-wrap; word-break: break-word; font-family: var(--fon
                               border: 1px solid var(--border-light); font-size: 0.85rem;
                               text-decoration: none; color: var(--text-muted); }
 .steps li.done a { color: #86efac; border-color: rgba(34, 197, 94, 0.5); }
-.steps li.current a, .steps li.current span { color: var(--text-main);
-                                              background: var(--accent-blue);
-                                              border-color: var(--accent-blue); }
+.steps li.current a, .steps li.current span { color: #fff;
+                                              background: var(--accent-fill);
+                                              border-color: var(--accent-fill); }
 .steps li.locked span { opacity: 0.5; }
 
 /* ── home cards ────────────────────────────────────────────────────────── */
 .device-card h2 { display: flex; justify-content: space-between; gap: 0.5rem; }
 .device-card .links { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem; }
-.sos-banner { border: 2px solid var(--level-4); background: rgba(239, 68, 68, 0.12); }
+/* The home card for an open alert (not the sticky global .sos-banner). */
+.sos-open { border: 2px solid var(--level-4); background: rgba(239, 68, 68, 0.12); }
 
 /* ── QR codes, letters and labels ──────────────────────────────────────── */
 svg.qr { width: 9rem; height: 9rem; background: #fff; border-radius: 6px; padding: 0.25rem; }
@@ -100,12 +101,10 @@ svg.qr path { fill: #000; }
 .print-sheet table.table th, .print-sheet table.table td { border-color: #ccc; color: #111; }
 .label-sheet { display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: center;
                border: 2px dashed #888; max-width: 520px; }
-.print-only { display: none; }
 
 @media print {
   body { background: #fff; color: #000; }
   .nav, .no-print, .actions { display: none !important; }
-  .print-only { display: block; }
   .main { max-width: none; padding: 0; }
   .print-sheet { border-radius: 0; padding: 0; }
   .test-banner { background: #fff; color: #000; border: 2px solid #000; }

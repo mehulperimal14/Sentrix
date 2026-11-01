@@ -40,8 +40,8 @@
     <tbody>
     {% for row in history %}
       <tr><td>{{ purposes.get(row.purpose, {}).get('title', row.purpose) }}</td>
-        <td>{{ row.granted_at.strftime('%d %b %Y %H:%M') if row.granted_at else '—' }}</td>
-        <td>{{ row.withdrawn_at.strftime('%d %b %Y %H:%M') if row.withdrawn_at else '—' }}</td>
+        <td>{{ (row.granted_at | when) or '—' }}</td>
+        <td>{{ (row.withdrawn_at | when) or '—' }}</td>
         <td>{{ row.notice_version }}</td><td>{{ row.method }}</td></tr>
     {% endfor %}
     </tbody>

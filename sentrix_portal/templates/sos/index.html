@@ -35,7 +35,7 @@ requests lapse as <strong>unanswered</strong>, never as "safe". SENTRIX does not
     {% for r in recent %}
       <tr><td><a class="mono" href="/sos/{{ r.id }}">{{ r.short_id }}</a></td>
           <td>{{ r.label }}</td><td>{{ r.incident_type }}</td>
-          <td><time datetime="{{ r.created_at }}">{{ r.created_at }}</time></td></tr>
+          <td><time datetime="{{ r.created_at }}">{{ r.created_at | when }}</time></td></tr>
     {% endfor %}
     </tbody>
   </table>

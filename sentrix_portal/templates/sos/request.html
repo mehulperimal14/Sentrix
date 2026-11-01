@@ -11,27 +11,25 @@
 
   {% if message %}<p class="notice" role="status">{{ message }}</p>{% endif %}
 
+  {% set what = {"weapon": "Possible weapon", "fire": "Possible fire", "assault": "Possible fight",
+                 "intrusion": "Someone not recognised", "robbery": "Possible robbery",
+                 "duress": "Alert"} %}
   <section class="card sos-card sos-state-{{ req.state | lower }}">
     <p class="sos-label"><span class="mono">{{ req.short_id }}</span>
       <strong id="sos-state-label">{{ req.label }}</strong></p>
-    <p>{{ req.incident_type }} &middot; level {{ req.peak_level }}
+    <p>{{ what.get(req.incident_type, (req.incident_type or 'Alert') | capitalize) }} &middot; level {{ req.peak_level }}
       {% if req.evidence_state == 'corroborated' %}&middot; confirmed by two different models
       {% elif req.evidence_state == 'confirmed' %}&middot; possible (one camera check){% endif %}</p>
     {% if req.remaining_s is not none %}
-    <p class="countdown-big" aria-live="polite">Answer within
-      <span class="countdown" data-expires="{{ req.expires_at }}">{{ req.remaining_s // 60 }}:{{ '%02d' % (req.remaining_s % 60) }}</span></p>
+    <p class="countdown-big">Answer within
+      <span class="countdown" role="timer" data-expires="{{ req.expires_at }}">{{ req.remaining_s // 60 }}:{{ '%02d' % (req.remaining_s % 60) }}</span></p>
     {% endif %}
-    {% if has_snapshot %}
-    <img class="sos-snapshot" src="/sos/{{ req.id }}/snapshot.jpg" alt="Snapshot from the camera when the alarm was confirmed">
-    {% endif %}
-    {% if req.sos_text %}<pre class="sos-text">{{ req.sos_text }}</pre>{% endif %}
-    {% if req.device_id %}<p><a href="/d/{{ req.device_id }}/live">Open the live view</a></p>{% endif %}
   </section>
 
   <section class="card sos-actions" aria-label="Answers">
     {% if 'call_112' in req.actions %}
       {% if call.href %}<a class="btn btn-danger btn-call" href="{{ call.href }}">{{ call.label }}</a>
-      {% else %}<span class="btn btn-ghost btn-disabled">{{ call.label }}</span>{% endif %}
+      {% else %}<p class="muted">{{ call.label }}.</p>{% endif %}
     {% endif %}
 
     {% if 'approve' in req.actions %}
@@ -71,7 +69,7 @@
       <input id="pin-safe" name="pin" type="password" inputmode="numeric" autocomplete="off"
              pattern="[0-9]{4,8}" required>
       <button type="submit" class="btn btn-ghost">I'm safe now (PIN)</button>
-      <p class="muted">Help already asked for stays on its way; only the Desk or a contact closes it.</p>
+      <p class="muted">Help already asked for stays on its way; only the SENTRIX Desk closes it.</p>
     </form>
     {% endif %}
 
@@ -85,12 +83,25 @@
     <p class="muted">SENTRIX does not contact 112 itself.</p>
   </section>
 
+  {% if has_snapshot or req.sos_text or req.device_id %}
+  <section class="card" aria-label="What was seen">
+    {% if has_snapshot %}
+    <img class="sos-snapshot" src="/sos/{{ req.id }}/snapshot.jpg" alt="Snapshot from the camera when the alarm was confirmed">
+    {% endif %}
+    {% if req.device_id %}<p><a class="btn btn-ghost" href="/d/{{ req.device_id }}/live">Open the live view</a></p>{% endif %}
+    {% if req.sos_text %}
+    <details class="sos-message"><summary>What your contacts and the Desk would get</summary>
+      <pre class="sos-text">{{ req.sos_text }}</pre></details>
+    {% endif %}
+  </section>
+  {% endif %}
+
   <section class="card" aria-labelledby="timeline-title">
     <h2 id="timeline-title">Timeline</h2>
     <ol class="timeline" id="sos-timeline">
       {% for e in events %}
-      <li><time datetime="{{ e.at }}">{{ e.at }}</time> <strong>{{ e.event }}</strong>
-        <span class="muted">{{ e.actor_type }}{% if e.channel %} via {{ e.channel }}{% endif %}{% if e.origin == 'cloud' %} (Portal){% endif %}</span></li>
+      <li><time datetime="{{ e.at }}">{{ e.at | when }}</time> <strong>{{ event_label(e.event) }}</strong>
+        {% if e.channel and e.channel != 'system' %}<span class="muted">via {{ e.channel }}{% if e.origin == 'cloud' %} (Portal){% endif %}</span>{% endif %}</li>
       {% endfor %}
     </ol>
   </section>

@@ -6,11 +6,11 @@
   on your household, newest first. The log is tamper-evident (hash-chained).</p>
 <div class="card table-wrap">
   <table class="table">
-    <thead><tr><th>When (UTC)</th><th>What</th><th>Who</th><th>Details</th></tr></thead>
+    <thead><tr><th>When</th><th>What</th><th>Who</th><th>Details</th></tr></thead>
     <tbody>
     {% for row in rows %}
       <tr>
-        <td><time datetime="{{ row.at }}">{{ (row.at or '')[:19] | replace('T', ' ') }}</time></td>
+        <td><time datetime="{{ row.at }}">{{ row.at | when }}</time></td>
         <td class="mono small">{{ row.event }}</td>
         <td>{{ row.actor }}</td>
         <td class="small">{% for key, value in row.detail.items() if key not in ('restricted',) %}{{ key | replace('_', ' ') }}: {{ value }}{% if not loop.last %}; {% endif %}{% endfor %}</td>

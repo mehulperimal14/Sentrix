@@ -45,6 +45,13 @@ from sentrix_portal.models import (Camera, Device, EmergencyContact, Household,
 from sentrix_portal.routes.auth import household_of, render, see_other, user_of
 from sentrix_portal.services import accounts
 
+
+def _whatsapp_configured() -> bool:
+    """WhatsApp is offered only when this Portal can send it (D17)."""
+    from sentrix.alerting.channels import whatsapp
+    return whatsapp.configured()
+
+
 router = APIRouter()
 
 OWNER = security.require_role("owner")
@@ -138,7 +145,8 @@ def _extra(db: Session, principal, user, household, step: int) -> dict[str, Any]
                 "telegram_linked": bool(links), "stepped_up": principal.stepped_up(),
                 "pin_length": accounts.sos_config().pin_length,
                 "duress_digits": accounts.sos_config().duress_min_digit_difference,
-                "bot_configured": bool(accounts.portal_config().telegram_bot_name)}
+                "bot_configured": bool(accounts.portal_config().telegram_bot_name),
+                "whatsapp_configured": _whatsapp_configured()}
     if step == 7:
         consents = accounts.consent_choices(db, household.id)
         consents["medical_notes"] = consents["medical_notes"] or bool(household.medical_enc)

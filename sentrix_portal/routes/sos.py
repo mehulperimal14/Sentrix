@@ -70,7 +70,8 @@ def call_112(settings) -> dict:
             number = ""                           # never tel:112 in test mode
         return {"href": f"tel:{number}" if number else None,
                 "label": f"Call the SENTRIX Desk ({number})" if number
-                else "Call 112 now (test mode: no number set)", "test_mode": True}
+                else "Calling is off in this demo: no SENTRIX Desk number is set",
+                "test_mode": True}
     return {"href": "tel:112", "label": "Call 112 now", "test_mode": False}
 
 

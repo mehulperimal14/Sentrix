@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from sentrix.actor import Actor
+from sentrix.alerting.channels import whatsapp
 from sentrix_portal import security
 from sentrix_portal.db import DB
 from sentrix_portal.models import Camera, Device, TelegramLink
@@ -70,6 +71,7 @@ def _page(request, db, principal, household, *, errors=None, values=None, notice
         "duress_digits": accounts.sos_config().duress_min_digit_difference,
         "telegram": accounts.telegram_links(db, "user", user.id),
         "bot_configured": bool(accounts.portal_config().telegram_bot_name),
+        "whatsapp_configured": whatsapp.configured(),
         "devices": [{"device": d, "camera": (accounts.device_cameras(db, d.id) or [None])[0],
                      "online": d.state == "CLAIMED" and bool(hub.is_online(d.id))}
                     for d in devices],
