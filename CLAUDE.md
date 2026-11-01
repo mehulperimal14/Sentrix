@@ -372,6 +372,44 @@ alarm's first SMS. Full suite after the sweep: **2097 passed** (388 s, laptop;
 the guards blocked only the camera/mic and network attempts of the tests
 that check them).
 
+### Experience clean-up and wiring audit (2026-11-01, `sentrix/portal`)
+
+A UX review (the owner's alert on a phone, errors, contrast, copy against
+D1-D21), a frontend/backend wiring audit and a static-copy audit, then the
+fixes, on the owner's request to implement and deploy them:
+
+* **Portal**: browser pages get a page, never `{"detail": ...}` (404/403/429,
+  a timed-out form says "nothing was sent"; a form sent after the session
+  ended signs in again and comes back); one clock, "1 Nov, 6:22 pm" IST
+  (`when` filter, also in the Desk's JS); timeline events in words
+  (`states.EVENT_LABELS`); the alert page puts the answers first on a phone
+  (snapshot and "what your contacts would get" below); a FAILED request leads
+  the banner ("Help request not delivered") and the banner is rebuilt only
+  when it changes; the Desk's request page follows its request; WhatsApp is
+  offered only when the Portal can send it; contrast fixes (#2563eb/#b91c1c
+  fills), a focus ring, a skip link, 44 px touch targets.
+* **Copy** now matches the decisions: no knife (D1), no armed-mode intrusion
+  alert (D2/D8), fire after 2 minutes (D9), "Stored ... Render in Singapore"
+  (D18, notice version 2026-11-1), no "call 112" in test mode or in the
+  FAILED label ("NOT DELIVERED - call for help yourself"), "the SENTRIX Desk
+  closes it" (contacts cannot), a duress text never says "call the resident";
+  no "near near" or "Patiala, Patiala" in addresses; previews show "(private
+  link)", not `{link}`.
+* **Console**: the call button says what it does ("Calling is off in this
+  demo" instead of a dead "Call 112 now"); the SOS dialog takes the focus
+  (its title, never a send button) and makes the page behind it inert; a
+  "lost contact" banner after 10 s without the websocket (or while the
+  Portal relays an offline device); one IST clock; the dashboard SOS panel
+  uses the prompt's own buttons; the dead theft/harmful rows, the zero-width
+  "TCI band" and setting names on owner pages are gone; through the Portal
+  the face gallery and pictures follow the household's consents (no
+  controls the path table refuses); a signed-in `GET /login` goes to the
+  dashboard (the form used to answer 403 csrf); the dispatch package (address,
+  phone) is no longer broadcast in the state to every viewer.
+* Not done (lower value): reasons still show raw model scores; the LC audit
+  trail shows event ids; the dashboard shows "Level 1" before the first
+  state message.
+
 ## 3. Git history
 
 | Branch | Head | Contents |
