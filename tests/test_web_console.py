@@ -133,6 +133,16 @@ def lc_client(console, **kwargs):
     return client, auth.csrf_for_session(cookie)
 
 
+@pytest.fixture(autouse=True)
+def consented_household(monkeypatch):
+    """Tunnelled users of a household that consented to remote viewing and
+    face recognition (the console hides what the path table would refuse
+    without them; ``TestConsents`` covers that)."""
+    from sentrix.link import policy
+    monkeypatch.setattr(policy, "_profile_consents",
+                        lambda: {"remote_view": True, "face_recognition": True})
+
+
 def tunnel_client(console, role="owner", **kwargs):
     """A Portal user replayed in-process by the link (``/d/abc``)."""
     from fastapi.testclient import TestClient

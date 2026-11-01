@@ -35,7 +35,7 @@ export function normaliseSession(raw: Raw | null | undefined): DeviceSession {
     testMode,
     call: {
       // Test mode never says "112": the Desk if it has a number, else a plain word.
-      label: call.desk ? 'Call the SENTRIX Desk' : testMode ? 'Call for help' : 'Call 112 now',
+      label: call.desk ? 'Call the SENTRIX Desk' : testMode ? 'Calling is off in this demo' : 'Call 112 now',
       number: call.enabled ? call.number ?? (call.href ? String(call.href).replace(/^tel:/, '') : null) : null,
       enabled: Boolean(call.enabled),
       note: call.note || undefined,

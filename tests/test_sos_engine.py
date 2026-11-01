@@ -464,7 +464,7 @@ class TestAnswers:
         advance(world, 130)
         req = requests.get_request(req["id"])
         assert req["state"] == S.FAILED
-        assert world.state.get()["sos"]["label"] == "NOT DELIVERED - call 112 now"
+        assert world.state.get()["sos"]["label"] == "NOT DELIVERED - call for help yourself"
         statuses = {e["detail"]["status"] for e in requests.events(req["id"])
                     if e["event"] == "notification"}
         assert statuses == {"SUPPRESSED"}
@@ -481,6 +481,19 @@ class TestAnswers:
         prompt = [i for i in world.channels.items(req["id"]) if i.message.step == "t0"]
         assert prompt and all(i.status == "SUPPRESSED" and "cancelled" in (i.error or "")
                               for i in prompt)
+        world.channels.router.pump()
+        assert not [s for s in world.channels.sent() if s[2] == "t0"]
+
+    def test_a_false_alarm_verdict_withdraws_queued_messages(self, world):
+        """The Events page / verdict.set cancels outside _apply: its queued
+        "do you need assistance?" must not go out after the verdict."""
+        incident = fire_trigger(world, "fire")
+        req = the_request()
+        assert ("owner", "modem_sms", "t0") in world.channels.keys(req["id"])
+        result = world.engine.false_verdict(incident, pin=SOS_PIN, actor=OWNER, channel="lc")
+        assert result["ok"]
+        world.engine.drain()
+        assert requests.get_request(req["id"])["state"] == S.CANCELLED
         world.channels.router.pump()
         assert not [s for s in world.channels.sent() if s[2] == "t0"]
 
@@ -1247,3 +1260,78 @@ class TestReviewRegressions:
         names = event_names(req["id"])
         assert names.index("contacts_notified") < names.index("expire")
         assert requests.get_request(req["id"])["state"] == S.EXPIRED
+
+
+# ── the same incident grows after its request was answered (audit 2026-10-28) ─
+def _rise(w, incident, level, kind="weapon", evidence="corroborated"):
+    w.engine.on_level(LevelChange(level=level, previous_level=level - 1, incident_id=incident,
+                                  incident_type=kind, evidence_state=evidence, tci=0.9,
+                                  at_wall=w.clock(), at_mono=0.0))
+    w.engine.work()
+
+
+class TestTheSameIncidentGrows:
+    """The pipeline hands an incident's messages to SOS for good (no legacy
+    SMS or call), so a stronger alarm in it after its request was answered
+    must open a new request instead of reaching nobody."""
+
+    def test_declined_then_corroborated_l4_prompts_again(self, world):
+        incident = fire_trigger(world)
+        first = the_request()
+        assert world.engine.respond(first["id"], "decline", actor=OWNER, channel="lc",
+                                    pin=SOS_PIN)["ok"]
+        world.clock.now += 30
+        _rise(world, incident, 4)
+        _rise(world, incident, 4)                         # once per incident and level
+        listed = requests.list_requests(5)
+        assert len(listed) == 2, [r["state"] for r in listed]
+        second = next(r for r in listed if r["id"] != first["id"])
+        assert incident in second["incident_ids"] and second["state"] not in S.TERMINAL_STATES
+
+    def test_expired_then_l5_prompts_again(self, world):
+        incident = fire_trigger(world)
+        first = the_request()
+        advance(world, 1801)
+        assert requests.get_request(first["id"])["state"] == S.EXPIRED
+        _rise(world, incident, 5)
+        assert len(requests.list_requests(5)) == 2
+
+    def test_a_new_class_in_the_same_incident_triggers(self, world):
+        incident = fire_trigger(world)                     # weapon
+        first = the_request()
+        assert world.engine.respond(first["id"], "decline", actor=OWNER, channel="lc",
+                                    pin=SOS_PIN)["ok"]
+        fire_trigger(world, "fire", incident_id=incident)  # the pipeline's "sos:fire" claim
+        listed = requests.list_requests(5)
+        assert len(listed) == 2 and {r["incident_type"] for r in listed} == {"weapon", "fire"}
+
+    def test_the_same_class_at_l3_does_not_prompt_twice(self, world):
+        incident = fire_trigger(world)
+        first = the_request()
+        assert world.engine.respond(first["id"], "decline", actor=OWNER, channel="lc",
+                                    pin=SOS_PIN)["ok"]
+        fire_trigger(world, incident_id=incident)          # a repeated weapon trigger
+        assert len(requests.list_requests(5)) == 1
+
+
+def test_a_false_alarm_never_reveals_or_touches_a_silent_duress_request(world):
+    """Disarmed with the duress PIN while an L2 incident is live: a silent
+    request opens. A "False alarm" on that incident must answer as if there
+    were no request (no PIN asked) and leave its package alone."""
+    from types import SimpleNamespace
+    world.holder["reach"] = OFFLINE
+    mode.set_armed(True, by="test")
+    try:
+        incident = new_incident("intrusion", 2)
+        world.pipeline.incidents = SimpleNamespace(current=SimpleNamespace(
+            id=incident, snapshot_path=None, evidence_bundle=None, evidence_hash=None))
+        assert world.engine.set_mode(False, pin=DURESS_PIN, actor=OWNER)["ok"]
+        req = the_request()
+        before = package_of(req["id"])["status"]
+        no_pin = world.engine.false_verdict(incident, pin=None, actor=OWNER, channel="lc")
+        assert no_pin["ok"], "like an incident with no request: labelled without a PIN"
+        world.engine.drain()
+        assert package_of(req["id"])["status"] == before
+        assert requests.get_request(req["id"])["state"] == req["state"]
+    finally:
+        mode.set_armed(False, by="test")

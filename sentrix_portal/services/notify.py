@@ -225,8 +225,14 @@ class PortalOutbox:
     def cancel(self, request_id: str, reason: str,
                steps: tuple[str, ...] | None = None) -> list[OutboxItem]:
         with self._session() as db:
-            query = db.query(Notification).filter(Notification.request_id == request_id,
-                                                  Notification.status.in_((QUEUED, FAILED)))
+            # QUEUED, or FAILED and still retrying: a message that gave up
+            # keeps its FAILED (the real outcome), never "cancelled".
+            query = db.query(Notification).filter(
+                Notification.request_id == request_id,
+                (Notification.status == QUEUED)
+                | ((Notification.status == FAILED)
+                   & (Notification.next_attempt_at.is_(None)
+                      | (Notification.next_attempt_at < _NEVER))))
             if steps:
                 query = query.filter(Notification.step.in_(tuple(steps)))
             rows = query.all()
@@ -381,12 +387,14 @@ def cancel(db, request_id: str, reason: str = "request closed",
            steps: tuple[str, ...] | None = None) -> int:
     """Withdraw a request's queued and retrying messages (SUPPRESSED,
     "cancelled: <reason>") in the caller's transaction. Does not wait for the
-    worker: a message already being sent may still leave."""
-    items = PortalOutbox(session=db).cancel(request_id, reason,
-                                            tuple(steps) if steps else None)
-    for item in items:
-        _fanout(item)
-    return len(items)
+    worker: a message already being sent may still leave.
+
+    No listener hears it: a withdrawn message is not a delivery outcome, and
+    the SOS feedback listener writes through a second session, which waits
+    out SQLite's 5 s lock while this transaction holds it (the cloud path
+    used to stall the Portal 5 s per withdrawn message)."""
+    return len(PortalOutbox(session=db).cancel(request_id, reason,
+                                               tuple(steps) if steps else None))
 
 
 def ready(channel: str) -> bool:

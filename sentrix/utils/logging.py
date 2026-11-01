@@ -15,6 +15,7 @@ import sys
 import threading
 import time
 from collections import defaultdict, deque
+from pathlib import Path
 from typing import Any
 
 from sentrix.paths import LOG_DIR
@@ -52,13 +53,28 @@ class Telemetry:
         self._latencies: dict[str, deque] = defaultdict(lambda: deque(maxlen=window))
         self._counts: dict[str, int] = defaultdict(int)
         self._fh = None
+        self._day = ""
         self._log = get_logger("telemetry")
 
+    @property
+    def path(self) -> Path | None:
+        """The file being written (the retention never deletes it)."""
+        return Path(self._fh.name) if self._fh else None
+
     def _handle(self):
+        day = time.strftime("%Y%m%d")
+        if self._fh and day != self._day:
+            # A new file each day, so the retention can prune the old ones.
+            try:
+                self._fh.close()
+            except OSError:
+                pass
+            self._fh = None
         if self._fh is None:
             try:
                 LOG_DIR.mkdir(parents=True, exist_ok=True)
                 stamp = time.strftime("%Y%m%d_%H%M%S")
+                self._day = day
                 self._fh = open(LOG_DIR / f"telemetry_{stamp}.jsonl", "a",
                                 encoding="utf-8")
             except OSError as exc:

@@ -57,7 +57,7 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
 
 from sentrix.alerting import guard
@@ -1103,6 +1103,19 @@ def build_worker(port: str = "", baud: int = 115200) -> ModemWorker | MmcliWorke
 
 
 # ── daily cap ─────────────────────────────────────────────────────────────────
+#: Message steps that start an alarm's conversation: an owner's first prompt,
+#: the first page to contacts and the Desk, duress, "help now", delivery
+#: failures. Reminders and re-pages may not use the last segments of the cap.
+FIRST_CONTACT_STEPS = ("t0", "contacts_t0", "desk_t0", "duress", "help_now", "failed")
+RESERVED_SEGMENTS = 8
+
+
+def _seconds_to_midnight(now: datetime | None = None) -> float:
+    now = now or datetime.now()
+    tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=5, microsecond=0)
+    return max(60.0, (tomorrow - now).total_seconds())
+
+
 class DailyCounter:
     """SMS segments sent today (local date); refuses beyond ``cap``."""
 
@@ -1118,10 +1131,12 @@ class DailyCounter:
         if day != self._day:
             self._day, self._used = day, 0
 
-    def take(self, n: int = 1) -> bool:
+    def take(self, n: int = 1, *, reserve: int = 0) -> bool:
+        """Count ``n`` segments, unless that would leave fewer than
+        ``reserve`` of the cap (kept for first-contact messages)."""
         with self._lock:
             self._roll()
-            if self._used + n > self.cap:
+            if self._used + n > self.cap - max(0, int(reserve)):
                 return False
             self._used += n
             return True
@@ -1203,9 +1218,13 @@ class ModemSmsTransport:
         if number not in self._allowlist():
             return _not_in_profile()
         parts = self.worker.count_parts(message.text)
-        if not self.counter.take(parts):
+        first = str(message.step or "").startswith(FIRST_CONTACT_STEPS)
+        if not self.counter.take(parts, reserve=0 if first else RESERVED_SEGMENTS):
+            # Retried after local midnight, not given up: the next alarm's
+            # first SMS must not be lost to a day of reminders and re-pages.
             return SendResult(False, error=f"daily_cap: {self.counter.cap} SMS segments a "
-                                           "day already sent", retryable=False)
+                                           "day already sent", retryable=True,
+                              retry_after=_seconds_to_midnight())
         try:
             references = self.worker.send_sms(number, message.text)
         except ModemUnavailable as exc:

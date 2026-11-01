@@ -29,6 +29,10 @@ services:
         value: "1"
       - key: PORTAL_TRUSTED_PROXIES
         value: "*"
+      # Render sits behind Cloudflare, which sets CF-Connecting-IP; a client's
+      # own X-Forwarded-For / X-Real-IP pass through, so they are not trusted.
+      - key: PORTAL_CLIENT_IP_HEADER
+        value: cf-connecting-ip
       - key: PORTAL_TEST_MODE
         value: "1"
       - key: SENTRIX_TEST_MODE

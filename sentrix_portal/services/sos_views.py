@@ -71,7 +71,8 @@ def call_112(settings) -> dict:
             number = ""                           # never tel:112 in test mode
         return {"href": f"tel:{number}" if number else None,
                 "label": f"Call the SENTRIX Desk ({number})" if number
-                else "Call 112 now (test mode: no number set)", "test_mode": True}
+                else "Calling is off in this demo: no SENTRIX Desk number is set",
+                "test_mode": True}
     return {"href": "tel:112", "label": "Call 112 now", "test_mode": False}
 
 
@@ -174,12 +175,15 @@ async def use_action_link(db: Session, found, row: AssistanceRequest, user: User
                           action: str, *, authority: str | None,
                           ip: str | None) -> dict[str, Any]:
     """The link's one answer (the caller checked ``action`` is in
-    :data:`LINK_ACTIONS`); the link is used up whatever the outcome."""
-    found.used_at = utcnow()
+    :data:`LINK_ACTIONS`). As the Telegram buttons: only a help request that
+    went through uses the link up; a timeout ("try again") or "I'm checking"
+    leaves it usable."""
     actor = Actor(type=user.role if user.role in ("owner", "member") else "owner",
                   id=user.id, name=user.display_name or user.username).to_dict()
     outcome = await sos_service.respond(db, row.id, action, actor=actor, channel="email",
                                         authority=authority)
+    if outcome["ok"] and action == "approve":
+        found.used_at = utcnow()
     security.audit(db, "action_link.used", actor_type="user", actor_id=user.id,
                    household_id=row.household_id, target_type="request", target_id=row.id,
                    ip=ip, detail={"action": action, "code": outcome["code"]})

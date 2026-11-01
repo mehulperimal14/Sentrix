@@ -19,7 +19,7 @@ from sqlalchemy.orm import sessionmaker
 from sentrix.config import settings
 from sentrix.fusion.policy import LevelState
 from sentrix.pipeline.engine import Pipeline
-from sentrix.pipeline.events import SCHEMA_VERSION, EventLog
+from sentrix.pipeline.events import SCHEMA_VERSION, EventLog, read_events
 from sentrix.pipeline.incidents import IncidentManager
 from sentrix.storage import database
 from sentrix.storage.models import Base, IncidentRecord
@@ -259,3 +259,81 @@ class TestEventLogRetention:
         kept = self._log(tmp_path, "a", 10, 1, now)
         assert prune_logs(tmp_path, keep_days=365, max_bytes=1e9, now=now) == []
         assert kept.exists()
+
+
+# ── the open row carries its captures (audit 2026-10-28) ──────────────────────
+def test_the_open_row_gets_its_snapshot_and_evidence_without_a_peak_move(temp_db, tmp_path,
+                                                                        monkeypatch):
+    """A steady L3 is re-saved only when its peak moves; the snapshot and the
+    evidence land after the open row's save, so a crash used to leave the
+    row (and the Portal's mirror) without them."""
+    import numpy as np
+    from sentrix.pipeline import engine as engine_mod
+    from sentrix.pipeline.escalation import plan_for
+    from sentrix.sos import NullSosService
+    from sentrix.storage import database
+    database.init_db()
+    monkeypatch.setattr(engine_mod.notifier, "save_snapshot",
+                        lambda frame, iid: tmp_path / f"snap_{iid}.jpg")
+    monkeypatch.setattr(engine_mod.vault, "save",
+                        lambda *a, **k: SimpleNamespace(bundle_id="ev_1", sha256="h"))
+    queue = []
+    p = Pipeline.__new__(Pipeline)
+    p.cfg, p.session_id, p.sos = settings, "s1", NullSosService()
+    p.incidents = IncidentManager()
+    p._submit = lambda func, *a, **k: queue.append((func, a, k))
+    p._submit_or_run = lambda func, *a: queue.append((func, a, {}))
+    p.siren = SimpleNamespace(activate=lambda *a: None)
+    frame = np.zeros((8, 8, 3), np.uint8)
+    result = SimpleNamespace(incident_type="weapon", tci=0.55, raw_tci=0.55, reason="r",
+                             features=SimpleNamespace(extras={}, authorized=False,
+                                                      identity_degraded=False))
+    for i in range(10):                       # 10 s of a steady L3 (the peak never moves)
+        incident, _closed = p.incidents.update(3, 0.55, "weapon", float(i), reason="r")
+        p._persist_open(incident, float(i))
+        p._act(incident, plan_for(3), frame, result, 3, "ELEVATED", float(i))
+        while queue:                          # the FIFO worker
+            func, args, kwargs = queue.pop(0)
+            func(*args, **kwargs)
+    row = database.recent_incidents()[0]
+    assert row["snapshot_path"] and row["evidence_bundle"] == "ev_1"
+    assert database.close_interrupted("next") == 1   # a hard kill, then a restart
+    row = database.recent_incidents()[0]
+    assert row["snapshot_path"] and row["evidence_bundle"] == "ev_1"
+
+
+def test_closed_incidents_in_memory_are_bounded():
+    manager = IncidentManager()
+    for i in range(120):
+        manager.update(3, 0.55, "weapon", float(i * 400), reason="r")
+        manager.update(1, 0.0, "normal", float(i * 400 + 200), reason="")
+    assert len(manager.recent) == 50
+
+
+def test_the_event_log_starts_a_new_file_each_day(tmp_path):
+    """The file being written is never pruned: without a daily file a unit
+    that is never restarted grows one file past every retention cap."""
+    log = EventLog(session_id="sess", directory=tmp_path)
+    log.audit("first")
+    first = log.path
+    log._day = "19990101"                         # the clock passed midnight
+    log.audit("second")
+    assert log.path != first and first.exists() and log.path.exists()
+    assert "sess" in log.path.name
+    assert [r.get("event") for r in read_events(log.path)
+            if r.get("event") in ("first", "second")] == ["second"]
+
+
+def test_telemetry_files_are_pruned_too(tmp_path):
+    import os
+    from sentrix.pipeline.events import prune_logs
+    now = 1_800_000_000.0
+    old = tmp_path / "telemetry_20250101_000000.jsonl"
+    new = tmp_path / "telemetry_20261027_000000.jsonl"
+    event = tmp_path / "events_20250101_000000_s.jsonl"
+    for path, age in ((old, 40), (new, 1), (event, 40)):
+        path.write_text("{}\n")
+        os.utime(path, (now - age * 86400, now - age * 86400))
+    assert prune_logs(tmp_path, keep_days=30, max_bytes=2**30, now=now,
+                      pattern="telemetry_*.jsonl") == [old]
+    assert new.exists() and event.exists(), "only the pattern's files"

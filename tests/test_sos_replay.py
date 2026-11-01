@@ -125,7 +125,7 @@ class TestPipelineHook:
             incident, _ = fake.incidents.update(3, 0.5, kind, now=0.0)
             fake._act(incident, plan_for(3), np.zeros((4, 4, 3), np.uint8),
                       result_of(kind, 3), 3, "ELEVATED", 0.0)
-            assert "sos" not in incident.actions and fake._tasks.empty()
+            assert not any(a.startswith("sos") for a in incident.actions) and fake._tasks.empty()
         finally:
             engine.stop()
 
@@ -138,7 +138,7 @@ class TestPipelineHook:
             incident, _ = fake.incidents.update(4, 0.7, "assault", now=0.0)
             fake._act(incident, plan_for(4), np.zeros((4, 4, 3), np.uint8),
                       result_of("assault", 4), 4, "HIGH", 0.0)
-            assert "sos" not in incident.actions
+            assert not any(a.startswith("sos") for a in incident.actions)
             assert "send_sms" in fake.submitted and "_create_dispatch" in fake.submitted
         finally:
             engine.stop()
@@ -150,7 +150,7 @@ class TestPipelineHook:
             incident, _ = fake.incidents.update(3, 0.5, "assault", now=0.0)
             fake._act(incident, plan_for(3), np.zeros((4, 4, 3), np.uint8),
                       result_of("assault", 3, "corroborated"), 3, "ELEVATED", 0.0)
-            assert "sos" in incident.actions
+            assert "sos:assault" in incident.actions
         finally:
             engine.stop()
 
@@ -337,9 +337,9 @@ def replay_into_engine(rows, *, armed: bool, tool) -> tuple[SimpleNamespace, lis
                     tci=result.tci, at_wall=t, at_mono=t))
                 committed = level
             if (incident is not None and plan_for(level).sos
-                    and "sos" not in incident.actions
+                    and f"sos:{result.incident_type}" not in incident.actions
                     and engine.wants(result.incident_type, level)):
-                incident.actions.add("sos")
+                incident.actions.add(f"sos:{result.incident_type}")
                 engine.trigger(SosTrigger(
                     incident_id=incident.id, level=level,
                     incident_type=result.incident_type,

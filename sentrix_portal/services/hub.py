@@ -53,9 +53,9 @@ from typing import Any
 
 from sentrix.link import protocol
 from sentrix.utils.redact import redact_url
-from sentrix_portal.models import (Device, DeviceCommand, DeviceEvent, DispatchMirror,
-                                   EvidenceMetaMirror, Household, IncidentMirror,
-                                   SnapshotMirror, utcnow)
+from sentrix_portal.models import (AssistanceRequest, Device, DeviceCommand, DeviceEvent,
+                                   DispatchMirror, EvidenceMetaMirror, Household,
+                                   IncidentMirror, SnapshotMirror, utcnow)
 
 log = logging.getLogger("sentrix_portal.hub")
 
@@ -216,6 +216,9 @@ class LinkHub:
         self.app = app
         self.sessions: dict[str, DeviceSession] = {}
         self.pending_tokens: dict[str, str] = {}
+        #: Device events acknowledged but not applied (a transient error):
+        #: device -> seq -> [kind, payload, at, tries]. Retried on heartbeats.
+        self.unapplied: dict[str, dict[int, list]] = {}
         self.state_viewers: dict[str, set[Viewer]] = {}
         self.video_viewers: dict[str, set[Viewer]] = {}
         #: The last state payload per device, kept after it disconnects so the
@@ -499,11 +502,60 @@ class LinkHub:
 
     async def _on_heartbeat(self, session: DeviceSession, message: dict) -> None:
         session.heartbeat = message
-        await asyncio.to_thread(self._store_heartbeat, session, message)
+        stranded = await asyncio.to_thread(self._store_heartbeat, session, message)
         await self._send(session, protocol.envelope(protocol.ACK, seqs=[],
                                                     upto=session.watermark))
+        if self.unapplied.get(session.device_id):
+            for name, args in await asyncio.to_thread(self._reapply, session.device_id):
+                self._spawn(self.send_command(session.device_id, name, args,
+                                              _cloud_actor(), timeout=10,
+                                              queue_if_offline=True))
+        if stranded and session.full:
+            # The heartbeat watcher handed a request to the cloud while this
+            # session was being set up (after the welcome's own hand-back):
+            # give it back now instead of at the next reconnect.
+            from sentrix_portal.services import sos as sos_service
+            for sync in await asyncio.to_thread(self._with_db, sos_service.sync_messages,
+                                                session.device_id):
+                await self._send(session, sync)
 
-    def _store_heartbeat(self, session: DeviceSession, message: dict) -> None:
+    #: Tries before a failed device event is given up (audited).
+    REAPPLY_TRIES = 5
+
+    def _reapply(self, device_id: str) -> list[tuple[str, dict]]:
+        """Apply again the events that failed (oldest first); the follow-up
+        device commands of those that now apply."""
+        from sentrix_portal import security
+        followups: list[tuple[str, dict]] = []
+        pending = self.unapplied.get(device_id) or {}
+        for seq in sorted(pending):
+            kind, payload, at, tries = pending[seq]
+            try:
+                with self.db.session() as db:
+                    device = db.get(Device, device_id)
+                    if device is None:
+                        pending.pop(seq, None)
+                        continue
+                    followups += self._apply(db, device, kind, payload, at) or []
+                pending.pop(seq, None)
+            except Exception as exc:
+                pending[seq][3] = tries + 1
+                if tries + 1 >= self.REAPPLY_TRIES:
+                    pending.pop(seq, None)
+                    log.error("device %s event %s (%s) given up after %d tries: %s",
+                              device_id, seq, kind, tries + 1, exc)
+                    with self.db.session() as db:
+                        security.audit(db, "device.event_given_up", actor_type="device",
+                                       actor_id=device_id, target_type="device",
+                                       target_id=device_id,
+                                       detail={"seq": seq, "kind": kind})
+        if not pending:
+            self.unapplied.pop(device_id, None)
+        return followups
+
+    def _store_heartbeat(self, session: DeviceSession, message: dict) -> bool:
+        """Store the heartbeat; True when an open request of this (online)
+        device is still the cloud's."""
         keep = ("camera_online", "video_fps", "ai_hz", "frame_age_ms", "audio", "armed",
                 "alarm", "open_request_id", "node", "modem", "channels", "outbox_depth",
                 "remote_viewers", "uptime_s", "profile_version", "time_ms")
@@ -512,7 +564,7 @@ class LinkHub:
         with self.db.session() as db:
             device = db.get(Device, session.device_id)
             if device is None:
-                return
+                return False
             device.last_heartbeat = record
             device.last_seen_at = utcnow()
             device.armed = bool(message.get("armed"))
@@ -522,6 +574,11 @@ class LinkHub:
                 security.audit(db, "device.online", actor_type="device", actor_id=device.id,
                                household_id=device.household_id, target_type="device",
                                target_id=device.id, detail={"via": "heartbeat"})
+            from sentrix.sos import states as sos_states
+            return db.query(AssistanceRequest.id).filter(
+                AssistanceRequest.device_id == device.id,
+                AssistanceRequest.authority_side == "cloud",
+                AssistanceRequest.state.in_(sorted(sos_states.OPEN_STATES))).first() is not None
 
     async def _on_event(self, session: DeviceSession, message: dict) -> None:
         seq = message.get("seq")
@@ -585,7 +642,9 @@ class LinkHub:
         except Exception as exc:
             log.error("device %s event %s (%s) could not be applied: %s",
                       session.device_id, seq, kind, exc, exc_info=True)
-        # Keep the raw event (nothing is lost) and acknowledge it.
+        # Keep the raw event (nothing is lost) and acknowledge it; apply it
+        # again on later heartbeats (a closed request must not stay open).
+        self.unapplied.setdefault(session.device_id, {})[seq] = [kind, payload, at, 0]
         with self.db.session() as db:
             device = db.get(Device, session.device_id)
             if db.get(DeviceEvent, (session.device_id, seq)) is None:
@@ -1138,6 +1197,11 @@ class LinkHub:
         await self._send_viewer_count(device_id)
         if refusal is not None:
             await self.remove_video_viewer(device_id, viewer, idle_stop=False)
+            # The device dropped the shared subscription with the refusal:
+            # restore it at once for whoever else is watching.
+            remaining = self.video_viewers.get(device_id)
+            if remaining and session is not None and not session.closed:
+                await self._subscribe_video(device_id, _lease_actor(remaining))
         return refusal
 
     async def _wait_video(self, session: DeviceSession, ref: str | None,
@@ -1216,7 +1280,7 @@ class LinkHub:
             await self._subscribe_state(device_id)
         viewers = self.video_viewers.get(device_id)
         if viewers:
-            await self._subscribe_video(device_id, next(iter(viewers)).actor)
+            await self._subscribe_video(device_id, _lease_actor(viewers))
 
     def _ensure_renewer(self, device_id: str) -> None:
         task = self._renewers.get(device_id)
@@ -1232,7 +1296,7 @@ class LinkHub:
                     await self._subscribe_state(device_id)
                 viewers = self.video_viewers.get(device_id)
                 if viewers:
-                    await self._subscribe_video(device_id, next(iter(viewers)).actor)
+                    await self._subscribe_video(device_id, _lease_actor(viewers))
         except Exception as exc:
             if not _is_closed(exc):
                 log.error("subscription renewal for %s failed: %s", device_id, exc)
@@ -1346,7 +1410,8 @@ def offline_state(payload: dict | None) -> dict:
     link = dict(out.get("link") or {})
     link.update(connected=False, state="offline")
     out.update(camera_online=False, camera_available=False, ai_hz=0.0, fps=0.0,
-               video_fps=0.0, link=link, link_online=False, device_offline=True)
+               video_fps=0.0, link=link, link_online=False, device_offline=True,
+               mic_available=False, mic_classifying=False)
     return out
 
 
@@ -1460,6 +1525,15 @@ async def unpair(db, device_id: str, actor: dict) -> dict[str, Any]:
             session.closed = True
             await session.conn.close(protocol.CLOSE_REVOKED, "unpaired")
     return _command_result(True, "ok", "unpaired")
+
+
+def _lease_actor(viewers) -> dict:
+    """The actor that renews the one shared video subscription: an owner's
+    or member's while one watches. Their access is the household's own; the
+    Desk's is re-checked per viewer on the Portal (device_proxy), and a
+    refused Desk renewal would have dropped the household's video too."""
+    household = [v for v in viewers if v.role in ("owner", "member")]
+    return (household or list(viewers))[0].actor
 
 
 def start(app):

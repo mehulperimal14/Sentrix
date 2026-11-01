@@ -113,7 +113,7 @@ async def save_step1(body: AboutYou, request: Request, db: Session = DB,
                      principal=Depends(OWNER)) -> StepSavedOut:
     user, household = _load(db, principal, 1)
     outcome = await flows.save_about_you(db, user, household, form_values(body),
-                                         ip=ip_of(request))
+                                         ip=ip_of(request), stepped_up=principal.stepped_up())
     return _saved(db, user, household, outcome)
 
 

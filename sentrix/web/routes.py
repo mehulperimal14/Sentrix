@@ -150,7 +150,17 @@ def redacted(value: Any) -> Any:
 def capabilities(principal: auth.LcPrincipal | None) -> frozenset[str]:
     if principal is None:
         return frozenset()
-    return ROLE_CAPABILITIES.get(principal.role, frozenset())
+    caps = ROLE_CAPABILITIES.get(principal.role, frozenset())
+    if principal.kind == "tunnel":
+        # The path table refuses these without the household's consent
+        # (sentrix/link/policy.py): no control or picture that only fails.
+        from sentrix.link.policy import _profile_consents
+        consents = _profile_consents()
+        if not consents.get("remote_view"):
+            caps -= {"media", "gallery_view", "gallery_write"}
+        if not consents.get("face_recognition"):
+            caps -= {"gallery_view", "gallery_write"}
+    return caps
 
 
 def call_target() -> dict[str, str]:
@@ -160,7 +170,7 @@ def call_target() -> dict[str, str]:
     configured. Built here (``/api/session`` ``call``), so no app ever holds
     an emergency number."""
     if not _test_mode():
-        return {"href": "tel:112", "note": ""}
+        return {"href": "tel:112", "label": "Call 112 now", "note": ""}
     desk = (state.get().get("sos") or {}).get("desk_number")
     if not desk:
         try:
@@ -172,10 +182,10 @@ def call_target() -> dict[str, str]:
     from sentrix.alerting.guard import is_emergency_number
     number = re.sub(r"[^\d+]", "", str(desk or ""))
     if number and not is_emergency_number(number):
-        return {"href": f"tel:{number}",
+        return {"href": f"tel:{number}", "label": "Call the SENTRIX Desk",
                 "note": f"Test mode: this calls the SENTRIX Desk ({number}), not 112."}
-    return {"href": "", "note": "Test mode: no SENTRIX Desk number is configured "
-                                "(SENTRIX_DESK_NUMBER), so this button is disabled."}
+    return {"href": "", "label": "Call the SENTRIX Desk",
+            "note": "Calling is off in this demo: no SENTRIX Desk number is set."}
 
 
 def _actor_label(ref: str | None) -> str:

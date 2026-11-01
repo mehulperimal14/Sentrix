@@ -127,9 +127,10 @@ EVENT_LOG_PRUNE_SECONDS = 6 * 3600
 
 
 async def _prune_event_logs(pipeline) -> None:
-    """Event-log retention (``settings.retention``): at start-up, then every
-    six hours, so a unit that runs for months never fills its SD card. The
-    file the pipeline is writing is never deleted."""
+    """Event-log and telemetry retention (``settings.retention``): at
+    start-up, then every six hours, so a unit that runs for months never
+    fills its SD card. The files being written are never deleted; both
+    start a new file each day."""
     from sentrix.config import settings
     from sentrix.pipeline.events import prune_logs
     retention = settings.retention
@@ -139,6 +140,11 @@ async def _prune_event_logs(pipeline) -> None:
             await asyncio.to_thread(prune_logs, keep_days=retention.audit_days,
                                     max_bytes=retention.event_log_max_gb * 2**30,
                                     keep=current)
+            # Telemetry (per-stage timings, ~7 lines a tick): a month, 1 GB.
+            from sentrix.paths import LOG_DIR
+            from sentrix.utils.logging import telemetry
+            await asyncio.to_thread(prune_logs, LOG_DIR, keep_days=30, max_bytes=2**30,
+                                    keep=telemetry.path, pattern="telemetry_*.jsonl")
         except Exception as exc:
             log.warning("event-log retention skipped: %s", exc)
         await asyncio.sleep(EVENT_LOG_PRUNE_SECONDS)

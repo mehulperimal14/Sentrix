@@ -347,6 +347,69 @@ from the Scalebee USB microphone (arrives 2026-11-03).
 
 ---
 
+### Bug sweep and code audit (2026-10-28, `sentrix/portal`, not pushed)
+
+Twelve bugs from a review in another chat, then a five-way audit
+(ponytail-audit rules: a concrete failing case for every finding; aimed by
+a graphify code graph) of Portal auth, Portal SOS/hub, device SOS/alerts,
+link/LC and the runtime. Every confirmed finding was fixed with a
+regression test, one commit each (`f935082` .. `96ab1ae`). The main ones:
+duress texts never say "Call 112" in test mode, and a duress help path
+never shows in the household's activity log, export, `/api/channels` or
+through a false-alarm verdict; admin/erasure unpair reaches an online
+device; queued messages are withdrawn when a request is answered or closes
+(device and Portal; a first version stalled the Portal on SQLite's lock and
+was fixed); an alarm that grows after its request was answered prompts
+again (per-class SOS claim); stale device timers after a cloud takeover act
+on nothing; raw `device_events` are pruned (30 d) and lose their JPEGs; the
+client address on Render comes from `CF-Connecting-IP`
+(`PORTAL_CLIENT_IP_HEADER`, needs a Blueprint sync); an e-mailed action
+link survives a timeout; live relays re-check access every 30 s; the clip
+preview no longer shows AI STALLED all the time and draws boxes at full
+scale; identity re-checks before its verdict goes stale; event logs and
+telemetry rotate daily with a retention; the modem keeps 8 segments for an
+alarm's first SMS. Full suite after the sweep: **2097 passed** (388 s, laptop;
+the guards blocked only the camera/mic and network attempts of the tests
+that check them).
+
+### Experience clean-up and wiring audit (2026-11-01, `sentrix/portal`)
+
+A UX review (the owner's alert on a phone, errors, contrast, copy against
+D1-D21), a frontend/backend wiring audit and a static-copy audit, then the
+fixes, on the owner's request to implement and deploy them:
+
+* **Portal**: browser pages get a page, never `{"detail": ...}` (404/403/429,
+  a timed-out form says "nothing was sent"; a form sent after the session
+  ended signs in again and comes back); one clock, "1 Nov, 6:22 pm" IST
+  (`when` filter, also in the Desk's JS); timeline events in words
+  (`states.EVENT_LABELS`); the alert page puts the answers first on a phone
+  (snapshot and "what your contacts would get" below); a FAILED request leads
+  the banner ("Help request not delivered") and the banner is rebuilt only
+  when it changes; the Desk's request page follows its request; WhatsApp is
+  offered only when the Portal can send it; contrast fixes (#2563eb/#b91c1c
+  fills), a focus ring, a skip link, 44 px touch targets.
+* **Copy** now matches the decisions: no knife (D1), no armed-mode intrusion
+  alert (D2/D8), fire after 2 minutes (D9), "Stored ... Render in Singapore"
+  (D18, notice version 2026-11-1), no "call 112" in test mode or in the
+  FAILED label ("NOT DELIVERED - call for help yourself"), "the SENTRIX Desk
+  closes it" (contacts cannot), a duress text never says "call the resident";
+  no "near near" or "Patiala, Patiala" in addresses; previews show "(private
+  link)", not `{link}`.
+* **Console**: the call button says what it does ("Calling is off in this
+  demo" instead of a dead "Call 112 now"); the SOS dialog takes the focus
+  (its title, never a send button) and makes the page behind it inert; a
+  "lost contact" banner after 10 s without the websocket (or while the
+  Portal relays an offline device); one IST clock; the dashboard SOS panel
+  uses the prompt's own buttons; the dead theft/harmful rows, the zero-width
+  "TCI band" and setting names on owner pages are gone; through the Portal
+  the face gallery and pictures follow the household's consents (no
+  controls the path table refuses); a signed-in `GET /login` goes to the
+  dashboard (the form used to answer 403 csrf); the dispatch package (address,
+  phone) is no longer broadcast in the state to every viewer.
+* Not done (lower value): reasons still show raw model scores; the LC audit
+  trail shows event ids; the dashboard shows "Level 1" before the first
+  state message.
+
 ## 3. Git history
 
 | Branch | Head | Contents |
@@ -718,6 +781,8 @@ log-only, gunshot/glass-break data track (non-gating).
 ### Open questions for the team
 
 **Owner decisions surfaced by M1–M5:** (1) CUDA torch in the app env (Python 3.14 needs a cp314 CUDA wheel, or move the app env to 3.11/3.12) — moves DINOv2 to the RTX 4060; not needed for 5 Hz on CPU. (2) A folder of ≥ 3 h normal footage from the demo room for `--negatives` (G3). (3) Pre-roll evidence clips need a multi-frame vault format (M3 deferral). (4) Re-test live on the real webcam: video should now run at camera rate and the TCI should match the level.
+
+**Owner decisions surfaced by the 2026-10-28 audit:** (8) The `face_recognition` consent is not enforced on the device: withdrawing it should stop recognition, but with it off by default every resident would become an L2 "unrecognised person" on the demo unit - enforce it (and set the consent for the demo household), or reword the consent text. (9) Under duress the LC's "remote view: N" badge and `/api/link/remote-audit` still show the Desk watching after the screen says "Marked as false alarm" (D10's "visible in the room" against duress secrecy). (10) Sync the Render Blueprint (`PORTAL_CLIENT_IP_HEADER`) and check one request's logged address.
 
 **Owner decisions surfaced by M11:** (5) Home mode now raises an L2 "unrecognised person" after 10 s (D2 as amended, owner requirement 4): every unenrolled guest becomes an L2 incident on the dashboard - keep it, lengthen `SENTRIX_UNKNOWN_HOME_DWELL`, or set `SENTRIX_UNKNOWN_ALERT_HOME=0` (logged only). (6) ~~Talk-down speaker hardware~~ - decided: no speaker and no buzzer (D19). (7) Record the audio sessions of ROADMAP §15.1 (play-fighting vs staged fights with sound, laughter, shouting, TV, alarm beeps, gunshot/glass sounds from a speaker) before any fight or audio claim is made.
 

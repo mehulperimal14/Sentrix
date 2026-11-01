@@ -244,7 +244,7 @@ def advance(household: Household, step: int) -> str:
 
 # ── wizard steps ──────────────────────────────────────────────────────────────
 async def save_about_you(db: Session, user: User, household: Household, form: Form, *,
-                         ip: str | None) -> Outcome:
+                         ip: str | None, stepped_up: bool = False) -> Outcome:
     """Step 1: name, mobile, e-mail, language, "I am 18 or older"."""
     errors = accounts.FormErrors()
     name = accounts.clean_text(errors, "display_name", form.get("display_name"),
@@ -255,6 +255,12 @@ async def save_about_you(db: Session, user: User, household: Household, form: Fo
                                      accounts.LANGUAGES, label="Language")
     if not form.get("adult"):
         errors.add("adult", "Only an adult (18 or older) can set up the household.")
+    # The e-mail is the recovery channel: once set up, changing it here needs
+    # the same fresh password as /account (a held phone must not take it over).
+    if (email and email != user.email and household.onboarding_completed_at is not None
+            and not stepped_up):
+        errors.add("email", "Confirm your password in Account settings before changing "
+                            "the e-mail.")
     if errors:
         return invalid(errors)
     if phone != accounts.user_phone(user):

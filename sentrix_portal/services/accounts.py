@@ -76,8 +76,6 @@ SERIAL_PREFIX = "SX5-"
 #: Activation and reset codes: 12 characters of the RFC 8628 alphabet
 #: (about 52 bits), typed from the letter or carried by the e-mailed link.
 ACTIVATION_CODE_LENGTH = 12
-#: Wrong codes against one account's outstanding code before it is burned.
-ACTIVATION_MAX_ATTEMPTS = 10
 PASSWORD_MIN_LENGTH = 10
 PASSWORD_MAX_LENGTH = 128
 CONSENT_TOKEN_SECONDS = 14 * 86400
@@ -122,7 +120,7 @@ PURPOSES: dict[str, dict[str, str]] = {
                 "alerts you approve (or that your safety defaults send)."},
     "face_recognition": {
         "title": "Face recognition of household members",
-        "text": "Recognising enrolled adults so they do not raise intrusion alarms. "
+        "text": "Recognising enrolled adults so they are not shown as unrecognised people. "
                 "Face photos and their embeddings stay on the device and never reach "
                 "the SENTRIX server. Faces of minors are never enrolled."},
     "medical_notes": {
@@ -133,7 +131,7 @@ PURPOSES: dict[str, dict[str, str]] = {
         "title": "SOS snapshot upload",
         "text": "One camera picture per assistance request is copied to the SENTRIX "
                 "server so your contacts and the Desk can see it even if the device is "
-                "destroyed. It may show faces and is deleted after 30 days."},
+                "destroyed. It may show faces and is deleted after a set time (see the privacy notice)."},
     "remote_view": {
         "title": "Remote live view",
         "text": "Watching the camera and the device's pages from outside the home "
@@ -494,8 +492,10 @@ def issue_activation_code(db: Session, user: User, *, purpose: str = "activate",
 
 
 def _usable(row: ActivationCode | None, now: datetime) -> bool:
-    return (row is not None and row.used_at is None and as_utc(row.expires_at) > now
-            and (row.attempts or 0) < ACTIVATION_MAX_ATTEMPTS)
+    # Wrong guesses are counted (``attempts``) but never kill the code: a
+    # 12-character code cannot be guessed past the per-address back-off, and
+    # burning it let anyone who knows a username break a welcome letter.
+    return row is not None and row.used_at is None and as_utc(row.expires_at) > now
 
 
 def activation_for_link(db: Session, code: str) -> tuple[ActivationCode, User] | None:
@@ -519,8 +519,8 @@ def _activatable(user: User, purpose: str) -> bool:
 
 
 def activation_for_typed(db: Session, username: str, code: str) -> tuple[ActivationCode, User] | None:
-    """A typed (username, code). A wrong code counts against the account's
-    outstanding codes (burned after ``ACTIVATION_MAX_ATTEMPTS``)."""
+    """A typed (username, code). A wrong code is counted on the account's
+    outstanding codes (shown to staff), never burns them."""
     user = db.query(User).filter_by(username=security.attempt_key(username)).first()
     if user is None:
         return None
@@ -896,6 +896,9 @@ def release_device(db: Session, device: Device, *, actor_id: str | None,
     Returns the new claim code (None when retired)."""
     previous = device.household_id
     db.query(Camera).filter_by(device_id=device.id).delete(synchronize_session=False)
+    # The raw link events carry the old household's SOS texts, phone numbers
+    # and snapshots; an erasure later matches devices still in the household.
+    db.query(DeviceEvent).filter_by(device_id=device.id).delete(synchronize_session=False)
     device.household_id = None
     device.token_hash = None
     device.claimed_at = device.claimed_by = device.assigned_at = None
@@ -1872,9 +1875,22 @@ def advance_onboarding(household: Household, step: int) -> None:
 # ── the household's own audit trail ──────────────────────────────────────────
 #: Rows an owner or member never sees: restricted SOS rows and anything that
 #: would reveal a duress approval (docs/7 §7.8).
-def _hidden_from_household(row: AuditLog) -> bool:
+def _hidden_from_household(row: AuditLog, duress_requests: frozenset = frozenset()) -> bool:
+    """A duress help path never shows to the household (it may be read by
+    whoever coerced the resident): restricted events, and for a duress
+    request everything but its owner-visible ``sos.*`` rows (created,
+    prompted, the "false alarm"). The Desk's and contacts' rows go too."""
     detail = row.detail or {}
-    return bool(detail.get("restricted") or detail.get("duress"))
+    if detail.get("restricted") or detail.get("duress"):
+        return True
+    return (row.target_type == "request" and row.target_id in duress_requests
+            and not str(row.event or "").startswith("sos."))
+
+
+def _duress_requests(db: Session, household_id: str) -> frozenset:
+    return frozenset(r.id for r in db.query(AssistanceRequest)
+                     .filter_by(household_id=household_id)
+                     if (r.flags or {}).get("duress"))
 
 
 def household_audit(db: Session, household_id: str, *, limit: int = 100,
@@ -1890,8 +1906,9 @@ def household_audit(db: Session, household_id: str, *, limit: int = 100,
     if before_id is not None:
         rows = rows.filter(AuditLog.id < before_id)
     out, skipped = [], 0
+    duress = _duress_requests(db, household_id)
     for row in rows:
-        if _hidden_from_household(row):
+        if _hidden_from_household(row, duress):
             continue
         if skipped < offset:
             skipped += 1

@@ -220,6 +220,32 @@ class TestActionLinks:
             events = {a.event for a in db.query(AuditLog)}
             assert {"action_link.opened", "action_link.used"} <= events
 
+    def test_a_failed_answer_or_checking_keeps_the_link(self, portal, monkeypatch):
+        """A timeout says "try again": the e-mailed link must still work."""
+        from sentrix_portal.services import sos as portal_sos
+        app, seeded, _ = portal
+        rid, _ = open_request(app, seeded)
+        raw = self._token(app, rid, seeded.owner_id)
+        browser = TestClient(app, follow_redirects=False)
+        page = browser.get(f"/a/{raw}")
+        csrf = re.search(r'name="csrf_token" value="([^"]+)"', page.text).group(1)
+        real = portal_sos.respond
+
+        async def slow(*args, **kwargs):
+            return {"ok": False, "code": "timeout", "status": 504,
+                    "message": "The device did not answer in time. Try again."}
+        monkeypatch.setattr(portal_sos, "respond", slow)
+        failed = browser.post(f"/a/{raw}", data={"action": "approve", "csrf_token": csrf})
+        assert failed.status_code == 409
+        monkeypatch.setattr(portal_sos, "respond", real)
+        checking = browser.post(f"/a/{raw}", data={"action": "checking", "csrf_token": csrf})
+        assert checking.status_code == 200
+        done = browser.post(f"/a/{raw}", data={"action": "approve", "authority": "POLICE",
+                                               "csrf_token": csrf})
+        assert done.status_code == 200 and state_of(app, rid) == "DISPATCHED"
+        assert browser.post(f"/a/{raw}", data={"action": "approve",
+                                               "csrf_token": csrf}).status_code == 404
+
     def test_a_link_cannot_decline_and_bad_tokens_are_404(self, portal):
         app, seeded, _ = portal
         rid, _ = open_request(app, seeded)
@@ -465,6 +491,26 @@ class TestOfflineProxy:
                                  headers={"accept": "text/html"})
         assert bookmark.status_code == 303 and bookmark.headers["location"] == f"/live/{seeded.device_id}", "the app signs in"
         assert anonymous.get(f"/d/{seeded.device_id}/api/health").status_code == 401
+
+    def test_the_state_relay_closes_when_access_ends(self, portal, monkeypatch):
+        """Authorised once at connect used to mean forever: an open tab kept
+        the home's live state after its session or access ended."""
+        from starlette.websockets import WebSocketDisconnect
+        from sentrix_portal.models import UserSession
+        from sentrix_portal.routes import device_proxy
+        monkeypatch.setattr(device_proxy, "REAUTH_SECONDS", 0.2)
+        app, seeded, _ = portal
+        raw, _ = login(app, seeded.owner_id)
+        client = TestClient(app)
+        client.cookies.set("portal_session", raw)
+        with client.websocket_connect(f"/d/{seeded.device_id}/ws/threat",
+                                      headers={"origin": "http://testserver"}) as ws:
+            ws.receive_json()
+            with app.state.db.session() as db:
+                db.query(UserSession).delete()            # signed out everywhere
+            with pytest.raises(WebSocketDisconnect):
+                for _ in range(5):
+                    ws.receive_json()
 
     def test_the_state_relay_needs_a_session_and_the_same_origin(self, portal):
         from starlette.websockets import WebSocketDisconnect

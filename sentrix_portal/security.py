@@ -133,13 +133,17 @@ def ip_digest(ip: str | None) -> str | None:
 
 def client_ip(request: Request) -> str | None:
     """The client address; from a trusted proxy (Caddy, or any peer with
-    ``PORTAL_TRUSTED_PROXIES=*`` behind Railway's edge) its X-Real-IP, else
-    the first X-Forwarded-For entry."""
+    ``PORTAL_TRUSTED_PROXIES=*`` behind a platform's edge) the header named
+    by ``PORTAL_CLIENT_IP_HEADER`` (X-Real-IP; CF-Connecting-IP on Render,
+    whose edge passes a client's own X-Forwarded-For through, so every
+    sign-in back-off could be dodged), else the first X-Forwarded-For entry."""
     peer = request.client.host if request.client else None
-    trusted = portal_settings.current().trusted_proxies
+    settings = portal_settings.current()
+    trusted = settings.trusted_proxies
     if peer not in trusted and "*" not in trusted:
         return peer
-    real = (request.headers.get("x-real-ip") or "").strip()
+    header = getattr(settings, "client_ip_header", "x-real-ip") or "x-real-ip"
+    real = (request.headers.get(header) or "").strip()
     if real:
         return real
     forwarded = request.headers.get("x-forwarded-for")
@@ -553,8 +557,26 @@ def _signed_in(request: Request, db: Session) -> Principal:
         if _wants_html(request):
             raise HTTPException(status.HTTP_303_SEE_OTHER,
                                 headers={"Location": login_url_for(request)})
+        if browser_form_post(request):
+            # A form sent after the session timed out (an alert answered after
+            # a quiet spell): sign in again and come back to the page, never
+            # {"detail": "not signed in"}.
+            from urllib.parse import quote, urlsplit
+            back =urlsplit(request.headers.get("referer") or "").path or "/home"
+            raise HTTPException(status.HTTP_303_SEE_OTHER,
+                                headers={"Location": "/login?next=" + quote(
+                                    safe_next(back), safe="/")})
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="not signed in")
     return principal
+
+
+def browser_form_post(request: Request) -> bool:
+    """A plain HTML form POST from a browser (not fetch, not an API)."""
+    return (request.method == "POST"
+            and "text/html" in request.headers.get("accept", "")
+            and "x-requested-with" not in request.headers
+            and "x-csrf-token" not in request.headers
+            and not _inner_path(request.url.path).startswith(("/api/", "/media/")))
 
 
 async def _check_csrf(request: Request, principal: Principal, csrf: bool | str) -> None:

@@ -147,6 +147,16 @@ class TestIdentityWorker:
         worker.stop()
         assert engine.calls == 1
 
+    def test_a_recognised_room_is_rechecked_before_its_verdict_goes_stale(self):
+        """Clip decisions ~4 s apart on the Pi read the verdict once each; a
+        5 s re-check left every third one past the 6 s limit (UNKNOWN)."""
+        worker = IdentityWorker(FakeEngine())
+        worker.stop()
+        limit = worker.cfg.verdict_max_age_seconds
+        worker._submitted_at, worker._arrival = 0.0, False
+        assert not worker._due(limit / 2 - 0.1, settled=True)
+        assert worker._due(limit / 2, settled=True), "re-checked at half the verdict's life"
+
     def test_check_carries_the_persons_of_its_frame(self):
         worker = IdentityWorker(FakeEngine())
         check = drive(worker, seconds=0.3)

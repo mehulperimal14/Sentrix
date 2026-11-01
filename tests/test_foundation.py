@@ -550,7 +550,7 @@ class TestPipelineSosHook:
             fake._act(incident, plan_for(3), frame, _result(), 3, "ELEVATED", 0.0)
         _drain(fake)
         assert fake.submitted[:2] == ["_capture_snapshot", "_capture_evidence"]
-        assert len(sos.triggers) == 1 and "sos" in incident.actions
+        assert len(sos.triggers) == 1 and "sos:weapon" in incident.actions
         trigger = sos.triggers[0]
         assert (trigger.incident_id, trigger.incident_type, trigger.evidence_state,
                 trigger.level) == (incident.id, "weapon", "confirmed", 3)
@@ -563,7 +563,7 @@ class TestPipelineSosHook:
         incident = _incident(fake.incidents)
         frame = np.zeros((4, 4, 3), np.uint8)
         fake._act(incident, plan_for(3), frame, _result("intrusion"), 3, "ELEVATED", 0.0)
-        assert "sos" not in incident.actions and fake._tasks.empty()
+        assert not any(a.startswith("sos") for a in incident.actions) and fake._tasks.empty()
         fake._act(incident, plan_for(3), frame, _result("weapon"), 3, "ELEVATED", 1.0)
         _drain(fake)
         assert len(sos.triggers) == 1

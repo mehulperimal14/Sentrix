@@ -46,7 +46,7 @@ HELP_RANK = {FAILED: 1, APPROVED: 2, DISPATCHED: 3, ACKNOWLEDGED: 4, CLOSED: 5}
 STATE_LABELS = {
     DRAFTED: "Preparing", PENDING: "Waiting for your answer",
     APPROVED: "Help requested", DISPATCHED: "Help request sent",
-    ACKNOWLEDGED: "Acknowledged", FAILED: "NOT DELIVERED - call 112 now",
+    ACKNOWLEDGED: "Acknowledged", FAILED: "NOT DELIVERED - call for help yourself",
     CLOSED: "Closed", DECLINED: "Marked as false alarm",
     EXPIRED: "Unanswered", CANCELLED: "Cancelled",
 }
@@ -80,6 +80,23 @@ PIN_FAILED = "pin_failed"
 NOTIFICATION = "notification"      # a message queued/sent/failed (detail says which)
 HELP_REQUESTED_LATER = "help_requested_later"  # "Request help now" on a closed request
 CONFLICT = "conflict"              # reconnect merge changed the state
+
+#: Timeline wording for people (the event ids stay in the data and exports).
+EVENT_LABELS = {
+    CREATED: "Alert opened", PROMPTED: "Owner asked", ATTACHED: "Another detection joined",
+    APPROVE: "Help requested", DECLINE: "Marked as false alarm", CHECKING: "Owner is checking",
+    SEEN: "Alert opened by the owner", LEVEL_RISE: "Alarm level rose",
+    REMINDER: "Reminder sent", LAPSE_WARNING: "Warned: the window is closing",
+    CONTACTS_NOTIFIED: "Contacts alerted (safety default)",
+    DEVICE_OFFLINE: "Device went offline", DEVICE_ONLINE: "Device back online",
+    UNDELIVERED: "Not delivered yet", EXPIRE: "Unanswered: the window closed",
+    CANCEL: "Cancelled", DELIVERED: "Delivered", DELIVERY_FAILED: "A message failed",
+    RETRY: "Sending again", ACKNOWLEDGE: "Someone is handling it",
+    RESIDENT_SAFE: "Owner reports being safe", RESOLVE: "Closed by the Desk",
+    STALE_CLOSE: "Closed after 24 hours", REPAGE: "Contacts paged again",
+    PIN_FAILED: "Wrong PIN", NOTIFICATION: "Message", HELP_REQUESTED_LATER:
+    "Help requested later", CONFLICT: "Updated after a reconnect",
+}
 
 EVENTS = (CREATED, PROMPTED, ATTACHED, APPROVE, DECLINE, CHECKING, SEEN,
           LEVEL_RISE, REMINDER, LAPSE_WARNING, CONTACTS_NOTIFIED, DEVICE_OFFLINE,

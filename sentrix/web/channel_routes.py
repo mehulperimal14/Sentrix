@@ -42,7 +42,27 @@ async def api_channels() -> JSONResponse:
         return JSONResponse({**state.get().get("channels", {}), "recent": []})
     block = await asyncio.to_thread(service.status)
     recent = await asyncio.to_thread(service.recent, 20)
+    recent = await asyncio.to_thread(_without_duress, recent)
     return JSONResponse({**block, "recent": recent})
+
+
+def _without_duress(rows: list[dict]) -> list[dict]:
+    """A duress help path is invisible to the household (the owner's pages
+    say "false alarm"): its messages never show on the console or, through
+    the tunnel, on the Portal."""
+    from sentrix.storage import requests
+    hidden: dict[str, bool] = {}
+    out = []
+    for row in rows:
+        request_id = row.get("request_id")
+        if request_id:
+            if request_id not in hidden:
+                flags = (requests.get_request(request_id) or {}).get("flags") or {}
+                hidden[request_id] = bool(flags.get("silent") or flags.get("duress"))
+            if hidden[request_id]:
+                continue
+        out.append(row)
+    return out
 
 
 @router.post("/api/channels/test")

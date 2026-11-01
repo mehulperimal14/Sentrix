@@ -608,6 +608,10 @@ class IdentityWorker:
             return True
         interval = (self.cfg.authorised_recheck_seconds if settled
                     else self.cfg.recheck_seconds)
+        # Re-check before the verdict can go stale (it fails closed past
+        # verdict_max_age_seconds): with clip decisions ~4 s apart on the Pi,
+        # a 5 s re-check left every third decision reading an 8.5 s verdict.
+        interval = min(interval, self.cfg.verdict_max_age_seconds / 2)
         return now - self._submitted_at >= interval
 
     def _run(self) -> None:

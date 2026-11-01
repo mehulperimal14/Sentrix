@@ -42,7 +42,11 @@ deleting the service.
    `render.yaml` at the repository root: one web service `sentrix-portal`,
    Docker (`deploy/portal/Dockerfile`), **Starter** (`0.5c-512mb`), **Singapore**, a 1 GB
    disk on `/data`, health check `/healthz`. The two Portal keys and the
-   WhatsApp verify token are generated for you.
+   WhatsApp verify token are generated for you. It also sets
+   `PORTAL_CLIENT_IP_HEADER=cf-connecting-ip`: Render's edge passes a
+   client's own `X-Forwarded-For` through, so the sign-in back-off counts the
+   address Cloudflare (in front of Render) reports instead. A service created
+   before 2026-10-28 picks it up with **Blueprint → Sync**.
 3. Render asks for the values marked `sync: false`. Fill in what you have
    now; the rest can be added later under the service's **Environment**:
 

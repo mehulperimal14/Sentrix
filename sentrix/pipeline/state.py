@@ -219,7 +219,6 @@ class SystemState:
         link = data.get("link") or {}
         data.setdefault("cloud_online", bool(link.get("connected")))
         data.setdefault("cloud_available", bool(link.get("enabled")))
-        data.setdefault("dispatch_package", None)
         data.setdefault("latest_snapshot", None)
         return data
 

@@ -396,9 +396,13 @@ def _false_verdict_effect(session, incident: IncidentRecord, by: str | None,
     if request is None:
         # A false alarm must not leave an emergency package waiting for
         # someone to press "send".
+        # Only packages of no request: a silent duress request's package
+        # (not linked on the incident row) must survive a "False alarm".
         cancelled = (session.query(DispatchRecord)
-                     .filter_by(incident_id=incident.id, status="PENDING")
-                     .update({"status": "CANCELLED"}))
+                     .filter(DispatchRecord.incident_id == incident.id,
+                             DispatchRecord.status == "PENDING",
+                             DispatchRecord.request_id.is_(None))
+                     .update({"status": "CANCELLED"}, synchronize_session=False))
         if cancelled:
             log.info("cancelled %d dispatch package(s) for false alarm %s",
                      cancelled, incident.id[:8])

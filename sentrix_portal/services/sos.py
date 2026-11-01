@@ -40,6 +40,7 @@ owners and members: a duress approval reads "Marked as false alarm").
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import hashlib
 import html
 import json
@@ -70,8 +71,7 @@ DESK_STATES = frozenset(S.HELP_PATH - S.TERMINAL_STATES)
 _GENESIS = "0" * 64
 _REQUEST_KINDS = ("sos.created", "sos.transition", "sos.event")
 FOOTER = "SENTRIX does not contact 112 itself."
-DURESS_BANNER = "Do not go to the home. Call 112."
-WHAT = {"weapon": "a possible weapon (handgun or knife)", "fire": "visible fire",
+WHAT = {"weapon": "a possible weapon (handgun)", "fire": "visible fire",
         "assault": "a fight (seen and heard)",
         "intrusion": "an unrecognised person in the home",
         "duress": "an alert", "unknown": "an alert"}
@@ -348,7 +348,21 @@ def _drain(db, device: Device, request_id: str) -> list[tuple[str, dict]]:
     if row is not None:
         for snapshot in snapshots:
             _store_snapshot(db, row, snapshot)
+        if snapshots:
+            _scrub_raw_snapshots(db, device, request_id)
     return followups
+
+
+def _scrub_raw_snapshots(db, device: Device, request_id: str) -> None:
+    """The raw ``sos.snapshot`` events keep their JPEG only until it is
+    stored (``SosSnapshot``, consent and its 30-day cap) or dropped: the
+    raw copy would otherwise outlive both."""
+    for raw in (db.query(DeviceEvent)
+                .filter(DeviceEvent.device_id == device.id,
+                        DeviceEvent.kind == "sos.snapshot")):
+        payload = raw.payload or {}
+        if _payload_request_id(payload) == request_id and "data_b64" in payload:
+            raw.payload = {k: v for k, v in payload.items() if k != "data_b64"}
 
 
 def _apply_device(db, device: Device, payload: dict) -> list[tuple[str, dict]] | None:
@@ -379,7 +393,8 @@ def _apply_device(db, device: Device, payload: dict) -> list[tuple[str, dict]] |
                                 authority_side="device", flags={}, incident_ids=[],
                                 policy={})
         db.add(row)
-    _merge_request(db, row, request, has_cloud_events(db, request_id))
+    cloud_acted = has_cloud_events(db, request_id)
+    _merge_request(db, row, request, cloud_acted)
     db.add(RequestEvent(
         request_id=request_id, seq=fields["seq"], origin="device", at=_parse(fields["at"]),
         at_text=fields["at"], received_at=utcnow(), from_state=fields["from_state"],
@@ -395,7 +410,17 @@ def _apply_device(db, device: Device, payload: dict) -> list[tuple[str, dict]] |
                    target_type="request", target_id=request_id,
                    detail={"origin": "device", "seq": fields["seq"],
                            "to_state": fields["to_state"],
-                           "actor": f"{fields['actor_type']}:{fields['actor_id'] or ''}"})
+                           "actor": f"{fields['actor_type']}:{fields['actor_id'] or ''}",
+                           # A duress help path: never in the household's log.
+                           **({"restricted": True} if fields["restricted"] else {})})
+    if cloud_acted and fields["to_state"] and row.state != fields["to_state"]:
+        # Stale: the device's own timers ran while it was cut off and the
+        # cloud took over (or it restarted). The event stays in the chain,
+        # but its reminders / "lapsed" / withdrawal no longer match the
+        # request, which the reconcile kept in the cloud's state.
+        log.info("request %s: stale device %s (-> %s) kept, not acted on (now %s)",
+                 request_id[:8], fields["event"], fields["to_state"], row.state)
+        return []
     return _after_event(db, row, event_dict_from(fields, event["hash"], prev), "device")
 
 
@@ -523,7 +548,8 @@ def _cloud_event(db, row: AssistanceRequest, event: str, *, actor_type: str = "c
     db.flush()
     security.audit(db, f"sos.{event}", actor_type=actor_type, actor_id=actor_id,
                    household_id=row.household_id, target_type="request", target_id=row.id,
-                   detail={"origin": "cloud", "seq": seq, "to_state": to_state})
+                   detail={"origin": "cloud", "seq": seq, "to_state": to_state,
+                           **({"restricted": True} if restricted else {})})
     ev = {**record, "prev_hash": prev, "hash": digest}
     _after_event(db, row, ev, "cloud")
     return ev
@@ -597,7 +623,7 @@ def cloud_sos_text(db, row: AssistanceRequest, household: Household | None) -> s
     renders it from the profile with ``sentrix/sos/templates.py``)."""
     owner = _owner(db, row.household_id)
     lines = [f"SENTRIX SOS {short_id(row)}: {WHAT.get(row.incident_type or 'unknown', 'an alert')}"
-             f" at {owner.display_name if owner else 'the home'}."]
+             f" at {'the home of ' + owner.display_name if owner else 'the home'}."]
     if (row.flags or {}).get("device_offline"):
         lines.append("The SENTRIX device went offline during an open alert.")
     if household is not None:
@@ -689,6 +715,9 @@ def _notify_owner_offline(db, device: Device, incident_type: str, level: int,
             f"and nobody else was alerted. Check the home or the device.\n{FOOTER}")
     step = f"offline_l2:{incident_id or device.id}"
     for recipient in recipients:
+        # No request to find the household by: name the owner, so erasure
+        # and the data export find this notice (a bare "owner" ref did not).
+        recipient = dataclasses.replace(recipient, ref=f"user:{owner.id}")
         _enqueue(db, recipient, Message(template="device.offline", step=step, text=text,
                                         subject="SENTRIX: device offline during an alert"))
 
@@ -1016,10 +1045,11 @@ def _cloud_answer(db, row: AssistanceRequest, action: str, who, channel: str,
             # Looks declined to the household, so it answers exactly as a
             # declined request does (a new linked request, a new id), and the
             # Desk and contacts are paged again with the banner.
+            step = f"help_now{int(row.repage_count or 0) + 1}"
+            row.repage_count = int(row.repage_count or 0) + 1   # each press: its own step
             _cloud_event(db, row, S.NOTIFICATION, actor_type=actor_type, actor_id=actor_id,
                          channel=channel, restricted=True,
-                         detail={"step": f"help_now{int(row.repage_count or 0) + 1}",
-                                 "duress": True})
+                         detail={"step": step, "duress": True})
         elif row.state not in (S.EXPIRED, S.DECLINED, S.CANCELLED):
             return result("conflict", "this request is still open", request_view(row, view))
         else:
@@ -1477,6 +1507,12 @@ def _after_event(db, row: AssistanceRequest, ev: dict, origin: str) -> list[tupl
                            text_for=lambda c, p: ((f"SENTRIX: the alert at {owner_name}'s home "
                                                    f"({short}) lapsed unanswered. {FOOTER}"),) * 2)
         _close_tokens(db, row, revoke_contacts=False)
+    elif (event == S.NOTIFICATION and duress
+          and str((ev.get("detail") or {}).get("step") or "").startswith("help_now")):
+        # "Request help now" under duress (it looks declined to the household):
+        # page the contacts again with the duress banner, as its own step.
+        _send_contacts(db, row, step=str(ev["detail"]["step"]), template="sos.duress",
+                       text_for=sos_texts, subject=f"SENTRIX SOS {short}")
     elif event in (S.DECLINE, S.CANCEL):
         if flags.get("contacts_notified"):
             _send_contacts(db, row, step=S.STEP_RESOLVED, template="sos.resolved",
@@ -1638,4 +1674,4 @@ __all__ = ["ACTIONS", "respond", "open_requests", "start", "ingest_device_event"
            "events_view", "desk_queue", "mint_token", "resolve_token", "mark_seen",
            "record_note", "create_cloud_request", "verify_chains", "chain_hash",
            "event_dict", "consent_active", "owner_actions", "DESK_STATES",
-           "DURESS_BANNER", "duress_banner", "FOOTER", "reset_pin_limiter"]
+           "duress_banner", "FOOTER", "reset_pin_limiter"]

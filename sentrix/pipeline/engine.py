@@ -127,6 +127,13 @@ class Overlay:
     detections: dict
     #: Capture time of the frame the overlay was computed on.
     at: float
+    #: Width of the frame the detections' boxes refer to (the clip engine
+    #: analyses a downscaled keyframe); 0 = the preview frame's own.
+    frame_width: int = 0
+    #: ``time.monotonic()`` when the decision was published. The clip engine
+    #: publishes a clip's decision seconds after its capture time, so "AI
+    #: STALLED" is judged on this, not on ``at``.
+    published: float | None = None
 
 
 @runtime_checkable
@@ -503,6 +510,7 @@ class Pipeline:
         path = notifier.save_snapshot(frame, incident.id)
         if path is not None:
             incident.snapshot_path = path.name
+            self._save_with_capture(incident)
             listeners.emit("snapshot", lambda: {
                 "name": path.name, "incident_id": incident.id,
                 "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
@@ -518,6 +526,16 @@ class Pipeline:
             # the trigger, which is what a reviewer wants to see first.
             incident.evidence_bundle = record.bundle_id
             incident.evidence_hash = record.sha256
+            self._save_with_capture(incident)
+
+    def _save_with_capture(self, incident) -> None:
+        """Re-save the row once a capture landed (worker thread, after the
+        open row's save). A steady incident is otherwise re-saved only when
+        its peak moves, so a crash left its row without snapshot/evidence."""
+        try:
+            database.save_incident(incident, self.session_id, incident.ended_at is None)
+        except Exception as exc:
+            log.error("incident %s: saving the capture failed: %s", incident.id[:8], exc)
 
     @staticmethod
     def _create_dispatch(incident, result: TCIResult, level: int) -> None:
@@ -568,13 +586,14 @@ class Pipeline:
 
         evidence_state = ((result.features.extras or {}).get("evidence") or {}).get(
             result.incident_type, {}).get("state")
-        if (plan.sos and "sos" not in incident.actions
+        sos_claim = f"sos:{result.incident_type}"
+        if (plan.sos and sos_claim not in incident.actions
                 and self.sos.wants(result.incident_type, level, evidence_state)):
-            # Claimed only once the service wants this incident type, so an
-            # incident that becomes a weapon after an experimental L2 still
-            # opens a request. Queued after the snapshot and evidence above,
-            # so the trigger carries their paths; never dropped (D8).
-            incident.actions.add("sos")
+            # Claimed per class once the service wants it, so an incident that
+            # becomes a weapon after an experimental L2, or a fire after a
+            # declined weapon, still reaches SOS. Queued after the snapshot and
+            # evidence above, so the trigger carries their paths (D8).
+            incident.actions.add(sos_claim)
             self._submit_or_run(self._sos_trigger, incident, result, level, now)
 
         # Once the SOS service owns an incident it owns every message about it
@@ -582,7 +601,7 @@ class Pipeline:
         # into the request's level_rise reminder, the L5 call into its rise5
         # step) and its one dispatch package (opened with the request at L3).
         # The siren stays: a physical deterrent is not a message.
-        sos_owned = "sos" in incident.actions
+        sos_owned = any(a == "sos" or a.startswith("sos:") for a in incident.actions)
 
         if plan.sms and not sos_owned and claim(incident, "sms"):
             self._submit(notifier.send_sms, result, level, status)
@@ -730,7 +749,9 @@ class Pipeline:
             behaviour_label=features.behaviour_label, weapon=features.weapon,
             fire=features.fire, authorized=features.authorized,
             identity_degraded=features.identity_degraded,
-            detections=features.extras.get("detections", {}), at=now)
+            detections=features.extras.get("detections", {}), at=now,
+            frame_width=int(frame.shape[1]) if getattr(frame, "ndim", 0) >= 2 else 0,
+            published=time.monotonic())
         if self._close_requested is not None:
             self._apply_close_request(result, now)
         return {"tci": result.tci, "level": level, "status": status,
@@ -1247,9 +1268,11 @@ class Pipeline:
                 # Anyone watching through the Portal is visible in the room.
                 cv2.putText(frame, f"REMOTE VIEW: {viewers}", (12, 92),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 200, 255), 2)
-            if age > self._stale_overlay_seconds():
+            stale = (time.monotonic() - overlay.published
+                     if overlay.published is not None else age)
+            if stale > self._stale_overlay_seconds():
                 # Boxes this old describe a scene that has moved on.
-                cv2.putText(frame, f"AI STALLED {age:.0f}s  VIDEO {self._video_fps:.0f} fps",
+                cv2.putText(frame, f"AI STALLED {stale:.0f}s  VIDEO {self._video_fps:.0f} fps",
                             (info_x, 66), cv2.FONT_HERSHEY_SIMPLEX, 0.45,
                             (0, 165, 255), 1)
                 return frame
@@ -1259,9 +1282,12 @@ class Pipeline:
             detections = overlay.detections
             palette = {"persons": colour, "weapons": (0, 0, 255),
                        "fires": (0, 140, 255)}
+            # Boxes from a downscaled analysis frame (clip mode) onto the
+            # full-size preview: the same aspect, so one factor.
+            scale = width / overlay.frame_width if overlay.frame_width else 1.0
             for group, box_colour in palette.items():
                 for det in detections.get(group, []):
-                    x1, y1, x2, y2 = det["bbox"]
+                    x1, y1, x2, y2 = (int(round(v * scale)) for v in det["bbox"])
                     cv2.rectangle(frame, (x1, y1), (x2, y2), box_colour, 2)
                     tag = det.get("identity") or det["label"]
                     if det.get("track_id") is not None:

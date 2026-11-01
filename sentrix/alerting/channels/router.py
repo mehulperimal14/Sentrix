@@ -136,7 +136,11 @@ class _MemoryOps:
                steps: tuple[str, ...] | None = None) -> list[OutboxItem]:
         out = []
         for item in self._items():
-            if (item.message.request_id == request_id and item.status in (QUEUED, FAILED)
+            # QUEUED, or FAILED and still retrying: a message that gave up
+            # keeps its FAILED (the real outcome), never "cancelled".
+            retrying = item.status == FAILED and not math.isinf(item.next_attempt_at)
+            if (item.message.request_id == request_id
+                    and (item.status == QUEUED or retrying)
                     and (not steps or item.message.step in steps)):
                 item.status, item.error = SUPPRESSED, f"cancelled: {reason}"
                 item.next_attempt_at = math.inf

@@ -602,8 +602,8 @@ def respond(snap: Snapshot, action: str, *, actor: Actor, channel: str, now: flo
         step = Step(S.RESIDENT_SAFE, flags={"resident_safe": True}, detail={"via": action},
                     notices=(Notice("desk", S.STEP_RESOLVED, T_RESOLVED),
                              Notice("contacts", S.STEP_RESOLVED, T_RESOLVED)))
-        return Outcome(message="Marked as safe; help stays open until the Desk or a "
-                               "contact closes it", steps=(step,))
+        return Outcome(message="Marked as safe; help stays open until the SENTRIX Desk "
+                               "closes it", steps=(step,))
     return Outcome("conflict", f"the request is {snap.state}")
 
 
