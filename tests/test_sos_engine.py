@@ -464,7 +464,7 @@ class TestAnswers:
         advance(world, 130)
         req = requests.get_request(req["id"])
         assert req["state"] == S.FAILED
-        assert world.state.get()["sos"]["label"] == "NOT DELIVERED - call 112 now"
+        assert world.state.get()["sos"]["label"] == "NOT DELIVERED - call for help yourself"
         statuses = {e["detail"]["status"] for e in requests.events(req["id"])
                     if e["event"] == "notification"}
         assert statuses == {"SUPPRESSED"}

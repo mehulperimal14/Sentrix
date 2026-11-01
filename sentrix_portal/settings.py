@@ -125,7 +125,7 @@ class PortalSettings:
     telegram_mode: str = "polling"
     #: Who to complain to before the Data Protection Board (privacy notice).
     grievance_contact: str = "the SENTRIX capstone team, CSED, Thapar Institute, Patiala"
-    notice_version: str = "2026-10-1"
+    notice_version: str = "2026-11-1"
     api_docs: bool = False
     #: Key files, exports, and SOS snapshots when not in the database.
     data_dir: str = field(default_factory=_default_data_dir)

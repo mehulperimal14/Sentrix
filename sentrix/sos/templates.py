@@ -60,8 +60,8 @@ def duress_banner(call: str = "112") -> str:
             f"Do not go to the home. Call {call}.")
 
 
-#: The live-mode banner (callers without a profile or a test-mode flag).
-DURESS_BANNER = duress_banner("112")
+#: Stands in for each recipient's private link in previews.
+PREVIEW_LINK = "(private link)"
 
 #: Button labels the LC and the Portal show (names: ``sentrix.sos.SOS_ACTIONS``).
 BUTTONS = {
@@ -192,6 +192,21 @@ def _room(profile: Mapping, camera_id: str | None) -> tuple[str, str]:
     return clean(chosen.get("room_label"), 40) or "Camera", clean(chosen.get("floor"), 30)
 
 
+def _near(landmark: str) -> str | None:
+    """``near <landmark>``, unless the landmark already says where
+    ("opposite the SBI ATM", "near the park")."""
+    if not landmark:
+        return None
+    first = landmark.split()[0].lower()
+    return landmark if first in ("near", "opposite", "behind", "beside", "next",
+                                 "facing", "above", "below", "off") else f"near {landmark}"
+
+
+def _unless_same(value, other):
+    """``value``, or None when it repeats ``other`` ("Patiala, Patiala")."""
+    return None if str(value or "").strip().lower() == str(other or "").strip().lower() else value
+
+
 def _address(profile: Mapping) -> tuple[str, str]:
     """(full address, compressed address for SMS)."""
     addr = profile.get("address") or {}
@@ -199,8 +214,8 @@ def _address(profile: Mapping) -> tuple[str, str]:
         return "", ""
     landmark = clean(addr.get("landmark"), 60)
     full = _join([addr.get("house"), addr.get("building"), addr.get("street"),
-                  addr.get("locality"), f"near {landmark}" if landmark else None,
-                  addr.get("city"), addr.get("district"),
+                  addr.get("locality"), _near(landmark),
+                  addr.get("city"), _unless_same(addr.get("district"), addr.get("city")),
                   " ".join(p for p in (clean(addr.get("state"), 30),
                                        clean(addr.get("pincode"), 10)) if p)],
                  limit=80)
@@ -385,15 +400,16 @@ WHERE: {{ where }}
 ADDRESS: {{ address }}
 {% if map_url %}MAP: {{ map_url }}
 {% endif %}RESIDENT: {{ resident }}\
-{% if resident_phone %}, {{ resident_phone }} (call back first){% endif %}
+{% if resident_phone %}, {{ resident_phone }}{% if not duress %} (call back first){% endif %}{% endif %}
 {% if home %}HOME: {{ home }}
 {% endif %}{% if medical %}MEDICAL: {{ medical }}
 {% endif %}{% if nearest %}NEAREST: {{ nearest }}
 {% endif %}{% if evidence %}EVIDENCE: {{ evidence }}
 {% endif %}TIMELINE: detected {{ detected }} IST{% if approved_by %} · {{ approved_by }}{% endif %}
 {% if link %}DETAILS: {{ link }}
-{% endif %}This alert comes from a home security system. Call the resident, and \
-{{ call_number }} if needed.
+{% endif %}This alert comes from a home security system. {% if duress %}Do not call the \
+resident first. Call {{ call_number }}.{% else %}Call the resident, and {{ call_number }} \
+if needed.{% endif %}
 {{ disclaimer }}"""
 
 #: Short text: SMS to contacts and the Desk (with address), Telegram (without).
@@ -445,7 +461,7 @@ lapsed at {{ expires_time }}. If you have not reached {{ resident }}, call them,
 
 RESOLVED = """\
 {{ banner }}SENTRIX {{ short_id }}: {% if help_open %}the resident reports being \
-safe. Help stays open until the Desk or a contact closes it.{% else %}resolved by the \
+safe. Help stays open until the SENTRIX Desk closes it.{% else %}resolved by the \
 resident. No action is needed now.{% endif %} {{ disclaimer }}"""
 
 DURESS = """\
@@ -645,8 +661,10 @@ def preview(profile: Mapping | None, *, incident_type: str = "weapon",
         "template_version": TEMPLATE_VERSION, "test_mode": test_mode,
         "incident_type": incident_type, "level": level,
         "full": render_full(profile, request, test_mode=test_mode),
-        "sms": render_short(profile, request, channel="sms", test_mode=test_mode),
-        "telegram": render_short(profile, request, channel="telegram", test_mode=test_mode),
+        "sms": render_short(profile, request, channel="sms", test_mode=test_mode,
+                            link=PREVIEW_LINK),
+        "telegram": render_short(profile, request, channel="telegram", test_mode=test_mode,
+                                 link=PREVIEW_LINK),
         "prompt": render("prompt", build_context(profile, request, test_mode=test_mode,
                                                  now=moment), profile=profile),
         "offline_prompt": render_offline_prompt(profile, request, test_mode=test_mode),
@@ -666,7 +684,7 @@ def render_preview(profile: Mapping | None, *, incident_type: str = "weapon",
 
 __all__ = ["render_preview", "TEMPLATE_VERSION", "IST", "DISCLAIMER", "WORDING_CORROBORATED",
            "WORDING_SINGLE_SOURCE", "WORDING_DEGRADED", "WORDING_SIMULATED",
-           "DURESS_BANNER", "duress_banner", "BUTTONS", "AUTHORITY_LABELS", "EVENT_NAMES",
+           "duress_banner", "BUTTONS", "AUTHORITY_LABELS", "EVENT_NAMES",
            "MESSAGE_TEMPLATES", "BUILTIN", "clean", "clock_time", "to_ist", "gsm_text",
            "is_gsm", "sms_length", "fits_sms", "call_number", "build_context", "render",
            "render_full", "render_short", "render_offline_prompt", "fit_sms",

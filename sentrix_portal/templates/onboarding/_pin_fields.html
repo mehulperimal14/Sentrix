@@ -14,7 +14,7 @@
   {% if contacts_exist %}
   <p class="help"><strong>Duress PIN (recommended).</strong> If someone forces you to cancel,
     type this PIN instead: the screen shows "Marked as false alarm" while your contacts and the
-    Desk are told "Do not go to the home. Call 112." It must differ from the SOS PIN in at least
+    Desk are told not to go to the home and to call for help. It must differ from the SOS PIN in at least
     {{ duress_digits }} digits.</p>
   <div class="grid-2">
     {{ ui.input('duress_pin', 'Duress PIN', '', errors=errors, type='password', inputmode='numeric', maxlength=pin_length, autocomplete='off', disabled=disabled) }}

@@ -71,8 +71,7 @@ DESK_STATES = frozenset(S.HELP_PATH - S.TERMINAL_STATES)
 _GENESIS = "0" * 64
 _REQUEST_KINDS = ("sos.created", "sos.transition", "sos.event")
 FOOTER = "SENTRIX does not contact 112 itself."
-DURESS_BANNER = "Do not go to the home. Call 112."
-WHAT = {"weapon": "a possible weapon (handgun or knife)", "fire": "visible fire",
+WHAT = {"weapon": "a possible weapon (handgun)", "fire": "visible fire",
         "assault": "a fight (seen and heard)",
         "intrusion": "an unrecognised person in the home",
         "duress": "an alert", "unknown": "an alert"}
@@ -624,7 +623,7 @@ def cloud_sos_text(db, row: AssistanceRequest, household: Household | None) -> s
     renders it from the profile with ``sentrix/sos/templates.py``)."""
     owner = _owner(db, row.household_id)
     lines = [f"SENTRIX SOS {short_id(row)}: {WHAT.get(row.incident_type or 'unknown', 'an alert')}"
-             f" at {owner.display_name if owner else 'the home'}."]
+             f" at {'the home of ' + owner.display_name if owner else 'the home'}."]
     if (row.flags or {}).get("device_offline"):
         lines.append("The SENTRIX device went offline during an open alert.")
     if household is not None:
@@ -1673,4 +1672,4 @@ __all__ = ["ACTIONS", "respond", "open_requests", "start", "ingest_device_event"
            "events_view", "desk_queue", "mint_token", "resolve_token", "mark_seen",
            "record_note", "create_cloud_request", "verify_chains", "chain_hash",
            "event_dict", "consent_active", "owner_actions", "DESK_STATES",
-           "DURESS_BANNER", "duress_banner", "FOOTER", "reset_pin_limiter"]
+           "duress_banner", "FOOTER", "reset_pin_limiter"]

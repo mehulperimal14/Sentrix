@@ -120,7 +120,7 @@ PURPOSES: dict[str, dict[str, str]] = {
                 "alerts you approve (or that your safety defaults send)."},
     "face_recognition": {
         "title": "Face recognition of household members",
-        "text": "Recognising enrolled adults so they do not raise intrusion alarms. "
+        "text": "Recognising enrolled adults so they are not shown as unrecognised people. "
                 "Face photos and their embeddings stay on the device and never reach "
                 "the SENTRIX server. Faces of minors are never enrolled."},
     "medical_notes": {
@@ -131,7 +131,7 @@ PURPOSES: dict[str, dict[str, str]] = {
         "title": "SOS snapshot upload",
         "text": "One camera picture per assistance request is copied to the SENTRIX "
                 "server so your contacts and the Desk can see it even if the device is "
-                "destroyed. It may show faces and is deleted after 30 days."},
+                "destroyed. It may show faces and is deleted after a set time (see the privacy notice)."},
     "remote_view": {
         "title": "Remote live view",
         "text": "Watching the camera and the device's pages from outside the home "

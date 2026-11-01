@@ -28,7 +28,7 @@
     </div>
     <div class="grid-2">
       {{ ui.input('floor', 'Floor', form_values.get('floor') or (item.camera.floor if item.camera else ''), errors=errors, maxlength=20, placeholder='Ground') }}
-      {{ ui.select('mode', 'Default mode', [('home', 'HOME: an unknown person is only logged'), ('armed', 'ARMED: a confirmed stranger opens an intrusion alert')], form_values.get('mode') or 'home', errors=errors, required=True) }}
+      {{ ui.select('mode', 'Default mode', [('home', 'HOME: an unrecognised person is shown on the dashboard after 10 s'), ('armed', 'ARMED (away): shown after 3 s; never an alarm on its own')], form_values.get('mode') or 'home', errors=errors, required=True) }}
     </div>
     <h3>Check the view</h3>
     <p>Open the live view and make sure the camera sees the room as intended (mounted
