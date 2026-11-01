@@ -16,7 +16,9 @@ test('signed out, an app page asks to sign in and returns there @phone', async (
 
 test('a wrong password is refused with a message', async ({ page, w, errors }) => {
   await page.goto(`${w.portal}/login`);
-  await page.getByLabel('Username').fill(w.owner.username);
+  // An unknown name: a wrong password for the demo owner would start the
+  // account's sign-in back-off and lock the other tests out.
+  await page.getByLabel('Username').fill('nobody_e2e');
   await page.getByLabel('Password').fill('not-the-password');
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByRole('alert').or(page.getByText(/password/i).nth(1))).toBeVisible();
@@ -29,7 +31,7 @@ test('home says whether the home is OK and shows the device @phone', async ({ pa
   await expect(page).toHaveURL(/\/home$/);
   await expect(page.getByText(/All clear|Something unusual|Someone we don’t recognise|is offline/).first()).toBeVisible();
   await expect(page.getByRole('radiogroup', { name: 'Mode' }).or(page.getByRole('group', { name: 'Mode' }))).toBeVisible();
-  await expect(page.getByText('Today')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Today' })).toBeVisible();
   void errors;
 });
 

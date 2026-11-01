@@ -34,7 +34,8 @@ export function normaliseSession(raw: Raw | null | undefined): DeviceSession {
     tunnelled: r.via === 'portal',
     testMode,
     call: {
-      label: call.desk ? 'Call the SENTRIX Desk' : 'Call 112 now',
+      // Test mode never says "112": the Desk if it has a number, else a plain word.
+      label: call.desk ? 'Call the SENTRIX Desk' : testMode ? 'Call for help' : 'Call 112 now',
       number: call.enabled ? call.number ?? (call.href ? String(call.href).replace(/^tel:/, '') : null) : null,
       enabled: Boolean(call.enabled),
       note: call.note || undefined,

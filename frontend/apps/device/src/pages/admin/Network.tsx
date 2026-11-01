@@ -24,7 +24,7 @@ export default function Network() {
   if (link.isLoading) return <Spinner />;
   const l = link.data ?? {};
   const c = channels.data ?? {};
-  const rows: any[] = audit.data?.items ?? audit.data?.audit ?? audit.data ?? [];
+  const rows: any[] = Array.isArray(audit.data?.rows) ? audit.data.rows : [];
   return (
     <div className="grid gap-4">
       <h1 className="text-[24px] font-bold">Network</h1>

@@ -20,7 +20,7 @@ test('the owner is asked, answers, and the Desk handles it', async ({ page, brow
   await bar.getByRole('link', { name: 'Answer' }).click();
   await expect(page).toHaveURL(/\/alert\//);
   await expect(page.getByRole('button', { name: 'Alert my contacts and the SENTRIX desk' })).toBeVisible();
-  await expect(page.getByText('SENTRIX does not contact 112 itself.').first()).toBeVisible();
+  await expect(page.getByText('SENTRIX does not contact 112 itself.').locator('visible=true').first()).toBeVisible();
   // Test mode never offers a call to 112.
   await expect(page.locator('a[href^="tel:112"]')).toHaveCount(0);
 
@@ -45,7 +45,7 @@ test('the owner is asked, answers, and the Desk handles it', async ({ page, brow
 
   await desk.getByLabel('Outcome').selectOption({ index: 1 });
   await desk.getByRole('button', { name: 'Close the request' }).click();
-  await expect(desk.getByText(/^Closed/)).toBeVisible();
+  await expect(desk.getByText(/^Closed[.:]/)).toBeVisible();
   await deskCtx.close();
 
   await page.goto(alertUrl);

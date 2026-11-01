@@ -26,7 +26,9 @@ test('the admin console lists the demo customer and device', async ({ page, w, e
 test('the device console signs in and shows the wall view', async ({ page, w, errors }) => {
   await deviceSignIn(page, w);
   await expect(page).toHaveURL(new RegExp(`${w.device.replace(/[./]/g, '\\$&')}/?$`));
-  await expect(page.getByText(/Mode/).first()).toBeVisible({ timeout: 30_000 });
+  // The wall view, or the alert takeover if an alert from another test is open.
+  await expect(page.getByText(/camera|Needs an answer|Help requested/).first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText('Call 112 now')).toHaveCount(0);
   void errors;
 });
 

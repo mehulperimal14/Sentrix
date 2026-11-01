@@ -34,10 +34,13 @@ export async function portalSignIn(page: Page, w: World, who: 'owner' | 'desk' |
     await page.getByLabel('Code').fill(totp((w as World)[who].totp));
     await page.getByRole('button', { name: 'Continue' }).click();
   }
+  // Signed in once the app has left the sign-in pages.
+  await expect(page).not.toHaveURL(/\/(login|account\/2fa)/, { timeout: 20_000 });
 }
 
 export async function deviceSignIn(page: Page, w: World) {
   await page.goto(`${w.device}/login`);
   await page.getByLabel('Device password').fill(w.device_password);
   await page.getByRole('button', { name: /sign in/i }).click();
+  await expect(page).not.toHaveURL(/\/login/, { timeout: 20_000 });
 }

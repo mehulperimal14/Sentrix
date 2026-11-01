@@ -1,7 +1,8 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /** Starts a fresh test-mode demo world for the end-to-end run:
  *  tools/demo_reset.py in a temp dir (never var/), then tools/demo_run.py
@@ -9,9 +10,10 @@ import { join, resolve } from 'node:path';
  *  the camera, every live switch forced off). Credentials are parsed from the
  *  reset's one-time printout and kept in e2e/.world.json (git-ignored). */
 
-export const REPO = resolve(__dirname, '..', '..');
+const HERE = dirname(fileURLToPath(import.meta.url));
+export const REPO = resolve(HERE, '..', '..');
 export const PYTHON = process.env.E2E_PYTHON ?? resolve(REPO, '..', '..', '..', '.venv', 'Scripts', 'python.exe');
-export const STATE_FILE = join(__dirname, '.world.json');
+export const STATE_FILE = join(HERE, '.world.json');
 
 function grab(text: string, re: RegExp): string {
   const m = text.match(re);
