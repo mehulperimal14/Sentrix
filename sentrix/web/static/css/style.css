@@ -22,6 +22,15 @@
      when installed; otherwise the platform's UI and monospace faces. */
   --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', 'DejaVu Sans Mono', Consolas, monospace;
+  --focus: #93c5fd;
+  color-scheme: dark;
+}
+
+/* Keyboard focus is always visible (WCAG 2.4.7). */
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 
 * {
@@ -87,7 +96,7 @@ a.nav-brand { text-decoration: none; }
   font-weight: 500;
   padding: 0.5rem 0.25rem;
   border-bottom: 2px solid transparent;
-  transition: all 0.2s ease;
+  transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .nav-link:hover, .nav-link.active {
@@ -363,7 +372,7 @@ a.nav-brand { text-decoration: none; }
   font-weight: 600;
   font-size: 0.9rem;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -374,8 +383,8 @@ a.nav-brand { text-decoration: none; }
 .btn-fire:hover { background: #b91c1c; }
 .btn-cancel { background: transparent; color: var(--text-muted); border: 1px solid var(--text-muted); }
 .btn-cancel:hover { background: rgba(255,255,255,0.1); color: #fff; }
-.btn-primary { background: #3b82f6; color: #fff; }
-.btn-primary:hover { background: #2563eb; }
+.btn-primary { background: #2563eb; color: #fff; }
+.btn-primary:hover { background: #1d4ed8; }
 .btn-outline { background: transparent; border: 1px solid var(--accent-blue); color: var(--accent-blue); }
 .btn-outline:hover { background: rgba(59, 130, 246, 0.1); }
 .btn-sm { padding: 0.4rem 0.8rem; font-size: 0.8rem; }
@@ -536,15 +545,6 @@ a.nav-brand { text-decoration: none; }
   aspect-ratio: 1;
   object-fit: cover;
 }
-.face-info {
-  padding: 0.75rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text-main);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 
 /* Lightbox */
 .lightbox {
@@ -648,7 +648,8 @@ a.nav-brand { text-decoration: none; }
 .nav { flex-wrap: wrap; }
 .nav-status { align-items: center; }
 .status-dot.idle {
-  background: #4b5563;
+  background: transparent;
+  border: 2px solid #6b7280;
   box-shadow: none;
 }
 .status-dot.warn {
@@ -679,7 +680,7 @@ a.nav-brand { text-decoration: none; }
   font-size: 0.75rem;
   font-weight: 700;
   color: #fff;
-  background: var(--level-4);
+  background: #b91c1c;
   border: none;
   border-radius: 9999px;
   padding: 0.15rem 0.6rem;
@@ -813,7 +814,7 @@ a.nav-brand { text-decoration: none; }
   font-family: var(--font-sans);
   font-size: 0.9rem;
 }
-.text-input:focus { outline: none; border-color: var(--accent-blue); }
+.text-input:focus { border-color: var(--accent-blue); }
 .text-input.pin { width: 9rem; font-family: var(--font-mono); letter-spacing: 3px; }
 select.text-input { cursor: pointer; }
 
@@ -998,7 +999,6 @@ body.standalone {
   transition: border-color 0.3s;
 }
 .form-input:focus {
-  outline: none;
   border-color: var(--accent-blue);
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
 }

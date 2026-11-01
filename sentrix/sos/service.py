@@ -1722,16 +1722,11 @@ class SosEngine:
         return []
 
     def _refresh_state(self) -> None:
-        from sentrix.alerting.dispatch import dispatch_service, owner_view
         try:
-            block = self.status()
-            package = None
-            if block.get("active"):
-                found = dispatch_service.package_for_request(block["request_id"])
-                if found is not None and found.status in ("PENDING", "FAILED"):
-                    from sentrix.storage import database
-                    package = owner_view(database.get_dispatch(found.id) or {})
-            self.state.update(sos=block, dispatch_package=package)
+            # The package (with the household's address and phone) is not
+            # broadcast to every viewer: the dashboard fetches
+            # /api/dispatch/latest itself.
+            self.state.update(sos=self.status())
         except Exception as exc:
             log.error("SOS: state refresh failed: %s", exc)
 

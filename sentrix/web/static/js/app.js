@@ -119,10 +119,18 @@ const Sentrix = (() => {
         if (node) node.classList.toggle("hidden", !visible);
     }
 
+    const CLOCK = new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", day: "numeric",
+        month: "short", hour: "numeric", minute: "2-digit", hour12: true });
+
     function localTime(iso) {
         if (!iso) return "";
         const when = new Date(iso);
-        return isNaN(when.getTime()) ? String(iso) : when.toLocaleString();
+        if (isNaN(when.getTime())) return String(iso);
+        // One clock for the household, whatever the viewer's browser locale:
+        // "1 Nov, 6:22 pm" IST, as the Portal and the SOS texts give it.
+        const p = {};
+        CLOCK.formatToParts(when).forEach(x => { p[x.type] = x.value; });
+        return `${p.day} ${p.month}, ${p.hour}:${p.minute} ${String(p.dayPeriod || "").toLowerCase()}`;
     }
 
     function applyLocalTimes(root) {
@@ -156,6 +164,7 @@ const Sentrix = (() => {
 
     let socket = null;
     let retryDelay = 1000;
+    let connTimer = null;
 
     function connect() {
         if (expired) return;
@@ -163,7 +172,15 @@ const Sentrix = (() => {
                        socket.readyState === WebSocket.CONNECTING)) return;
         const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
         socket = new WebSocket(`${scheme}//${window.location.host}${url("/ws/threat")}`);
-        socket.addEventListener("open", () => { retryDelay = 1000; });
+        // "Lost contact" only after 10 s without a socket, so a reconnect
+        // or a page change never flashes it.
+        if (!connTimer) connTimer = setTimeout(() => show(document.getElementById("conn-banner"), true), 10000);
+        socket.addEventListener("open", () => {
+            retryDelay = 1000;
+            clearTimeout(connTimer);
+            connTimer = null;
+            show(document.getElementById("conn-banner"), false);
+        });
         socket.addEventListener("message", event => {
             let data;
             try {
@@ -172,6 +189,9 @@ const Sentrix = (() => {
                 return;
             }
             lastState = data;
+            // Through the Portal while the device is offline (the relay
+            // sends its last state with device_offline).
+            show(document.getElementById("conn-banner"), !!data.device_offline);
             for (const listener of stateListeners) {
                 try { listener(data); } catch (err) { console.error(err); }
             }
@@ -179,6 +199,7 @@ const Sentrix = (() => {
         socket.addEventListener("close", event => {
             socket = null;
             if (event.code === 1008) {          // signed out or session expired
+                clearTimeout(connTimer);
                 sessionExpired();
                 return;
             }
@@ -351,7 +372,27 @@ const Sentrix = (() => {
             const text = setText("sos-prompt-text", block.sos_text || "");
             show(text, !!block.sos_text);
         }
+        const wasOpen = !prompt.classList.contains("hidden");
         show(prompt, visible);
+        if (visible !== wasOpen) trapFocus(prompt, visible);
+    }
+
+    // A modal dialog: the page behind it is inert while it shows, its title
+    // gets the focus (never an answer a stray Enter would send), and the
+    // focus goes back where it was after.
+    let focusBefore = null;
+    function trapFocus(dialog, open) {
+        document.querySelectorAll("body > nav, body > main, body > .sos-banner").forEach(node => {
+            if (open) node.setAttribute("inert", ""); else node.removeAttribute("inert");
+        });
+        if (open) {
+            focusBefore = document.activeElement;
+            const title = dialog.querySelector("#sos-prompt-title");
+            if (title) title.focus();
+        } else if (focusBefore && document.contains(focusBefore)) {
+            focusBefore.focus();
+            focusBefore = null;
+        }
     }
 
     function tick() {

@@ -9,8 +9,7 @@
 (() => {
     const S = window.Sentrix;
     const SCORE_KEYS = ["vision", "audio", "motion", "behaviour", "identity", "weapon",
-                        "fire", "theft", "harmful", "is_night"];
-    const NO_MODEL = new Set(["theft", "harmful"]);   // no engine produces these yet
+                        "fire", "is_night"];
     const SENDABLE = new Set(["PENDING", "FAILED"]);
 
     let latest = null;
@@ -55,7 +54,6 @@
         SCORE_KEYS.forEach(key => {
             const bar = document.getElementById("score-" + key);
             const label = document.getElementById("score-" + key + "-value");
-            if (NO_MODEL.has(key)) return;
             const value = Math.min(Math.max(Number(scores[key]) || 0, 0), 1);
             if (bar) {
                 bar.style.width = (value * 100) + "%";
@@ -185,11 +183,6 @@
             badge.textContent = state.toUpperCase();
             badge.style.color = colors[state] || "#8a9bb8";
         }
-        if (Array.isArray(data.confidence_band)) {
-            const lo = (data.confidence_band[0] * 100).toFixed(1);
-            const hi = (data.confidence_band[1] * 100).toFixed(1);
-            S.setText("tci-band", `${lo}% – ${hi}%`);
-        }
         if (data.latency_avg !== undefined) S.setText("lat-avg", data.latency_avg);
         if (data.latency_p95 !== undefined) S.setText("lat-p95", data.latency_p95);
         if (data.queue_depth !== undefined) S.setText("queue-depth", data.queue_depth);
@@ -260,16 +253,15 @@
         S.setText("dp-address", (ownPkg && ownPkg.user_address) || "—");
         S.setText("dp-authority", (mode === "sos" ? (block.authority || block.recommended_authority)
                                                   : pkg.recommended_authority) || "—");
-        const hidden = document.getElementById("dp-id");
-        if (hidden) hidden.value = id;
         const snapshot = document.getElementById("dp-snapshot");
         if (snapshot) {
             const path = mode === "sos" ? block.snapshot : null;
             if (path && snapshot.getAttribute("src") !== S.rel(path)) snapshot.setAttribute("src", S.rel(path));
             S.show(snapshot, !!path && S.can("media"));
         }
-        const actions = new Set((block && block.actions) || []);
-        const canSend = mode === "sos" ? actions.has("approve") : SENDABLE.has(pkg.status);
+        // In SOS mode the panel answers with the prompt's own buttons
+        // ("Alert my contacts and the SENTRIX desk"), not a second set.
+        const canSend = mode !== "sos" && SENDABLE.has(pkg.status);
         node.querySelectorAll("[data-dispatch-authority]").forEach(button => S.show(button, canSend));
         S.show(document.getElementById("dp-sos-actions"), mode === "sos");
         S.setText("dp-note", mode === "sos"

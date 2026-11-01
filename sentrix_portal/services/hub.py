@@ -1410,7 +1410,8 @@ def offline_state(payload: dict | None) -> dict:
     link = dict(out.get("link") or {})
     link.update(connected=False, state="offline")
     out.update(camera_online=False, camera_available=False, ai_hz=0.0, fps=0.0,
-               video_fps=0.0, link=link, link_online=False, device_offline=True)
+               video_fps=0.0, link=link, link_online=False, device_offline=True,
+               mic_available=False, mic_classifying=False)
     return out
 
 

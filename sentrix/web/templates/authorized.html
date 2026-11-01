@@ -43,12 +43,17 @@
     </div>
   </div>
 </div>
-{% else %}
+{% elif 'gallery_view' in caps %}
 <p class="sos-note mb-2" id="gallery-view-only">View only: the household owner enrols and removes faces.</p>
+{% else %}
+<p class="sos-note mb-2" id="gallery-no-consent">Face recognition is not switched on for this
+  household, so enrolled faces are not shown here. The owner can switch it on under Privacy on the
+  SENTRIX Portal.</p>
 {% endif %}
 
 <div id="enrol-status" class="card enrol-status hidden" role="status" aria-live="polite"></div>
 
+{% if 'gallery_view' in caps %}
 <div class="card auth-card">
   <div class="card-label">Authorized Faces</div>
   <div class="faces-grid" id="faces-grid">
@@ -68,11 +73,12 @@
     {% else %}
     <div class="empty-faces">
       <p>No authorized persons enrolled.</p>
-      <p class="muted">Everyone detected will be flagged as UNAUTHORIZED.</p>
+      <p class="muted">Everyone in view will be shown as an unrecognised person.</p>
     </div>
     {% endfor %}
   </div>
 </div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}

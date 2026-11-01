@@ -6,14 +6,12 @@
 {% macro sos_actions(scope, approve=True) %}
 <div class="sos-actions" data-sos-actions data-scope="{{ scope }}">
   {% if 'sos' in caps %}
+  {% if call.href %}
   <div class="sos-call" data-sos-show="call_112">
-    {% if call.href %}
-    <a class="btn btn-call btn-block" href="{{ call.href }}" data-sos-call>Call 112 now</a>
-    {% else %}
-    <span class="btn btn-call btn-block" aria-disabled="true" data-sos-call>Call 112 now</span>
-    {% endif %}
+    <a class="btn btn-call btn-block" href="{{ call.href }}" data-sos-call>{{ call.label or 'Call 112 now' }}</a>
     {% if call.note %}<span class="sos-note">{{ call.note }}</span>{% endif %}
   </div>
+  {% endif %}
   {% if approve %}
   <div class="sos-approve-group" data-sos-show="approve">
     <button type="button" class="btn btn-approve btn-block" data-sos-action="approve">Alert my contacts and the SENTRIX desk</button>
@@ -31,6 +29,9 @@
     <button type="button" class="btn btn-outline" data-sos-pin-for="safe" data-sos-show="safe">I'm safe now (PIN)</button>
     <button type="button" class="btn btn-approve" data-sos-action="help_now" data-sos-show="help_now">Request help now</button>
   </div>
+  {% if not call.href %}
+  <p class="sos-note sos-call-off" data-sos-show="call_112">{{ call.note }}</p>
+  {% endif %}
   <div class="sos-pin-row hidden" data-sos-pin-row>
     <input type="password" inputmode="numeric" autocomplete="off" maxlength="12"
            class="text-input pin" placeholder="SOS PIN" aria-label="SOS PIN" data-sos-pin>

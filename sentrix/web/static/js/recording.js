@@ -74,7 +74,7 @@
 
     function statusText(data) {
         const status = data.status || {};
-        if (!status.enabled) return "Recording is turned off on this device (SENTRIX_RECORDING_ENABLED=0).";
+        if (!status.enabled) return "Recording is turned off on this device.";
         if (status.recording) {
             return `● REC ${S.formatRemaining(status.seconds)} / ${S.formatRemaining(status.max_seconds)}`
                 + ` · ${size(status.bytes)} · ${status.frames || 0} frames · ${micLine(data.microphone)}`;

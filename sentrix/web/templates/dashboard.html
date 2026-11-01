@@ -87,11 +87,7 @@
           <div class="score-track">
             <div class="score-bar" id="score-{{ key }}">0%</div>
           </div>
-          {% if key in ("theft", "harmful") %}
-          <span class="score-value na" id="score-{{ key }}-value" title="No model produces this score yet">n/a (no model)</span>
-          {% else %}
           <span class="score-value" id="score-{{ key }}-value">0%</span>
-          {% endif %}
         </div>
         {% endfor %}
       </div>
@@ -134,14 +130,11 @@
       <div class="factors-list" id="top-factors-list">
         <span class="muted">—</span>
       </div>
-      <div class="card-line" id="fusion-rule" title="The rule that set the leading class's score (D15)">—</div>
+      <div class="card-line" id="fusion-rule" title="The rule that set the leading class's score">—</div>
       <div class="contrib-list" id="contributions-list" aria-label="What each input did for the leading class"></div>
       <div class="evidence-line">
         <span class="muted">Evidence:</span>
         <span class="evidence-badge" id="uncertainty-badge">—</span>
-      </div>
-      <div class="card-line" title="A single estimate: a band needs a calibrated fusion model (CLAUDE.md M8)">
-        TCI band: <span id="tci-band">—</span>
       </div>
       <div class="card-line">
         Latency avg: <span id="lat-avg">—</span>s &nbsp;|&nbsp; P95: <span id="lat-p95">—</span>s &nbsp;|&nbsp; Queue: <span id="queue-depth">0</span>
@@ -182,18 +175,17 @@
     </div>
   </div>
   <img class="sos-snapshot dispatch-panel-snapshot hidden" id="dp-snapshot" alt="Camera snapshot of the alarm">
-  <input type="hidden" id="dp-id" value="">
   <div class="dispatch-actions">
     {% if 'dispatch' in caps %}
     <button type="button" class="btn btn-police" data-dispatch-authority="POLICE">🚔 Dispatch POLICE</button>
     <button type="button" class="btn btn-fire" data-dispatch-authority="FIRE">🚒 Dispatch FIRE</button>
     <button type="button" class="btn btn-medical" data-dispatch-authority="MEDICAL">🚑 Dispatch MEDICAL</button>
     {% endif %}
-    <button type="button" class="btn btn-cancel" id="dp-dismiss">Dismiss</button>
+    <button type="button" class="btn btn-cancel" id="dp-dismiss">Hide panel</button>
   </div>
   <p class="sos-note mt-1" id="dp-note"></p>
   <div class="hidden" id="dp-sos-actions">
-    {{ sosui.sos_actions("panel", approve=False) }}
+    {{ sosui.sos_actions("panel") }}
   </div>
   <div class="sos-message" id="dp-message" role="status" aria-live="polite"></div>
 </div>

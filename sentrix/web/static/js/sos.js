@@ -110,7 +110,7 @@
         const states = event.from_state && event.from_state !== event.to_state
             ? `${event.from_state} → ${event.to_state}` : (event.to_state || "");
         return S.h("tr", {},
-            S.h("td", { class: "mono", text: event.seq }),
+            S.h("td", { class: "mono", text: event.n ?? event.seq }),
             S.h("td", { class: "mono", text: S.localTime(event.at) }),
             S.h("td", { text: event.origin || "device" }),
             S.h("td", { text: event.event }),
@@ -176,7 +176,7 @@
             box.textContent = previewText(result.data) || "No preview available.";
         } else {
             box.textContent = result.status === 404 ? "The SOS service is not installed on this build."
-                : result.code === "unsupported" ? "The SOS service is off (SENTRIX_SOS_ENABLED=0)."
+                : result.code === "unsupported" ? "The SOS service is off on this device."
                 : `Preview unavailable (${result.detail}).`;
         }
     }

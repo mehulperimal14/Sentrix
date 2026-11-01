@@ -126,6 +126,16 @@ def lc_client(console, **kwargs):
     return client, auth.csrf_for_session(cookie)
 
 
+@pytest.fixture(autouse=True)
+def consented_household(monkeypatch):
+    """Tunnelled users of a household that consented to remote viewing and
+    face recognition (the console hides what the path table would refuse
+    without them; ``TestConsents`` covers that)."""
+    from sentrix.link import policy
+    monkeypatch.setattr(policy, "_profile_consents",
+                        lambda: {"remote_view": True, "face_recognition": True})
+
+
 def tunnel_client(console, role="owner", **kwargs):
     """A Portal user replayed in-process by the link (``/d/abc``)."""
     from fastapi.testclient import TestClient
@@ -389,6 +399,29 @@ class TestXssPayloadsAreInert:
 
 
 # ── tests: roles ──────────────────────────────────────────────────────────────
+class TestConsents:
+    def test_without_face_consent_the_portal_shows_no_gallery_controls(self, console,
+                                                                         monkeypatch):
+        """The path table refuses face tiles and gallery writes without the
+        consent: the page shows a note instead of controls that only fail."""
+        from sentrix.link import policy
+        populate(console)
+        monkeypatch.setattr(policy, "_profile_consents", lambda: {"remote_view": True})
+        page = tunnel_client(console, "owner").get("/authorized").text
+        assert 'id="gallery-no-consent"' in page
+        assert 'id="capture-toggle"' not in page and 'id="faces-grid"' not in page
+        lan = lc_client(console)[0].get("/authorized").text
+        assert 'id="capture-toggle"' in lan, "the device admin on the LAN is not affected"
+
+    def test_without_remote_view_no_media_is_offered(self, console, monkeypatch):
+        from sentrix.link import policy
+        monkeypatch.setattr(policy, "_profile_consents", lambda: {})
+        page = tunnel_client(console, "owner").get("/dashboard").text
+        assert 'data-caps="' in page
+        caps = re.search(r'data-caps="([^"]*)"', page).group(1).split()
+        assert "media" not in caps and "sos" in caps
+
+
 class TestRoles:
     def test_owner_and_device_admin_may_edit_the_gallery(self, console):
         populate(console)
@@ -461,7 +494,8 @@ class TestBannersAndSos:
             assert "tel:112" not in text and "sms:112" not in text, path
         monkeypatch.setenv("SENTRIX_DESK_NUMBER", "")
         text = lc_client(console)[0].get("/dashboard").text
-        assert "tel:" not in text and 'aria-disabled="true" data-sos-call' in text
+        assert "tel:" not in text and "data-sos-call" not in text
+        assert "Calling is off in this demo" in text
 
     def test_call_112_outside_test_mode(self, console, monkeypatch):
         from sentrix.web import routes
@@ -491,7 +525,8 @@ class TestBannersAndSos:
 
     def test_prompt_wording(self, console):
         text = lc_client(console)[0].get("/dashboard").text
-        for words in ("Alert my contacts and the SENTRIX desk", "Call 112 now",
+        # Test mode without a Desk number: no dead "Call 112 now" button.
+        for words in ("Alert my contacts and the SENTRIX desk", "Calling is off in this demo",
                       "I'm checking", "False alarm (PIN)", "SENTRIX does not contact 112 itself"):
             assert words.replace("'", "&#39;") in text or words in text, words
 
@@ -510,7 +545,7 @@ class TestBannersAndSos:
     def test_engine_scores_show_text_and_label_missing_models(self, console):
         text = lc_client(console)[0].get("/dashboard").text
         assert 'id="score-weapon-value">0%' in text
-        assert 'id="score-theft-value"' in text and "n/a (no model)" in text
+        assert 'id="score-theft-value"' not in text, "no engine produces it"
         assert 'id="score-is_night"' in text
 
 

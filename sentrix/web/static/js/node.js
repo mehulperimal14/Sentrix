@@ -72,7 +72,7 @@
         const note = document.getElementById("node-telemetry-note");
         if (note) {
             note.textContent = !nodeApi ? "The node telemetry service is not installed on this build."
-                : !node.updated_at ? "No telemetry yet (the node service is off: SENTRIX_NODE_ENABLED=0)." : "";
+                : !node.updated_at ? "No telemetry yet: the node service is off on this device." : "";
         }
     }
 
@@ -211,7 +211,7 @@
         // state.clip (track T-CLIP): the 4-second clip engine, or the tick loop.
         clip = clip || {};
         if (clip.mode !== "clip") {
-            fillTable("node-clip", [["Mode", "tick loop (SENTRIX_PIPELINE_MODE=tick)"]]);
+            fillTable("node-clip", [["Mode", "one frame at a time (tick loop)"]]);
             return;
         }
         const compute = clip.compute_ms || {};

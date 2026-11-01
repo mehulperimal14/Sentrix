@@ -12,7 +12,7 @@
     function describeVerdict(verdict, by) {
         const who = by === "lc:device_admin" ? "device admin"
             : (by || "").startsWith("portal:") ? "you (Portal)" : (by || "");
-        return [verdict === "TRUE" ? "Real" : "False alarm", who, new Date().toLocaleString()]
+        return [verdict === "TRUE" ? "Real" : "False alarm", who, S.localTime(new Date().toISOString())]
             .filter(Boolean).join(" · ");
     }
 
