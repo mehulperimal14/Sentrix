@@ -1,0 +1,289 @@
+%==============================================================
+\chapter{REQUIREMENT ANALYSIS}
+\label{ch:req}
+%==============================================================
+
+\section{Literature Survey}
+\label{sec:lit}
+
+\subsection{Related Work}
+\label{sec:related}
+
+\paragraph{Object detection for weapons and fire.} Single-stage detectors made real-time detection practical: YOLO frames detection as one regression from image to boxes and class probabilities \cite{redmon2016yolo}, and its successors in the Ultralytics family (YOLOv8 \cite{ultralytics_yolov8} and YOLO11 \cite{ultralytics_yolo11}) are the de facto choice for embedded detection, pre-trained on COCO \cite{lin2014coco}. Olmos \emph{et al.} built an automatic handgun alarm for surveillance video and showed that the false-positive rate, not recall, is the obstacle to deployment, which they reduced with a dedicated training set and a temporal activation rule \cite{olmos2018handgun}. Muhammad \emph{et al.} showed that a fine-tuned CNN detects fire in surveillance video with high accuracy and few false alarms \cite{muhammad2018fire}. Tracking by association of every detection box (ByteTrack) keeps identities of people across frames at low cost \cite{zhang2022bytetrack}, and open-set detectors such as Grounding DINO \cite{liu2024groundingdino} can propose boxes for any named object, which SENTRIX uses only as a label-gated teacher to annotate its own frames.
+
+\paragraph{Violence and anomaly detection in video.} Early work detected fights in hockey and movie clips with hand-crafted motion features \cite{bermejo2011violence}. RWF-2000 collected 2000 real-world surveillance clips and proposed a flow-gated network \cite{cheng2021rwf}; UCF-Crime framed anomaly detection as multiple-instance ranking on weakly labelled long videos \cite{sultani2018anomaly}; and XD-Violence showed that adding audio to video improves violence detection under weak supervision \cite{wu2020xdviolence}. These datasets are invaluable for pre-training, but their clips are curated and their test splits share cameras and settings with training, so their scores do not predict false alarms in a new home.
+
+\paragraph{Vision backbones, transfer and calibration.} Residual networks \cite{he2016resnet} and vision transformers \cite{dosovitskiy2021vit} are the standard backbones. DINOv2 learns general-purpose visual features without labels and transfers with a small head and little data \cite{oquab2024dinov2}, which is why SENTRIX's scene classifier fine-tunes only the last four blocks of a DINOv2 ViT-B/14. Mobile networks such as MobileNetV3 \cite{howard2019mobilenetv3} and EfficientNet \cite{tan2019efficientnet} are 20--40 times cheaper but, as Section~\ref{sec:results} shows, did not generalise across videos on our data even with knowledge distillation \cite{hinton2015distilling}. Modern networks are also over-confident; temperature scaling is a simple, effective calibration \cite{guo2017calibration}, applied to every SENTRIX classifier.
+
+\paragraph{Audio event detection.} Converting audio to log-mel spectrograms and classifying with CNNs became standard with ESC-50 \cite{piczak2015esc} and the work of Salamon and Bello on augmentation \cite{salamon2017deep}. AudioSet supplied a 527-class ontology and two million labelled clips \cite{gemmeke2017audioset}, on which large CNNs were trained \cite{hershey2017cnn}; PANNs released pretrained taggers such as CNN10 and CNN14 \cite{kong2020panns}. Surveillance-specific work detects screams, glass breaking and gunshots in noise \cite{foggia2015audio}, and a systematic review of audio surveillance lists background noise and privacy as the main open issues \cite{crocco2016audio}.
+
+\paragraph{Faces and person re-identification.} ArcFace's additive angular margin gives highly discriminative face embeddings \cite{deng2019arcface}, and SCRFD makes face detection efficient on small devices \cite{guo2022scrfd}; both are part of the InsightFace models SENTRIX uses. Person re-identification matches whole bodies across views: the triplet loss \cite{hermans2017triplet}, part-based models \cite{sun2018pcb} and the lightweight omni-scale OSNet \cite{zhou2019osnet} are representative, and a survey summarises the field \cite{ye2022reid}.
+
+\paragraph{Multimodal fusion.} Surveys of multimodal fusion distinguish early, late and hybrid fusion and point out the problem of asynchronous modalities and of deciding how much to trust each \cite{atrey2010fusion, baltrusaitis2019multimodal}. Gradient-boosted trees such as XGBoost \cite{chen2016xgboost} are a common late-fusion learner, but they need real labelled sessions to be fitted to.
+
+\paragraph{Edge computing and system security.} Edge computing places computation near the data source to cut latency and bandwidth and to keep data private \cite{shi2016edge}. The software stack rests on PyTorch \cite{paszke2019pytorch}, OpenCV \cite{bradski2000opencv} and ONNX Runtime \cite{onnxruntime}; the security mechanisms follow NIST and IETF standards for authenticated encryption \cite{nist80038d}, hashing \cite{fips1804}, one-time passwords \cite{rfc6238}, password hashing \cite{rfc9106} and WebSockets \cite{rfc6455}.
+
+\paragraph{Literature survey by team member.} \tabref{tab:litsurvey} lists the papers each member studied, in the department's format.
+
+\input{chapters/02a_lit_table}
+
+\subsection{Research Gaps of Existing Literature}
+The gaps are summarised in \tabref{tab:gaps}. In more detail:
+\begin{enumerate}
+\item \textbf{The metric is not the alarm (RG-1).} Handgun, fire and violence papers report frame-level accuracy, mAP or AUROC \cite{olmos2018handgun, muhammad2018fire, cheng2021rwf}. A home system is judged by what its owner experiences: how many real episodes reach an alarm, how fast, and how many false alarms per hour of ordinary life. A detector with 0.93 frame AUROC can still raise an alarm every few minutes if one frame is enough.
+\item \textbf{Test sets share the training distribution (RG-2).} Public corpora split clips from the same sources into train and test; our audit found that 52.7\,\% of the RWF-2000 validation rows we used shared source videos with training, and 12--20\,\% of the weapon and fire validation images were near-duplicates of training images. Scores on such splits overstate performance in a new room.
+\item \textbf{Fusion assumes aligned, clean inputs (RG-3).} Audio-visual work fuses features of edited clips \cite{wu2020xdviolence}; a live system must decide whether a sound window even describes the frame being judged, and must not hear a television or the device's own siren as the room.
+\item \textbf{No owner in the loop (RG-4).} Alarm guidance stresses verification before dispatch \cite{sampson2011false}, but published systems stop at detection.
+\item \textbf{Heavy models on small boards (RG-5).} Transformer backbones dominate accuracy tables \cite{oquab2024dinov2} but few papers measure the full multimodal stack on a single-board computer.
+\item \textbf{Identity from faces alone (RG-6).} A resident who turns away becomes ``unknown''; body re-identification \cite{zhou2019osnet} is rarely tied to an access decision with a measured false-accept rate.
+\item \textbf{Privacy (RG-7).} Cloud analysis moves personal video out of the home \cite{shi2016edge, dpdp2023}.
+\end{enumerate}
+
+\subsection{Detailed Problem Analysis}
+\label{sec:problem-analysis}
+The clearest statement of the problem came from the team's own first live run (30 September 2026): a laptop webcam in a dark bedroom with several team members for 18.3 minutes, using the mid-semester version of the pipeline with the newly trained models. The product did not work as a whole. Seven investigations reconstructed the session from its event log---which replays exactly (TCI to 0.0003, levels 1300 of 1300)---and every high-severity finding was then attacked by an independent reviewer; all ten survived. \tabref{tab:diagnosis} summarises what the users saw and why.
+
+\begin{table}[htbp]
+\caption{Diagnosis of the first live run: symptoms, root causes and fixes}
+\label{tab:diagnosis}
+\centering\tablefont
+\begin{tabularx}{\textwidth}{|L{3.0cm}|Y|L{3.4cm}|}
+\hline\rowhead
+\thead{Symptom} & \thead{Root cause (measured)} & \thead{Fix (milestone)}\\ \hline
+False ``fire'' and ``weapon'' alarms & Every one came from the DINOv2 scene classifier, one tick each, 0.001--0.017 above a 0.35 threshold; the room was far outside the training distribution (nearest-neighbour cosine 0.25--0.39 vs 0.91--0.97 for validation); 7.7\,\% of normal ticks crossed the weapon threshold, i.e.\ about 171 weapon episodes per hour, 65\,\% of them with nobody in frame. & $k$-of-$n$ confirmation, person gate, raised floors, no single-frame overrides (M1)\\ \hline
+Video ``0.6 fps'', lag & The preview showed only inferred frames; the capture loop blocked on inference; ONNX Runtime sessions of the face models busy-spun on about 20 of 24 cores, making the next YOLO call 10--30 times slower (3086\,ms per tick, 0.32\,Hz). & Separate capture, inference and preview threads; spinning off; identity on its own thread (M2)\\ \hline
+TCI ``very inaccurate'' & The XGBoost booster was fitted to synthetic labels with the opposite meaning of identity: it scored a resident 0.36--0.44 and a stranger 0.08; on labelled replay the TCI ranked threats worse than its own input (AUROC 0.793 vs 0.848). & Booster retired; TCI = strongest confirmed class evidence (M1, D6)\\ \hline
+Level shown next to a different TCI & Hysteresis restarted on every band change; a smoothed display value was shown next to a level decided from another frame; 45\,\% of rows disagreed. & Per-threshold timers, no display smoothing, one committed alarm object (M1, M3)\\ \hline
+Incident rows mixing frames & Type frozen at the first non-normal frame, reason and TCI from the peak, identity hard-coded. & Peak snapshot frozen from one tick (M3)\\ \hline
+Snapshots of team members & Any unenrolled person added a fixed 0.15 to the TCI. & Unknown person = Level~2 only, snapshots from Level~3 (M1, D2, D4)\\ \hline
+Face enrolment failed & The browser asked for the webcam the server held; uploads compared \code{x.jpg} with \code{x} and always failed. & Enrol from the device's own camera with quality checks (M4)\\ \hline
+One face authorised everyone & Identity was per frame: one resident in view authorised every person for 5\,s. & Per-track identity (M4); body re-identification (D22)\\ \hline
+\end{tabularx}
+\end{table}
+
+The lesson that shaped the rest of the project is that the problem was not one model's accuracy but the system around the models: how many observations a decision needs, which inputs may corroborate each other, what is measured, and how the result is shown to a person.
+
+\subsection{Survey of Tools and Technologies Used}
+\label{sec:tools-survey}
+\tabref{tab:toolsurvey} compares the main technology choices with the alternatives that were considered.
+
+\begin{table}[htbp]
+\caption{Technology choices and the alternatives considered}
+\label{tab:toolsurvey}
+\centering\tablefont
+\begin{tabularx}{\textwidth}{|L{2.6cm}|L{3.3cm}|Y|}
+\hline\rowhead
+\thead{Need} & \thead{Chosen} & \thead{Alternatives and reason for the choice}\\ \hline
+Object detection & YOLOv8n (person) + YOLO11n weapon and fire heads, ByteTrack & Faster R-CNN is too slow for a Pi; YOLO11n has fewer parameters at similar accuracy; ByteTrack adds track ids at almost no cost.\\ \hline
+Scene classifier & DINOv2 ViT-B/14, last 4 blocks fine-tuned & ResNet-18 (LOVO macro-F1 0.210), MobileNetV3-L (0.229) and EfficientNet-B0 (0.211) all failed the 0.396 bar; DINOv2 reached 0.440.\\ \hline
+Faces & InsightFace \code{buffalo\_l} (laptop) / \code{buffalo\_s} (Pi): SCRFD + ArcFace & dlib and \code{face\_recognition} are slower and weaker on small faces.\\ \hline
+Body re-identification & OSNet x1\_0 (ImageNet weights), ONNX & Colour histograms (AUROC 0.73 vs 0.83); torchreid does not install on Python 3.14, so the network was re-implemented with the same parameter names.\\ \hline
+Sound & PANNs CNN10 (AudioSet, 25\,MB), ONNX Runtime & AST (346\,MB, 10\,s input) and CNN14 (327\,MB) are too heavy; the team's 4-class CNN was trained on 375 clips only (kept as fallback).\\ \hline
+Inference runtime & ONNX Runtime on the Pi; PyTorch on the laptop & PyTorch is about 5 times slower than NCNN or ONNX on the Pi for YOLO; NCNN path written but no export yet.\\ \hline
+Device web & FastAPI + Uvicorn, WebSockets, SQLite (WAL) & Flask lacks native async and WebSockets; SQLite needs no server on the Pi.\\ \hline
+Portal & FastAPI, SQLAlchemy, SQLite on a 1\,GB disk (Postgres-ready) & Same language and guard code as the device; Postgres DDL checked for deployment at scale.\\ \hline
+Frontend & React 19, TypeScript, Vite, Tailwind CSS 4, TanStack Query & Server-rendered Jinja pages (the earlier version) could not deliver the alert takeover and live updates cleanly.\\ \hline
+Hosting & Render Starter, Singapore, Docker & Oracle Always Free (planned long-term), Railway (closed sign-ups); Render keeps the tested SQLite path and never sleeps.\\ \hline
+Phone alerts & Telegram Bot API (demo); e-mail API; 4G modem SMS & WhatsApp Cloud API built but Meta's business set-up was out of reach; Twilio kept as a guarded legacy path.\\ \hline
+Edge hardware & Raspberry~Pi~5 8\,GB + Camera Module 3 & ESP32-S3 (weak camera and audio path), Jetson Orin Nano (about four times the price), Coral and NCS2 (discontinued); Hailo AI HAT+ reserved as an upgrade.\\ \hline
+\end{tabularx}
+\end{table}
+
+\subsection{Summary}
+SENTRIX builds on mature components---YOLO detectors, a self-supervised DINOv2 backbone, ArcFace faces, OSNet bodies, PANNs sound tags---but its contribution lies in what the literature leaves out. It evaluates by committed alarm level rather than per frame, trains and selects on footage split strictly by video and confirms on a held-out video, fuses modalities only when they are independent and time-aligned, puts the owner in the loop with safety defaults, and runs entirely at the edge on a Raspberry~Pi~5 while keeping the owner connected through a privacy-preserving Portal. Where earlier work reports a component score, this project reports what a household would experience, together with the uncertainty of every number.
+
+%--------------------------------------------------------------
+\section{Software Requirements Specification}
+\label{sec:srs}
+
+\subsection{Introduction}
+\subsubsection{Purpose}
+This specification defines the functional and non-functional requirements of SENTRIX release 1 (device software, Portal, the two web applications and the Raspberry~Pi~5 unit), following the structure of ISO/IEC/IEEE 29148 \cite{iso29148}. It is the reference for the tests of Section~\ref{sec:testing}.
+
+\subsubsection{Intended Audience and Reading Suggestions}
+The audience is the evaluation panel and mentor, the five developers, and a future installer or maintainer. Evaluators may read Sections~\ref{sec:overall} and \ref{sec:nfr}; developers should also read the interface requirements and the contracts in the repository (\code{docs/7\_PORTAL\_AND\_SOS.md} for the Portal, link and SOS; \code{docs/9\_FRONTEND.md} for the web applications; \code{docs/8\_RASPBERRY\_PI5\_INTEGRATION.md} for the hardware).
+
+\subsubsection{Project Scope}
+SENTRIX detects a handgun, a visible flame and a corroborated fight in one room, commits one of five alarm levels with defined side effects, and runs an owner-approved assistance flow through a cloud Portal, while keeping faces, evidence and video on the device. Scope boundaries are given in Section~\ref{sec:scope}.
+
+\subsection{Overall Description}
+\label{sec:overall}
+\subsubsection{Product Perspective}
+SENTRIX is a new, self-contained product with two cooperating programs (\figref{fig:overview}). The device is autonomous: detection, evidence, the siren and the creation of an assistance request work without the Internet. The Portal adds remote access, the household's contact list, the Desk and administration. The device opens only outbound connections; it does not trust the Portal and enforces its own rules (consents for video and media, SMS only to numbers in the current profile, rate-limited siren tests, no command that disables the siren or the evidence).
+
+\paragraph{User classes.} \emph{Owner} (full household control, answers alerts, needs a step-up password for sensitive actions), \emph{household member} (sees and answers alerts), \emph{emergency contact} (no account; token pages only after consenting), \emph{Desk operator} (TOTP sign-in; acknowledges and closes requests), \emph{company administrator} (TOTP; customers, devices, staff, audit), \emph{device administrator} (installer on the home network; diagnostics, faces, recordings, hardware).
+
+\subsubsection{Product Features}
+\tabref{tab:fr} lists the functional requirements with their priorities.
+
+\begin{longtable}{|C{1.0cm}|L{10.4cm}|C{1.6cm}|}
+\caption{Functional requirements}\label{tab:fr}\\
+\hline\rowhead
+\thead{ID} & \thead{Requirement} & \thead{Priority}\\ \hline
+\endfirsthead
+\hline\rowhead
+\thead{ID} & \thead{Requirement} & \thead{Priority}\\ \hline
+\endhead
+\multicolumn{3}{r}{\footnotesize\itshape continued on next page}\\
+\endfoot
+\endlastfoot
+\tablefont FR-1 & \tablefont Read video from a Pi camera, USB webcam, RTSP stream, video file or demo reel; keep only the newest frame for inference. & \tablefont High\\ \hline
+\tablefont FR-2 & \tablefont Detect persons (with track ids), handguns and fire in each analysed frame or clip. & \tablefont High\\ \hline
+\tablefont FR-3 & \tablefont Classify each scene into normal, fire, weapon, assault, robbery with calibrated probabilities. & \tablefont High\\ \hline
+\tablefont FR-4 & \tablefont Recognise enrolled residents per tracked person; carry a face-verified resident to their own track by body appearance at home. & \tablefont High\\ \hline
+\tablefont FR-5 & \tablefont Tag audio windows into aggression, weapon sound, fire sound, laughter, calm talk, background and siren cues, each with a time window. & \tablefont Medium\\ \hline
+\tablefont FR-6 & \tablefont Confirm evidence ($k$-of-$n$), apply the person gate and modality rules, and compute the TCI with per-input contributions. & \tablefont High\\ \hline
+\tablefont FR-7 & \tablefont Commit an alarm level with dwell timers and step it down after 5\,s without support. & \tablefont High\\ \hline
+\tablefont FR-8 & \tablefont Open, update and close incidents from one peak tick; seal an encrypted evidence bundle and a snapshot from Level~3. & \tablefont High\\ \hline
+\tablefont FR-9 & \tablefont Open one assistance request per device for a confirmed Level~3 alarm class; prompt the owner on Portal, device screen, Telegram and e-mail; SMS when offline. & \tablefont High\\ \hline
+\tablefont FR-10 & \tablefont Accept approve, false alarm (PIN), I'm checking, duress PIN, I'm safe and Request help now; apply reminders, lapse warning, expiry and safety defaults. & \tablefont High\\ \hline
+\tablefont FR-11 & \tablefont Let the Desk acknowledge and resolve requests with an outcome that sets the incident verdict. & \tablefont High\\ \hline
+\tablefont FR-12 & \tablefont Drive the siren relay at Level~5 for 5\,s, at most once per minute, never longer than 90\,s; show level and faults on three LEDs. & \tablefont High\\ \hline
+\tablefont FR-13 & \tablefont Provision devices, create customers with activation codes, run the seven-step onboarding, confirm contacts by consent link, and claim a device. & \tablefont High\\ \hline
+\tablefont FR-14 & \tablefont Show the device's own pages and live video to the owner through the Portal tunnel, within the household's consents. & \tablefont High\\ \hline
+\tablefont FR-15 & \tablefont Record training video (raw frames and microphone) on request of the device administrator, or the owner with a step-up; downloads on the home network only. & \tablefont Medium\\ \hline
+\tablefont FR-16 & \tablefont Export all of a household's data and erase the account on request; apply retention to logs, events and snapshots. & \tablefont Medium\\ \hline
+\tablefont FR-17 & \tablefont Keep a hash-chained audit log on the Portal and an event log on the device for every decision. & \tablefont High\\ \hline
+\tablefont FR-18 & \tablefont Refuse every outbound message unless live switches are on and, in test mode, the recipient is allowlisted; never contact an emergency number. & \tablefont High\\ \hline
+\end{longtable}
+
+\subsubsection{Operating Environment}
+Device: Raspberry~Pi~OS (Debian Trixie) on a Raspberry~Pi~5 8\,GB, Python 3.13 with system site packages (Picamera2, lgpio); or Windows/Linux/macOS with Python 3.10--3.14. Portal: a Docker container on Render (Python slim image) with a persistent disk. Clients: any current browser on a phone or computer.
+
+\subsection{External Interface Requirements}
+\subsubsection{User Interfaces}
+\begin{itemize}
+\item \textbf{Device screen} (dark by default): live video with boxes and labels, current level, a ``someone we don't recognise'' card, Home/Away mode, and a full-screen alert takeover with countdown, answer buttons and an on-screen PIN pad.
+\item \textbf{Device administration} (home network only): Diagnostics (live picture with overlays, engine scores, scene probabilities, fusion contributions, level changes), Activity (incidents, snapshots, evidence, dispatch, verdicts), Help requests, Record video, Faces, Hardware, Network.
+\item \textbf{Portal app:} Home (device cards, live view, open alerts), the alert screen (answers first on a phone), Activity, People (contacts, household), Settings (alerts and PINs, home, devices, account, privacy), onboarding wizard; token pages for contacts; the Desk queue and request page; the admin console.
+\item Accessibility (WCAG 2.1 \cite{wcag21}): contrast of at least 4.5:1 for text, visible focus, 44\,px touch targets, a skip link; times shown in the household's time zone (IST).
+\end{itemize}
+
+\subsubsection{Hardware Interfaces}
+\begin{table}[htbp]
+\caption{Hardware interfaces of the Raspberry~Pi~5 unit}
+\label{tab:hwif}
+\centering\tablefont
+\begin{tabularx}{\textwidth}{|L{3.0cm}|L{2.4cm}|Y|}
+\hline\rowhead
+\thead{Device} & \thead{Interface} & \thead{Requirement}\\ \hline
+Camera Module 3 & CSI (22-pin) & Picamera2: 1280$\times$720 main stream for preview and evidence, 640-wide frames for analysis, 15 fps in clip mode.\\ \hline
+USB microphone & USB audio & Any USB port, plugged before or after start; opened at its native rate and resampled to 16\,kHz mono.\\ \hline
+Siren relay & GPIO17 (pin 11) & Active-high through an NPN driver with a base pull-down; held low from power-on.\\ \hline
+Status LEDs & GPIO5/12/13 & Green, amber, red, 330\,$\Omega$ each; patterns for link, faults and level.\\ \hline
+PIR / door / mains & GPIO23/24/16 & Debounced inputs with pull-ups; mains sensed through a PC817 optocoupler.\\ \hline
+4G modem & USB & AT commands over serial (PDU SMS); NetworkManager failover for data.\\ \hline
+\end{tabularx}
+\end{table}
+
+\subsubsection{Software Interfaces}
+\begin{itemize}
+\item \textbf{Device JSON API} (\code{/api/...}): session, state, incidents, verdicts, SOS, faces, recordings, node, health; live state over the \code{/ws/threat} WebSocket and video as MJPEG on \code{/video}.
+\item \textbf{Portal JSON API v2} (\code{/api/v2/...}): session, auth, onboarding, home, devices, activity, household, members, contacts, audit, settings, privacy, SOS, Desk, admin; JSON errors with a stable code; CSRF header on every state change.
+\item \textbf{Link protocol v1}: the device's outbound WebSocket to \code{/device/v1/link} with a bearer identity, heartbeats, an outbox with acknowledgements, the tunnel and the binary video relay.
+\item \textbf{Third-party services:} Telegram Bot API \cite{telegrambotapi} (polling mode), an e-mail HTTP API, and the modem's AT command set; all behind the send guard.
+\item \textbf{Model runtimes:} PyTorch \cite{paszke2019pytorch}, ONNX Runtime \cite{onnxruntime}; storage in SQLite (WAL) on both sides.
+\end{itemize}
+
+\subsection{Other Non-functional Requirements}
+\label{sec:nfr}
+\subsubsection{Performance Requirements}
+\begin{itemize}
+\item Laptop (tick mode): preview at camera rate ($\geq 25$ fps) and AI decisions $\geq 3$\,Hz with identity running.
+\item Raspberry~Pi~5 (clip mode): a clip decision at least every 2\,s; fast-lane Level~3 within 2\,s at the 95th percentile; Level~4/5 within 6\,s (release gate G4).
+\item An assistance request reaches the owner on at least one remote channel within 60\,s, or the owner is warned that it was not delivered.
+\item Remote video through the tunnel adapts to the link and is capped at 15 fps and 640\,px width.
+\item False alarms: no Level~4/5 in at least 3 hours of normal footage and at most one Level~3 per hour (release gate G3).
+\end{itemize}
+
+\subsubsection{Safety Requirements}
+\begin{itemize}
+\item The siren pin is held low from power-on, driven low after any exit of the service, released by a timer, and never on for more than 90\,s in one period; siren tests are refused while the arming key is off.
+\item Test mode is the default; no test, evaluation, replay or demonstration may send a real alert; SENTRIX never dials an emergency number.
+\item An unanswered request is ``unanswered'', never ``safe''; a failed delivery is shown as ``NOT DELIVERED - call for help yourself''.
+\item Experimental classes and an unrecognised person never pass Level~2.
+\end{itemize}
+
+\subsubsection{Security Requirements}
+\begin{itemize}
+\item Passwords and PINs hashed with Argon2id \cite{rfc9106}; five wrong PINs lock answers for 10 minutes; TOTP \cite{rfc6238} for staff; single-use activation codes with back-off.
+\item Evidence encrypted with AES-256-GCM \cite{nist80038d} with a hash-chained manifest; Portal audit log hash-chained (tamper-evident, not ``court-admissible'').
+\item Strict Content Security Policy, CSRF tokens on state changes, per-role path table on the tunnel, rate limits, no secrets in any API response (OWASP Top 10 \cite{owasp2021}).
+\item The device accepts no inbound connection from the Internet; the console binds to the home network, firewalled to the local subnet.
+\item Faces, evidence and continuous video stay on the device; the cloud keeps one consented snapshot per request for 30 days.
+\end{itemize}
+
+%--------------------------------------------------------------
+\section{Cost Analysis}
+\label{sec:cost}
+Prices were checked at Indian retailers on 14 October 2026; ``$\approx$'' marks a price that could not be confirmed (\tabref{tab:bom}). The software has no licence cost: every library and model used is open source (licences in \code{THIRD\_PARTY.md}).
+
+\begin{table}[htbp]
+\caption{Bill of materials of the Raspberry~Pi~5 unit (Order 1: bench kit)}
+\label{tab:bom}
+\centering\tablefont
+\begin{tabularx}{\textwidth}{|Y|L{2.8cm}|R{2.0cm}|}
+\hline\rowhead
+\thead{Item} & \thead{Source} & \multicolumn{1}{c|}{\thead{Price (Rs.)}}\\ \hline
+Raspberry~Pi~5, 8\,GB & thingbits & 19,852\\ \hline
+Official 27\,W USB-C power supply & Robocraze & 1,255\\ \hline
+Official Active Cooler (mandatory) & thingbits & 531\\ \hline
+microSD SanDisk High Endurance 128\,GB & Flipkart & 3,699\\ \hline
+Camera Module 3 (Wide, 102$^\circ$; Standard Rs.\,3,245) & Robocraze & 4,379\\ \hline
+Pi~5 camera cable, 22-pin Standard--Mini & thingbits & 117\\ \hline
+RTC cell ML-2020 (rechargeable) & -- & $\approx$ 500\\ \hline
+USB microphone (Scalebee) & Robocraze & 289\\ \hline
+Relay module, 2N2222/BC547 transistors, 1N4007 diodes & Robocraze & $\approx$ 150\\ \hline
+PIR HC-SR505 & Robocraze / thingbits & 73\\ \hline
+MC-38 door reed switch & Robocraze & 52\\ \hline
+Breadboard, jumpers, LEDs, resistors & -- & $\approx$ 350\\ \hline
+\multicolumn{2}{|r|}{\textbf{Subtotal, bench kit}} & \textbf{$\approx$ 31,250}\\ \hline
+\end{tabularx}
+\end{table}
+
+\begin{table}[htbp]
+\caption{Integration kit, running costs and total}
+\label{tab:cost2}
+\centering\tablefont
+\begin{tabularx}{\textwidth}{|Y|R{3.2cm}|}
+\hline\rowhead
+\thead{Item} & \multicolumn{1}{c|}{\thead{Cost (Rs.)}}\\ \hline
+Integration kit (Order 2): BIS-marked 12\,V adapter (566), router mini UPS 12\,V 3\,A (2,399), 12\,V$\to$5.2\,V 6\,A converter (119), 12\,V siren SQR117 (194), arming switch, fuses and PC817 ($\approx$130), 4G modem Quectel EC200U-CN (2,236), SIM ($\approx$300), IP65 box, fan, glands and mount ($\approx$900--1,500) & $\approx$ 7,300\\ \hline
+Tools (multimeter, soldering kit, micro-HDMI cable, panel meter, etc.) & $\approx$ 2,000\\ \hline
+\textbf{Device total (one time)} & \textbf{$\approx$ 40,500}\\ \hline
+3D-printed enclosure (PLA, own printer or campus lab) & material only\\ \hline
+Portal hosting on Render: Starter instance + 1\,GB disk & \$7.25 per month ($\approx$ Rs.\,600)\\ \hline
+SIM for the modem & $\approx$ 200 per month\\ \hline
+Telegram bot, e-mail API, open-source software & 0\\ \hline
+\end{tabularx}
+\end{table}
+
+\paragraph{Cost comparison.} The cheapest configuration (Camera Module 3 Standard, 64\,GB card) costs about Rs.\,36,000, and a confirmed 4\,GB Pi~5 would bring it to about Rs.\,28,350. Running the same models in the cloud instead---streaming the camera to a GPU instance---was estimated at Rs.\,11,200--40,600 per month for GPU time plus about Rs.\,1,500 of mobile data, i.e.\ the device pays for itself within one to four months, works when the Internet is down and keeps everyone's video at home. A production version would also drop the bench-only items (breadboard, tools) and buy in volume. To keep the Portal bill near zero, the Render service is suspended between evaluation sessions (about \$3--4 in total instead of about \$10) and the long-term plan is an Oracle Always Free virtual machine in India.
+
+%--------------------------------------------------------------
+\section{Risk Analysis}
+\label{sec:risk}
+Risks were assessed with a Failure Mode and Effects Analysis: severity (S) and likelihood (L) on a 1--5 scale, risk priority number RPN = S $\times$ L (\tabref{tab:fmea}). Scores are the team's judgement after mitigation planning; the mitigations are implemented unless marked ``planned''.
+
+\begin{longtable}{|C{0.8cm}|L{3.6cm}|C{0.5cm}|C{0.5cm}|C{0.8cm}|L{6.1cm}|}
+\caption{Failure Mode and Effects Analysis}\label{tab:fmea}\\
+\hline\rowhead
+\thead{ID} & \thead{Failure mode} & \thead{S} & \thead{L} & \thead{RPN} & \thead{Mitigation}\\ \hline
+\endfirsthead
+\hline\rowhead
+\thead{ID} & \thead{Failure mode} & \thead{S} & \thead{L} & \thead{RPN} & \thead{Mitigation}\\ \hline
+\endhead
+\endfoot
+\endlastfoot
+\tablefont R-1 & \tablefont False alarms in a room the models have never seen & \tablefont 4 & \tablefont 4 & \tablefont 16 & \tablefont $k$-of-$n$ confirmation, person gate, per-room thresholds from the device's own logs, Level~4+ only with two modalities; deployment-room recordings for training.\\ \hline
+\tablefont R-2 & \tablefont A test or demo sends a real alert & \tablefont 5 & \tablefont 2 & \tablefont 10 & \tablefont Test mode by default, send guard re-reading switches on every message, allowlist, test banner, test harness forcing all switches off and blocking non-loopback sockets.\\ \hline
+\tablefont R-3 & \tablefont A real threat missed (low recall) & \tablefont 5 & \tablefont 3 & \tablefont 15 & \tablefont Two visual sources (detector and scene model), fast lane, evidence logged for review; limits stated honestly; more data planned.\\ \hline
+\tablefont R-4 & \tablefont Pi too slow for the models & \tablefont 3 & \tablefont 4 & \tablefont 12 & \tablefont Clip engine, ONNX, 320\,px object stage, fast lane; Hailo AI HAT+ or the laptop as hub as fallbacks (planned).\\ \hline
+\tablefont R-5 & \tablefont Internet or Wi-Fi outage during an alarm & \tablefont 4 & \tablefont 3 & \tablefont 12 & \tablefont Detection, evidence, siren and the request work offline; outbox replays on reconnect; modem SMS; the Portal alerts contacts if the device goes offline during an alarm.\\ \hline
+\tablefont R-6 & \tablefont Siren stuck on or sounding at boot & \tablefont 4 & \tablefont 1 & \tablefont 4 & \tablefont Pin held low by \code{config.txt}, unit forces it low after any exit, timer release, 90\,s cap, physical arming key; bench test with an LED first.\\ \hline
+\tablefont R-7 & \tablefont Owner cannot answer (asleep, coerced) & \tablefont 5 & \tablefont 2 & \tablefont 10 & \tablefont Safety defaults, duress PIN, ``unanswered is never safe'', reminders and SMS after 10 minutes unseen.\\ \hline
+\tablefont R-8 & \tablefont Leak of faces or video & \tablefont 5 & \tablefont 1 & \tablefont 5 & \tablefont Data stay on the device; tunnel views follow consents; encrypted evidence; outbound-only link; erasure and retention.\\ \hline
+\tablefont R-9 & \tablefont Account takeover on the Portal & \tablefont 4 & \tablefont 2 & \tablefont 8 & \tablefont Argon2id, step-up for sensitive actions, TOTP for staff, activation back-off, CSRF and CSP, audit chain.\\ \hline
+\tablefont R-10 & \tablefont Power cut or SD card full & \tablefont 3 & \tablefont 2 & \tablefont 6 & \tablefont UPS-backed 12\,V bus, mains-loss alert, systemd watchdog, recording caps that keep 2\,GB free for evidence, log rotation and retention.\\ \hline
+\tablefont R-11 & \tablefont A resident shown as a stranger (or the reverse) & \tablefont 2 & \tablefont 3 & \tablefont 6 & \tablefont Per-track identity, body re-identification at a bar that accepted 0.04\,\% of different people; identity never lowers threat evidence.\\ \hline
+\end{longtable}

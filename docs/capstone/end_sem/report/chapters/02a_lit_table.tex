@@ -1,0 +1,48 @@
+% Literature survey table in the department's format.
+\begingroup
+\footnotesize\setstretch{1.0}
+\setlength{\tabcolsep}{2.5pt}
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{|C{0.45cm}|C{1.65cm}|L{1.35cm}|L{2.7cm}|L{1.75cm}|L{3.3cm}|L{1.55cm}|}
+\caption{Literature survey by team member}\label{tab:litsurvey}\\
+\hline\rowhead
+\thead{S. No.} & \thead{Roll Number} & \thead{Name} & \thead{Paper Title} & \thead{Tools/ Technology} & \thead{Findings} & \thead{Citation}\\ \hline
+\endfirsthead
+\hline\rowhead
+\thead{S. No.} & \thead{Roll Number} & \thead{Name} & \thead{Paper Title} & \thead{Tools/ Technology} & \thead{Findings} & \thead{Citation}\\ \hline
+\endhead
+\multicolumn{7}{r}{\itshape continued on next page}\\
+\endfoot
+\endlastfoot
+1 & 102303478 & Kartik Garg & You only look once: Unified, real-time object detection & Single-stage CNN detector & Detection as one regression from the image; 45 fps (Fast YOLO 155 fps) with fewer background false positives than earlier detectors. & Redmon \emph{et al.} \cite{redmon2016yolo}\\ \hline
+2 & & & Ultralytics YOLO11 & PyTorch, anchor-free YOLO & YOLO11n reaches 39.5 COCO mAP with 2.6\,M parameters; YOLO11m beats YOLOv8m with 22\,\% fewer parameters. & Jocher and Qiu \cite{ultralytics_yolo11}\\ \hline
+3 & & & Automatic handgun detection alarm in videos using deep learning & Faster R-CNN & An alarm after five successive detections fired correctly in 27 of 30 test scenes; false positives, not recall, limit deployment. & Olmos \emph{et al.} \cite{olmos2018handgun}\\ \hline
+4 & & & Convolutional neural networks based fire detection in surveillance videos & GoogLeNet, fine-tuning & A fine-tuned low-cost CNN detects fire in CCTV video and outperforms earlier fire detectors on benchmark sets. & Muhammad \emph{et al.} \cite{muhammad2018fire}\\ \hline
+5 & & & ByteTrack: Multi-object tracking by associating every detection box & YOLOX, Kalman filter, IoU matching & Matching low-score boxes too adds 1--10 IDF1 to nine trackers; 80.3 MOTA on MOT17 at 30 fps. & Zhang \emph{et al.} \cite{zhang2022bytetrack}\\ \hline
+6 & & & Grounding DINO: Marrying DINO with grounded pre-training for open-set object detection & Transformer detector, text encoder & 52.5 AP zero-shot on COCO; detects objects named in free text. Used here only as a label-gated box teacher. & Liu \emph{et al.} \cite{liu2024groundingdino}\\ \hline
+7 & 102303453 & Akshay Ranveer & ArcFace: Additive angular margin loss for deep face recognition & ResNet, margin softmax, InsightFace & The angular margin gives discriminative face embeddings that beat the state of the art on ten benchmarks at negligible cost. & Deng \emph{et al.} \cite{deng2019arcface}\\ \hline
+8 & & & Sample and computation redistribution for efficient face detection & Architecture search, WIDER FACE & SCRFD-34GF beats TinaFace by 3.86\,\% AP on WIDER FACE hard while running over 3 times faster. & Guo \emph{et al.} \cite{guo2022scrfd}\\ \hline
+9 & & & Omni-scale feature learning for person re-identification & OSNet, depthwise convolutions & A lightweight network with multi-scale streams and an aggregation gate is state of the art on six re-ID datasets. & Zhou \emph{et al.} \cite{zhou2019osnet}\\ \hline
+10 & & & In defense of the triplet loss for person re-identification & Triplet loss, ResNet-50 & Batch-hard triplet loss for end-to-end metric learning beats most published re-ID methods by a large margin. & Hermans \emph{et al.} \cite{hermans2017triplet}\\ \hline
+11 & & & Beyond part models: Person retrieval with refined part pooling & ResNet-50, part pooling & Part-based features with refined pooling raise Market-1501 mAP from 77.4 to 81.6\,\% and rank-1 to 93.8\,\%. & Sun \emph{et al.} \cite{sun2018pcb}\\ \hline
+12 & & & Deep learning for person re-identification: A survey and outlook & Survey, AGW baseline & Separates closed- and open-world re-ID; the AGW baseline is state of the art or comparable on 12 datasets. & Ye \emph{et al.} \cite{ye2022reid}\\ \hline
+13 & 102353011 & Prashant Gagneja & PANNs: Large-scale pretrained audio neural networks for audio pattern recognition & CNN10/CNN14, log-mel, AudioSet & AudioSet-pretrained CNNs reach 0.439 mAP (previous best 0.392) and transfer to six other audio tasks. & Kong \emph{et al.} \cite{kong2020panns}\\ \hline
+14 & & & Audio Set: An ontology and human-labeled dataset for audio events & YouTube segments, human rating & An ontology of 632 sound classes and about 1.8 million labelled 10\,s clips. & Gemmeke \emph{et al.} \cite{gemmeke2017audioset}\\ \hline
+15 & & & CNN architectures for large-scale audio classification & VGG, ResNet, Inception, log-mel & Image-style CNNs classify 70\,M videos' audio well; their embeddings beat raw features (origin of VGGish). & Hershey \emph{et al.} \cite{hershey2017cnn}\\ \hline
+16 & & & Deep CNNs and data augmentation for environmental sound classification & CNN, log-mel, augmentation & A deep CNN with audio augmentation sets the state of the art on UrbanSound8K; augmentations affect classes differently. & Salamon and Bello \cite{salamon2017deep}\\ \hline
+17 & & & ESC: Dataset for environmental sound classification & MFCC, ZCR, k-NN/RF/SVM & 2000 labelled clips in 50 classes; humans reach 81.3\,\%, a random-forest baseline 44.3\,\%. & Piczak \cite{piczak2015esc}\\ \hline
+18 & & & Reliable detection of audio events in highly noisy environments & Bag-of-words audio features & Detects screams, glass breaking and gunshots under loud background noise (5--30\,dB SNR) better than prior methods. & Foggia \emph{et al.} \cite{foggia2015audio}\\ \hline
+19 & 102319039 & Harshit Mishra & RWF-2000: An open large scale video database for violence detection & 3D-CNN, optical flow & 2000 real surveillance clips; a flow-gated network reaches 87.25\,\% test accuracy. & Cheng \emph{et al.} \cite{cheng2021rwf}\\ \hline
+20 & & & Real-world anomaly detection in surveillance videos & C3D features, MIL ranking & UCF-Crime: 1900 untrimmed videos (128\,h, 13 anomaly types) learned from video-level labels only. & Sultani \emph{et al.} \cite{sultani2018anomaly}\\ \hline
+21 & & & Not only look, but also listen: Learning multimodal violence detection under weak supervision & I3D, VGGish, weak supervision & XD-Violence (4754 videos, 217\,h, with audio); adding audio to video improves violence detection. & Wu \emph{et al.} \cite{wu2020xdviolence}\\ \hline
+22 & & & Violence detection in video using computer vision techniques & STIP, MoSIFT, bag-of-words & A 1000-clip fight dataset (Hockey Fights); hand-crafted motion features reach about 90\,\% accuracy. & Bermejo Nievas \emph{et al.} \cite{bermejo2011violence}\\ \hline
+23 & & & DINOv2: Learning robust visual features without supervision & ViT, self-distillation & Self-supervised features from curated data beat OpenCLIP on most image and pixel benchmarks and transfer with frozen backbones. & Oquab \emph{et al.} \cite{oquab2024dinov2}\\ \hline
+24 & & & Multimodal machine learning: A survey and taxonomy & Survey & Names five challenges of multimodal learning: representation, translation, alignment, fusion and co-learning. & Baltru\v{s}aitis \emph{et al.} \cite{baltrusaitis2019multimodal}\\ \hline
+25 & 102315144 & Mehul Perimal & False burglar alarms (2nd ed.) & Police call data review & 94--98\,\% of alarm calls are false; U.S. police answered about 36 million activations a year at about \$1.8 billion. & Sampson \cite{sampson2011false}\\ \hline
+26 & & & Edge computing: Vision and challenges & Edge/cloud offloading, IoT & Computing at the edge meets response-time, bandwidth and privacy needs; the smart home is a key case. & Shi \emph{et al.} \cite{shi2016edge}\\ \hline
+27 & & & On calibration of modern neural networks & Temperature scaling, ECE & Modern networks are over-confident; one-parameter temperature scaling calibrates them effectively. & Guo \emph{et al.} \cite{guo2017calibration}\\ \hline
+28 & & & An introduction to ROC analysis & ROC, AUC & A tutorial on ROC graphs and AUC and their common pitfalls in evaluating classifiers. & Fawcett \cite{fawcett2006roc}\\ \hline
+29 & & & Recommendation for block cipher modes of operation: GCM and GMAC & AES, GHASH & Specifies AES-GCM authenticated encryption, used for the evidence vault. & Dworkin \cite{nist80038d}\\ \hline
+30 & & & Multimodal fusion for multimedia analysis: A survey & Rule, classifier and estimation fusion & Classifies fusion by level (feature, decision, hybrid) and discusses confidence and synchronisation of modalities. & Atrey \emph{et al.} \cite{atrey2010fusion}\\ \hline
+\end{longtable}
+\endgroup
