@@ -1,6 +1,6 @@
 # End-semester report (CPG-299, December 2026)
 
-`SENTRIX_CPG299_EndSem_Report.pdf` is the compiled report (101 pages, A4).
+`SENTRIX_CPG299_EndSem_Report.pdf` is the compiled report (106 pages, A4).
 `report/` holds its LaTeX source.
 
 ## Format
@@ -42,8 +42,27 @@ Test results were measured on 18 Nov 2026:
 | Vitest | `sentrix/frontend-v2` `c1241c1` | 15 of 15 passed |
 | Playwright | `sentrix/frontend-v2` `c1241c1` | 22 of 23 passed; adding a contact fails (test case TC-29) |
 
-All 57 references were checked against the publisher, DOI or official page on
+All 87 references were checked against the publisher, DOI or official page on
 18 Nov 2026. The mid-semester references that could not be verified are not used.
+
+30 of the references are from 2024–2026. They cover:
+- newer detectors (RT-DETR, YOLOv10, YOLOv12, YOLO26) and recent weapon and
+  fire detection work;
+- anomaly detection with vision-language models, and recent audio-visual
+  fusion;
+- DINOv3, CED and re-identification surveys;
+- the Raspberry Pi AI HAT+ and AI HAT+ 2;
+- policy and data: the DPDP Rules 2025, the EU AI Act, NCRB *Crime in India
+  2023*, ERSS 2.0 and Seattle's verified-response policy;
+- news on cloud face recognition in home cameras.
+
+They appear in the need analysis, the research gaps, the "recent developments"
+part of the literature review (Section 2.1.1), the literature table (two per
+member), the comparison table (Section 5.5.8) and the future work.
+
+The verification notes:
+- DINOv3 is cited through its arXiv version.
+- The DPDP Rules are cited through the government's own press release (PIB).
 
 ## Screenshots
 

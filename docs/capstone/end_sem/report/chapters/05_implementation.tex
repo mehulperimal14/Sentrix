@@ -599,6 +599,10 @@ Re-identification & OSNet: state of the art on six re-ID datasets with re-ID tra
 Evaluation & Frame accuracy, mAP or AUROC on curated test sets & Committed-level episodes, false onsets per hour with exact Poisson bounds, onset latency; pre-registered model selection\\ \hline
 Alert flow & Detection only, or direct alerting & Owner-approved request, PIN-protected false alarms, duress PIN, safety defaults, ``unanswered'' never ``safe''\\ \hline
 Deployment & GPU servers or cloud analysis \cite{shi2016edge} & All inference on a Raspberry~Pi~5; video, faces and evidence stay at home\\ \hline
+Recent detectors (2024--2026) & NMS-free YOLOv10s and YOLO26s: 125--130\,ms per frame on a Jetson Nano \cite{fierrosilva2026yolo26weapon}; a review of 101 weapon papers finds little real-world validation \cite{murugan2025weaponreview} & YOLO11n heads at 320\,px take 35--39\,ms per head on the Pi~5 CPU and are judged by committed level in real rooms; YOLO26 is next\\ \hline
+VLM and LLM anomaly detection & VadCLIP: 84.51\,\% AP on XD-Violence \cite{wu2024vadclip}; LAVAD: 80.28\,\% AUC on UCF-Crime without training \cite{zanella2024lavad}; MLLMs still limited on smart-home video \cite{zhao2025smarthomebench} & Supervised detectors and published rules on the device; no model's verdict replaces the owner's\\ \hline
+Audio-visual fusion (2025) & Align-then-fuse: 86.07\,\% AP on XD-Violence \cite{jin2025aligning} & Time-stamped windows vote only when aligned; banter holds a fight at Level~2\\ \hline
+Industry practice & Cloud face recognition in doorbells (2025) \cite{perez2025ringfaces}; police dispatch only with audio, video or witness evidence (2024) \cite{seattle2024alarm} & Faces stay on the device; every request carries a snapshot and a timeline\\ \hline
 \end{tabularx}
 \end{table}
 
