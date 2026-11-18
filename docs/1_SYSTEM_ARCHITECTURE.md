@@ -74,8 +74,11 @@ Sentrix/
 │   ├── link/                   link protocol, client, tunnel, tunnel auth, command rules
 │   ├── storage/                SQLite: incidents, dispatch, requests, outboxes, audit
 │   ├── evaluation/             side-effect-free harness, custom dataset, metrics
-│   └── web/                    Local Console: routes, auth, hardening, templates, JS
-├── sentrix_portal/             the cloud Portal (python -m sentrix_portal)
+│   └── web/                    Local Console: JSON API, auth, hardening, video,
+│                               websocket; static/app/ = the built device app (doc 9)
+├── sentrix_portal/             the cloud Portal (python -m sentrix_portal); /api/v2,
+│                               static/app/ = the built Portal app (doc 9)
+├── frontend/                   React sources of both apps (npm workspaces; doc 9)
 ├── models/                     weights (doc 2 §5)
 ├── tools/                      doctor, replay, evaluation, bench, demo, provisioning
 ├── training/                   training scripts, notebooks, datasets, run reports
@@ -311,16 +314,16 @@ with four faces as a 30 fps camera, laptop CPU; report
 | Surface | Control |
 |---|---|
 | Session | `lc_session` cookie, HMAC-signed, HttpOnly, SameSite=Lax, 12 h; `Secure` with `SENTRIX_SECURE_COOKIES=1` |
-| Pages | sign-in required (`routes.require_auth`, 307 to `/login`) |
+| App shell (`/`, `/admin/...`; `spa_routes.py`) | holds no data; the device app asks `GET /api/session` and shows its own sign-in (`POST /api/login`, LAN only); a tunnelled request for an app path is a JSON 404 |
 | APIs, media, `/video`, `/ws/threat` | sign-in required (`auth.require_lc`, 401 JSON); websocket Origin check |
 | State-changing requests | `X-CSRF-Token` header, bound to the session; cross-site requests refused |
-| Scripts | external JS only; CSP with a per-response nonce; no `innerHTML` with data |
-| Evidence, snapshots, faces | authenticated `/media/*` routes only; `/static` holds package assets only |
+| Scripts | the built React app only (`/static/app/`); CSP `script-src 'self'`, `style-src 'self'`, no inline script or style, no nonces; no `innerHTML` with data |
+| Evidence, snapshots, faces | authenticated `/media/*` routes only; `/static` holds the built app and sounds only |
 | Login | rate limited, 8 attempts per 5 minutes per client |
 | Uploads | extension, MIME **and** magic-byte checks; 10 MB cap; paths confined to a fixed base |
 | Camera URLs | credentials redacted in names, health, logs and link payloads |
 | Tunnelled requests from the Portal | a per-process secret marks verified identities; roles, consents, step-up and rate limits checked on the device (`link/policy.py`); every request audited |
-| If the hardening module fails to load | every state-changing request answers 503; pages and video keep working |
+| If the hardening module fails to load | every state-changing request answers 503; the app shell and video keep working |
 | Default bind | `127.0.0.1` |
 
 **Portal** (`sentrix_portal/`): Argon2id passwords and PINs, per-login session

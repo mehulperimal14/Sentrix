@@ -122,7 +122,9 @@ untested.
 sudo systemctl start sentrix && journalctl -u sentrix -f
 ```
 
-Open the Node page (`http://<pi>:8000/node`, or `GET /api/node`):
+Sign in on `http://<pi>:8000` with the device password and open Device admin →
+Hardware (`http://<pi>:8000/admin/hardware`; the old `/node` redirects there),
+or read `GET /api/node`:
 
 | Do | Expect |
 |---|---|
@@ -152,7 +154,7 @@ not, with an LED + 1 kΩ resistor on the relay's NO contact (from 5 V or a
 | Service stop | off | `sudo systemctl stop sentrix` |
 | Crash | off | `sudo kill -9 $(systemctl show -p MainPID --value sentrix)` (`ExecStopPost` forces the pin low; systemd restarts it) |
 | Mains → UPS switchover | off | pull the mains plug of the UPS (after step 13) |
-| Test | **on for 1 s**, then off | Node page "Test siren" (once per minute) |
+| Test | **on for 1 s**, then off | Hardware page (`/admin/hardware`) "Test siren" (once per minute) |
 
 If the LED lights at boot or stays lit after a stop, the polarity is wrong:
 an active-low opto relay board needs `SENTRIX_SIREN_ACTIVE_HIGH=0` in `.env`
@@ -167,11 +169,12 @@ active-high and the defaults are right.
 
 Connect the siren to the relay's NO contact on the fused 12 V line through
 the arming key (docs/8 §6.3). Ear protection on (110 dB). One test from the
-Node page (`POST /api/node/siren-test`: 1 s, once per minute; device admin, or
-an owner with a fresh step-up through the Portal).
+Hardware page (`/admin/hardware`; `POST /api/node/siren-test`: 1 s, once per
+minute; device admin, or an owner with a fresh step-up through the Portal's
+tunnel, though the Portal app has no button for it).
 
 **Arming key.** Wire the key's second contact from a free GPIO to GND and set
-`SENTRIX_SIREN_ARM_PIN=<gpio>`: the Node page shows the key's position and a
+`SENTRIX_SIREN_ARM_PIN=<gpio>`: the Hardware page shows the key's position and a
 siren test is refused (409) while it is off. Without that input,
 `SENTRIX_SIREN_ARMED=1` (default) says the line is armed. A real alarm drives
 the relay either way; the key is what silences the line.
@@ -266,8 +269,8 @@ replay is evaluation only: report its numbers, never tune on them (and never
 on `wa02`).
 
 Then run the service with the link on for an hour and read the clip block
-(compute p50/p95, dropped clips) on the Node page, plus temperature and
-throttling. Criteria: docs/8 §7.
+(compute p50/p95, dropped clips) on Device admin → Diagnostics (Pipeline),
+plus temperature and throttling on the Hardware page. Criteria: docs/8 §7.
 
 ## Operating notes
 
@@ -300,7 +303,19 @@ systemctl --user daemon-reload && systemctl --user enable --now sentrix.service
 ```
 
 Logs: `journalctl --user -u sentrix -f`. Update: `git pull` in `~/Sentrix`, then
-`systemctl --user restart sentrix.service`. Unlike the system service it has no
+`systemctl --user restart sentrix.service`. The web UI is the committed build
+of the device app (`sentrix/web/static/app/`), so an update needs no Node.js
+on the Pi.
+
+The demo Pi's desktop autostart (`~/.config/autostart/sentrix-dashboard.desktop`,
+outside the repository) opens Chromium on `http://127.0.0.1:8000/dashboard`
+when a screen is connected. Since the React device app (D22) `/dashboard`
+redirects to `/`, the wall view: the live picture and level, taken over by the
+alert screen while an SOS request is open. The device admin pages are under
+`/admin/` (Diagnostics, Activity, Help requests, Faces, Hardware, Network);
+training recordings are made, downloaded and deleted on `/admin/recordings`
+from a laptop on the same network (a browser on the Pi itself cannot
+download them). Unlike the system service it has no
 hardware watchdog and does not force the siren pin low after an exit, so it
 suits a unit without a siren relay; a box with the siren wired uses
 `install_pi.sh`.

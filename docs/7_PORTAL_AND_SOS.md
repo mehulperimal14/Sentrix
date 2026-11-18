@@ -26,7 +26,8 @@ questions, and section 17 the results of the live verification run.
 * **Tiers** (from the team's Roadmap v2): Tier 0 is what the demo needs
   (accounts, onboarding, claim, tunnel, SOS engine, Telegram and e-mail,
   minimal Desk, test mode); Tier 1 adds modem SMS, offline approval on the
-  LC, the Node page and adaptive remote video; Tier 2 is design only (inbound
+  LC, the hardware page (the old Node page, now the device app's
+  `/admin/hardware`) and adaptive remote video; Tier 2 is design only (inbound
   SMS, web push, owner TOTP, Hindi templates, WebRTC). Tiers 0 and 1 are built.
 
 ---
@@ -40,8 +41,8 @@ questions, and section 17 the results of the live verification run.
 | 1 Provision | Company admin | Portal admin console: a device serial, claim code and printable label; `identity.json` is written for the device |
 | 2 Sell | Company admin | A customer account with a **username and a single-use activation code** (72 h) on a welcome letter. The company never sees a password |
 | 3 Install | Customer | The device dials out to the Portal (outbound only, so it works behind CGNAT) and shows as "online, unclaimed" |
-| 4 Onboard | Customer | Activate, choose a password, then a 7-step wizard: about you, home, household, contacts, device claim, alerts and SOS (PIN, window), consent with an SOS preview |
-| 5 Daily use | Owner, members | The **same console pages** as on the device, in any browser, through the Portal's tunnel; plus Portal pages for home, account, settings, SOS and privacy |
+| 4 Onboard | Customer | Activate, choose a password, then setup: five screens over the 7 backend steps (about you, home, household, contacts, device claim, alerts and SOS (PIN, window), consent with an SOS preview) |
+| 5 Daily use | Owner, members | The Portal app in any browser: Home, Activity, People, Settings, the alert screen and the Live view, whose picture, level and the device's own incidents come from the device's JSON API through the tunnel (D22, doc 9) |
 | 6 Alarm | Device | A **confirmed L3** of a weapon or fire, or a fight corroborated by video *and* time-aligned aggression audio (D15), opens an **assistance request**: "Do you need assistance?" with a 30, 45 or 60 minute window. An unrecognised person is an L2 in both modes and opens none (D8 as amended by D15) |
 | 7 Decide | Owner, member | "Alert my contacts and the SENTRIX desk" · "Call 112 now" · "I'm checking" · "False alarm (PIN)" |
 | 8 Help path | Desk, contacts | The SENTRIX Desk (a simulated responder console) and the confirmed emergency contacts get the SOS. The Desk acknowledges and resolves it |
@@ -55,12 +56,12 @@ SENTRIX never calls 112 itself. Every SOS text says so. In test mode the
 | Part | Process | Code | Role |
 |---|---|---|---|
 | Pipeline | device: `python -m sentrix` | `sentrix/pipeline/`, `perception/`, `fusion/` | Detection, levels, incidents, evidence, siren. This work added one hook: at a committed L3 the pipeline hands the incident to the SOS service |
-| Local Console (LC) | device, same process | `sentrix/web/` | The dashboard on the home network (`http://<device>:8000`, password `SENTRIX_PASSWORD`). The Portal shows these same pages through the tunnel |
+| Local Console (LC) | device, same process | `sentrix/web/` | The device app on the home network (`http://<device>:8000`, password `SENTRIX_PASSWORD`): the wall view and alert screen on the device's screen, device admin pages on the LAN, and the JSON API the Portal app reads through the tunnel (doc 9) |
 | SOS service | device, same process | `sentrix/sos/` | The assistance-request state machine, timers, PINs, texts, and recovery after a restart |
 | Channels | device, same process | `sentrix/alerting/channels/` | Outbox and router; 4G modem SMS; Telegram and e-mail only when no Portal is linked; legacy Twilio (off unless enabled) |
 | Link client | device, same process | `sentrix/link/` | One outbound WebSocket to the Portal: heartbeats, an outbox of events, state and video on demand, the tunnel, and commands that the device checks itself |
 | Hardware I/O | device, same process | `sentrix/io/` | Siren relay, LEDs, PIR, door, mains sense, telemetry, Pi camera, Wi-Fi setup (docs/8); no buzzer or speaker (D19) |
-| Portal | cloud: `python -m sentrix_portal` | `sentrix_portal/` | Accounts, onboarding, the device hub, the `/d/{device_id}/…` proxy, the SOS mirror (and its timers while a device is offline), Telegram, WhatsApp (D17) and e-mail, the Desk, contact pages, privacy |
+| Portal | cloud: `python -m sentrix_portal` | `sentrix_portal/` | The Portal app (React) and its JSON API `/api/v2`: accounts, onboarding, the device hub, the `/d/{device_id}/…` proxy, the SOS mirror (and its timers while a device is offline), Telegram, WhatsApp (D17) and e-mail, the Desk, contact pages, privacy |
 
 One device process owns all the device parts (§1.2). On the laptop the device
 runs with a video file or the demo reel as its camera. On a Raspberry Pi 5 the
@@ -149,9 +150,9 @@ responder console) + confirmed emergency contacts → Desk resolves.
 |   sentrix)                          |====>|  link hub   /device/v1/link              |
 |  Pipeline: capture, inference, HUD  | out |  tunnel     /d/{device_id}/...           |
 |    -> sos.wants/trigger/on_level    | only|  relays     /d/{id}/video, /d/{id}/ws/... |
-|  LC web app (sentrix/web)           |     |  own pages: home, onboarding, account,   |
-|  services (sentrix/services.py):    |<====|    settings, SOS, Desk, admin, contacts, |
-|    node, gpio, channels (+modem),   | cmds|    privacy; offline mirror               |
+|  LC (sentrix/web): device app + API |     |  Portal app + /api/v2: home, setup,      |
+|  services (sentrix/services.py):    |<====|    account, settings, SOS, Desk, admin,  |
+|    node, gpio, channels (+modem),   | cmds|    contacts, privacy; offline mirror     |
 |    sos (engine + sweeper), link     | tun.|  cloud SOS authority (device offline)    |
 |  SQLite var/sentrix.db, vault, faces|     |  channel router: Telegram, e-mail        |
 |  siren relay, LEDs, PIR, door, mains|     |  Postgres (internal network only)        |
@@ -165,9 +166,11 @@ responder console) + confirmed emergency contacts → Desk resolves.
   multi-process Pi split is future work; when it comes, the routes must read
   through a backend interface instead of `get_pipeline()` (a review blocker,
   deferred with this decision; §16 q5).
-* **Parity by tunnel (D10):** the Portal does not re-implement LC pages.
-  `/d/{device_id}/...` is forwarded over the link and replayed *in-process* into
-  the device's own LC app (`httpx.ASGITransport`), so the same code serves both.
+* **Parity by tunnel (D10, as changed by D22):** the Portal does not
+  re-implement the device's data. `/d/{device_id}/api/...` (and `/media/...`)
+  is forwarded over the link and replayed *in-process* into the device's own
+  LC app (`httpx.ASGITransport`), so the same code answers both; the screens
+  are the Portal app's own (no console page is tunnelled).
   `/video` and `/ws/threat` are relayed specially (frame and state messages;
   remote video adaptive up to 15 fps, at most 640 px wide).
 * **Topologies.** Laptop (what was run, §17): device = `python -m sentrix`
@@ -263,8 +266,8 @@ Frozen names in other files (keep them working and keep their signatures):
 `event_dict`), `alerting/dispatch.py` (`SendOutcome`,
 `DispatchService.send(package_id, authority, *, by)`), `io/actuators.py`
 (`build_siren`, `Actuator.activate/deactivate/name/is_real`, `siren_test`),
-`link/profile.py` (every public function), `web/routes.py` (`require_auth`,
-`health_payload`), `sentrix_portal/services/{hub,sos,accounts,notify,retention}.py`
+`link/profile.py` (every public function), `web/routes.py`
+(`health_payload`; `require_auth` left with the HTML pages, D22), `sentrix_portal/services/{hub,sos,accounts,notify,retention}.py`
 (every public function), `sentrix_portal/security.py` (`require_role`,
 `audit`, the primitives of §11).
 
@@ -278,7 +281,7 @@ Frozen names in other files (keep them working and keep their signatures):
 | `sentrix/io/sources.py`, `demo_reel.py` | `picamera:`, `demo-reel:` and the other camera specs; source names are redacted |
 | `sentrix/web/node_routes.py` | `GET /api/node` (with `microphone`), `POST /api/node/siren-test` (via `actuators.siren_test`) |
 | `sentrix/io/recorder.py` | `Recorder` (`start`, `stop`, `wait`, `close`; the O(1) taps `on_frame`, `on_audio`; `status`, `list`, `path_for`, `delete`, `prune`, `recover`), `RecorderError(code, message, status)`: constant-frame-rate MJPEG AVI, the 16 kHz track muxed by ffmpeg (else a `.wav`), sidecar, caps, crash recovery (D20) |
-| `sentrix/web/recording_routes.py`, `templates/dashboard.html` (*Record video* card), `static/js/recording.js` | `/api/recordings*`, `/media/recording/{file}` (§9.2): the device admin; start, stop and the list also the owner through the Portal (§5.7) |
+| `sentrix/web/recording_routes.py`; the *Record video* page of the device app (`frontend/apps/device`, `/admin/recordings`; `frontend/packages/ui/src/recordings.tsx`) | `/api/recordings*`, `/media/recording/{file}` (§9.2): the device admin; start, stop and the list also the owner through the Portal (§5.7; the Portal app has no button for it) |
 | `sentrix/perception/audio.py` | The microphone chooser (D21): `rank_inputs`, `devices_fingerprint`, `is_usb`, `Resampler`, `AudioEngine.status()`; sample listeners (`add_sample_listener`) feed the clip buffer and the recorder 16 kHz mono blocks |
 | `run.sh` (Pi path), `requirements-pi.txt`, `deploy/pi5/**`, `tools/doctor.py` | Pi install and service; doctor hardware rows; services print through `preflight`; doctor rows for ffmpeg, the recordings directory and the microphones PortAudio lists, none opened (D20, D21) |
 | `sentrix/pipeline/clip.py`, `fastlane.py`, `sentrix/runtime/**` | `ClipBuffer`, `ClipScheduler`, `ClipEngine`, `ClipScores`, `build_strategy(pipeline) -> InferenceStrategy`, `prepare_eval_pipeline(pipeline) -> Pipeline`; the fast lane; exported-model backends |
@@ -292,14 +295,17 @@ Frozen names in other files (keep them working and keep their signatures):
 | `sentrix/alerting/notifier.py` | The legacy L4 SMS / L5 call, routed through the router when it runs and SOS does not own the incident; guarded |
 | `sentrix/storage/notifications.py` | `SqlOutbox` with meta, recovery, cancel, queries |
 | `sentrix/web/channel_routes.py`, `sentrix_portal/routes/hooks.py`, `sentrix_portal/services/notify.py` | `/api/channels`; `POST /hooks/telegram`; the Portal's transports, outbox, worker and inbound Telegram |
-| `sentrix/web/routes.py`, `streaming.py`, `security.py`, `hardening.py`, `setup_routes.py`, `templates/**`, `static/**` | Console pages and APIs, CSP/CSRF hardening, tunnel acceptance, base-aware URLs, `/sos`, `/node`, `/setup/wifi` |
+| `sentrix/web/routes.py`, `api_routes.py`, `api_models.py`, `streaming.py`, `security.py`, `hardening.py`, `setup_routes.py`, `spa_routes.py`, `static/app/` | Console JSON API (`/api/session`, `POST /api/login`, `/api/state` and the rest), video and websocket, CSP/CSRF hardening, tunnel acceptance, `/api/setup/wifi`; the device app served for every other path (doc 9; built from `frontend/apps/device`) |
 | `sentrix/link/client.py`, `tunnel.py`, `commands.py`, `policy.py`, `profile.py`, `sentrix/storage/link_store.py`, `sentrix/web/link_routes.py` | The link service (`build_service`, `preflight`); the tunnel executor; command rules; the tunnel path table (the only place tunnelled roles, consents, step-up and rate limits are enforced); the profile cache |
-| `sentrix_portal/routes/{link_hub,device_proxy,sos,desk,contacts}.py`, `services/{hub,sos}.py` | The device socket and hub, the `/d/{id}` proxy and relays, the SOS mirror and cloud authority (who gets which message, tokens, Telegram buttons), the Desk, contact pages |
-| `sentrix_portal/routes/{auth,admin,onboarding,household,settings,privacy,home,consent}.py`, `security.py`, `hardening.py`, `services/{accounts,retention}.py`, `tools/provision_device.py` | Accounts, the admin console, onboarding, household and contacts, settings, privacy, retention; device provisioning |
+| `sentrix_portal/routes/{link_hub,device_proxy}.py`, `routes/api_v2/{sos,desk,contacts}.py`, `services/{hub,sos,sos_views}.py` | The device socket and hub, the `/d/{id}` proxy and relays (`/d/{id}` and non-API paths answer 303 to the app's `/live/{id}`), the SOS mirror and cloud authority (who gets which message, tokens, Telegram buttons), the Desk, contact pages |
+| `sentrix_portal/routes/api_v2/{auth,admin,onboarding,household,settings,privacy,home}.py`, `security.py`, `hardening.py`, `services/{accounts,account_flows,admin_flows,household_flows,retention}.py`, `tools/provision_device.py` | Accounts, the admin console, onboarding, household and contacts, settings, privacy, retention; device provisioning |
+| `sentrix_portal/routes/spa.py`, `static/app/` | The Portal app for every path no other route claims (registered last; doc 9; built from `frontend/apps/portal`) |
 | `training/custom/**`, `models/v5_slim/**` | Slim scene classifiers (not promoted, §16 q11) |
 
-Templates: Portal templates live in `sentrix_portal/templates/<area>/...`
-(`base.html` is shared). Static files: `sentrix_portal/static/<area>/`.
+Pages: both UIs are React apps built from `frontend/` (doc 9, D22). The
+Portal app is in `sentrix_portal/static/app/`, the device app in
+`sentrix/web/static/app/`; the built output is committed. No Jinja templates
+remain.
 
 ### 2.4 Additive seams in shared files
 
@@ -638,9 +644,10 @@ not built yet (§15 item 6).
 * `create_app(settings=None)` builds the database (tables created, missing
   nullable columns added: additive only, idempotent), `app.state.settings`,
   `app.state.db` (`Database`: `.session()` context manager, `.SessionLocal`),
-  `app.state.templates` (Jinja globals `test_mode`, `desk_number`; context
-  processor `csp_nonce`), `/static`, every router in `routes.ROUTER_MODULES`,
-  every module in `app.MIDDLEWARE_MODULES` and `GET /healthz` →
+  `/static` (the built Portal app under `/static/app/`), every router in
+  `routes.ROUTER_MODULES` (`link_hub`, `device_proxy`, `hooks`, `api_v2`),
+  then the app's catch-all `routes/spa.py` (last; doc 9 §8), every module in
+  `app.MIDDLEWARE_MODULES` and `GET /healthz` →
   `{"status": "ok", "db": "ok", "test_mode": bool, "version"}`.
 * **Lifespan**: with `settings.workers` (`PORTAL_WORKERS=1`; off in tests),
   each module in `app.BACKGROUND_MODULES` that exports `start(app) -> stop` is
@@ -651,22 +658,21 @@ not built yet (§15 item 6).
   `services.sos` (T-LINK cloud timers), `services.notify` (T-CH worker and
   Telegram polling), `services.retention` (T-ACCT). `app.state.background`
   lists what runs.
-* **Middleware**: each module in `MIDDLEWARE_MODULES` exports `install(app)`
-  and must set `request.state.csp_nonce`. A failure is fatal (the Portal faces
-  the Internet). The default `sentrix_portal/hardening.py` (T-ACCT owns it)
-  adds CSP with the nonce, `X-Frame-Options: DENY`, `X-Content-Type-Options`
-  and `Referrer-Policy` — and **no CSP and no frame header on `/d/{id}/…`
-  responses**: the console's own CSP (its own nonce) passes through untouched,
-  because two policies on one response combine and would block the console's
-  scripts. It is pure ASGI so the MJPEG relay streams unbuffered.
+* **Middleware**: each module in `MIDDLEWARE_MODULES` exports `install(app)`.
+  A failure is fatal (the Portal faces the Internet). The default
+  `sentrix_portal/hardening.py` (T-ACCT owns it) adds CSP (`script-src
+  'self'` plus a per-request nonce no page uses any more, `style-src 'self'`),
+  `X-Frame-Options: DENY`, `X-Content-Type-Options` and `Referrer-Policy` —
+  and **no CSP and no frame header on `/d/{id}/…` responses**: the device's
+  own headers pass through untouched. It is pure ASGI so the MJPEG relay
+  streams unbuffered.
 * `python -m sentrix_portal` serves it on `PORTAL_HOST:PORTAL_PORT` (8100).
 * `db.get_db` is the per-request session dependency (commit on success). A
   route that needs its write visible before responding calls `db.commit()`.
-* Templates extend `base.html`: blocks `title`, `extra_head`, `nav`, `content`,
-  `scripts`; context `principal` (a `security.Principal` or None) and
-  `active_page` (a nav key). `base.html` renders the test-mode banner, the CSRF
-  meta tag and a role-based nav; scripts must be external files carrying
-  `nonce="{{ csp_nonce }}"`.
+* Pages: the Portal app (React, doc 9) renders every screen, including the
+  test-mode banner and the role-based navigation; it reads `GET
+  /api/v2/session` for the signed-in person, the role and the CSRF token and
+  sends `X-CSRF-Token` on every write. There are no server-rendered pages.
 * Schema changes after the first deployment are meant to go through Alembic;
   the baseline does not exist yet (§15 item 4, §16 q7).
 
@@ -919,15 +925,26 @@ request ≤ 11 MiB (the Portal also caps while streaming), response ≤ 16 MiB,
 `tunnel_timeout_seconds` (60 s for uploads/captures), ≤ 8 in flight (else 503
 `device_busy`). The Portal adds `Cache-Control: no-store` to `/media/*` and
 `/api/*`, `public, max-age=3600` to `/static/*`. The base travels in
-`x-sentrix-base`, and the console's own security headers (its CSP with the
-page's nonce, `X-Frame-Options`) pass through the tunnel unchanged.
+`x-sentrix-base`, and the console's own security headers (its CSP,
+`X-Frame-Options`) pass through the tunnel unchanged.
 
-Never tunnelled (refused by both sides): `/login`, `/logout`, `/setup/*`,
-`/docs`, `/redoc`, `/openapi.json`, `/video` and `/ws/*` (relayed instead).
+**No console page is tunnelled** (D22). The Portal proxy forwards only
+`/d/<id>/api/...`, `/d/<id>/media/...` and `/d/<id>/static/...`; `/d/<id>`
+and any other path under it (an old console page, a bookmark) answer 303 to
+the Portal app's `/live/<id>`. On the device a tunnelled request for an app
+path or `/static/*` is not in the path table (`not_found`), and the device
+app's shell answers a tunnelled request with a JSON 404 anyway. Owners and
+members see the device through Portal app screens that call the JSON API.
+
+Never tunnelled (refused by both sides): `/login`, `/logout`, `/api/login`,
+`/api/logout`, `/setup/*`, `/api/setup/*`, `/docs`, `/redoc`,
+`/openapi.json`, `/video` and `/ws/*` (relayed instead).
 
 LC-only (refused by the device to every tunnelled role as `lc_only`, code
 `forbidden_role`, before any handler runs): the exact paths `LC_ONLY`
-(`/api/link/reconnect`, `/api/channels/test`) and, whatever the method, the
+(`/api/link/reconnect`, `/api/channels/test`, and the device admin's lists
+`/api/snapshots`, `/api/evidence`, `/api/dispatch`) and,
+whatever the method, the
 prefixes `LC_ONLY_PREFIXES` (`/api/recordings`, `/media/recording/`), except
 the owner's two recording rows, which `classify` picks out first: `GET` or
 `HEAD` on `/api/recordings` (`record_status`) and `POST` on
@@ -938,12 +955,12 @@ response cap (D20).
 
 Request handling on the Portal proxy (T-LINK): the route uses
 `security.require_role("owner", "member", "operator", csrf="header")` — only
-the `X-CSRF-Token` header counts and the body is never read, so form and
-multipart posts are forwarded untouched (T-WEB makes every state-changing
-console request a `fetch` with that header; no native form posts on pages the
-tunnel serves). A logged-out HTML GET of `/d/<id>/<page>` is redirected to
-`/login` (`require_role` handles it); APIs get 401 JSON. A `Location: /x`
-answer from the console is rewritten to `/d/<id>/x`. Role, consent, step-up
+the `X-CSRF-Token` header counts and the body is never read, so JSON and
+multipart posts are forwarded untouched (the Portal app sends every
+state-changing request as a `fetch` with that header). A logged-out request
+for an API gets 401 JSON; a page path never reaches the device (303 to
+`/live/<id>`, which signs in first when it has to). A `Location: /x` answer
+from the console is rewritten to `/d/<id>/x`. Role, consent, step-up
 and rate-limit rules for tunnelled requests are enforced **only** by
 `sentrix/link/policy.py` on the device, before the in-process call; console
 routes enforce only their business rules (§5.8). The one exception is the
@@ -970,17 +987,19 @@ call; every request → `remote_audit`):
 
 | Path class | Roles | Extra |
 |---|---|---|
-| pages and read APIs (`/dashboard`, `/live`, `/events`, `/alerts`, `/evidence`, `/dispatch`, `/authorized`, `/sos`, `/node`, `/api/*` GET, `/static/*`) | owner, member | |
-| media (`/media/*`, `/api/authorized/preview.jpg`), video relay | owner, member | consent `remote_view`; faces also `face_recognition`; ≤ 60/min per user |
-| gallery writes (`POST /authorized/upload`, `POST /api/authorized/capture`, `DELETE /api/authorized/*`) | owner | consent `face_recognition`; DELETE needs step-up |
+| read APIs (`/api/*` GET, among them `/api/session`, `/api/state`, `/api/activity`) | owner, member | |
+| media (`/media/*`, `/api/authorized/preview.jpg`), video relay | owner, member | consent `remote_view`; faces (`/media/face/*` and the gallery list `GET /api/authorized`, since 2026-11-19) also `face_recognition`; ≤ 60/min per user |
+| gallery writes (`POST /api/authorized/upload`, `POST /authorized/upload`, `POST /api/authorized/capture`, `DELETE /api/authorized/*`) | owner | consent `face_recognition`; DELETE needs step-up. The Portal app's People page (owner) uses them; the device admin's Faces page on the LAN too |
 | `POST /api/incidents/*/verdict`, `POST /api/sos/*`, `POST /api/dispatch/*` | owner, member | |
 | HOME/ARMED (`POST /api/mode`) | owner, member | the route checks the SOS PIN |
-| `POST /api/node/siren-test` | owner | step-up; 1/min |
+| `POST /api/node/siren-test` | owner | step-up; 1/min (the Portal app has no button for it) |
 | recording status: `GET /api/recordings` (status and list) | owner | no step-up (D20) |
 | recording start: `POST /api/recordings/start` | owner | step-up (D20) |
-| recording stop: `POST /api/recordings/stop` | owner | no step-up: stopping is never blocked (D20) |
-| Desk view: `GET /dashboard`, `/live`, `/static/*`, `/api/health`, `/api/metrics`, video and state relays | operator | only while a request of this device is on the help path **and** consent `desk_live_view` |
+| recording stop: `POST /api/recordings/stop` | owner | no step-up: stopping is never blocked (D20). The Portal app has no recording controls |
+| Desk view: `GET /api/health`, `/api/metrics`, video and state relays | operator | only while a request of this device is on the help path **and** consent `desk_live_view` |
 | recording files: `DELETE /api/recordings/*` and every other `/api/recordings*` path, `/media/recording/*` (every method) | none (LC only) | the device admin on the LAN (D20) |
+| device admin lists and actions: `/api/snapshots`, `/api/evidence`, `/api/dispatch`, `/api/link/reconnect`, `/api/channels/test` | none (LC only) | the device app's admin pages (doc 9) |
+| app paths (`/`, `/admin/*`, ...), `/static/*`, anything else | none | not in the table: `not_found` (GET) or `forbidden_role` |
 | anything | company_admin | always refused |
 
 ### 5.8 Tunnel auth bridge *(`sentrix/link/tunnel_auth.py`)*
@@ -1002,13 +1021,13 @@ call; every request → `remote_audit`):
   `.stepped_up_within(seconds, now)`.
 * LC hardening (T-WEB, `sentrix/web/hardening.py`): verify on every request;
   store at `scope[tunnel_auth.SCOPE_KEY]`; **strip all `BRIDGE_HEADERS`** from
-  requests that fail. `require_auth` accepts a verified identity. The bridge
+  requests that fail. `auth.principal_of` accepts a verified identity. The bridge
   headers coming from the network are therefore inert.
 * CSRF bridging: the Portal validates **its own** CSRF token before forwarding
-  any state-changing tunnel request; it passes `x-sentrix-csrf` so the LC page
-  renders `<meta name="csrf-token" content="...">` and its scripts send it back
-  as `X-CSRF-Token` (which the Portal checks next time). The LC does not re-check
-  CSRF for verified tunnel identities; it checks its own token for LC sessions.
+  any state-changing tunnel request (the Portal app sends it as
+  `X-CSRF-Token`, taken from `GET /api/v2/session`) and passes it on as
+  `x-sentrix-csrf`. The LC does not re-check CSRF for verified tunnel
+  identities; it checks its own token for LC sessions.
 * Cookies: LC `lc_session` (device admin), Portal `portal_session` (+
   `portal_csrf` before login). Distinct names; dev uses distinct hosts.
 * `tunnel_auth.base_for(request)` → `/d/<id>` or "" (§9.5).
@@ -1021,8 +1040,7 @@ call; every request → `remote_audit`):
   `request.state.lc_principal`); `rate_key(request)`; `csrf_for_session(cookie)`
   (HMAC of the LC session); `LcError(code, message)` → `{"detail", "code"}`
   JSON with the §13 status (handler installed by `extensions.install`).
-  `routes.require_auth` is the same check with the pre-M10 307 for LC
-  requests. Use `require_lc()` with no roles on every console route; pass
+  Use `require_lc()` with no roles on every console route; pass
   roles only for LC-only routes (`require_lc("device_admin")` on
   `/api/link/reconnect`, `/api/channels/test`, `/api/sos/demo/trigger` and
   the recordings' delete and download, D20). The recordings' list, start and
@@ -1030,8 +1048,8 @@ call; every request → `remote_audit`):
   start and stop with `step_up_seconds=STEP_UP_SECONDS`). The device admin's
   password session counts as stepped up.
 * If the hardening module fails to load, `extensions.install` installs a
-  fail-closed middleware: every POST/PUT/PATCH/DELETE answers 503 while pages,
-  video and reads keep working; tunnel identities never exist without it.
+  fail-closed middleware: every POST/PUT/PATCH/DELETE answers 503 while the
+  app shell, video and reads keep working; tunnel identities never exist without it.
 
 ### 5.9 Binary messages
 
@@ -1520,7 +1538,8 @@ Silent requests (`flags.silent`): a duress PIN at a disarm with nothing open,
 or on an already closed request, opens a request the household never sees: a
 restricted `created` event, owner views answer 404, the LC block ignores it, no
 incident row is written, `incident_type: "duress"`. A duress decline also
-labels the incidents FALSE, so the Events page looks like a real decline.
+labels the incidents FALSE, so the activity lists (the device's
+`/admin/activity`, the Portal's `/activity`) look like a real decline.
 **Dataset builders (M8) must drop or relabel incidents of requests whose chain
 has a restricted `approve` with `detail.duress`.**
 
@@ -1702,26 +1721,28 @@ leave).
 
 ### 9.1 Hardening (T-WEB)
 
-* External JS only (no inline handlers or scripts); CSP with a per-request
-  nonce (`script-src 'self' 'nonce-…'`; `img-src 'self' blob: data:`;
-  `connect-src 'self'` + ws(s) same origin; `frame-ancestors 'none'`).
-* `X-CSRF-Token` header (from `<meta name="csrf-token">`) on every POST/PUT/
-  PATCH/DELETE fetch; LC token = HMAC(session key, "csrf:" + session cookie),
-  stateless and session-bound; tunnelled requests: §5.8.
-* `innerHTML` with server or device data → `textContent`/DOM building;
-  `data-*` attributes + `addEventListener` instead of `onclick='...'`.
+* The pages are the device app (React, doc 9), served from
+  `/static/app/`; no inline script or style. CSP `script-src 'self'`,
+  `style-src 'self'`, no nonces; `img-src 'self' blob: data:`;
+  `connect-src 'self'` + ws(s) same origin; `frame-ancestors 'none'`
+  (`sentrix/web/hardening.py`).
+* `X-CSRF-Token` header (the token comes from `GET /api/session`) on every
+  POST/PUT/PATCH/DELETE fetch; LC token = HMAC(session key, "csrf:" + session
+  cookie), stateless and session-bound; tunnelled requests: §5.8.
+* React renders server and device data as text; no `innerHTML` with data.
 * Cookie `lc_session` (HttpOnly, SameSite=Lax, 12 h, Secure with
   `SENTRIX_SECURE_COOKIES=1`). The pre-M10 `session_token` cookie is no longer
   a session (it skipped the CSRF header); login and logout delete it. `/video`
   and `/ws/threat` go through `auth.principal_of` like every route; the
-  websocket checks Origin and closes with 1008 without a session; logout is a
-  POST (`GET /logout` shows a confirm page). Login: 8 attempts per 5 minutes
-  per client.
-* APIs and media use `auth.require_lc()` and answer 401 JSON; pages use
-  `routes.require_auth` (a 307 to `/login` on the LAN). Credentials are
+  websocket checks Origin and closes with 1008 without a session. Sign-in is
+  `POST /api/login` and sign-out `POST /api/logout`, both LAN only. Login: 8
+  attempts per 5 minutes per client.
+* APIs and media use `auth.require_lc()` and answer 401 JSON. The app shell
+  (every other GET, `spa_routes.py`) holds no data and needs no sign-in; the
+  app asks `GET /api/session` and shows its own sign-in. Credentials are
   redacted from every JSON output and the websocket payload.
-* No external fonts (system font stack; bundled fonts were not added, §16
-  q9); `/docs` off unless `SENTRIX_API_DOCS=1`.
+* No external fonts: the apps bundle Anek Latin and Noto Sans through
+  `@fontsource` (doc 9 §2); `/docs` off unless `SENTRIX_API_DOCS=1`.
 
 ### 9.2 New LC endpoints
 
@@ -1749,8 +1770,13 @@ leave).
 | GET | `/api/channels` | T-CH | the `state.channels` block; `modem` = `{present, registered, signal_dbm, sms_today}` |
 | POST | `/api/channels/test` | T-CH | device admin; guarded test message to the owner number |
 | GET | `/api/level-history` | T-WEB | `state.level_history()` |
-| GET | `/sos`, `/node` | T-WEB | pages |
-| GET/POST | `/setup/wifi`, POST `/setup/wifi/scan` | T-WEB (+ T-HW `io/network.py`) | only while `SENTRIX_SETUP_MODE=1`; the label's one-time code checked against `identity.json` `setup_code_digest`; rate limited |
+| GET | `/api/session` | D22 | who is calling (answers signed out too), roles, CSRF token, device identity flags |
+| POST | `/api/login`, `/api/logout` | D22 | LAN only (a tunnelled request is a 404); the device password; 8 tries / 5 min |
+| GET | `/api/state` | D22 | the websocket's live state as one JSON read |
+| GET | `/api/activity` | D22 | `/api/incidents` with each incident's request in the owner view |
+| GET | `/api/snapshots`, `/api/evidence`, `/api/dispatch` | D22 | device admin only: the device app's admin lists (`lc_only`, §5.7) |
+| GET | `/api/authorized` | D22 | the face gallery: device admin; through the Portal owner and member (path-table row `faces`: consents `remote_view` + `face_recognition`; never the Desk) |
+| GET/POST | `/api/setup/wifi`, POST `/api/setup/wifi/scan`, `/api/setup/wifi/connect` (the app's `/setup/wifi` screen) | T-WEB (+ T-HW `io/network.py`) | only while `SENTRIX_SETUP_MODE=1`; the label's one-time code checked against `identity.json` `setup_code_digest`; rate limited |
 | GET | `/api/incidents?limit&offset` + filters | T-WEB | limit ≤ 500 (database caps it); type, level, verdict, date filters |
 | GET | `/api/recordings` | D20 | device admin, or the owner through the Portal without a step-up (`require_lc("device_admin", "owner")`; path-table class `record_status`; members and the Desk 403 `forbidden_role`); `{status, items, free_bytes, ffmpeg, microphone, keep_days, total_bytes, max_total_bytes, via, can_delete, download_here, device_address, lan_url}`: `via` is `lan` or `portal`; through the Portal `can_delete` and `download_here` are false and `device_address` / `lan_url` (`http://<address>:<SENTRIX_PORT>`, null when unknown) name the console on the home network; on the LAN `can_delete` is true and the address is given only when `download_here` is false (a browser on the device itself); the recorder's status (recording / finalizing, name, seconds, frames, duplicated, dropped, fps, size, audio, stop_reason, last_error), the finished recordings newest first (name, label, created_at, seconds, bytes, has_audio, interrupted, files); prunes past `keep_days` at most hourly |
 | POST | `/api/recordings/start` | D20 | device admin, or the owner through the Portal with a step-up ≤ 300 s (class `record`; 403 `step_up_required` without one, checked by the path table and again by the route); audited with `by` = `lc:device_admin` or `portal:<user>`; JSON `{"label"?}` (≤ 200 characters; the file name keeps `a-z 0-9 _ -`, 40 at most); 400 `invalid_args` for a bad body; 409 `conflict` before the camera's first frame or while it is offline, while recording or saving, short of free space, over the total quota, or with recording off; at most 10 starts a minute per caller, refused ones included (429 `rate_limited`, `Retry-After: 60`); a stop is never rate limited |
@@ -1807,21 +1833,19 @@ messages) is redacted with `sentrix.utils.redact.redact_tree`.
 
 **Paths in state blocks are base-relative** (`"media/snapshot/<name>"`, no
 leading slash): one websocket payload reaches LC and tunnel viewers alike, so
-the page prefixes `document.body.dataset.base`. Only request-scoped HTML and
-JSON use `base_for(request)`.
+each app prefixes its own base (none on the LAN, `/d/<id>/` in the Portal
+app). Only request-scoped JSON uses `base_for(request)`.
 
 ### 9.5 URL and base helper
 
 Paths on the device never change; the prefix comes from the tunnel identity.
-`tunnel_auth.base_for(request)` → `/d/<id>` or "". T-WEB adds Jinja globals
-`url(path)` (base + path) and `static_url(path)`, `active_page` in every page
-context (nav highlighting by name, not by raw path), and `<body
-data-base="{{ base }}">`; scripts read `document.body.dataset.base || ""` and
-build every fetch, link, image and WebSocket URL from it. Python-built URLs
-(`/media/snapshot/…`, `/media/face/…`, `vault.view_url`) go through the same
-helper; T-WEB prefixes `vault.view_url` in routes and templates (`vault.py`
-is left alone). A test renders every page through the tunnel and asserts every
-`href`, `src`, fetch and WebSocket target starts with the base.
+`tunnel_auth.base_for(request)` → `/d/<id>` or "". Python-built URLs
+(`/media/snapshot/…`, `/media/face/…`, `vault.view_url`) go through
+`routes.base_url` / `media_url`, so a JSON answer read through the tunnel
+carries links under `/d/<id>/`. `GET /api/session` also returns the `base`.
+The device app runs on the LAN only and uses plain paths; the Portal app
+builds its device calls as `/d/<id>/api/...`, `/d/<id>/video` and
+`/d/<id>/ws/threat` (doc 9).
 
 ---
 
@@ -1829,9 +1853,9 @@ is left alone). A test renders every page through the tunnel and asserts every
 
 | Capability | device_admin (LC password) | owner | member | operator (Desk) | company_admin |
 |---|---|---|---|---|---|
-| LC pages, live video, state | ✓ | ✓ (tunnel; video needs `remote_view`, adaptive up to 15 fps, at most 640 px wide) | ✓ (same) | only during a help-path request with `desk_live_view` | ✗ |
+| Live video and state (device app on the LAN; the Portal app's Live view) | ✓ | ✓ (tunnel; video needs `remote_view`, adaptive up to 15 fps, at most 640 px wide) | ✓ (same) | only during a help-path request with `desk_live_view` | ✗ |
 | Snapshots / evidence images | ✓ | ✓ (`remote_view`) | ✓ (`remote_view`) | ✗ | ✗ |
-| Face gallery view / enrol / delete | ✓ | ✓ / ✓ / ✓ step-up (`face_recognition`) | view only | ✗ | ✗ |
+| Face gallery view / enrol / delete | ✓ (device admin's Faces page) | ✓ / ✓ / ✓ step-up (`face_recognition`; Portal app People page) | view only (gallery list and pictures) | ✗ | ✗ |
 | Verdict Real/False | ✓ | ✓ (PIN with an open request) | ✓ (same) | via resolve | ✗ |
 | SOS approve / I'm checking | ✓ | ✓ | ✓ | ✗ | ✗ |
 | SOS decline / I'm safe | ✓ (PIN) | ✓ (PIN) | ✓ (PIN) | ✗ | ✗ |
@@ -1860,30 +1884,39 @@ lower-cased username, `activate:<username>` / `activate:link`,
 
 ## 11. Portal endpoints
 
-| Area | Paths | Built by |
-|---|---|---|
-| health | `GET /healthz` | foundation |
-| auth | `GET/POST /login`, `POST /logout`, `GET/POST /activate`, `GET/POST /activate/{code}`, `GET/POST /account`, `POST /account/phone`, `POST /account/step-up`, `GET/POST /account/password`, `GET/POST /account/2fa`, `GET/POST /account/sessions` (revoke), `POST /account/verify-email` (re-send), `GET/POST /account/verify-email/{token}` | T-ACCT |
-| consent | `GET/POST /consent/{token}` (a contact confirms or opts out) | T-ACCT |
-| home | `GET /`, `GET /home` | T-ACCT |
-| onboarding | `GET /onboarding`, `GET/POST /onboarding/{1..7}`, `GET/POST /claim?sn=` | T-ACCT |
-| household | `GET/POST /household`, `/household/members`, `/household/contacts`; `GET /household/audit` | T-ACCT |
-| settings | `GET/POST /settings` (window, safety defaults, PINs, channels, Telegram link) | T-ACCT |
-| privacy | `GET /privacy`, `GET /privacy/notice`, `POST /privacy/consents`, `GET/POST /privacy/export`, `GET/POST /privacy/erase` | T-ACCT |
-| admin | `GET /admin`; `GET/POST /admin/customers`, `GET /admin/customers/{id}`, `POST /admin/customers/{id}/resend\|status\|assign`, `GET/POST /admin/customers/{id}/letter`; `GET/POST /admin/devices` (provision), `GET/POST /admin/devices/{id}/label`, `POST /admin/devices/{id}/assign\|transfer\|retire`; `GET/POST /admin/operators`, `POST /admin/operators/{id}`; `GET /admin/audit` | T-ACCT |
-| device link | `WS /device/v1/link` | T-LINK |
-| tunnel | `/d/{device_id}`, `/d/{device_id}/{path:path}`, `GET /d/{id}/video`, `WS /d/{id}/ws/threat` | T-LINK |
-| SOS | `GET /sos`, `GET /sos/{request_id}`, `GET /sos/{request_id}/snapshot.jpg`, `POST /sos/{request_id}/{action}`, `GET /sos/api/open`, `GET /sos/api/requests/{id}`, `GET/POST /a/{token}` | T-LINK |
-| Desk | `GET /desk`, `GET /desk/api/queue`, `GET /desk/requests/{id}`, `GET /desk/requests/{id}/snapshot.jpg`, `POST /desk/requests/{id}/acknowledge\|called-112\|resolve` ("Called 112" is recorded as simulated) | T-LINK |
-| contacts | `GET/POST /c/{token}`, `GET /c/{token}/snapshot.jpg` (SOS contact pages only) | T-LINK |
-| hooks | `POST /hooks/telegram` | T-CH |
+The Portal serves JSON under `/api/v2` (`sentrix_portal/routes/api_v2/`, doc 9
+§4–§5), each route calling the same service functions the removed HTML routes
+called (`services/account_flows`, `household_flows`, `sos_views`,
+`admin_flows`). Paths below are under `/api/v2` unless they start otherwise.
 
-Every page and API uses `security.require_role(...)` (roles, TOTP, CSRF,
-step-up; `csrf="header"` for the device proxy); tenant isolation filters every
-query on the principal's household. Unauthenticated routes (gate P2):
-`/login`, `/activate/*`, `/account/verify-email/*`, `/consent/*`,
-`/static/*`, `/healthz`, `/c/*`, `/a/*` (confirmation only; POST needs CSRF),
-`/hooks/telegram` (secret-checked), `/device/v1/link` (device auth).
+| Area | Paths | Module |
+|---|---|---|
+| health | `GET /healthz` | `app.py` |
+| session, auth | `GET /session`; `POST /auth/login`, `/auth/logout`, `/auth/step-up`; `GET /auth/activate/{code}`, `POST /auth/activate[/{code}]` | `auth.py` |
+| account | `GET/PATCH /account`; `POST /account/phone/send\|confirm`, `/account/email/resend`, `/account/password`; `GET/POST /account/verify-email/{token}`; `GET /account/2fa`, `POST /account/2fa/verify\|setup\|restart\|recovery-codes`; `GET /account/sessions`, `DELETE /account/sessions/{id}`, `POST /account/sessions/revoke-others` | `auth.py` |
+| home | `GET /home`, `GET /devices/{id}/mirror` | `home.py` |
+| onboarding | `GET /onboarding`, `GET/PUT /onboarding/{1,2,3,6,7}`, `GET/POST /onboarding/4`, `GET /onboarding/5`, `POST /onboarding/5/claim`, `PUT /onboarding/5/devices/{id}`, `GET /onboarding/preview`, `POST /claim` | `onboarding.py` |
+| household | `GET/PUT /household`; members and contacts `GET/POST`, `PATCH/DELETE /{id}`, `POST /household/contacts/{id}/resend`; `GET /household/audit` | `household.py` |
+| settings | `GET /settings`, `PUT /settings/sos`, `PUT /settings/pins`, `POST /telegram/link-code`, `DELETE /telegram/links/{id}`, `PATCH /devices/{id}`, `POST /devices/{id}/unpair` | `settings.py` |
+| privacy | `GET /privacy`, `GET /privacy/notice`, `PUT /privacy/consents`, `POST /privacy/export`, `POST /privacy/erase`, `POST /privacy/erase/cancel` | `privacy.py` |
+| SOS | `GET /sos`, `GET /sos/open`, `GET /sos/{id}`, `GET /sos/{id}/snapshot.jpg`, `POST /sos/{id}/answer`, `GET/POST /action/{token}` | `sos.py` |
+| contacts | `GET/POST /consent/{token}`; `GET/POST /contact-page/{token}`, `GET /contact-page/{token}/snapshot.jpg` (SOS contact pages only) | `contacts.py` |
+| Desk | `GET /desk/queue`, `GET /desk/requests/{id}`, `GET /desk/requests/{id}/snapshot.jpg`, `POST /desk/requests/{id}/acknowledge\|called-112\|resolve` ("Called 112" is recorded as simulated) | `desk.py` |
+| admin | `GET /overview`; `GET/POST /customers`, `GET /customers/{id}`, `POST /customers/{id}/resend\|status\|assign`, `GET/POST /customers/{id}/letter`; `GET/POST /devices`, `GET/POST /devices/{id}/label`, `POST /devices/{id}/assign\|transfer\|retire`; `GET/POST /operators`, `POST /operators/{id}`; `GET /audit` | `admin.py` |
+| device link | `WS /device/v1/link` | `routes/link_hub.py` |
+| tunnel | `/d/{device_id}` (303 to `/live/{device_id}`), `/d/{device_id}/{api,media,static}/...` (other paths 303 to `/live/{device_id}`), `GET /d/{id}/video`, `WS /d/{id}/ws/threat` | `routes/device_proxy.py` |
+| hooks | `POST /hooks/telegram`, `GET/POST /hooks/whatsapp` | `routes/hooks.py` |
+| the app | every other GET: the Portal app's `index.html` (routes in doc 9 §8); writes nobody claims and unclaimed GETs under `api`, `d`, `hooks`, `static`, `healthz`, `link` are a JSON 404 | `routes/spa.py` (last) |
+
+Every API uses `security.require_role(...)` (roles, TOTP, CSRF, step-up;
+`csrf="header"` for the JSON API and the device proxy) and answers 401/403 as
+JSON, never a redirect; tenant isolation filters every query on the
+principal's household. Unauthenticated routes (gate P2): `GET /api/v2/session`,
+`/api/v2/auth/login`, `/api/v2/auth/activate*`, `/api/v2/account/verify-email/*`,
+`/api/v2/consent/*`, `/api/v2/contact-page/*`, `/api/v2/action/*`
+(confirmation only; POST needs CSRF), the app shell,
+`/static/*`, `/healthz`, `/hooks/*` (secret-checked), `/device/v1/link`
+(device auth).
 
 Primitives *(`sentrix_portal/security.py`)*: `hash_password`,
 `verify_password`, `hash_pin`/`verify_pin` (Argon2id m=19 MiB, t=2, p=1),
@@ -1892,9 +1925,9 @@ Primitives *(`sentrix_portal/security.py`)*: `hash_password`,
 `load_session`, `revoke_session`, `revoke_user_sessions`, `principal_of`,
 `set_session_cookie`, `issue_login_csrf`/`verify_login_csrf`,
 `supplied_csrf(request, *, header_only=False)`, `verify_csrf`,
-`require_role(*roles, csrf=True|"header"|False, step_up=False)` (a logged-out
-HTML GET — `/d/<id>/<page>` included — is redirected to `/login`; APIs, media
-and the relays get 401), `audit`, `verify_audit_chain`.
+`require_role(*roles, csrf=True|"header"|False, step_up=False)` (APIs, media
+and the relays get 401 JSON; a page path under `/d/<id>/` never reaches it,
+§5.7), `audit`, `verify_audit_chain`.
 
 ---
 
@@ -2146,13 +2179,14 @@ Portal endpoints (§11). What was not applied is in §16 q7–q11. The rest:
 * Clip mode: the HUD's "AI STALLED" limit is `max(stale_overlay_seconds, hop *
   (1 + budget_fraction))`. `AudioEngine.classify_window(samples, rms)` and
   `add_sample_listener(callback(samples, end_at))` feed the clip buffer the
-  microphone's own samples. The Node page shows the `clip` block.
+  microphone's own samples. The Node page (now the device app's Hardware
+  page) shows the `clip` block.
 * `/api/health` gained `identity_model` (`buffalo_l` / `buffalo_s`) and
   `scene_runtime` (torch / onnx / ncnn) (§9.3).
 * Portal vocabulary: token purpose `phone_verify`; household status `active |
   disabled | erasing | closed`; a contact's opt-out is a withdrawn `consents`
-  row. `base.html` carries the global SOS banner (`/static/sos/sos.js`) on
-  every owner and member page and links the user's name to `/account`.
+  row. `base.html` carried the global SOS banner on every owner and member
+  page; since D22 the Portal app's owner shell does (no templates remain).
 * Found during integration: tests without `temp_db` opened the developer's
   `var/sentrix.db`. `SENTRIX_VAR_DIR` now moves the whole `var/` tree and
   `tests/conftest.py` points it at a temporary directory (§14).
@@ -2190,8 +2224,9 @@ Contract-review findings answered differently (with the reason):
   state-changing request (the alarm must stay visible); the Portal treats a
   failed middleware as fatal (it faces the Internet).
 * *401 JSON.* Tunnelled requests, APIs and media get 401 JSON from
-  `require_lc`; pages keep `routes.require_auth`, which answers a LAN
-  request with a 307 to `/login` (§9.1).
+  `require_lc`. (Pages used `routes.require_auth`, a 307 to `/login` on the
+  LAN; since D22 the device app's shell holds no data and needs no sign-in,
+  §9.1.)
 * *The L5 voice call* (the review left it open): skipped once SOS owns the
   incident; its job moves to the `rise5` step (a `modem_call` there is Tier 1).
 * *Authorised-face disarm* (left open): T-SOS checks the live per-track
@@ -2226,7 +2261,8 @@ Integration requests not applied (with the reason):
    touches most of T-LINK's message logic and needs its own tests. The SOS
    preview already uses the template module.
 9. *Bundled Inter / JetBrains Mono fonts* (T-WEB): needs a download; the CSS
-   falls back to system fonts (CSP `font-src 'self'`).
+   falls back to system fonts (CSP `font-src 'self'`). *Settled by D22: the
+   React apps bundle Anek Latin and Noto Sans through `@fontsource` (doc 9).*
 10. *`ncnn` / `pnnx` and the `buffalo_s` face pack* (T-CLIP): not installed
     (each downloads binaries or models); the backends are tested with fakes.
     `buffalo_s`'s match threshold needs a re-check on enrolled team faces.

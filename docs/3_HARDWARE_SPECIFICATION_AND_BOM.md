@@ -157,7 +157,7 @@ the strongest backend available at startup and logs which one it chose:
 Override with `SENTRIX_SIREN=auto|gpio|sound|console` (`auto`, the value
 `.env.example` ships, picks the best backend; before M10 it gave the console
 stub). `/api/health` exposes `siren_backend` and `siren_is_real`, so the
-dashboard cannot claim a deterrent that does not exist; `GET /api/node` adds
+device app cannot claim a deterrent that does not exist; `GET /api/node` adds
 the arming state.
 
 Rules in the code (doc 8 §6 has the wiring and the pin table):
@@ -227,6 +227,7 @@ logs, link messages).
 | 4G modem SMS | `alerting/channels/modem.py` | tested against a fake AT serial port |
 
 Bring-up order, wiring and the LED test: `deploy/pi5/README.md` and doc 8.
-Thermal telemetry is reported on the Node page but is still not a fusion
+Thermal telemetry is reported on the device admin's Hardware page
+(`/admin/hardware`) but is still not a fusion
 feature: adding a feature means a new contract version and a refit on data
 that includes it.

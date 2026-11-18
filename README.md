@@ -11,14 +11,17 @@ SENTRIX is two programs:
   Raspberry Pi 5 later. It reads a camera (and optionally a microphone), runs the
   perception models, turns their outputs into a **Threat Confidence Index (TCI,
   0–1)** and a five-level alarm, and keeps the incident records, the encrypted
-  evidence and the face gallery. It serves the **Local Console (LC)**, the
-  dashboard on `http://127.0.0.1:8000`. It also runs the **SOS engine**, the
+  evidence and the face gallery. It serves the **Local Console (LC)** on
+  `http://127.0.0.1:8000`: the device app (the wall view and alert screen on
+  the device's own screen, and the device admin pages on the LAN) and the
+  JSON API behind it. It also runs the **SOS engine**, the
   alert channels and the outbound link to the Portal.
 * **The Portal** (`python -m sentrix_portal`). It runs in the cloud (planned:
   Oracle Always Free, India). It holds accounts, onboarding, the household and
   its emergency contacts, the SOS requests, the **SENTRIX Desk** (a simulated
-  responder console) and the company admin console. It shows the device's own
-  console pages through a tunnel, so the owner sees the same dashboard from any
+  responder console) and the company admin console. It serves the Portal app,
+  whose owner screens (live picture, level, the device's incidents, mode) read
+  the device's JSON API through a tunnel, so the owner sees the home from any
   browser.
 
 Detection stays on the device. The Portal stores profiles, metadata and one
@@ -52,10 +55,11 @@ real person unless two switches are on, and even then only to an allowlist (see
 | 1. Provision a device: id, serial, claim code, label | company | `tools/provision_device.py` |
 | 2. Create the customer; print the welcome letter (username, activation code, device serial and claim code) | company admin | Portal admin console |
 | 3. Install the device; activate the account with the code and choose a password | customer | Portal `/activate` |
-| 4. Onboarding wizard, 7 steps: profile, address, household, emergency contacts (each confirms by link), claim the device, alerts + SOS PIN + window, consent and SOS preview | customer | Portal `/onboarding` |
-| 5. Daily use: the device's dashboard, live view, events, evidence, access (faces), SOS, node | customer | LC on the LAN, or the Portal through `/d/{device_id}/...` |
+| 4. Setup, 5 screens over the Portal's 7 steps: you and your address, people (household and emergency contacts, each confirms by link), the device (claim), alerts (SOS PIN, window, channels), review (consent and SOS preview) | customer | Portal `/setup` |
+| 5. Daily use: Home (device cards, open alerts), Activity, People, Settings, Live view of the device | customer | Portal app; the device's live picture and level come through the tunnel (`/d/{device_id}/api/...`, `/video`, `/ws/threat`) |
+| 5a. Device admin: Diagnostics, Activity, Help requests, Record video, Faces, Hardware, Network | device admin | device app `/admin/...`, on the LAN only |
 | 6. A **confirmed L3** of an alarm class (weapon, fire, or a fight confirmed by video *and* time-aligned aggression audio) opens an **assistance request**, pre-filled from the profile. An unrecognised person is an L2 only (no request) | device | SOS engine |
-| 7. "Do you need assistance?" on the Portal, the LC, Telegram and e-mail (SMS only when offline or unseen for 10 min); window 30/45/60 min | owner | |
+| 7. "Do you need assistance?" on the Portal (`/alert/{id}`), the device screen, Telegram and e-mail (SMS only when offline or unseen for 10 min); window 30/45/60 min | owner | |
 | 8. Approve → the Desk and the confirmed contacts get the dispatch. False alarm → PIN. No answer → **EXPIRED** ("unanswered", never "safe"); "Request help now" opens a linked request | owner | |
 | 9. The Desk acknowledges and resolves; the incident verdict is recorded | Desk operator | Portal `/desk` |
 
@@ -76,9 +80,10 @@ D8–D14 in [`CLAUDE.md`](CLAUDE.md) §6 and the state machine in
  HOME (device, one process: python -m sentrix)         CLOUD (python -m sentrix_portal)
 +--------------------------------------------------+   +-----------------------------------+
 | Camera: webcam | file | RTSP | Pi camera | demo  |   | Accounts, activation, TOTP        |
-|   |                                               |   | Onboarding wizard, household,     |
+|   |                                               |   | Setup wizard, household,          |
 |   v  capture thread (camera rate)                 |   |   contacts (consent links)        |
-| Pipeline (tick mode ~6 Hz, or 4 s clip mode)      |   | SOS pages, Desk, admin console    |
+| Pipeline (tick mode ~6 Hz, or 4 s clip mode)      |   | Portal app (React) + /api/v2:     |
+|                                                   |   |   owner, SOS, Desk, admin         |
 |   Detector: YOLO person (+ByteTrack), weapon,     |   | Privacy: export, erasure,         |
 |     fire heads                                    |   |   retention worker                |
 |   Scene classifier: DINOv2 ViT-B/14, 5 classes    |   | Channel router: Telegram, e-mail  |
@@ -88,21 +93,22 @@ D8–D14 in [`CLAUDE.md`](CLAUDE.md) §6 and the state machine in
 |      corroboration) -> TCI -> level policy        |   |   device is offline               |
 |   -> incidents, event log, evidence vault         |   |                                   |
 |   -> SOS trigger (idempotent, per incident)       |   | Link hub  /device/v1/link         |
-| SOS engine: machine, frozen policy, PINs, sweeper |   | Tunnel    /d/{device_id}/...      |
+| SOS engine: machine, frozen policy, PINs, sweeper |   | Tunnel    /d/{device_id}/api/...  |
 | Channels: router + outbox; modem SMS, Telegram,   |WSS|   (replayed in-process into the   |
-|   e-mail, Twilio (all behind the send guard)      |==>|    device's own LC app; /video    |
+|   e-mail, Twilio (all behind the send guard)      |==>|    device's own JSON API; /video  |
 | Link client: outbox, heartbeat, tunnel executor,  |out|    and /ws/threat relayed)        |
 |   device-enforced command rules                   |   |                                   |
-| LC web app (FastAPI) on :8000                     |   | SQLite (dev) / Postgres (deploy)  |
+| LC (FastAPI) on :8000: device app + JSON API      |   | SQLite (dev) / Postgres (deploy)  |
 | SQLite var/sentrix.db, vault, faces               |   +-----------------------------------+
 | Pi 5: siren relay, LEDs, PIR, door, mains sense,  |
 |   node telemetry, watchdog, 4G modem              |
 +--------------------------------------------------+
 ```
 
-The device only opens outbound connections. Every page the Portal shows under
-`/d/{device_id}/` is served by the device's own code, so the LAN console and the
-remote one cannot drift apart. The device does not trust the Portal: it checks
+The device only opens outbound connections. Everything the Portal app shows
+about the device comes from the device's own JSON API under
+`/d/{device_id}/api/...` (plus `/video` and `/ws/threat`), so the LAN and the
+remote views read the same data; no device page is tunnelled. The device does not trust the Portal: it checks
 consent flags for video and media, allows SMS only to numbers in the current
 profile (30 a day), rate-limits siren tests, and has no command that disables
 the siren or the evidence.
@@ -172,7 +178,9 @@ first time, then only when it changes), create `.env` with a generated console
 password (**printed once**), session secret and evidence key, run
 `tools/doctor.py` and start `python -m sentrix`. Open
 **http://127.0.0.1:8000** and sign in with that password (`SENTRIX_PASSWORD` in
-`.env`).
+`.env`): `/` is the wall view (the device screen), and **Device admin**
+(`/admin/diagnostics`) holds the engineering views, the face gallery, recordings,
+hardware and network pages.
 
 The first start downloads about 600 MB of public weights once: the DINOv2 base
 of the scene classifier (Hugging Face cache) and InsightFace `buffalo_l`
@@ -248,9 +256,13 @@ the Portal's outbox, on the Desk and on the LC; nothing leaves the laptop.
 
 ### 6. Enrol faces
 
-LC **Access** page → *Capture from camera* (uses the device's own camera frame,
-with quality checks) or *Upload photos*. Until someone is enrolled everyone is
-"unknown"; in home mode that is only logged.
+Device admin → **Faces** (`/admin/faces`, on the LAN) → *Capture from camera*
+(uses the device's own camera frame, with quality checks) or *Upload photos*.
+Or, as the owner, in the Portal app: People → *Faces SENTRIX recognises*
+(upload photos, or take one with the SENTRIX camera; the photos are stored
+only on the device). Body re-identification needs no extra photo: SENTRIX
+learns a person's body look from their verified face. Until someone is enrolled everyone is
+"unknown"; at home that becomes an L2 after 10 s (D2).
 
 ### 7. Record training videos
 
@@ -264,12 +276,12 @@ will guard it (ROADMAP.md §15). The device records it itself (decision D20):
    running SENTRIX, open `http://127.0.0.1:8000` on that laptop: the console
    binds loopback only by default (`SENTRIX_HOST=127.0.0.1`), and opening it
    to the network needs `SENTRIX_HOST` set deliberately plus a firewall rule
-   (`docs/4_DEPLOYMENT_AND_RUNBOOK.md` §4.1). The owner can also start and
-   stop a recording on the Portal's dashboard (after re-entering the Portal
-   password), but downloads and deletes happen here on the local network
-   only: the Portal never carries the files.
-2. Dashboard → **Record video** → a label (optional) → **Start
-   recording**. A red **REC** badge shows on the live video for everyone
+   (`docs/4_DEPLOYMENT_AND_RUNBOOK.md` §4.1). Downloads and deletes happen
+   here on the local network only: the Portal never carries the files. (The
+   device still lets the owner start and stop a recording through the
+   tunnel after a step-up, but the Portal app has no button for it.)
+2. Device admin → **Record video** (`/admin/recordings`) → a label
+   (optional) → **Start recording**. A red **REC** badge shows on the live video for everyone
    watching (it is not in the file). Get the consent of everyone filmed first.
 3. **Stop recording**, wait for "Finishing the files…" to clear, then
    **Download video** and **Delete**. Download on your laptop: in a browser
@@ -298,6 +310,27 @@ SENTRIX_MIC_DEVICE=                # empty = automatic; or a device index or nam
 Recordings live in `var/recordings/` on the device and are never committed
 (`.gitignore`). `python tools/doctor.py` shows ffmpeg, the recordings' size and
 free space, and the microphones the device can see (it opens none).
+
+### 8. The frontend
+
+Both web UIs are React 19 + TypeScript single-page apps built with Vite and
+Tailwind 4 from `frontend/` (npm workspaces: `packages/ui`, `packages/api`,
+`apps/portal`, `apps/device`; decision D22, contract
+[`docs/9_FRONTEND.md`](docs/9_FRONTEND.md)). The built output is committed:
+`apps/portal` → `sentrix_portal/static/app/`, `apps/device` →
+`sentrix/web/static/app/`, both served under `/static/app/`. Running the
+device or the Portal (laptop, Render, the Pi) needs no Node.js. To change the
+frontend you need Node.js (18 or later):
+
+```bash
+cd frontend
+npm install
+npm run build        # rebuilds both apps into their static/app/ folders; commit the result
+npm test             # Vitest unit tests
+npm run e2e          # Playwright (Edge) against tools/demo_reset.py + tools/demo_run.py in a temp dir
+npm run dev:portal   # Vite dev server on :5173, API calls proxied to a running Portal
+npm run dev:device   # Vite dev server on :5174, API calls proxied to a running device
+```
 
 ---
 
@@ -344,7 +377,7 @@ With none of them set, `python -m sentrix` behaves like the stand-alone console.
 ## Tests and evaluation
 
 ```bash
-python -m pytest                     # 1647 tests, ~6.5 min on the laptop CPU; no camera, mic, network or GPU
+python -m pytest                     # 2243 passed, 1 skipped at 2024b07; several minutes on the laptop CPU; no camera, mic, network or GPU
 python -m pytest -o addopts=""       # same, with the summary line
 python tools/doctor.py               # pre-flight report; never opens a camera unless --probe-camera
 python tools/bench_live.py           # live loop on a bundled video: video fps, AI Hz, latency
@@ -382,15 +415,16 @@ Never tune or select on the test video `wa02`.
 
 | Folder | What it holds |
 |---|---|
-| `sentrix/` | The device: `perception/` (detector, scene, identity, audio, behaviour, motion, re-id), `fusion/` (evidence rules, TCI, level policy), `pipeline/` (engine, 4 s clip engine, fast lane, incidents, event log, state), `runtime/` (torch/onnx/ncnn backends), `sos/` (machine, policy, PINs, templates, sweeper, service), `alerting/` (send guard, dispatch, channels: router, modem, Telegram, e-mail, Twilio), `link/` (client, protocol, tunnel, command rules), `io/` (cameras, demo reel, siren, GPIO, node, Wi-Fi, watchdog), `storage/` (SQLite), `evidence/` (vault), `web/` (Local Console), `evaluation/` |
-| `sentrix_portal/` | The Portal: `routes/` (auth, onboarding, home, household, contacts, consent, settings, SOS, Desk, admin, privacy, link hub, device proxy, hooks), `services/` (accounts, hub, SOS, notify, retention), templates and static files |
+| `sentrix/` | The device: `perception/` (detector, scene, identity, audio, behaviour, motion, re-id), `fusion/` (evidence rules, TCI, level policy), `pipeline/` (engine, 4 s clip engine, fast lane, incidents, event log, state), `runtime/` (torch/onnx/ncnn backends), `sos/` (machine, policy, PINs, templates, sweeper, service), `alerting/` (send guard, dispatch, channels: router, modem, Telegram, e-mail, Twilio), `link/` (client, protocol, tunnel, command rules), `io/` (cameras, demo reel, siren, GPIO, node, Wi-Fi, watchdog), `storage/` (SQLite), `evidence/` (vault), `web/` (Local Console: JSON API, video, websocket, `static/app/` the built device app), `evaluation/` |
+| `sentrix_portal/` | The Portal: `routes/` (`api_v2/`: the JSON API for auth, onboarding, home, household, contacts, consent, settings, SOS, Desk, admin, privacy; link hub, device proxy, hooks, `spa.py`), `services/` (accounts, hub, SOS, notify, retention), `static/app/` (the built Portal app) |
+| `frontend/` | The two React apps' sources (D22): `packages/ui` (design system), `packages/api` (fetch client), `apps/portal`, `apps/device`, `e2e/` (Playwright). Built into `sentrix_portal/static/app/` and `sentrix/web/static/app/` |
 | `models/` | Weights the runtime loads: `v4_custom/` (default: DINOv2 scene classifier, YOLO11n weapon and fire heads), `v3_real/`, `v5_slim/` (slim scene heads, experimental), `yolov8n.pt`, and provenance checkpoints |
 | `training/` | `custom/` trainers, `datasets/sentrix_custom/` (765 frames, 10 videos, ground truth), `notebooks/`, `scripts/` (legacy trainers), `runs/` (the reports the docs cite) |
 | `notebooks/` | TCI analysis: feature contract, calibration, thresholds |
 | `tools/` | doctor, setup_env, provision_device, demo_reset, demo_run, benchmarks (`bench_live`, `bench_clip`), replay and evaluation, gate report, model export, `portal_pg_check` |
 | `tests/` | The test suite; `tests/e2e/` holds the product-flow world |
 | `deploy/` | `pi5/` (install script, systemd units, watchdog, NetworkManager failover, firewall, `pi.env`), `portal/` (Dockerfile, compose with Postgres on an internal network, Caddy, backup and restore scripts, runbook) |
-| `docs/` | Numbered specifications `1_`–`8_`, `capstone/` (proposal, mid-semester report, poster), `assets/` (diagrams) |
+| `docs/` | Numbered specifications `1_`–`9_`, `capstone/` (proposal, mid-semester report, poster), `assets/` (diagrams) |
 | `var/` | Runtime output: database, events, evidence, snapshots, faces. Gitignored, never web-served |
 
 ---
@@ -410,6 +444,7 @@ Never tune or select on the test video `wa02`.
 | [`docs/6_CUSTOM_DATASET_EVALUATION.md`](docs/6_CUSTOM_DATASET_EVALUATION.md) | Custom-dataset protocol and results |
 | [`docs/7_PORTAL_AND_SOS.md`](docs/7_PORTAL_AND_SOS.md) | Portal, onboarding, link, tunnel and SOS contract; §17 the live smoke run |
 | [`docs/8_RASPBERRY_PI5_INTEGRATION.md`](docs/8_RASPBERRY_PI5_INTEGRATION.md) | Raspberry Pi 5 plan, clip engine, pin table |
+| [`docs/9_FRONTEND.md`](docs/9_FRONTEND.md) | The React Portal and device apps: contract, JSON API conventions, routes, tests |
 | [`deploy/pi5/README.md`](deploy/pi5/README.md) | Pi bring-up and deployment |
 | [`deploy/portal/README.md`](deploy/portal/README.md) | Portal deployment (Oracle Always Free; Render + Supabase fallback) |
 | [`THIRD_PARTY.md`](THIRD_PARTY.md) | Licences of models, data and services SENTRIX uses |
@@ -425,6 +460,7 @@ a real e-mail account or a live Postgres yet.**
 | Area | State | Evidence |
 |---|---|---|
 | Device pipeline, LC, records | working on the laptop | `tools/bench_live.py` on vid07 with four faces: preview 29.7 fps, AI 5.6 Hz (CLAUDE.md M2) |
+| React Portal and device apps (D22) | deployed (GitHub main, the Render Portal and the Pi, 2026-11-18/19) | Vitest 15 passed; Playwright 22 passed, 1 skipped at desktop and phone sizes against a demo world (`c1241c1`) |
 | Portal + device as two processes | working on the laptop | docs/7 §17: provisioning → activation → wizard → claim → tunnel → real detection → approve → Desk → closed; decline, expiry, Portal outage |
 | Detection to SOS request | working on bundled clips | docs/7 §17: PENDING weapon request 8.0–9.8 s after `scene gun`; fire 11.6–11.9 s after `scene fire` |
 | Remote view through the tunnel | working, capped | docs/7 §17: MJPEG 29.9 fps direct, 13.6 fps tunnelled (cap 15) |

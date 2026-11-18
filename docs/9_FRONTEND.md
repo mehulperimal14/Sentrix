@@ -1,6 +1,10 @@
 # 9. The SENTRIX frontend (v2)
 
-Status: in progress on branch `sentrix/frontend-v2` (decision D22 in CLAUDE.md).
+Status: **done and deployed** (decision D22 in CLAUDE.md). Built on branch
+`sentrix/frontend-v2`, merged to GitHub `main` and deployed on 2026-11-18/19 to
+the Render Portal and the Pi (the Pi runs `2867bdf`). Tests at the switch-over:
+Python suite 2243 passed, 1 skipped (`2024b07`); Vitest 15 passed; Playwright
+22 passed, 1 skipped at desktop and phone sizes (`c1241c1`).
 Design source: the SENTRIX Experience Plan and the platform prototype (private
 artifacts linked from CLAUDE.md). This file is the contract between the two
 React apps and the two Python apps.
@@ -9,8 +13,9 @@ React apps and the two Python apps.
 
 * The server-rendered Jinja pages of the Portal (`sentrix_portal/templates`,
   `sentrix_portal/static`) and of the device console (`sentrix/web/templates`,
-  `sentrix/web/static`) are replaced by two single-page apps built from
-  `frontend/`.
+  `sentrix/web/static/js`, `sentrix/web/static/css`) were replaced by two
+  single-page apps built from `frontend/`; the templates, the old static files
+  and the HTML route modules are gone from both Python apps.
 * **No data changes.** No table, column, file format, retention rule or
   directory under `var/` (device) or the Portal data dir changes meaning. New
   storage is additive only (the existing guarded `ALTER TABLE ADD COLUMN`
@@ -19,7 +24,8 @@ React apps and the two Python apps.
   call the same service functions the old HTML routes called.
 * Links already in the world keep working: `/activate/{code}`, `/claim?sn=`,
   `/consent/{token}`, `/c/{token}`, `/a/{token}`, `/sos/{id}`, `/desk`,
-  `/admin/...`, the device's `/dashboard`, `/setup/wifi`. The SPA routes them.
+  `/admin/...`, the device's `/dashboard`, `/setup/wifi`. The SPA routes them
+  (§8).
 
 ## 2. Stack
 
@@ -49,8 +55,16 @@ frontend/
 
 Build output is committed so neither Render nor the Pi needs Node:
 `apps/portal` → `sentrix_portal/static/app/`, `apps/device` →
-`sentrix/web/static/app/`. `npm run build` regenerates both; a Python test
-fails when `index.html` is missing or points at an asset that is not there.
+`sentrix/web/static/app/`, each served under `/static/app/` (Vite `base`).
+`cd frontend && npm install && npm run build` regenerates both; commit the
+result. A Python test fails when `index.html` is missing or points at an asset
+that is not there. Without a build the app paths answer 503 `not_built`.
+
+Commands (in `frontend/`): `npm run build`, `npm test` (Vitest), `npm run e2e`
+(Playwright; Edge by default, `E2E_CHANNEL=chrome` or `chromium` to change it),
+`npm run typecheck`, `npm run dev:portal` (Vite on :5173) and
+`npm run dev:device` (:5174), both proxying `/api`, `/d/`, `/ws`, `/video` and
+`/media` to a running Python app, `npm run gen:api` (types from OpenAPI).
 
 ## 3. Who sees what
 
@@ -63,8 +77,22 @@ fails when `index.html` is missing or points at an asset that is not there.
   The device's engineering views are never shown to owners.
 * **Device app** (`sentrix/web`, `/`): the device screen (wall view, alert
   takeover with an on-screen PIN pad) and device admin on the LAN (Diagnostics,
-  Activity, Record video, Hardware, Faces, Network, Wi-Fi setup mode). Device
-  admin pages stay LAN-only (path table `LC_ONLY_PREFIXES`).
+  Activity, Help requests, Record video, Faces, Hardware, Network, Wi-Fi setup
+  mode). The device app is LAN-only: no page is tunnelled (the path table has
+  no page or static class, and a tunnelled request for an app path is a JSON
+  404); the recordings' files stay LAN-only by `LC_ONLY_PREFIXES`.
+* **Faces** are enrolled on the device admin's Faces page (capture from the
+  device's camera or upload, on the LAN) and, since 2026-11-19, by the
+  **owner** in the Portal app (People → *Faces SENTRIX recognises*: upload
+  photos, or take one with the SENTRIX camera from its live preview; removing
+  a photo asks for the password again). Members see the gallery read-only;
+  the Desk never. Both need the household's `remote_view` and
+  `face_recognition` consents. Photos go through the tunnel to the device and
+  are stored only there (D12). Body re-identification needs no photo: the
+  device learns a person's body look from their verified face (D24). The
+  Portal app has no recording or siren-test buttons (the device's path table
+  still allows the owner's recording start/stop and siren test through the
+  tunnel after a step-up).
 
 ## 4. JSON API conventions (both apps)
 
@@ -114,9 +142,14 @@ client side from the URLs the API returns.
 
 ## 6. Security
 
-* CSP stays strict: `script-src 'self'`, `style-src 'self'`, `connect-src 'self'`
-  (plus `ws:`/`wss:` self), `img-src 'self' data: blob:`, no inline script, no
-  third-party origin. React sets styles through the CSSOM, which CSP allows.
+* CSP stays strict, with no inline script or style and no third-party origin.
+  The device (`sentrix/web/hardening.py`): `script-src 'self'`,
+  `style-src 'self'`, `connect-src 'self'` plus `ws:`/`wss:` to its own host,
+  `img-src 'self' blob: data:`, no nonces. The Portal
+  (`sentrix_portal/hardening.py`): the same, except that `script-src` still
+  carries a per-request nonce that no page uses any more. React sets styles
+  through the CSSOM, which CSP allows. Tunnelled responses (`/d/{id}/...`)
+  carry the device's headers, not the Portal's.
 * Test mode, the send guard, `SENTRIX_TEST_RECIPIENTS`, "no `tel:112` in test
   mode", duress parity (the owner's screens after a duress PIN look exactly like
   a normal false alarm) and the SOS contract's labels (docs/7 §7.10) hold in the
@@ -133,3 +166,71 @@ client side from the URLs the API returns.
   of the Experience Plan at desktop and phone sizes.
 * Nothing is pushed to GitHub before the suite, the frontend tests and a manual
   local run pass.
+
+## 8. Routes
+
+### Portal app (`sentrix_portal`)
+
+The Python app answers `/api/v2/...` (`sentrix_portal/routes/api_v2/`), the
+link hub, `/hooks/...`, the device tunnel `/d/{device_id}/api|media|static/...`
+with the relays `/d/{device_id}/video` and `/d/{device_id}/ws/threat`, and
+`/healthz`. Every other GET gets the app's `index.html`
+(`sentrix_portal/routes/spa.py`, registered last; its routes yield to every
+other route). A GET under `api`, `d`, `hooks`, `static`, `healthz` or `link`
+that nothing claims, and any write nothing claims, is a JSON 404, never the
+app. `/d/{device_id}` and any other non-API tunnel path (an old console page)
+answer 303 to the app's `/live/{device_id}`.
+
+| Path | Who | Screen |
+|---|---|---|
+| `/` | anyone | sends the person to their home screen, or to `/login` |
+| `/login`, `/account/2fa` | anyone; signed-in people | sign-in; TOTP set-up and check (admin, Desk) |
+| `/activate`, `/activate/:code` | new customer | activation with the welcome letter's code |
+| `/setup`, `/setup/:step` (`you`, `people`, `device`, `alerts`, `review`, `done`) | owner | setup: 5 screens over the backend's 7 steps (1+2, 3+4, 5, 6, 7) |
+| `/home` | owner, member | device cards, open alerts |
+| `/activity` | owner, member | incidents, help requests, device events, verdicts |
+| `/people` | owner, member | household, members, emergency contacts |
+| `/settings`, `/settings/alerts`, `/settings/home`, `/settings/devices`, `/settings/account`, `/settings/privacy` | owner, member | alert window, safety net, channels, PINs; home details; devices and mode; account; consents, export, erasure |
+| `/alert/:id` (old `/sos/:id` still works) | owner, member | the alert screen: answers first, then the snapshot and what contacts would get |
+| `/live/:deviceId` | owner, member | live picture and level through the tunnel |
+| `/claim` (`?sn=`) | owner | claim a device |
+| `/account` | signed in | account (household people go to `/settings/account`) |
+| `/consent/:token`, `/c/:token`, `/a/:token` | emergency contact, no account | consent link; contact alert page; one-tap action link |
+| `/account/verify-email/:token`, `/privacy/notice` | anyone | e-mail verification; the privacy notice |
+| `/desk`, `/desk/:id` (old `/desk/requests/:id`) | Desk operator (TOTP) | queue; one request |
+| `/admin`, `/admin/customers`, `/admin/customers/:id`, `/admin/devices`, `/admin/operators`, `/admin/audit` | company admin (TOTP) | overview, customers (letters drawn from data), devices (labels drawn from data), staff, audit chain |
+
+Old Portal paths redirect: `/onboarding[/:step]` → `/setup`; `/household` →
+`/settings/home`; `/household/contacts`, `/household/members` → `/people`;
+`/household/audit`, `/sos` → `/activity`; `/privacy`, `/privacy/erase`,
+`/privacy/export` → `/settings/privacy`; `/account/password`,
+`/account/sessions` → `/account`; `/customers`, `/devices`, `/operators`,
+`/audit` → `/admin/...`; `/admin/customers/:id/letter` → the customer;
+`/admin/devices/:id/label` → `/admin/devices`. Anything else shows "This page
+doesn't exist".
+
+### Device app (`sentrix/web`)
+
+The Python app answers its JSON API (`/api/...`, sign-in by
+`POST /api/login`, `GET /api/session`), `/video`, `/ws/threat` and `/media/...`;
+every other GET gets the app's `index.html` (`sentrix/web/spa_routes.py`,
+registered last). A GET under `api`, `ws`, `video`, `media` or `static` that
+nothing claims, any write nothing claims, and any tunnelled request for an app
+path are a JSON 404.
+
+| Path | Who | Screen |
+|---|---|---|
+| `/` | signed in | wall view on the device screen; an open SOS request takes it over with the alert screen and its PIN pad, which also offers a **Device admin** link to the device admin on the LAN |
+| `/login` | anyone | sign-in with the device password (`POST /api/login`) |
+| `/setup/wifi` | anyone on the device's own setup network, with the setup code from the label | Wi-Fi setup mode |
+| `/admin/diagnostics` | device admin | live picture with overlays, fusion, level changes, engine scores, scene classifier, pipeline rates (the old dashboard) |
+| `/admin/activity` | device admin | incidents with verdicts, snapshots, sealed evidence, dispatch packages |
+| `/admin/sos` | device admin | help requests; in test mode the demo controls (close the incident, the disclosed scripted trigger) |
+| `/admin/recordings` | device admin | Record video: start, stop, download, delete (D20) |
+| `/admin/faces` | device admin | face gallery: capture from the camera, upload, remove |
+| `/admin/hardware` | device admin | this unit, camera and microphone, LEDs, siren and sensors, siren test, services |
+| `/admin/network` | device admin | Portal link, alert channels (test message), who watched through the Portal |
+
+Old device paths redirect: `/dashboard`, `/live` → `/`; `/events`, `/alerts`,
+`/evidence`, `/dispatch` → `/admin/activity`; `/sos` → `/admin/sos`; `/node` →
+`/admin/hardware`; `/authorized` → `/admin/faces`; any unknown path → `/`.

@@ -5,7 +5,7 @@ The demo set-up (decisions D17, D18 in `CLAUDE.md`):
 ```
  owner's phone ──┐                  ┌──────── Render (Singapore) ─────────┐
  any browser ────┼── https ────────►│  SENTRIX Portal (deploy/portal)      │
- authorities ────┘                  │  accounts · wizard · SOS · /d/<id>/… │
+ authorities ────┘                  │  Portal app · setup · SOS · /d/<id>/ │
  phone (contact)                    │  SQLite + files on the /data disk    │
                                     └──────▲──────────────────────▲───────┘
                                            │ wss (device link)    │ webhook + Graph API
@@ -15,7 +15,12 @@ The demo set-up (decisions D17, D18 in `CLAUDE.md`):
 
 The Pi connects **out** to the Portal; nothing connects into the Pi. While the
 Pi is off the Portal shows the device offline; when it powers up it links
-again by itself and the dashboard (`/d/<device id>/dashboard`) is live.
+again by itself and the Live view (`/live/<device id>`, fed through
+`/d/<device id>/api/...`, `/video` and `/ws/threat`) is live. Old
+`/d/<device id>/dashboard` links go there too.
+
+The Portal's web pages are the React Portal app (D22), built and committed in
+`sentrix_portal/static/app/`; the Render image needs no Node.js.
 
 Test mode stays on (D13): messages go only to the addresses in
 `SENTRIX_TEST_RECIPIENTS` (phone numbers, `tg:<chat id>`), and every one starts
@@ -105,7 +110,8 @@ and sending variables above). `PORTAL_BASE_URL` comes from
    updates; no webhook needed).
 4. Check: `/start` to the bot from an allowlisted account answers "This is
    the SENTRIX alert bot…".
-5. Linking happens in the owner's wizard: step 6 **Link Telegram** (owner);
+5. Linking happens in the owner's setup: the **Alerts** step
+   (`/setup/alerts`) **Link Telegram** (owner);
    the contact's consent page **Get alerts on Telegram** (authorities).
 
 ## 2B. WhatsApp: Meta's Cloud API (about 20 minutes; optional)
@@ -173,22 +179,22 @@ delete `PORTAL_RESET_ADMIN` again.
 
 ## 4. The owner's flow (what the professors see)
 
-1. The owner opens the activation link → sets a password → the **7-step
-   wizard**: name and **mobile number**, address (the nearest police, fire
+1. The owner opens the activation link → sets a password → **setup** (five
+   screens over the Portal's 7 steps): name and **mobile number**, address (the nearest police, fire
    station and hospital are optional and only appear in the SOS text),
    household, **emergency contacts** (add the authorities phone; send it the
    consent link the page shows - on WhatsApp it arrives by itself - and it
    taps *Confirm*, then *Get alerts on Telegram*), **claim the device** with
    the serial and claim code, alerts (**Telegram** linked, or **WhatsApp**
    ticked; SOS PIN, duress PIN), consent.
-2. **Home** shows the device and its live dashboard through the Portal.
+2. **Home** shows the device; **Live** (`/live/<device id>`) shows its picture and level through the Portal.
 3. A confirmed Level 3 (weapon or fire) → the owner gets a Telegram (or
    WhatsApp) message with **Alert my contacts / I'm checking / False alarm**,
    no sign-in needed. *Alert contacts* → the authorities phone gets the SOS
    with **I'm handling it / Open**. *False alarm* answers with the
    PIN page link (a PIN typed into a chat would stay in its history).
 4. Pi switched off → the Portal shows **offline** within about a minute;
-   switched on → online again and the dashboard is live.
+   switched on → online again and the Live view moves.
 
 ## 5. Demo-morning checklist
 
@@ -197,7 +203,7 @@ delete `PORTAL_RESET_ADMIN` again.
 - [ ] Hotspot on and the Pi on it (powered about 2 minutes before).
 - [ ] Telegram: `/start` to the bot answers (WhatsApp instead: both phones
       sent "hi" to the test number, templates APPROVED).
-- [ ] Portal home shows the device **online**; the dashboard video moves.
+- [ ] Portal home shows the device **online**; the Live view's video moves.
 - [ ] `SENTRIX_LIVE_ALERTS=1` and the channel's switch on Render; after the
       demo set them back to `0`, suspend the service, and delete it after
       2026-12-05.

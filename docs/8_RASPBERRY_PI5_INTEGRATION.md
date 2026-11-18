@@ -103,7 +103,7 @@ MobileNetV3-L 6.6 / 2.4 ms; EfficientNet-B0 9.5 / 4.3 ms.
 | ultralytics pulls the full `opencv-python` next to the headless build; both provide `cv2` | `run.sh` and `install_pi.sh` remove the full build so one headless OpenCV < 5 remains |
 | No hardware H.264 encoder on the Pi 5 [13] | No continuous stream to the cloud; remote video is MJPEG frames over the link, on demand, ≤ 15 fps |
 | On a non-PD 5 V supply USB is capped at 600 mA [11] | `PSU_MAX_CURRENT=5000` in the EEPROM, or the 4G modem browns out; doctor and the installer warn |
-| Throttling at 80–85 °C [11][RPB] | Active Cooler; temperature, throttle flags and EXT5V on the Node page and `/api/health` |
+| Throttling at 80–85 °C [11][RPB] | Active Cooler; temperature, throttle flags and EXT5V on the device admin's Hardware page (`/admin/hardware`) and `/api/health` |
 | GPIO is 3.3 V, not 5 V tolerant [56] | Relay through an NPN driver (§6); never feed 5 V into a GPIO pin |
 | No analogue audio jack [12] | USB microphone in; no sound out (no speaker or buzzer, §6.6, D19) |
 | Trixie's desktop runs PipeWire, but sounddevice's PortAudio talks to ALSA directly | `PA_ALSA_PLUGHW=1` (`sentrix/perception/audio.py`, before sounddevice loads): the USB card opens through ALSA's `plughw` (channels and format converted), PipeWire not in the path, at the card's own rate (often 44.1/48 kHz), and SENTRIX resamples to 16 kHz mono with an anti-alias filter. Not at 16 kHz through plughw: without `libasound2-plugins` (not installed on the demo Pi) ALSA's only rate converter is `linear`, with no low-pass filter, and 8-24 kHz would fold into the band the sound model and the recordings hear; the chooser prefers a card with `/proc/asound/card<N>/usbid` and rebuilds PortAudio's list when `/proc/asound/cards` changes, so the microphone goes into any USB port at any time (D21). WirePlumber may hold a newly plugged card for a few seconds; the engine looks again. Not yet run with a microphone on the Pi |
@@ -128,7 +128,7 @@ python -m sentrix  (systemd: Type=notify, Restart=always, WatchdogSec=30)
 │                      raw main frames (1280×720, 15 fps) + the USB microphone at 16 kHz
 │                      → var/recordings (MJPEG AVI, ffmpeg mux)
 ├─ decision            evidence → TCI → level policy → incidents → side effects (unchanged)
-├─ web (FastAPI)       Local Console on the LAN :8000, /api/node, /api/health
+├─ web (FastAPI)       Local Console on the LAN :8000: device app (doc 9), /api/node, /api/health
 ├─ services            gpio (LEDs, inputs), node (telemetry, watchdog),
 │                      sos, channels (outbox, modem SMS), link (Portal WSS + tunnel)
 └─ siren               GpioSiren on GPIO17 (relay), pin forced low by the unit after any exit
@@ -310,7 +310,7 @@ factory uses the same map, so a laptop run and the tests exercise it.
 | CAM/DISP 0 | — | Camera Module 3 (standard lens) | Needs the **Standard–Mini 22-pin** cable; the camera's own cable does not fit a Pi 5 [24] |
 | USB | — | Microphone, 4G modem | Modem needs `PSU_MAX_CURRENT=5000` (§6.3) |
 
-Room sensors are telemetry only (Node page); they are not in the feature
+Room sensors are telemetry only (Hardware page); they are not in the feature
 contract until data exists. There is no buzzer and no speaker (§6.6, D19):
 GPIO26 (pin 37), the buzzer's pin until 2026-10-27, is free.
 
@@ -538,14 +538,14 @@ Intel NCS2.
 | GPIO service: LEDs, PIR, door, mains, arming key, tamper; 50 ms software debounce; mock pins and a visible error when lgpio fails | `sentrix/io/gpio.py` | built; debounce to check on real inputs |
 | Board telemetry: CPU temperature, throttle flags, EXT5V, uptime, BME280/DHT22 (IIO); alerts; systemd ready + watchdog | `sentrix/io/node.py`, `sensors.py`, `watchdog.py` | built; `pmic_read_adc` format to check on the firmware |
 | Wi-Fi scan/connect/status for `/setup/wifi` | `sentrix/io/network.py` | built; fake `nmcli` only |
-| Local Console API: `GET /api/node`, `POST /api/node/siren-test`; Node page (telemetry, inputs, relay, clip status, test siren) | `sentrix/web/node_routes.py`, templates | built |
+| Local Console API: `GET /api/node`, `POST /api/node/siren-test`; device admin Hardware page `/admin/hardware` (telemetry, inputs, relay, services, test siren) | `sentrix/web/node_routes.py`, `frontend/apps/device` | built |
 | Clip engine, fast lane, runtimes, exports, bench | `pipeline/clip.py`, `pipeline/fastlane.py`, `sentrix/runtime/`, `tools/export_models.py`, `tools/bench_clip.py`, `replay_custom_videos.py --mode clip` | built; laptop only; NCNN untested |
 | Modem SMS and ringing call | `sentrix/alerting/channels/modem.py` | built; fake serial port only |
-| Training recordings ("record normal session"): the dashboard's *Record video* card, raw frames as constant-frame-rate MJPEG AVI + the microphone's 16 kHz track muxed by ffmpeg (installed by `install_pi.sh`), caps 10 min / 2 GB free / 20 GB / 14 days; files on the LAN only, the owner starts through the Portal with a step-up and stops without one (D20) | `sentrix/io/recorder.py`, `web/recording_routes.py`, `static/js/recording.js` | built; laptop and a synthetic camera only. Still to check on the Pi: the MJPEG encode cost at 1280 px next to the clip engine, and the writer's lower priority |
-| USB microphone in any port at any time: ranked inputs, `plughw`, resampling to 16 kHz, rebuilds when `/proc/asound/cards` changes, `microphone` on the Node page and `/api/health` (D21) | `sentrix/perception/audio.py` | built; fake `sounddevice` only |
+| Training recordings ("record normal session"): the device admin's *Record video* page (`/admin/recordings`), raw frames as constant-frame-rate MJPEG AVI + the microphone's 16 kHz track muxed by ffmpeg (installed by `install_pi.sh`), caps 10 min / 2 GB free / 20 GB / 14 days; files on the LAN only; the device's path table also lets the owner start through the tunnel with a step-up and stop without one (D20), though the Portal app has no button for it | `sentrix/io/recorder.py`, `web/recording_routes.py`, `frontend/packages/ui/src/recordings.tsx` | built; laptop and a synthetic camera only. Still to check on the Pi: the MJPEG encode cost at 1280 px next to the clip engine, and the writer's lower priority |
+| USB microphone in any port at any time: ranked inputs, `plughw`, resampling to 16 kHz, rebuilds when `/proc/asound/cards` changes, `microphone` on the Hardware page and `/api/health` (D21) | `sentrix/perception/audio.py` | built; fake `sounddevice` only |
 | Doctor hardware section (venv, camera enumerated not opened, OpenCV, temperature, throttling, EXT5V, config.txt lines, `PSU_MAX_CURRENT`, unit, network) | `tools/doctor.py`, `node.hardware_report` | built; one "skipped" row on a laptop |
 | Installer, systemd unit, journald caps, watchdog, config.txt snippet, Pi env, NetworkManager, polkit, firewall | `deploy/pi5/`, `run.sh` (Pi path), `requirements-pi.txt` | built; checked by `tests/test_hw_deploy.py` |
-| Profile label `SENTRIX_PROFILE=laptop\|pi5-clip\|pi5-hailo\|pi5-node\|hub` | `sentrix/config.py` (`NodeConfig`) | a label on the Node page and a doctor hint only; it changes no behaviour |
+| Profile label `SENTRIX_PROFILE=laptop\|pi5-clip\|pi5-hailo\|pi5-node\|hub` | `sentrix/config.py` (`NodeConfig`) | a label on the Hardware page and a doctor hint only; it changes no behaviour |
 | Shared-memory ring buffer, three processes | — | not built (one-process decision) |
 | Hailo backend, HEF scripts | — | not built (T2) |
 | Node agent (MediaMTX, MQTT), hub `RemoteNode` | — | not built (T3) |
@@ -574,10 +574,10 @@ roadmap v2 (W0–W8).
 | H0 Plan | W0 | this file; decisions D8–D14; order parts incl. 4G modem + SIM | parts ordered | plan done; parts not ordered |
 | H1 Laptop prep | W1 | clip engine + fast lane; ONNX exports; gpiozero with mock pins; `PiCameraSource`; clip replay and bench; modem tested on the laptop with an Airtel/Vi SIM | clip replay ≥ M5 minus one, 0 false onsets; SMS out from the laptop | software done (§9); replay met; budget not met; modem not tested |
 | C Connectivity and cloud | W0–W1 | Oracle VM, `.in` domain, Docker, Caddy HTTPS, backups + tested restore; reachable from 4G and the demo room (`deploy/portal/README.md`) | HTTPS live, restore tested, fallback deploy ≤ 30 min | files written and tested statically; nothing deployed |
-| H2 Bench bring-up | W2 | OS, cooler, RTC; camera, mic (plugged in while running, D21), PIR, door, LEDs; relay test with an LED; doctor; "record normal session" (built: the dashboard's *Record video*, D20) | every input and output verified on the bench; a recording downloaded with sound | OS and camera up (2026-10-23); recording mode built, not yet run on the Pi; microphone arrives 2026-11-03 |
+| H2 Bench bring-up | W2 | OS, cooler, RTC; camera, mic (plugged in while running, D21), PIR, door, LEDs; relay test with an LED; doctor; "record normal session" (built: the device admin's *Record video*, D20) | every input and output verified on the bench; a recording downloaded with sound | OS and camera up (2026-10-23); recording mode built, not yet run on the Pi; microphone arrives 2026-11-03 |
 | H3 Gate A | W3 | NCNN/ONNX models on the Pi, clip engine, fast lane, link running; `bench_clip` and a 1 h soak | **Gate A**; go/no-go 1 | not started |
 | H4 Power and alarm | W4 | 12 V UPS path, buck, fuses, siren relay; modem on the Pi; offline SMS path | power pass test (§6.3); offline SMS works on the bench | not started |
-| H5 Data | W3–W5 | M6 sessions recorded **with the Pi camera**, from the dashboard's *Record video* (D20): silent first, with the USB microphone from November | dataset in the `frames.csv` schema | recording mode built; no sessions yet |
+| H5 Data | W3–W5 | M6 sessions recorded **with the Pi camera**, from the device admin's *Record video* (D20): silent first, with the USB microphone from November | dataset in the `frames.csv` schema | recording mode built; no sessions yet |
 | H6 Upgrade or optimise | after Gate A | fail → T2 (HEFs, Gate B) or T3; pass → M7 single YOLO, T4 for 24/7 | gate passed | — |
 | H7 Deploy | W6–W8 | box and mount at 1.8–2.2 m, burn-in, code freeze end of W6, M9 gates on S4, rehearsals | G0–G5 (clip-mode G4), P1–P8 | — |
 

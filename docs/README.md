@@ -17,6 +17,7 @@ sections describe what.
 | know what the models score, and on what | [2 — Model benchmarks](2_MODEL_BENCHMARKS_AND_KPIS.md), [6 — Custom dataset evaluation](6_CUSTOM_DATASET_EVALUATION.md) |
 | know what is left | [`ROADMAP.md`](../ROADMAP.md) (the step-by-step plan to a working prototype); [5 — Roadmap & remaining work](5_FUTURE_ADVANCEMENTS_AND_CLOUD_DEPLOYMENT.md) (summary and research notes) |
 | build the Raspberry Pi unit | [8 — Raspberry Pi 5 integration](8_RASPBERRY_PI5_INTEGRATION.md), `deploy/pi5/README.md` |
+| change the web UI (Portal app, device app) | [9 — The SENTRIX frontend](9_FRONTEND.md) |
 
 ## The numbered set
 
@@ -30,6 +31,7 @@ sections describe what.
 | 6 | [Custom dataset evaluation](6_CUSTOM_DATASET_EVALUATION.md) | the team's 765-frame, 10-video dataset; how v4 was chosen; results after the repair, in clip mode and for the slim models | per section (table in its header) |
 | 7 | [Portal, onboarding and SOS — architecture and contract](7_PORTAL_AND_SOS.md) | plain overview (Part 0); configuration, link protocol, tunnel, data model, SOS state machine, channels, roles, endpoints; integration status; live verification run | current |
 | 8 | [Raspberry Pi 5 integration](8_RASPBERRY_PI5_INTEGRATION.md) | targets, measured compute problem, the four Pi techniques, wiring, BOM, gates | current plan; no hardware run yet |
+| 9 | [The SENTRIX frontend](9_FRONTEND.md) | the two React apps (Portal app, device app): stack, build, who sees what, JSON API conventions, security, tests, the route tables (D22) | current (deployed 2026-11-18/19) |
 
 Section numbers in docs 7 and 8 are cited from code comments; keep them stable
 when editing.

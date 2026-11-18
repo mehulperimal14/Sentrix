@@ -109,7 +109,7 @@ reviewable.
 | `SENTRIX_SECURE_COOKIES` | Behind TLS | `1` sets the `Secure` cookie flag |
 | `SENTRIX_AUDIO` | No | `0` disables the microphone |
 | `SENTRIX_MIC_DEVICE` | No | Which input to open: empty = automatic (USB, a newer one first, then another input plugged in while running, then the default; headsets, Bluetooth hands-free and virtual microphones never), or a PortAudio index or name substring (`python tools/doctor.py` lists them) |
-| `SENTRIX_RECORDING_ENABLED`, `SENTRIX_RECORD_*` | No | Training recordings on the dashboard (§9 "Recordings and disk"; doc 7 §3.4) |
+| `SENTRIX_RECORDING_ENABLED`, `SENTRIX_RECORD_*` | No | Training recordings on the device admin's *Record video* page (§9 "Recordings and disk"; doc 7 §3.4) |
 | `SENTRIX_ARMED` | No | ARMED at first start (later changes persist in `var/mode.json`) |
 | `SENTRIX_SIREN` | No | `auto` \| `gpio` \| `sound` \| `console` |
 | `RETENTION_DAYS` | No | Default 30 (§8) |
@@ -163,27 +163,38 @@ timers, notification worker, retention); they are off by default and in tests.
 
 ## 5. The Local Console
 
+The console is the **device app** (React; doc 9), built into
+`sentrix/web/static/app/` and committed, so the device needs no Node.js. To
+change it: `cd frontend && npm install && npm run build` (then `npm test` and
+`npm run e2e`). The app's pages are LAN only: through the Portal tunnel a
+request for an app path is a JSON 404; owners use the Portal app instead.
+
 | URL | Page |
 |---|---|
-| `/login`, `/logout` (POST; GET shows a confirm page) | sign-in |
-| `/dashboard` | TCI gauge, engine scores, scene card, pipeline rates, evidence state, event log, SOS panel; the *Record video* card: the device admin signed in on the LAN starts, stops, downloads and deletes; the owner through the Portal starts and stops (after a step-up) and sees the list, while downloads and deletes stay on the LAN (D20) |
-| `/live` | full-screen video with the HUD |
-| `/events` | incidents with filters, paging, Real / False verdicts |
-| `/alerts` | snapshot gallery |
-| `/evidence` | evidence bundles and chain status |
-| `/dispatch` | "Dispatch & SOS": packages, their requests, "Request help now" on closed ones |
-| `/authorized` | face gallery: capture from the camera, upload, remove |
-| `/sos` | the open assistance request, history, PIN answers; scripted trigger for the device admin in test mode |
-| `/node` | profile, telemetry, GPIO, HOME/ARMED, siren test, link, channels, clip status, the microphone in use (or "not connected") |
+| `/login` | sign-in with the device password (`POST /api/login`; sign-out is `POST /api/logout`) |
+| `/` | the wall view for the device's own screen: live picture, level, mode; an open SOS request takes it over with the alert screen (answers, PIN pad) and a *Device admin* link for the device admin |
+| `/admin/diagnostics` | the old dashboard: live picture with overlays, fusion and its contributions, level changes, engine scores, scene classifier, pipeline rates |
+| `/admin/activity` | incidents with Real / False verdicts, snapshots, evidence bundles and chain status, dispatch packages |
+| `/admin/sos` | help requests: the open one, history, PIN answers; in test mode the demo controls (close the incident, the disclosed scripted trigger) |
+| `/admin/recordings` | *Record video*: start, stop, download and delete training recordings (D20) |
+| `/admin/faces` | face gallery: capture from the camera, upload, remove (the owner can also do it in the Portal app, People) |
+| `/admin/hardware` | profile, telemetry, camera and microphone (or "not connected"), LEDs, siren and sensors, siren test, services |
+| `/admin/network` | Portal link (reconnect), alert channels (send a test), who watched through the Portal |
 | `/setup/wifi` | Wi-Fi setup, only while `SENTRIX_SETUP_MODE=1` |
 
-The JSON API, with methods and error codes, is doc 7 §9.2 (new routes) and
-`sentrix/web/routes.py`; the main reads are `GET /api/health`,
+Old addresses redirect: `/dashboard` and `/live` → `/`; `/events`, `/alerts`,
+`/evidence`, `/dispatch` → `/admin/activity`; `/sos` → `/admin/sos`; `/node` →
+`/admin/hardware`; `/authorized` → `/admin/faces`.
+
+The JSON API, with methods and error codes, is doc 7 §9.2 (new routes),
+`sentrix/web/api_routes.py` and `sentrix/web/routes.py`; the main reads are `GET /api/health`,
 `/api/metrics`, `/api/config`, `/api/incidents`, `/api/evidence/verify`,
 `/api/sos`, `/api/node`, `/api/link`, `/api/channels`, and `/api/recordings`
-(the device admin, and the owner through the Portal). `/docs` exists only with
+(the device admin; the path table also lets the owner start, stop and list
+through the Portal, though the Portal app has no button for it). The app
+itself reads `GET /api/session` and `GET /api/state`. `/docs` exists only with
 `SENTRIX_API_DOCS=1`. Every state-changing request needs the
-`X-CSRF-Token` header that the pages send.
+`X-CSRF-Token` header that the app sends.
 
 ---
 
@@ -288,7 +299,7 @@ run on hardware).
 
 ### Daily
 
-- `/events`: review incidents and mark each Real or False. Reviewed incidents
+- Device admin → Activity (`/admin/activity`): review incidents and mark each Real or False. Reviewed incidents
   are the labelled data the fusion model needs (M8). With an open SOS request,
   False needs the SOS PIN.
 - `/api/health`: `identity_backend` is not `null`, `camera` is `true`, the
@@ -320,13 +331,13 @@ missing, and a `.json` sidecar).
   from a computer on the same network (`http://<device-ip>:8000`; `pi.env`
   binds the LAN and `ufw.sh` limits the port to your subnet), on a laptop on
   the laptop itself (`http://127.0.0.1:8000`: the console binds loopback
-  only unless `SENTRIX_HOST` is set deliberately, §4.1) → dashboard →
-  *Record video* → a label → *Start recording*; *Stop recording*, wait
+  only unless `SENTRIX_HOST` is set deliberately, §4.1) → Device admin →
+  *Record video* (`/admin/recordings`) → a label → *Start recording*; *Stop recording*, wait
   for "Finishing the files…" to clear, then *Download video* (and *Download
-  sound* when there is a separate `.wav`) and *Delete*. Through the Portal
-  the owner sees the same card with *Start* / *Stop* (after re-entering the
-  Portal password) and the list, without *Download* or *Delete*: the Portal
-  refuses those routes and never carries the files.
+  sound* when there is a separate `.wav`) and *Delete*. The Portal app has
+  no recording controls; the device's path table still accepts the owner's
+  start (after a step-up), stop and list through the tunnel, never a
+  download or a delete: the Portal never carries the files.
 - **Limits that stop or refuse a recording** (`SENTRIX_RECORD_*`, doc 7
   §3.4): 10 min each; 2 GB free kept for evidence, snapshots and logs (no start
   below it, and a running recording stops at it); 20 GB for all recordings
@@ -335,7 +346,7 @@ missing, and a `.json` sidecar).
   when that copy leaves the 2 GB floor intact; otherwise the sound stays a
   separate `.wav` and the sidecar's `error` says why. Finished recordings are
   deleted after 14 days, checked every hour whether or not anyone opens the
-  dashboard.
+  console.
 - **Check:** `python tools/doctor.py` prints ffmpeg, the recordings' count and
   size against the 20 GB cap, and free space against the 2 GB floor.
 - **After a crash, a power cut or a failed save** (on Windows a virus scanner
@@ -368,13 +379,12 @@ missing, and a `.json` sidecar).
 | Portal sign-in lands back on `/login` | (fixed) session commit after the redirect | Fixed in `640e713` (doc 7 §17) |
 | Siren test answers 409 | siren line disarmed (`SENTRIX_SIREN_ARMED=0` or the arming key) | Arm it |
 | Siren does nothing | `ConsoleSiren` selected | `siren_is_real` in `/api/health` |
-| High TCI in an empty room | should not happen | `doctor` asserts empty-scene TCI < 0.10; the TCI leaves 0 only on confirmed evidence, so read the reason on the dashboard |
-| No *Record video* card | signed in as a member or the Desk on the Portal (only the owner and the device admin get it), or the device runs a build from before 2026-10-28 | Sign in as the owner, or on the device's console with the device password (§9 "Recordings and disk"); update the device |
-| *Start recording* on the Portal says to re-enter your password | the owner's step-up is older than 5 minutes (a start needs a fresh one; a stop never does) | Re-enter the password on the Portal's *Account* page (`/account`), then press it again |
-| No *Download* or *Delete* buttons | the card is open through the Portal (the files never go through it) | Open the device's console on the home Wi-Fi at the address the card names |
-| The card says recording is turned off | `SENTRIX_RECORDING_ENABLED=0` | Set it to `1` and restart |
+| High TCI in an empty room | should not happen | `doctor` asserts empty-scene TCI < 0.10; the TCI leaves 0 only on confirmed evidence, so read the reason on Device admin → Diagnostics |
+| No *Record video* page | looking on the Portal (the Portal app has no recording page), or the device runs a build from before 2026-10-28 | Open the device's console on the LAN with the device password → Device admin → *Record video* (§9 "Recordings and disk"); update the device |
+| No *Download* or *Delete* buttons | the console is open in a browser on the Pi itself (the video would land on its SD card) | Open the device's console from a laptop on the home Wi-Fi at the address the page names |
+| The page says recording is turned off | `SENTRIX_RECORDING_ENABLED=0` | Set it to `1` and restart |
 | *Start recording* refused | camera offline or no frame yet; already recording or saving; under 2 GB free; recordings over 20 GB | The message names which; download and delete old recordings |
-| A recording has no sound | no microphone delivered sound while it ran, or ffmpeg is missing (the sound is then the separate `.wav`) | Node page "Microphone"; `tools/doctor.py` ffmpeg and microphone rows |
+| A recording has no sound | no microphone delivered sound while it ran, or ffmpeg is missing (the sound is then the separate `.wav`) | Device admin → Hardware "Camera and microphone"; `tools/doctor.py` ffmpeg and microphone rows |
 | "Microphone: not connected" with one plugged in | PortAudio has not listed it yet (a new USB microphone is held by the sound server for a few seconds), or it is not an input SENTRIX chooses | Wait up to a minute; `tools/doctor.py` lists the inputs and which one would open; set `SENTRIX_MIC_DEVICE` to its index or name |
 
 ---
@@ -383,7 +393,7 @@ missing, and a `.json` sidecar).
 
 - [ ] `SENTRIX_PASSWORD` strong; `SESSION_SECRET` and `EVIDENCE_AES_KEY` set to
       32 random bytes, the evidence key **backed up**
-- [ ] Residents enrolled and verified on `/authorized` (adults only; no minors'
+- [ ] Residents enrolled and verified on Device admin → Faces (`/admin/faces`; adults only; no minors'
       faces in the capstone)
 - [ ] `python tools/doctor.py` reports no failures; `python -m pytest` passes
 - [ ] Console bound to the LAN (or behind TLS with `SENTRIX_SECURE_COOKIES=1`);

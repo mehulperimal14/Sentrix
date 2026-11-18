@@ -57,17 +57,18 @@ deployment-room data are what is missing.
 | Detection pipeline (per-frame mode), confirmed evidence, levels, incidents, evidence vault | Done | `CLAUDE.md` M1–M5; `training/runs/custom_eval/m5/` |
 | 4 s clip engine, fast lane, ONNX/NCNN runtime backends, model export | Partly | `sentrix/pipeline/clip.py`, `fastlane.py`, `sentrix/runtime/`, `tools/export_models.py`. ONNX tested; NCNN only against a fake module (not installed) |
 | Device Local Console (LC) with CSP, CSRF, base-aware URLs, new SOS / Node / Wi-Fi setup pages | Done | `sentrix/web/`; `tests/test_web_*.py` |
+| New frontend (D22): React Portal app and device app from `frontend/`, built output committed; Portal JSON API `/api/v2`; the server-rendered pages removed | Done, deployed to Render and the Pi (2026-11-18/19) | docs/9; Python suite 2243 passed / 1 skipped (`2024b07`), Vitest 15, Playwright 22 passed / 1 skipped (`c1241c1`) |
 | SOS engine (states, safety defaults, PINs, duress, expiry, "Request help now") | Done | `sentrix/sos/`; `tests/test_sos_*.py`; docs/7 §17 |
 | Channel router and outbox; Telegram, e-mail (Brevo/Resend), modem SMS, Twilio wrapper | Partly | `sentrix/alerting/channels/`; tested with fake transports only. No real bot, e-mail account or modem used yet |
 | Device link, tunnel, Portal hub, `/d/{id}` proxy, video and state relay, SOS mirror | Partly | `sentrix/link/`, `sentrix_portal/`; 100 forced disconnects lose 0 events; two-process loopback run on the laptop (docs/7 §17). Not yet over TLS, the Internet or 4G |
 | Portal accounts, activation codes, TOTP for admin and Desk, admin console, 7-step wizard, contacts, privacy, retention | Done (laptop) | `sentrix_portal/`; `tests/test_acct_*.py`; docs/7 §17 |
-| SENTRIX Desk and contact pages | Done (laptop) | `sentrix_portal/routes/desk.py`, `contacts.py`; docs/7 §17 |
+| SENTRIX Desk and contact pages | Done (laptop) | `sentrix_portal/routes/api_v2/desk.py`, `contacts.py` and the Portal app; docs/7 §17 |
 | Raspberry Pi 5 hardware I/O (siren, GPIO, LEDs, PIR, door, mains sense, Picamera2, nmcli, watchdog) | Partly | `sentrix/io/`, `deploy/pi5/`; tested against fake pins, a fake `picamera2` and a fake `vcgencmd`. **Nothing has run on a real Pi** |
 | Portal deployment files (Docker, Caddy, Postgres, backups) | Partly | `deploy/portal/`; checked by `tests/test_deploy_portal.py`. Docker never run; no live Postgres run |
 | Demo tools (`demo_reset.py`, `demo_run.py`, demo reel camera) | Done (laptop) | docs/7 §17 |
 | End-to-end product tests | Done | `tests/test_e2e_product.py` (13 scenarios, commit `7aca186`) |
 | Slim scene model for the Pi | Done, **failed its bar** | `training/runs/custom/slim/REPORT.md`: best slim LOVO macro-F1 0.229 vs DINOv2 0.440; DINOv2 stays |
-| Training recordings from the dashboard (D20: raw video + the microphone's sound, downloaded on the LAN) and a USB microphone in any port (D21) | Done (laptop) | `sentrix/io/recorder.py`, `sentrix/web/recording_routes.py`, `sentrix/perception/audio.py`; `tests/test_recorder.py`, `tests/test_recording_*.py`, `tests/test_mic_hotplug.py`. Not yet run on the Pi or with a real microphone |
+| Training recordings from the device admin's *Record video* page (D20: raw video + the microphone's sound, downloaded on the LAN) and a USB microphone in any port (D21) | Done (laptop) | `sentrix/io/recorder.py`, `sentrix/web/recording_routes.py`, `sentrix/perception/audio.py`; `tests/test_recorder.py`, `tests/test_recording_*.py`, `tests/test_mic_hotplug.py`. Not yet run on the Pi or with a real microphone |
 | Deployment-room data (M6), retrained models (M7), fitted fusion (M8), gates on S4 (M9) | Not started (the recording mode exists) | `CLAUDE.md` M6–M9 |
 
 The test suite collects 1,647 tests (`python -m pytest --collect-only -q` on
@@ -101,7 +102,7 @@ Raspberry Pi.
 | 0 | Admin creates customer, welcome letter, activation code | Done | docs/7 §17 row 1–2 |
 | 0 | Activation, own password, 7-step wizard, contacts with confirmation, 6-digit PIN, window | Done | docs/7 §17 |
 | 0 | Claim the device by code or QR | Partly | Code claim tested. QR on the printed label is generated (`tools/provision_device.py --label`), not yet scanned with a phone |
-| 0 | Portal tunnel to the device dashboard | Partly | Laptop loopback only. Needs HTTPS, the Internet and 4G |
+| 0 | Portal tunnel to the device's JSON API (the Portal app's Live view; no console page is tunnelled since D22) | Partly | Runs on the Render Portal with the Pi on home Wi-Fi (2026-11-19). Not measured on 4G |
 | 0 | L3 opens an SOS with countdown on the Portal and the LC | Done | docs/7 §17 |
 | 0 | Telegram to the owner and contacts | Partly | Fake transport only. No bot token yet |
 | 0 | Approve, decline with PIN, expiry, safety defaults | Done | docs/7 §17; `tests/test_e2e_product.py` |
@@ -111,7 +112,7 @@ Raspberry Pi.
 | 1 | Offline approval on the LC | Done | docs/7 §17 (Portal killed, LC approved) |
 | 1 | E-mail channel | Partly | Fake transport and SUPPRESSED live run. No Brevo/Resend account |
 | 1 | Remote viewer limits and adaptive video rate | Partly | 13.6 fps on loopback. Not measured on 4G (C7: ≥ 5 fps, target 10, p95 ≤ 1.5 s) |
-| 1 | Node page | Partly | Built; readings from fakes only |
+| 1 | Hardware page (the old Node page; device app `/admin/hardware`) | Partly | Built; readings from fakes only |
 | 2 | Inbound SMS parsing, web push / PWA, owner TOTP, Hindi templates, general merge, automated export/erasure, WebRTC | Not started (by design) | Designed only. A read API for inbound SMS exists (`AT+CMGL`); export and erasure exist as manual actions on the Portal privacy page |
 
 ### 2.2 Device work packages (v2 §11, A–I)
@@ -124,7 +125,7 @@ Raspberry Pi.
 | D | Clip engine, fast lane, combined YOLO, small scene model, smaller face model, NCNN | Partly | Clip engine and fast lane done. Combined YOLO not started (M7). Slim scene model failed its bar. `buffalo_s` and NCNN not installed |
 | E | Channel router with outbox and retries | Done (fakes) | `sentrix/alerting/channels/router.py` |
 | F | Network failover (Wi-Fi metric 600, modem 700) | Partly | `deploy/pi5/networkmanager/`. Needs the dongle |
-| G | Node page | Partly | As above |
+| G | Hardware page (`/admin/hardware`) | Partly | As above |
 | H | systemd, watchdog, `var/` partition, read-only system, cloned spare card | Partly | Units and watchdog in `deploy/pi5/systemd/`. Read-only root is a documented option. No spare card cloned |
 | I | Pi process layout | Decided: one process | docs/7 §16 q5: single process kept; revisit only if Gate A fails with the link running |
 
@@ -290,7 +291,7 @@ switches are still **off**.
 | Inputs with the siren **not** connected: PIR, door, mains pull, watched on `GET /api/node` | each input changes state once per action; one `node_alert` row per mains pull |
 | LEDs: lamp test at start; green / amber / red as in the README | matches the README table |
 | Picamera2 checks still open from T-HW: the lores format, the timestamp clock, CPU cost at 15 fps | recorded in `docs/8` |
-| USB microphone plugged in **while SENTRIX runs**, then moved to another port (D21) | the Node page's Microphone row names it within a minute each time; `tools/doctor.py` lists it as the input that would open |
+| USB microphone plugged in **while SENTRIX runs**, then moved to another port (D21) | the Hardware page's (`/admin/hardware`) microphone row names it within a minute each time; `tools/doctor.py` lists it as the input that would open |
 | A 1-minute *Record video* with someone talking, downloaded on a laptop on the same Wi-Fi (D20) | VLC plays the `.avi` with sound in sync; the sidecar shows few repeated or dropped frames |
 
 ### 6.2 Power test
@@ -400,8 +401,9 @@ written down why.
 3. Customer on a phone on 4G: activate, wizard, claim by **scanning the QR on
    the label** (the first real QR claim).
 4. Check the LED goes green when claimed; check `GET /api/link` on the LC.
-5. Through `/d/{id}/` on the phone: every LC page, the live video with the
-   "remote N fps" label, the Node page.
+5. In the Portal app on the phone: Home, the Live view (`/live/{id}`) with the
+   "remote N fps" label, Activity and the alert screen; every device call goes
+   through `/d/{id}/api/...`.
 6. Write `tools/bench_link.py` (docs/7 §15 item 3: remote fps, glass-to-glass p95,
    uplink, CPU) and measure C7 on 4G: ≥ 5 fps (target 10), p95 ≤ 1.5 s, Gate A
    numbers unchanged.
@@ -409,7 +411,7 @@ written down why.
    mark it offline after 45 s and raise the tamper signal; on reconnect the
    outbox drains with nothing lost.
 
-**Done when:** the phone on 4G shows the same dashboard as the LC, a claimed
+**Done when:** the phone on 4G shows the live picture and level in the Portal app, a claimed
 device stays online for 24 h, and C7 is measured.
 
 ---
@@ -519,7 +521,7 @@ normal footage. Until P8 passes, `contacts_for_single_source_l3` stays
 | 0:00–1:00 | The problem | one slide: the 9-step flow and the architecture |
 | 1:00–2:30 | Company sells | admin creates "Riya Sharma (demo)", prints the welcome letter, shows the device label |
 | 2:30–5:00 | Onboarding | activation, password, contacts (Prashant confirms by link), claim by QR (LED green), PIN and window, SOS preview |
-| 5:00–6:30 | Same dashboard | Portal on the phone next to the LC: gauge, scores, scene card, live feed, events, evidence, HOME/ARMED |
+| 5:00–6:30 | The home from anywhere | the Portal app on the phone next to the device screen: Home, Live (live feed, level), Activity, HOME/ARMED; the device admin's Diagnostics on a laptop for the scores and the scene card |
 | 6:30–9:00 | Path A: approve | handgun clip → L3 → Telegram + prompt → "Alert my contacts and the SENTRIX desk" → Desk acknowledges → contact page → resolve |
 | 9:00–10:00 | Path B: false alarm | next trigger → False alarm + PIN → DECLINED, verdict FALSE |
 | 10:00–12:30 | No answer | safety default off: EXPIRED (unanswered) at 90 s, "Request help now"; safety default on: the contact is alerted at once |
@@ -689,7 +691,7 @@ object is visible. Classes:
 
 **Audio with every clip (D15).** The microphone you will deploy (USB), at
 the device, recorded together with the video so the two stay in sync: the
-dashboard's *Record video* (D20, below) puts the microphone's 16 kHz
+device admin's *Record video* page (D20, below) puts the microphone's 16 kHz
 track into the same AVI, sample 0 under frame 0. Plan: silent recordings first
 (phase 1, now); with sound once the Scalebee USB microphone is in (arrives
 2026-11-03), for the 2026-11-30 evaluation. For each room and session also record:
@@ -718,7 +720,7 @@ switched on and off). This is what P8 and G3 are measured on. More hours give
 a tighter bound: 0 false onsets in 3 h still allows up to about 1 per hour at
 95 %.
 
-**Tools: record from the dashboard (D20).** The device records through its
+**Tools: record from the device admin's *Record video* page (D20).** The device records through its
 own capture path, so no script and no second program holds the camera:
 
 1. Open the device's console and sign in with the device password (the
@@ -728,7 +730,7 @@ own capture path, so no script and no second program holds the camera:
    on that laptop (the console binds loopback only unless `SENTRIX_HOST` is
    set deliberately, with a firewall rule). The Portal does not offer
    recording, and never carries the files.
-2. On the dashboard, *Record video*: type a label (e.g.
+2. Device admin → *Record video* (`/admin/recordings`): type a label (e.g.
    `S1 R1 handgun 001`; it becomes part of the file name), *Start recording*.
    A red **REC mm:ss** shows on the live video for everyone watching; it is
    not in the file.
@@ -1001,7 +1003,7 @@ or re-tested on a fresh S5. It is never tuned on S4.
 
 After deployment, the people who use SENTRIX produce the best labels:
 
-1. Every incident gets a **Real / False alarm** verdict on the Events page (or
+1. Every incident gets a **Real / False alarm** verdict on the device admin's Activity page, `/admin/activity` (or
    from the SOS decline). The event log keeps the votes behind each decision.
 2. Use verdicts for training **only with consent**, and only from
    team-recorded sessions this semester (v2 §5). Customer data is never used
