@@ -65,6 +65,6 @@ test('old device console addresses land on the new pages', async ({ page, w, err
 
 test('the Portal shows the device page through the tunnel only as data', async ({ request, w }) => {
   // The device app's shell is never served through the Portal tunnel.
-  const res = await request.get(`${w.portal}/d/${w.deviceId}/admin/diagnostics`, { maxRedirects: 0 });
+  const res = await request.get(`http://127.0.0.1:8100/d/${w.deviceId}/admin/diagnostics`, { maxRedirects: 0 });
   expect([302, 303, 307, 401, 403, 404]).toContain(res.status());
 });

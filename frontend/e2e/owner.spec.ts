@@ -145,7 +145,7 @@ test('old Portal addresses still land on the right page', async ({ page, w, erro
 test('an unknown page says so, and an unknown API path is JSON', async ({ page, w, request, errors }) => {
   await page.goto(`${w.portal}/no-such-page`);
   await expect(page.getByText('This page doesn’t exist')).toBeVisible();
-  const res = await request.get(`${w.portal}/api/v2/no-such-thing`);
+  const res = await request.get(`http://127.0.0.1:8100/api/v2/no-such-thing`);
   expect(res.status()).toBe(404);
   expect(res.headers()['content-type']).toContain('application/json');
   void errors;

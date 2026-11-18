@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, openSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -63,12 +63,14 @@ export default async function globalSetup() {
   const run = spawn(PYTHON, ['tools/demo_run.py', '--dir', dir, 'start'], {
     cwd: REPO,
     env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
-    stdio: 'ignore',
+    // A real file: on Windows a child without stdout cannot print its banner.
+    stdio: ['ignore', openSync(join(dir, 'demo_run.log'), 'w'), openSync(join(dir, 'demo_run.err'), 'w')],
     detached: false,
     windowsHide: true,
   });
   world.pid = run.pid ?? 0;
   writeFileSync(STATE_FILE, JSON.stringify(world, null, 2));
-  await waitFor(`${world.portal}/healthz`);
+  // Node asks the OS resolver, which may not know *.localhost; the browser does.
+  await waitFor('http://127.0.0.1:8100/healthz');
   await waitFor(`${world.device}/api/session`);
 }

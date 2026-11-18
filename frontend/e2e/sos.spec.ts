@@ -63,15 +63,13 @@ test('a false alarm needs the SOS PIN, and a wrong PIN is refused @phone', async
   await expect(bar).toBeVisible({ timeout: 30_000 });
   await bar.getByRole('link', { name: 'Answer' }).click();
   await page.getByRole('button', { name: 'False alarm (PIN)' }).click();
-  const pad = page.getByRole('dialog');
-  await pad.locator('input').first().focus();
-  await page.keyboard.type('000000');
-  await expect(pad.getByText(/wrong|PIN/i).first()).toBeVisible();
-  await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: 'False alarm (PIN)' }).click();
-  await page.getByRole('dialog').locator('input').first().focus();
-  await page.keyboard.type(w.sosPin!);
-  await expect(page.getByText(/false alarm/i).first()).toBeVisible();
+  const tap = async (pin: string) => {
+    for (const d of pin) await page.getByRole('dialog').getByRole('button', { name: d, exact: true }).click();
+  };
+  await tap('000000');
+  await expect(page.getByRole('dialog').getByRole('alert')).toContainText(/PIN/i);
+  await tap(w.sosPin!);
+  await expect(page.getByRole('heading', { name: 'Marked as false alarm' })).toBeVisible();
   await expect(page.getByRole('alert').filter({ hasText: 'Needs your answer' })).toHaveCount(0);
   void errors;
 });
