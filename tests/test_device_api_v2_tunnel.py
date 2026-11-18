@@ -37,7 +37,8 @@ DESK = Actor("operator", id="op1", name="Kartik")
 ALL = {"remote_view": True, "face_recognition": True, "desk_live_view": True}
 
 READS = ("/api/session", "/api/state", "/api/activity")
-ADMIN_LISTS = ("/api/snapshots", "/api/evidence", "/api/dispatch", "/api/authorized")
+ADMIN_LISTS = ("/api/snapshots", "/api/evidence", "/api/dispatch")
+FACE_LIST = "/api/authorized"
 NEVER = (("POST", "/api/login"), ("POST", "/api/logout"), ("GET", "/api/setup/wifi"),
          ("POST", "/api/setup/wifi/scan"), ("POST", "/api/setup/wifi/connect"),
          ("GET", "/api/setup"), ("GET", "/api/login"))
@@ -94,6 +95,15 @@ class TestPathTable:
                 decision = p.check_request("GET", path, actor)
                 assert not decision and decision.code == "forbidden_role", (actor.type, path)
                 assert decision.path_class == "lc_only" and decision.status == 403
+
+    def test_the_face_list_follows_the_face_pictures(self):
+        assert classify("GET", FACE_LIST) == classify("HEAD", FACE_LIST) == "faces"
+        p = policy(ALL, help_path=True)
+        assert p.check_request("GET", FACE_LIST, OWNER)
+        assert p.check_request("GET", FACE_LIST, MEMBER)
+        assert p.check_request("GET", FACE_LIST, DESK).code == "forbidden_role"
+        no_faces = policy({"remote_view": True})
+        assert no_faces.check_request("GET", FACE_LIST, OWNER).code == "consent_required"
 
     def test_sign_in_and_setup_are_never_tunnelled(self):
         p = policy(ALL, help_path=True)

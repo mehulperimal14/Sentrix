@@ -11,6 +11,9 @@ test('signed out, an app page asks to sign in and returns there @phone', async (
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page).toHaveURL(/\/people$/);
   await expect(page.getByRole('heading', { name: 'Emergency contacts' })).toBeVisible();
+  // The owner's face gallery comes from the device through the tunnel.
+  await expect(page.getByRole('heading', { name: 'Faces SENTRIX recognises' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Upload photos' })).toBeVisible();
   void errors;
 });
 

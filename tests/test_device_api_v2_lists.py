@@ -275,8 +275,28 @@ class TestFaces:
         body = lc_client(console)[0].get("/api/authorized").json()
         assert body == {"backend": None, "available": False, "items": []}
 
-    def test_the_device_admin_only(self, console):
+    @staticmethod
+    def _consents(monkeypatch, **consents):
+        from sentrix.link import policy
+        monkeypatch.setattr(policy, "_profile_consents", lambda: dict(consents))
+
+    def test_the_owner_and_members_see_it_through_the_portal(self, console, monkeypatch):
+        """The owner adds faces from the Portal app; members see who is in it."""
+        populate(console)
+        self._consents(monkeypatch, remote_view=True, face_recognition=True)
+        for role in ("owner", "member"):
+            body = tunnel_client(console, role=role).get("/api/authorized").json()
+            assert body["items"][0]["url"] == f"{BASE}/media/face/alice.jpg", role
+
+    def test_not_without_the_households_consent(self, console, monkeypatch):
+        populate(console)
+        self._consents(monkeypatch, remote_view=True)
         envelope(tunnel_client(console).get("/api/authorized"), 403, "forbidden")
+
+    def test_never_the_desk(self, console, monkeypatch):
+        self._consents(monkeypatch, remote_view=True, face_recognition=True)
+        envelope(tunnel_client(console, role="operator").get("/api/authorized"), 403,
+                 "forbidden")
 
 
 # ── /api/setup/wifi ───────────────────────────────────────────────────────────

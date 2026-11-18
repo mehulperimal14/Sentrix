@@ -3,6 +3,8 @@ import { Button, EmptyState, ErrorState, Field, List, ListRow, Pill, Select, She
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { api, useSession } from '../../lib/api';
+import { FacesSection } from './Faces';
+import { useHome } from '../../lib/data';
 import { CONTACT_STATUS, ContactForm, ContactRows, type ContactOut, type ContactSaved } from './contacts';
 
 interface MemberOut {
@@ -41,6 +43,7 @@ export function People() {
   const [share, setShare] = useState<{ name: string; link: string | null; emailed: boolean } | null>(null);
   const [addMember, setAddMember] = useState(false);
   const owner = s?.role === 'owner';
+  const home = useHome();
 
   if (members.isLoading || contacts.isLoading) return <Spinner />;
   if (!members.data || !contacts.data) return <div className="p-4"><ErrorState message="Could not load people." onRetry={() => { members.refetch(); contacts.refetch(); }} /></div>;
@@ -132,8 +135,11 @@ export function People() {
             </Button>
           )
         ) : null}
-        <p className="text-[12px] text-slate">Faces are added on the device itself, by the device admin. Children’s faces are never added.</p>
       </section>
+
+      {(home.data?.devices ?? []).filter((d) => d.claimed).map((d) => (
+        <FacesSection key={d.id} deviceId={d.id} deviceName={d.room ? `${d.room} unit` : d.name} online={d.online} owner={owner} />
+      ))}
 
       <Sheet open={Boolean(open)} onClose={() => setOpen(null)} title={open?.name}>
         {open ? (

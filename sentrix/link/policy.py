@@ -96,7 +96,10 @@ NEVER_PREFIXES = ("/setup/", "/ws/", "/docs/", "/redoc/", "/api/setup/")
 #: Routes only the device admin (LC password, on the LAN) may use, whatever
 #: the method: two actions, and the device app's admin lists (docs/9).
 LC_ONLY = frozenset({"/api/link/reconnect", "/api/channels/test",
-                     "/api/snapshots", "/api/evidence", "/api/dispatch", "/api/authorized"})
+                     "/api/snapshots", "/api/evidence", "/api/dispatch"})
+#: The face gallery's list: read like the face pictures it links to (the
+#: owner adds and removes faces from the Portal app; members see who is in it).
+FACE_LIST_PATH = "/api/authorized"
 #: Path prefixes only the device admin may use, whatever the method: the
 #: training recordings' files, their downloads and deletes (D20), except the
 #: owner's status and start/stop (:data:`RECORD_STATUS_PATH`,
@@ -173,7 +176,7 @@ def classify(method: str, path: str) -> str:
     if path in LC_ONLY or path.startswith(LC_ONLY_PREFIXES):
         return LC_ADMIN
     if method in READ_METHODS:
-        if path.startswith("/media/face/"):
+        if path.startswith("/media/face/") or path == FACE_LIST_PATH:
             return FACES
         if path.startswith("/media/") or path == "/api/authorized/preview.jpg":
             return MEDIA
@@ -344,6 +347,6 @@ class TunnelPolicy:
 
 
 __all__ = ["Decision", "TunnelPolicy", "classify", "normalise_path", "STEP_UP_SECONDS",
-           "GALLERY_WRITE_PATHS", "DESK_PATHS", "LC_ONLY", "LC_ONLY_PREFIXES", "RECORD_STATUS_PATH",
+           "GALLERY_WRITE_PATHS", "FACE_LIST_PATH", "DESK_PATHS", "LC_ONLY", "LC_ONLY_PREFIXES", "RECORD_STATUS_PATH",
            "RECORD_CONTROL", "RECORD_STOP_PATH", "NEVER_EXACT", "NEVER_PREFIXES",
            "TUNNEL_METHODS"]

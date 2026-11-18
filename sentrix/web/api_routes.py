@@ -652,11 +652,15 @@ async def api_dispatch(limit: int = Query(50, ge=1, le=200),
 
 @router.get("/api/authorized", response_model=M.FaceGallery)
 async def api_faces(request: Request,
-                    _principal: auth.LcPrincipal = Depends(device_admin)) -> dict[str, Any]:
+                    principal: auth.LcPrincipal = Depends(auth.require_lc())) -> dict[str, Any]:
     """The enrolled faces. Enrol with ``POST /api/authorized/capture`` (the
-    camera's frame) or ``POST /authorized/upload``; remove with
-    ``DELETE /api/authorized/{filename}``."""
+    camera's frame) or ``POST /api/authorized/upload``; remove with
+    ``DELETE /api/authorized/{filename}``. The device admin, and through the
+    Portal the owner and members while the household allows remote viewing
+    and face recognition (the path table's face row)."""
     from sentrix.perception.identity import person_name
+    if "gallery_view" not in console.capabilities(principal):
+        raise auth.LcError("forbidden_role", f"{principal.role} may not see the face gallery")
 
     def read() -> dict[str, Any]:
         pipeline = console.get_pipeline()
