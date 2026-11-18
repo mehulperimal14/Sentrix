@@ -390,7 +390,7 @@ Against the objectives approved at proposal stage.
 | Inference hot path | < 20 ms | **Not met on CPU**: tick p50 168 ms (§7); each YOLO head 23–25 ms |
 | End-to-end detect → alert | < 2 s | **Not met**: episode onset → committed L3 p95 4.0 s on the custom videos (gate G4 FAIL, `training/runs/custom_eval/m5/gates.json`); weapon 8 of 12 episodes within 2 s |
 | False alarms vs motion baseline | ≥ 60% reduction | **Not yet measured** — needs `tools/baseline.py` and a boring set |
-| ReID rank-1 | ≥ 85% | **Not yet measured** |
+| ReID rank-1 | ≥ 85% | **Not measured on Market-1501**. OSNet x1_0, ImageNet weights (D22), nine custom videos: pairwise AUROC 0.83; identity rule at 0.85: 37 % of same-person, 0.04 % of different-people cases (`training/runs/reid/osnet_x1_0_imagenet/REPORT.md`) |
 | Evidence integrity | tamper-evident | Met — AES-256-GCM + HMAC chained manifest |
 
 The unmeasured rows, and a false-alarm rate with a useful bound (the 3.7

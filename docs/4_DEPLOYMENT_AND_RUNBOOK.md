@@ -80,9 +80,10 @@ Without a face-embedding backend identity **fails closed**: nobody is ever
 authorised. `insightface` is in the requirements; the `buffalo_l` pack (about
 280 MB) downloads on first use. `tools/doctor.py` reports which backend loaded.
 
-Optional: `pip install torchreid` (appearance re-identification; histogram
-fallback without it), `jupyterlab matplotlib` (notebooks). Voice SOS (Vosk) is
-not wired and its model is not shipped.
+Body re-identification needs nothing extra: OSNet x1_0 is built in and its
+weights are tracked in `models/reid/` (`python tools/fetch_models.py --check`;
+torchreid is not used). Optional: `jupyterlab matplotlib` (notebooks). Voice
+SOS (Vosk) is not wired and its model is not shipped.
 
 > Create the venv on an NTFS or APFS drive, never on FAT32 or a USB stick:
 > `pip install` can hang for an hour on thousands of small files.

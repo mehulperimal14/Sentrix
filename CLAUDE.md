@@ -52,8 +52,10 @@ FrameSource (io/sources.py: webcam | file | RTSP | picamera:0 | demo-reel:<json>
   capture thread at camera rate → newest-frame slot → inference thread (≤ 6 Hz)
   └─ Detector (perception/detector.py)   YOLO person (+ByteTrack) / weapon / fire heads
   └─ SceneEngine (perception/scene.py)   5-class: normal fire weapon assault robbery (DINOv2)
-  └─ IdentityWorker + TrackIdentity      InsightFace on its own thread, per track, fail-closed
-  └─ BehaviourEngine, MotionEngine, ReIDEngine, AudioEngine (optional, own thread;
+  └─ IdentityWorker + TrackIdentity      InsightFace on its own thread, per track, fail-closed;
+     + OSNet body embeddings with each face check (ReIDEngine, D22): global ids, and at
+     home a face-verified resident carried to their own track by body
+  └─ BehaviourEngine, MotionEngine, AudioEngine (optional, own thread;
      PANNs CNN10 AudioSet tagger → 7 cues, each window stamped; used only when aligned)
   → fusion/evidence.py: k-of-n confirmation, person gate, per-modality corroboration
     (video detector / video classifier / aligned audio), fight + banter rule, experimental cap
@@ -410,6 +412,51 @@ fixes, on the owner's request to implement and deploy them:
   trail shows event ids; the dashboard shows "Level 1" before the first
   state message.
 
+### Body re-identification from IntrusionSentry (2026-11-18, D22)
+
+The owner asked for the re-id model of IntrusionSentry
+(`github.com/praxshant/IntrusionSentry`, the team's earlier Flask prototype,
+one upload on 2025-12-29) in SENTRIX. What it is: torchreid's
+`FeatureExtractor("osnet_x1_0", model_path=None)`, i.e. **OSNet x1_0 with the
+ImageNet weights** torchreid downloads (`osnet_x1_0_imagenet.pth`, 10.9 MB,
+Google Drive; the repository ships no weights), 256 x 128 crops padded to
+aspect 0.5, cosine at 0.50, fused 0.6 body + 0.4 dlib face; enrolment is a
+manual in-memory capture.
+
+* `sentrix/perception/osnet.py`: the network re-implemented with torchreid's
+  parameter names (no torchreid: it does not install on Python 3.14),
+  weights loaded strictly with torch's weights-only unpickler (2,169,508
+  parameters), pre-processing identical to torchvision's (difference 0.0), an
+  onnxruntime session of its own (ONNX within 5.8e-6 of torch), ~9-12 ms a
+  crop on the laptop CPU at 2 threads. `models/reid/` tracks the weights, the
+  ONNX file and its metadata; `tools/fetch_models.py` downloads and checks
+  them (SHA-256) and re-exports the ONNX.
+* `ReIDEngine` uses OSNet when the weights are there (colour histogram
+  otherwise) and embeds bodies **with each face check** (`bodies_for`, on the
+  recognition thread when live) instead of every person on every tick;
+  global ids come from those (`global_ids`). No bodies when nobody is
+  enrolled (so the evaluation harness is unchanged).
+* `TrackIdentity`: a resident's face-verified body looks are kept (20, 30
+  min); at **home** a track whose face has not been seen counts as that
+  resident when two checks in a row match their looks at >= 0.85 and 0.05
+  ahead of any other resident. A failed face always wins, a resident
+  authorised by face on another track in view is never matched by body, and
+  armed mode ignores bodies. The HUD and logs say `alice (body)`.
+* `tools/reid_eval.py` (refuses `wa02`): ByteTrack tracks of the nine train +
+  val videos, same track >= 2 s apart vs two people in one frame; section 4.3.
+  IntrusionSentry's 0.50 bar accepts 97 % of different-people pairs on OSNet's
+  ImageNet features, so it is not used.
+* `tests/test_reid.py` (26 tests); full suite **2125 passed** (595.7 s). Code,
+  weights, tool and report: `9eb50a1`.
+* Live (`tools/bench_live.py`, vid07, the 3 enrolled faces): re-id off / OSNet
+  on: preview 29.7 / 29.7 fps, AI 5.37 / 5.53 Hz, tick p50 163 / 156 ms - the
+  inference thread is unchanged. vid07 through the pipeline at 6 Hz with the
+  same gallery: of 2234 person-ticks 2163 were faces seen and not matched
+  (`unknown`: the body is never asked), 27 authorised by face, and the body
+  carried 2 of the 44 otherwise `unverified`. Not measured: the demo room,
+  the Pi's CPU cost (OSNet runs on the recognition thread, ~10 ms a crop here),
+  and re-id-trained weights (docs/5 §3.4).
+
 ## 3. Git history
 
 | Branch | Head | Contents |
@@ -453,6 +500,10 @@ then `565c23f` (THIRD_PARTY.md rows) and the M11b review fixes:
 ```
 819619a docs(m11b): review fixes - decisions, offline rule, results
 ba0bf17 fix(m11): review findings - offline SOS, sound-model threads, banter, overlapping audio
+```
+Later on the same branch (newest first; `git log sentrix/portal` for the rest):
+```
+9eb50a1 feat(reid): OSNet x1_0 from IntrusionSentry - body embeddings and body identity at home (D22)
 ```
 
 Commits on `sentrix/portal` up to `main` (first parent, newest first; each
@@ -560,6 +611,7 @@ validated** (2 videos / 1 event). Only two rooms are represented.
 | Sound model | PANNs CNN10 (AudioSet, 527 classes, 25 MB) on its own onnxruntime session: **40.1 ms p50 / 42.3 ms p95** per 4 s window, laptop CPU, 2 intra-op threads; torch's threads untouched (DINOv2 97.9 → 96.4 ms/frame after building the audio engine; the first M11 version's `set_num_threads(2)` doubled it) | `AudioEngine.classify_window`, `SceneEngine.score_frames` (`ba0bf17`) |
 | Pi 5 live in the demo room (clip mode, 320 px, ONNX; 2026-10-23/24, ~10 h; no simulated alerts) | 8077 clips: scene p(weapon) per scored keyframe median 0.19, p99 0.53, p99.9 0.65, max 0.742; at the 0.50 floor **16 clips confirmed = the 16 weapon L3s** (scene alone; the weapon detector never confirmed; 5 of their SOS requests declined as false alarms on the Pi); at >= 0.60 none. Per-deployment threshold set to weapon 0.75 on the Pi (`var/calibration/scene.json`). Not yet measured: a replica gun in that room | the Pi's own event log (`var/events/`, private), read-only analysis 2026-10-24 |
 | Pi 5 demo room, fire (2026-10-23 and 10-27: 16,927 clips, 12.1 h; 5,435 scored by the scene model, 5.7 h, no flame in view) | scene p(fire) per keyframe median 0.073, p99 0.212, p99.9 0.494, max 0.646; the confirming second keyframe never above 0.587; confirmed clips at 0.45 / 0.50 / 0.55 / >= 0.60: 4 / 1 / 1 / 0 (the 2 false fire L3s); the fire detector drew no fire box. Per-deployment threshold **fire 0.70** (owner approved 2026-10-28) next to weapon 0.75 | the Pi's event log and database (read-only analysis 2026-10-28) |
+| Body re-id, OSNet x1_0 ImageNet (IntrusionSentry's model) vs colour histogram, ByteTrack tracks of the nine train + val videos at 6 Hz (boxes >= 80 px; `wa02` refused) | pairwise (same track >= 2 s apart: 4524; two people in one frame: 2498): AUROC **0.83** vs 0.73; OSNet accepts 43 % of same-person pairs at 1 % different (bar 0.77, the global-id bar); IntrusionSentry's 0.50 accepts 97.8 % same and **97.2 % different**. Identity rule (20 looks, two checks 1 s apart; 1194 / 23546 cases): AUROC 0.96; at **0.85** 37 % same, 0.04 % different (the D22 bar); 0.80: 70 % / 1.6 % | `training/runs/reid/osnet_x1_0_imagenet/REPORT.md` (`tools/reid_eval.py`) |
 | Pi 5 clip engine (ONNX, fast lane, `buffalo_s`; `gun.mov` as a 30 fps camera) | clip compute p50 **8.0 s** at 640 px objects (74 % of clips dropped, decisions 9.3 s old) → **3.9 s at 320 px** (48 %, 4.3 s), 2.2 s at 320 px + 1 scene frame (10 %, 3.2 s); budget 1.6 s. Clip replay of the 9 train + val videos (`wa02` not replayed, partly in-sample): 640 / 320 / 320 + 1 scene frame → L3 weapon 9/9, 9/9, 8/9; fire 3/3, 3/3, 2/3; L4 weapon 6/8, 5/8, 3/8; 0 false onsets at L3+. The Pi profile uses 320 px (`SENTRIX_CLIP_IMGSZ=320`) | `training/runs/custom_eval/pi5/REPORT.md` (knobs `4503b0d`) |
 
 ---
@@ -643,6 +695,7 @@ video/session is never used for tuning.
 | D19 | **No buzzer and no talk-down speaker** (2026-10-27; withdraws D16 and the buzzer of the T-HW pin table): both are gone from the hardware, the code, the Local Console, the settings, the installer and the docs. The device's outputs are the three status LEDs (GPIO 5/12/13), the siren relay (GPIO17), the Local Console and Portal, and the alert channels; level rises, a Portal claim, a failed SOS, mains loss and tamper show on the LEDs, the console and the event log (mains and tamper also as `node.alert`). GPIO26 is free. The microphone stays (D15); its self-output filter now covers the siren only. Enclosure rev F has no buzzer cup. | The owner's call: the buzzer module stayed silent in the demo unit and was taken out, and the speaker's hardware was never fitted; nothing is offered that the unit cannot show. |
 | D20 | **Training recordings from the dashboard** (2026-10-28; the "record normal session" mode of M6). The **device admin on the LAN only** starts and stops a recording (optional label) on the dashboard's *Record video* card and lists, downloads and deletes them (`/api/recordings*`, `/media/recording/*`, `require_lc("device_admin")`, 10 starts/min, a stop never limited); **never through the Portal**: the path table refuses those paths to every tunnelled role (`LC_ONLY_PREFIXES`, `lc_only`), a recording is far over the tunnel's 16 MiB response cap, and continuous video stays on the device (D12). *Amended 2026-10-28: the owner can also start a recording through the Portal with a fresh step-up (path-table class `record`, the siren test's rule) and stop it without one (`record_stop`: a step-up lasts 5 min, a recording up to 10, and stopping the filming is never blocked) and see the status and list (`record_status`, no step-up); downloads and deletes stay on the LAN.* A recording is the camera's **raw frames** (no HUD) at the camera's resolution (Pi: 1280x720 at 15 fps; wider frames scaled to 1280) as **MJPEG AVI at a constant frame rate** (the camera's own rate; frame n is at t0 + n/fps: a missed slot repeats the last frame, a second frame in one slot is dropped, both counted), plus, while a microphone is connected, its **16 kHz mono PCM** track (sample 0 under frame 0, gaps zero-filled) **muxed with ffmpeg** (a separate `.wav` without it), and a JSON sidecar (who, when, frames repeated and dropped, audio gaps, camera, profile, device). **Caps** (`SENTRIX_RECORD_*`): 10 min each; 2 GB free kept for the alarm's evidence and logs (no start below it, a stop at it); 20 GB for all recordings (no new start above it); deleted after 14 days; the video also stops at 1.9 GB (OpenCV's AVI writer is unreadable past 2 GiB), when the camera is gone for 5 s and at shutdown; a crash's or a failed save's `.part` files are finished (at once, before the next take, hourly or at the next start; a save that wrote its sidecar keeps its figures); the mux runs only when its copy leaves the 2 GB floor intact; old recordings are pruned hourly with or without a dashboard open; the rate is a whole number (the AVI header stores it rounded). A red **REC mm:ss** badge on the live preview for everyone watching (LC and Portal viewers alike), never in the file. **Downloads never land on the Pi**: a browser on the device itself (its desktop dashboard on 127.0.0.1, or the Pi opening its own address) is refused (409, `SENTRIX_RECORD_DOWNLOAD_ON_DEVICE=auto` on a Raspberry Pi) and the card names the address to open on a laptop, so gigabytes of video never fill the 128 GB SD card the evidence shares; `/api/health` says only whether a recording runs, never its name (the label would reach the Portal in `hello.health`). **Consent** of everyone filmed (ROADMAP §15.1). **Purpose**: deployment-room training data (M6). Audited in the device log only: `recording_started`, `_stopped`, `_downloaded`, `_deleted`, `_pruned`, `_recovered`. | The models fail in the demo room because none of their footage came from it (section 5); footage from the deployed camera, mount and microphone is the fix, and a button on the dashboard is the cheapest way for the team to collect it. |
 | D21 | **A USB microphone in any port, at any time** (2026-10-28; replaces the default-input retry loop of `019854c`). The engine opens the best input there is now: `SENTRIX_MIC_DEVICE` (an index or a name substring) > a USB input (one plugged in while SENTRIX runs first) > another input plugged in while it runs > the system default; display audio (HDMI, vc4), monitors and loopbacks never, unless asked for; headsets (Bluetooth hands-free included) and virtual microphones only as a last resort, when no other input exists (a cheap USB adapter may call itself a headset, and on the Pi it is the only microphone). On Linux `PA_ALSA_PLUGHW=1`, so PortAudio opens the USB card through ALSA's `plughw` (PipeWire is not in the path) at the card's own rate first (plughw at 16 kHz would convert with ALSA's unfiltered `linear` converter: the demo Pi has no speexrate); elsewhere 16 kHz if the device takes it, else 48, 32 kHz or its own rate (44.1 kHz), resampled to 16 kHz with a filter whose state carries across blocks (multi-channel input downmixed), so listeners (clip buffer, recorder) always get 16 kHz mono. PortAudio's device list is rebuilt **only when the OS's own list changes** (`/proc/asound/cards`, the Windows wave-in count, read without opening anything), a few times after a change, and every `SENTRIX_MIC_RESCAN_SECONDS` (60) while no microphone is open: the old re-initialise every 5 s closed every stream and muted the log (sounddevice sends stderr to /dev/null while PortAudio initialises). A better input appearing (laptop mic → USB) is switched to. A microphone counts as **connected from its first block**, not from the open, and `mic_available` is the engine's own "delivering" (`mic_delivering`, written by the live loop; the same as `/api/health` `audio`), with `mic_classifying` saying whether a window was labelled (`state.mic_state`), so the dashboard neither says "Microphone: listening" with nothing plugged in nor "off" while a recording captures the room with the sound model off; `/api/health` and `/api/node` carry `microphone` (`AudioEngine.status()`: device, host API, native rate, channels, blocks, last error). With `SENTRIX_AUDIO_MODEL=off` the microphone still captures (for recordings) and nothing is classified. | The demo unit's microphone (a Scalebee USB microphone, arriving 2026-11-03) goes into whichever port is free, possibly after start-up; the old loop opened the default input only, at 16 kHz only, and called a stream "connected" before any sound arrived. |
+| D22 | **Body re-identification from IntrusionSentry** (2026-11-18; amends M4's "a new track never inherits it"). The body model is IntrusionSentry's: OSNet x1_0 with ImageNet weights (`sentrix/perception/osnet.py`, `models/reid/`, own onnxruntime session, `SENTRIX_REID_MODEL=auto|histogram|off`, `SENTRIX_REID_THREADS`), embedded with each face check, never per tick. At **home** (`SENTRIX_REID_IDENTITY=1`, default) a track whose face has not been seen is authorised as a resident when its body matches that resident's face-verified looks (last 20, 30 min) at >= **0.85** on **2 checks in a row**, >= 0.05 ahead of any other resident; shown as `name (body)` and `via: "appearance"` in the track verdict. Never: in armed mode (only a face clears the intrusion rule), against a face that was seen and failed, for a resident authorised by face on another track in view, with colour-histogram bodies. Global ids use OSNet at 0.77. IntrusionSentry's 0.50 bar and its manual body enrolment are not used: on these features 0.50 accepts 97 % of different-people pairs, and SENTRIX learns looks from verified faces instead. | A resident who turns away or re-enters became "unverified" and, after 10 s at home, an L2 "unrecognised person" (D2); the body bridges that, while a stranger is accepted in 0.04 % of measured cases. Identity still never relaxes threat evidence (M1), so a wrong body match can at most hide an L2 at home. |
 
 ### Milestones
 
@@ -680,7 +733,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done (with commit).
 **M4 — Identity and enrollment (days 5–7)**
 - [x] `POST /api/authorized/capture` from the pipeline's raw frame (auth, 20/min rate limit, quality gates with actionable reasons: exactly one face, ≥ 80 px, sharpness, brightness, not already enrolled under another name); `GET /api/authorized/preview.jpg` (raw frame, no HUD); `authorized.html` uses them instead of the browser webcam.
 - [x] Upload fixed (compared `alice.jpg` with the stem `alice`, so every upload said "not enrolled"; now gated like capture, several files with a result each, rejected images are not stored), assessment off the event loop, reload lock, incremental enrol/remove (no full re-embed), extra `</div>` removed, per-tile enrolled/not-enrolled status, several photos per person (`alice__2.jpg`), gallery changes audited in the event log (`gallery_enrolled/removed/rejected`; the unused `enrolled_faces` table is left alone).
-- [x] **Per-track identity** (`TrackIdentity`): each face attached to the person box containing it; authorised/unknown/unverified per ByteTrack id; match held on the track for 60 s unless its face fails twice in a row; a new track never inherits it; the frame is authorised only when everyone in view is (armed intrusion fails closed on unverified people); HUD labels boxes with the person's name or state. *Identity still does not relax threat evidence (M1); revisit with team data.*
+- [x] **Per-track identity** (`TrackIdentity`): each face attached to the person box containing it; authorised/unknown/unverified per ByteTrack id; match held on the track for 60 s unless its face fails twice in a row; a new track never inherits it (*D22: at home, a resident's body match can, never in armed mode*); the frame is authorised only when everyone in view is (armed intrusion fails closed on unverified people); HUD labels boxes with the person's name or state. *Identity still does not relax threat evidence (M1); revisit with team data.*
 - [ ] **Acceptance** (needs the team): enrol everyone while monitoring; 5-minute team sit-in → 0 incidents in home mode, identity flicker < 0.1 flips/person-minute. Unit tests cover tailgating, turning away, track swaps, one bad look, stale checks (196 tests); live bench unchanged at 5.5 Hz.
 
 **M5 — Evaluation that matches the product (days 6–8)**
