@@ -1,0 +1,86 @@
+{
+  "model_name": "fire_detector_room_v5",
+  "architecture": "YOLO11n (from models/v4_custom/fire_detector_custom_v4.pt)",
+  "init": "fire_detector_custom_v4.pt (models/v4_custom)",
+  "task": "fire",
+  "classes": [
+    "fire"
+  ],
+  "class_id_map": {
+    "0": "fire"
+  },
+  "image_size": 640,
+  "dataset": "SENTRIX custom frames (977 frames, 15 videos, 2026-11-18) + boxes.csv + 2000 fire/smoke train images (rehearsal; fire boxes only, smoke dropped as in D1)",
+  "rehearsal_images": 2000,
+  "positive_repeat": 3,
+  "epochs_configured": 60,
+  "patience": 15,
+  "seed": 42,
+  "metrics": {
+    "custom_val": {
+      "mAP50": 0.6049,
+      "mAP50_95": 0.3984,
+      "precision": 1.0,
+      "recall": 0.4794,
+      "per_class_mAP50": {
+        "fire": 0.6049
+      }
+    },
+    "frame_level": {
+      "val": {
+        "n_pos": 6,
+        "n_neg": 23,
+        "auroc": 0.8116,
+        "recall@0.25": 0.0,
+        "fpr@0.25": 0.0,
+        "recall@0.4": 0.0,
+        "fpr@0.4": 0.0,
+        "recall@0.5": 0.0,
+        "fpr@0.5": 0.0,
+        "recall@0.55": 0.0,
+        "fpr@0.55": 0.0,
+        "recall@0.7": 0.0,
+        "fpr@0.7": 0.0
+      }
+    },
+    "training_minutes": 18.2,
+    "dataset": {
+      "train_negative": 654,
+      "train_positive": 11,
+      "train_excluded": 135,
+      "val_negative": 78,
+      "val_positive": 6,
+      "test_negative": 93,
+      "train_rehearsal": 2000
+    },
+    "retention": {
+      "finetuned": {
+        "mAP50": 0.448,
+        "mAP50_95": 0.1962,
+        "precision": 0.5736,
+        "recall": 0.4178,
+        "per_class_mAP50": {
+          "fire": 0.448
+        }
+      },
+      "initial": {
+        "mAP50": 0.0028,
+        "mAP50_95": 0.0006,
+        "precision": 0.0056,
+        "recall": 0.0047,
+        "per_class_mAP50": {
+          "fire": 0.0028
+        }
+      }
+    }
+  },
+  "run_id": "20261119_003155",
+  "training_type": "real_data",
+  "synthetic_data": false,
+  "box_source": "GroundingDINO proposals gated by reviewed frame labels, person-overlap check and visual QC (annotate_boxes.py)",
+  "selection": {
+    "rule": "fixed before training: custom old-val fire AUROC not lower, no rise in false alarms on held-out custom normal frames (0.25), public fire AP50 not lower",
+    "report": "training/runs/eval/fire_candidate_2026-11-19/report.json",
+    "result": "pass: old-val AUROC 0.587 -> 0.964, FPR@0.25 0/0 (= v4), public fire AP50 0.000 -> 0.487; old-val recall at 0.25 still 0 (the small aerosol flame scores below the vote)"
+  }
+}

@@ -1,0 +1,118 @@
+{
+  "model_name": "weapon_detector_room_v5",
+  "architecture": "YOLO11n (from models/v4_custom/weapon_detector_custom_v4.pt)",
+  "init": "weapon_detector_custom_v4.pt (models/v4_custom)",
+  "task": "weapon",
+  "classes": [
+    "pistol",
+    "knife",
+    "long_gun",
+    "stick"
+  ],
+  "class_id_map": {
+    "0": "pistol",
+    "1": "knife",
+    "2": "long_gun",
+    "3": "stick"
+  },
+  "image_size": 640,
+  "dataset": "SENTRIX custom frames (977 frames, 15 videos, 2026-11-18) + boxes.csv (180 QC boxes) + 2000 Roboflow weaponsdata v4 train images (rehearsal)",
+  "rehearsal_images": 2000,
+  "positive_repeat": 3,
+  "epochs_configured": 60,
+  "patience": 15,
+  "seed": 42,
+  "metrics": {
+    "custom_val": {
+      "mAP50": 0.5533,
+      "mAP50_95": 0.3135,
+      "precision": 0.879,
+      "recall": 0.4091,
+      "per_class_mAP50": {
+        "pistol": 0.5533
+      }
+    },
+    "frame_level": {
+      "val": {
+        "n_pos": 55,
+        "n_neg": 23,
+        "auroc": 0.8395,
+        "recall@0.25": 0.2182,
+        "fpr@0.25": 0.0,
+        "recall@0.4": 0.2,
+        "fpr@0.4": 0.0,
+        "recall@0.5": 0.2,
+        "fpr@0.5": 0.0,
+        "recall@0.55": 0.1818,
+        "fpr@0.55": 0.0,
+        "recall@0.7": 0.0727,
+        "fpr@0.7": 0.0
+      },
+      "test": {
+        "n_pos": 26,
+        "n_neg": 67,
+        "auroc": 0.2859,
+        "recall@0.25": 0.0385,
+        "fpr@0.25": 0.2239,
+        "recall@0.4": 0.0385,
+        "fpr@0.4": 0.1045,
+        "recall@0.5": 0.0,
+        "fpr@0.5": 0.0597,
+        "recall@0.55": 0.0,
+        "fpr@0.55": 0.0448,
+        "recall@0.7": 0.0,
+        "fpr@0.7": 0.0299
+      }
+    },
+    "training_minutes": 41.9,
+    "dataset": {
+      "train_negative": 474,
+      "train_positive": 104,
+      "train_excluded": 222,
+      "val_negative": 29,
+      "val_positive": 44,
+      "val_excluded": 11,
+      "test_negative": 67,
+      "test_positive": 15,
+      "test_excluded": 11,
+      "train_rehearsal": 2000
+    },
+    "custom_test": {
+      "mAP50": 0.0028,
+      "mAP50_95": 0.0013,
+      "precision": 0.0033,
+      "recall": 0.1333,
+      "per_class_mAP50": {
+        "stick": 0.0028
+      }
+    },
+    "retention": {
+      "finetuned": {
+        "mAP50": 0.7236,
+        "mAP50_95": 0.3819,
+        "precision": 0.8001,
+        "recall": 0.6195,
+        "per_class_mAP50": {
+          "pistol": 0.782,
+          "knife": 0.7151,
+          "long_gun": 0.6737
+        }
+      },
+      "initial": {
+        "mAP50": 0.0024,
+        "mAP50_95": 0.0009,
+        "precision": 0.0148,
+        "recall": 0.0078
+      }
+    }
+  },
+  "run_id": "20261119_001155",
+  "training_type": "real_data",
+  "synthetic_data": false,
+  "box_source": "GroundingDINO proposals gated by reviewed frame labels, person-overlap check and visual QC (annotate_boxes.py)",
+  "selection": {
+    "rule": "fixed before training: no rise in false alarms on held-out custom normal frames (old val + wa02, voting classes at 0.25), old-val weapon AUROC not lower by more than 0.02, public test pistol AP50 not lower",
+    "report": "training/runs/eval/detectors_2026-11-19/report.json",
+    "result": "pass: FPR@0.25 0.0/0.0149 (= v4), old-val AUROC 0.7478 -> 0.8711, public pistol AP50 0.0074 -> 0.6993, knife AP50 0.7165 (new)"
+  }
+}
