@@ -502,7 +502,10 @@ branch's room-calibration work, its D23, stays there).
   0.000 -> 0.487). Replay: the new gun and knife scenes reach L3, weapon
   episodes at L3 9/14 -> 11/14, fire at L5 2/3 -> 0/3 (L3, L4 unchanged),
   false L3 onsets unchanged (1).
-  One known false box: the v5 weapon head calls the dark bag the masked thief\n  holds in `mmtheft` a "pistol" (0.67), which lifts that robbery episode to L3\n  (the robbery evidence itself stays at L2). Robbery frames are excluded from\n  detector training; mark weapon-free robbery videos as negatives next time.
+  One known false box: the v5 weapon head calls the dark bag the masked thief
+  holds in `mmtheft` a "pistol" (0.67), which lifts that robbery episode to L3
+  (the robbery evidence itself stays at L2). Robbery frames are excluded from
+  detector training; mark weapon-free robbery videos as negatives next time.
 * **v5 room scene classifier** (`models/v5_room/scene_classifier_room_v5.pt`, the v4
   DINOv2 recipe with the new videos): passed its bars (old-val macro-F1
   0.700 -> 0.743, no held-out normal frame flagged) but ships **opt-in**
