@@ -551,7 +551,7 @@ Frame AUROC of the scene model, weapon / fire & 0.93 / 0.999 & -- & --\\ \hline
 
 These numbers are encouraging but not a validation: seven of the ten videos were used in training, and 3.7 minutes of normal footage can only bound the false-alarm rate at 60 per hour, far above what a home needs. Two release gates measured on this data fail: G2 (handgun episodes confirmed within 2\,s: 8 of 12) and G4 (onset to Level~3 at the 95th percentile: 4.0\,s against 2\,s).
 
-\subsection{Detector heads retrained on fifteen videos}
+\subsection{Models retrained on fifteen videos}
 The weapon and fire heads were retrained from the v4 heads on all 977 frames (fifteen videos, 180 boxes) with 2000 public images mixed back in, so that the public classes are not forgotten. The weapon head gained knife and long-gun classes. Each head had to pass bars fixed before training:
 \begin{itemize}
 \item no rise in false alarms on the held-out normal frames of the validation and test videos;
@@ -567,7 +567,13 @@ In the replay of all fifteen videos, 11 of 14 weapon episodes reach Level~3 inst
 \end{itemize}
 The five new videos are in the training split, so their replay is in-sample.
 
-The scene classifier was not retrained in this step. Measured on the five new videos it recognises the new scenes poorly: accuracy 0.43, macro-F1 0.16, 1 of 47 weapon frames. It raised no false weapon or fire alarm on their 90 normal frames.
+\paragraph{The scene classifier (v5).} The v4 scene classifier had never seen the five new videos, and it recognised them poorly: accuracy 0.43, macro-F1 0.16 and 1 of 47 weapon frames, though it raised no false weapon or fire alarm on their 90 normal frames. It was retrained with the same recipe (DINOv2, last four blocks):
+\begin{itemize}
+\item \textbf{Cross-validation:} leave-one-video-out over the fourteen training and validation videos (884 frames) gives a tuned macro-F1 of 0.433. Held out, the new handgun video scores an accuracy of 1.00 and the knife video 0.54; the assault and theft videos stay low (0.31, 0.36).
+\item \textbf{Validation, as the product runs it (floors applied):} macro-F1 0.700 $\to$ 0.743; weapon recall 0.36 $\to$ 0.45; weapon AUROC 0.786 $\to$ 0.843.
+\item \textbf{False alarms:} no held-out normal frame flagged, the same as v4 (0 of 90).
+\end{itemize}
+The final model is fit on the training split. A room's thresholds belong to one model (D23), so v5 ships in the repository but is \emph{opt-in} (\code{SENTRIX\_SCENE\_WEIGHTS}). The demo Pi stays on v4 until v5 has run a few quiet hours in that room and the room has been calibrated again.
 
 \begin{table}[htbp]
 \caption{v4 and v5 detector heads (held-out validation: gun, vid04; replay: all fifteen videos, tick mode at 6\,Hz with their soundtracks, partly in-sample)}
