@@ -1,7 +1,9 @@
 import { ApiError } from '@sentrix/api';
 import { Band, BandButton, Button, Countdown, PinPad, Segmented, Strip, formatTime, useToast } from '@sentrix/ui';
 import { useMutation } from '@tanstack/react-query';
+import { Settings } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from 'react-router';
 import { api, type DeviceSession } from '../lib/api';
 import { alertHeadline, defaultAuthority, evidencePhrase, type SosBlock } from '../lib/state';
 
@@ -146,6 +148,14 @@ export function AlertTakeover({ sos, session }: { sos: SosBlock; session: Device
               <p className="text-[12.5px] text-slate">SENTRIX does not contact 112 itself.</p>
             </>
           )}
+          {session.canAdmin ? (
+            // The alert covers the wall view and its admin button; the device
+            // admin can still reach the admin pages (the alert keeps running).
+            <Link to="/admin" className="mt-auto inline-flex items-center gap-1.5 self-end rounded-lg border border-line px-2.5 py-1 text-[13px] font-semibold text-graphite">
+              <Settings className="size-4" aria-hidden />
+              Device admin
+            </Link>
+          ) : null}
         </div>
       </div>
     </div>
