@@ -1,0 +1,9 @@
+{
+  "source": "osnet_ain_x1_0_msmt17.pth",
+  "source_sha256": "8a07e8da38946f7cee37f4561617bf8b6d2fe8f3a4027852893ea092e46d919f",
+  "onnx_sha256": "dceb964ac876fc17beb54158365484d39397df3a902432b0dee443b452221984",
+  "max_abs_diff_vs_torch": 2.5272369384765625e-05,
+  "opset": 17,
+  "input": "image [batch, 3, 256, 128] float32, RGB, ImageNet mean/std",
+  "output": "feature [batch, 512] (OSNet fc output, not yet L2-normalised)"
+}

@@ -16,8 +16,8 @@ Here embeddings are explicitly unit-normalised, compared by cosine similarity,
 and each gallery entry carries its own immutable id. Entries expire on a TTL
 rather than by position, so ids stay stable for as long as an entry lives.
 
-**Body model** (CLAUDE.md D22): OSNet x1_0 with ImageNet weights, the re-id
-model of IntrusionSentry (``sentrix/perception/osnet.py``), when
+**Body model** (CLAUDE.md D22): OSNet, IntrusionSentry's re-id model family -
+OSNet-AIN x1_0 trained on MSMT17 (``sentrix/perception/osnet.py``) - when
 ``models/reid/`` holds its weights; else the 8x8x8 colour histogram. Body
 embeddings are computed **with each face check** (:meth:`ReIDEngine.bodies_for`,
 on the recognition thread when live), never per person per tick on the
@@ -95,8 +95,9 @@ class ReIDEngine:
         else:
             self.backend = "histogram"
         if self.backend == "osnet":
-            log.info("re-id backend: OSNet x1_0 (IntrusionSentry), %d-thread session",
-                     self.cfg.threads)
+            log.info("re-id backend: %s (%s), %d-thread session",
+                     getattr(self._embedder, "name", "osnet"),
+                     getattr(self._embedder, "weights", "injected"), self.cfg.threads)
 
     @property
     def enabled(self) -> bool:

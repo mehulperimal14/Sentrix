@@ -122,7 +122,7 @@ def check_models(report: Report) -> None:
     if _settings.reid.model == "off":
         report.add(WARN, "body re-id", "off (SENTRIX_REID_MODEL=off)")
     elif body.exists() and _settings.reid.model != "histogram":
-        report.add(OK, "body re-id", f"reid/{REID_WEIGHTS} (OSNet x1_0, IntrusionSentry), "
+        report.add(OK, "body re-id", f"reid/{REID_WEIGHTS} (OSNet-AIN, MSMT17), "
                                      f"{body.stat().st_size / 1e6:.1f} MB; carries a resident "
                                      f"by body at home: {'on' if _settings.reid.identity else 'off'}")
     else:

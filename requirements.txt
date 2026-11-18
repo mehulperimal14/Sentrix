@@ -78,8 +78,8 @@ gpiozero>=2.0.1               # siren relay, LEDs, PIR, door, mains-sense
 pytest>=8.0.0
 
 # ── optional, install explicitly ──────────────────────────────────────────────
-# Body re-identification needs no extra package: OSNet x1_0 (IntrusionSentry's
-# model) is built in (sentrix/perception/osnet.py) and its weights are in
+# Body re-identification needs no extra package: OSNet (IntrusionSentry's model
+# family) is built in (sentrix/perception/osnet.py) and its weights are in
 # models/reid/ (python tools/fetch_models.py --check). torchreid is not used.
 #
 # Offline voice SOS:

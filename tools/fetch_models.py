@@ -1,9 +1,9 @@
 """Download the third-party model weights SENTRIX does not train itself.
 
 Two files: the PANNs CNN10 AudioSet tagger (25 MB, Zenodo record 3987831,
-Kong et al. 2020) used as the general sound model (D15), and OSNet x1_0 with
-ImageNet weights (10.9 MB, torchreid's model zoo on Google Drive; Zhou et al.
-2019), the body re-id model of IntrusionSentry (D22). Both are tracked in git
+Kong et al. 2020) used as the general sound model (D15), and OSNet-AIN x1_0
+trained on MSMT17 (17.3 MB, torchreid's model zoo on Google Drive; Zhou et al.
+2021), the body re-id model (D22; IntrusionSentry's OSNet family). Both are tracked in git
 under ``models/audio/`` and ``models/reid/``, so a fresh clone needs this only
 if a file was removed or is corrupt. A download is checked against its SHA-256
 before it replaces anything, and the weights are only ever read with torch's

@@ -478,9 +478,10 @@ class ReIDConfig:
     *distance* threshold of 120.0 — unreachable for unit vectors, whose maximum
     separation is 2.0 — so every person collapsed onto a single global id.
 
-    The body embedding is OSNet x1_0 with ImageNet weights, the re-id model of
-    IntrusionSentry (``sentrix/perception/osnet.py``); the colour histogram is
-    the fallback when its weights are missing.
+    The body embedding is OSNet, IntrusionSentry's re-id model family: OSNet-AIN
+    x1_0 trained on MSMT17 (``sentrix/perception/osnet.py``); the colour
+    histogram is the fallback when its weights are missing. The OSNet bars
+    below belong to those weights (``training/runs/reid/osnet_weights_compare``).
     """
 
     #: ``auto`` (OSNet when ``models/reid/`` holds its weights, else the colour
@@ -490,9 +491,9 @@ class ReIDConfig:
     threads: int = _env_int("SENTRIX_REID_THREADS", 2)
     #: Global ids: cosine bar of the colour histogram, and of OSNet (the bar
     #: that accepts 1 % of different-people pairs on the nine train + val
-    #: videos, training/runs/reid/osnet_x1_0_imagenet/REPORT.md).
+    #: videos, rounded: 0.6638 -> 0.66; training/runs/reid/osnet_weights_compare).
     match_similarity: float = 0.72
-    osnet_match_similarity: float = 0.77
+    osnet_match_similarity: float = 0.66
     gallery_size: int = 200
     #: Forget a gallery entry that has not been matched for this long.
     gallery_ttl_seconds: float = 600.0
@@ -500,10 +501,11 @@ class ReIDConfig:
     #: when its OSNet body matches that resident's face-verified looks
     #: (``TrackIdentity``). Never in armed mode, never against a failed face.
     identity: bool = _env_bool("SENTRIX_REID_IDENTITY", True)
-    #: The bar on the best look, met on ``identity_hits`` checks in a row: 0.85
-    #: accepted 0.04 % of different-people and 37 % of same-person cases on the
-    #: nine train + val videos (20 looks, checks 1 s apart; same report).
-    identity_similarity: float = 0.85
+    #: The bar on the best look, met on ``identity_hits`` checks in a row: the
+    #: smallest 0.01 step accepting <= 0.05 % of different-people cases on the
+    #: nine train + val videos (20 looks, checks 1 s apart): 0.86, which
+    #: accepted 0.042 % of different-people and 42 % of same-person cases.
+    identity_similarity: float = 0.86
     identity_hits: int = 2
     #: How far ahead of every other resident the best match must be (a priori:
     #: the custom videos hold no two enrolled residents to measure it on).

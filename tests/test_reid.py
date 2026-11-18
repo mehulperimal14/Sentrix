@@ -1,4 +1,4 @@
-"""Body re-identification: OSNet x1_0 from IntrusionSentry (D22).
+"""Body re-identification: IntrusionSentry's OSNet, shipped as OSNet-AIN (D22).
 
 Pins the model port (crop, pre-processing, weights, ONNX parity), the
 ``ReIDEngine`` (backends, bodies with each face check, global ids) and the
@@ -96,6 +96,47 @@ def test_preprocess_matches_torchreid_transforms():
                            T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])])
     want = reference(T.ToPILImage()(np.ascontiguousarray(crop[:, :, ::-1]))).numpy()
     assert np.abs(osnet.preprocess([crop])[0] - want).max() < 1e-5
+
+
+def test_both_networks_carry_torchreids_parameter_names():
+    pytest.importorskip("torch")
+    plain = osnet._build_osnet("osnet_x1_0").state_dict()
+    ain = osnet._build_osnet("osnet_ain_x1_0").state_dict()
+    assert {"conv2.0.conv2d.3.conv1.weight", "conv2.2.0.conv.weight",
+            "conv1.bn.running_mean"} <= set(plain)
+    assert {"conv2.0.IN.weight", "conv2.0.conv2.3.layers.3.conv1.weight",
+            "pool2.0.conv.weight", "conv3.0.conv3.bn.weight", "conv1.bn.weight"} <= set(ain)
+    assert "conv1.bn.running_mean" not in ain            # instance norm: no running stats
+    assert "conv2.0.conv3.bn.weight" not in ain          # IN replaces that block's BN
+    assert osnet.architecture(ain) == "osnet_ain_x1_0"
+    assert osnet.architecture(plain) == "osnet_x1_0"
+    with pytest.raises(ValueError):
+        osnet._build_osnet("resnet50")
+
+
+def test_denormal_weights_are_zeroed_on_load(tmp_path):
+    """MSMT17-trained checkpoints carry denormals that slowed CPU inference 3-17x."""
+    torch = pytest.importorskip("torch")
+    weights = tmp_path / "w.pth"
+    torch.save({"module.fc.0.weight": torch.tensor([1e-40, 0.5, -2e-39, 0.0]),
+                "classifier.weight": torch.ones(2),
+                "fc.1.num_batches_tracked": torch.tensor(7)}, weights)
+    state = osnet._state_dict(weights)
+    assert state["fc.0.weight"].tolist() == [0.0, 0.5, 0.0, 0.0]
+    assert "classifier.weight" not in state                     # training head dropped
+    assert state["fc.1.num_batches_tracked"].item() == 7          # integers untouched
+
+
+def test_an_ain_checkpoint_exports_to_onnx_with_parity(tmp_path):
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("onnxruntime")
+    net = osnet._build_osnet("osnet_ain_x1_0").eval()
+    weights = tmp_path / "ain.pth"
+    torch.save({"module." + k: v for k, v in net.state_dict().items()}, weights)
+    assert osnet.export_onnx(weights, tmp_path / "ain.onnx") < 1e-3
+    embedder = osnet.BodyEmbedder(weights, threads=1)
+    assert embedder.available and embedder.backend == "onnx"
+    assert embedder.name == "osnet_ain_x1_0"
 
 
 def test_missing_weights_leave_the_embedder_unavailable(tmp_path):

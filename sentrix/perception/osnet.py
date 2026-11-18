@@ -1,4 +1,4 @@
-"""Body appearance embeddings: OSNet x1_0, the re-identification model of
+"""Body appearance embeddings: OSNet, the re-identification model family of
 IntrusionSentry (github.com/praxshant/IntrusionSentry, the team's earlier
 intrusion-detection prototype).
 
@@ -6,19 +6,27 @@ IntrusionSentry recognised enrolled people by their whole body, not only their
 face: ``torchreid.utils.FeatureExtractor("osnet_x1_0")`` turned a person crop
 into a 512-d vector, compared by cosine similarity (threshold 0.50), fused
 0.6 body + 0.4 face when a face was visible. This module reproduces that
-model exactly, without torchreid (it does not install on the app's Python and
-pulls tensorboard, gdown and Cython):
+model without torchreid (it does not install on the app's Python and pulls
+tensorboard, gdown and Cython):
 
-* **Network**: OSNet x1_0 (Zhou et al., "Omni-Scale Feature Learning for
-  Person Re-Identification", ICCV 2019; code MIT, KaiyangZhou/deep-person-reid)
-  with the published module and parameter names, so torchreid's checkpoint
-  loads unchanged; the ImageNet classifier head is dropped (torchreid drops it
-  too: it builds the model with one class). In eval mode the output is the
-  512-d ``fc`` feature (Linear + BatchNorm + ReLU).
-* **Weights**: ``osnet_x1_0_imagenet.pth`` (10.9 MB, 2.2 M parameters), the
-  file torchreid downloads when ``model_path`` is empty - which is how
-  IntrusionSentry called it - so these are **ImageNet-pretrained** weights, not
-  weights trained on a re-identification dataset. Loaded with torch's
+* **Networks**: OSNet x1_0 (Zhou et al., "Omni-Scale Feature Learning for
+  Person Re-Identification", ICCV 2019) and OSNet-AIN x1_0 (Zhou et al.,
+  "Learning Generalisable Omni-Scale Representations for Person
+  Re-Identification", TPAMI 2021: the same size, with instance normalisation
+  for unseen domains), both with torchreid's module and parameter names
+  (code MIT, KaiyangZhou/deep-person-reid), so its checkpoints load unchanged;
+  the training classifier is dropped. In eval mode the output is the 512-d
+  ``fc`` feature (Linear + BatchNorm + ReLU). :func:`architecture` tells the
+  two apart from a checkpoint's keys.
+* **Weights**: ``osnet_ain_x1_0_msmt17.pth`` (17.3 MB, 2.2 M parameters),
+  OSNet-AIN trained for re-identification on MSMT17 (torchreid model zoo,
+  "MSMT17 -> Market1501 & DukeMTMC-reID": the best cross-domain OSNet there).
+  IntrusionSentry used OSNet x1_0 with **ImageNet** weights (what torchreid
+  downloads when ``model_path`` is empty); on the nine train + val custom
+  videos those separated people worse (pairwise AUROC 0.83 vs 0.93; the
+  identity rule's same-person acceptance at <= 0.05 % strangers 37 % vs 42 %,
+  ``training/runs/reid/osnet_weights_compare/REPORT.md``), so they are no
+  longer shipped (git ``9eb50a1`` holds them). Loaded with torch's
   weights-only unpickler; ``tools/fetch_models.py`` downloads and checks them.
 * **Pre-processing** (IntrusionSentry + torchreid): the person box clipped to
   the frame, padded sideways by replicating its edge when narrower than 0.4
@@ -26,10 +34,12 @@ pulls tensorboard, gdown and Cython):
   (what ``torchvision.transforms.Resize`` does to a PIL image), ImageNet
   mean/std, then the feature L2-normalised.
 
-It runs on its own onnxruntime session (``models/reid/osnet_x1_0_imagenet.onnx``,
-exported by ``tools/fetch_models.py --export``, intra-op ``settings.reid.threads``,
-spinning off) so it never touches torch's process-wide threads; without
-onnxruntime or the ONNX file it falls back to torch.
+It runs on its own onnxruntime session (the ``.onnx`` file next to the
+weights, exported by ``tools/fetch_models.py --export``, intra-op
+``settings.reid.threads``, spinning off) so it never touches torch's
+process-wide threads; without onnxruntime or the ONNX file it falls back to
+torch. The similarity bars in ``settings.reid`` belong to these weights:
+other weights need ``tools/reid_eval.py`` and new bars.
 
 Where SENTRIX uses it: ``sentrix/perception/reid.py`` (global ids, and a
 face-verified resident's look carried to their own new track, CLAUDE.md D22).
@@ -45,12 +55,14 @@ from sentrix.utils.logging import get_logger
 
 log = get_logger("osnet")
 
-WEIGHTS_NAME = "osnet_x1_0_imagenet.pth"
-WEIGHTS_SHA256 = "fe2d63f9157c28a4a8d8ca29bec12d5b2988ac0346d712025789ea9174968e79"
-#: torchreid's model-zoo link for osnet_x1_0 (``torchreid/models/osnet.py``).
+WEIGHTS_NAME = "osnet_ain_x1_0_msmt17.pth"
+WEIGHTS_SHA256 = "8a07e8da38946f7cee37f4561617bf8b6d2fe8f3a4027852893ea092e46d919f"
+#: torchreid's model-zoo link (docs/MODEL_ZOO.md, osnet_ain_x1_0, MSMT17 ->
+#: Market1501 & DukeMTMC-reID): osnet_ain_x1_0_msmt17_256x128_amsgrad_ep50_
+#: lr0.0015_coslr_b64_fb10_softmax_labsmth_flip_jitter.pth
 WEIGHTS_URL = ("https://drive.usercontent.google.com/download"
-               "?id=1LaG1EJpHrxdAxKnSCJ_i0u-nbxSAeiFY&export=download")
-ONNX_NAME = "osnet_x1_0_imagenet.onnx"
+               "?id=1SigwBE6mPdqiJMqhuIY4aqC7--5CsMal&export=download")
+ONNX_NAME = "osnet_ain_x1_0_msmt17.onnx"
 
 HEIGHT, WIDTH = 256, 128
 FEATURE_DIM = 512
@@ -86,16 +98,28 @@ def preprocess(crops: list[np.ndarray]) -> np.ndarray:
     return (batch - _MEAN) / _STD
 
 
-def _build_osnet_x1_0():
-    """OSNet x1_0 with torchreid's module and parameter names (eval feature)."""
+#: The two networks this module can build (torchreid's names).
+ARCHITECTURES = ("osnet_x1_0", "osnet_ain_x1_0")
+
+
+def _build_osnet(arch: str = "osnet_x1_0"):
+    """OSNet x1_0, or OSNet-AIN x1_0 (Zhou et al., TPAMI 2021: instance
+    normalisation in the first conv and inside chosen blocks, for domain
+    generalisation), with torchreid's module and parameter names; the forward
+    returns the eval feature (fc output)."""
     import torch.nn as nn
     import torch.nn.functional as F
 
+    if arch not in ARCHITECTURES:
+        raise ValueError(f"unknown OSNet architecture {arch!r}; use one of {ARCHITECTURES}")
+    ain = arch == "osnet_ain_x1_0"
+
     class ConvLayer(nn.Module):
-        def __init__(self, cin, cout, k, stride=1, padding=0):
+        def __init__(self, cin, cout, k, stride=1, padding=0, instance_norm=False):
             super().__init__()
             self.conv = nn.Conv2d(cin, cout, k, stride=stride, padding=padding, bias=False)
-            self.bn = nn.BatchNorm2d(cout)
+            self.bn = (nn.InstanceNorm2d(cout, affine=True) if instance_norm
+                       else nn.BatchNorm2d(cout))
             self.relu = nn.ReLU(inplace=True)
 
         def forward(self, x):
@@ -112,13 +136,14 @@ def _build_osnet_x1_0():
             return self.relu(self.bn(self.conv(x)))
 
     class Conv1x1Linear(nn.Module):
-        def __init__(self, cin, cout):
+        def __init__(self, cin, cout, bn=True):
             super().__init__()
             self.conv = nn.Conv2d(cin, cout, 1, bias=False)
-            self.bn = nn.BatchNorm2d(cout)
+            self.bn = nn.BatchNorm2d(cout) if bn else None
 
         def forward(self, x):
-            return self.bn(self.conv(x))
+            x = self.conv(x)
+            return x if self.bn is None else self.bn(x)
 
     class LightConv3x3(nn.Module):
         def __init__(self, cin, cout):
@@ -145,6 +170,8 @@ def _build_osnet_x1_0():
             return x * self.gate_activation(gate)
 
     class OSBlock(nn.Module):
+        """OSNet's block: four streams of 1-4 light 3x3 convs (conv2a-d)."""
+
         def __init__(self, cin, cout, bottleneck_reduction=4):
             super().__init__()
             mid = cout // bottleneck_reduction
@@ -164,40 +191,117 @@ def _build_osnet_x1_0():
             identity = x if self.downsample is None else self.downsample(x)
             return F.relu(self.conv3(x2) + identity)
 
-    def layer(cin, cout, reduce):
-        blocks = [OSBlock(cin, cout), OSBlock(cout, cout)]
-        if reduce:
-            blocks.append(nn.Sequential(Conv1x1(cout, cout), nn.AvgPool2d(2, stride=2)))
-        return nn.Sequential(*blocks)
+    class LightConvStream(nn.Module):
+        def __init__(self, channels, depth):
+            super().__init__()
+            self.layers = nn.Sequential(*(LightConv3x3(channels, channels)
+                                          for _ in range(depth)))
+
+        def forward(self, x):
+            return self.layers(x)
+
+    class AinBlock(nn.Module):
+        """OSNet-AIN's block (torchreid ``OSBlock`` / ``OSBlockINin``): the same
+        four streams as a module list; with ``instance_norm`` the residual
+        branch ends in instance norm instead of batch norm."""
+
+        def __init__(self, cin, cout, instance_norm, reduction=4):
+            super().__init__()
+            mid = cout // reduction
+            self.conv1 = Conv1x1(cin, mid)
+            self.conv2 = nn.ModuleList(LightConvStream(mid, t) for t in range(1, 5))
+            self.gate = ChannelGate(mid)
+            self.conv3 = Conv1x1Linear(mid, cout, bn=not instance_norm)
+            self.downsample = Conv1x1Linear(cin, cout) if cin != cout else None
+            self.IN = nn.InstanceNorm2d(cout, affine=True) if instance_norm else None
+
+        def forward(self, x):
+            x1 = self.conv1(x)
+            x2 = 0
+            for stream in self.conv2:
+                x2 = x2 + self.gate(stream(x1))
+            x3 = self.conv3(x2)
+            if self.IN is not None:
+                x3 = self.IN(x3)
+            identity = x if self.downsample is None else self.downsample(x)
+            return F.relu(x3 + identity)
+
+    def pool(channels):
+        return nn.Sequential(Conv1x1(channels, channels), nn.AvgPool2d(2, stride=2))
 
     class OSNet(nn.Module):
         def __init__(self, channels=(64, 256, 384, 512)):
             super().__init__()
-            self.conv1 = ConvLayer(3, channels[0], 7, stride=2, padding=3)
+            self.conv1 = ConvLayer(3, channels[0], 7, stride=2, padding=3, instance_norm=ain)
             self.maxpool = nn.MaxPool2d(3, stride=2, padding=1)
-            self.conv2 = layer(channels[0], channels[1], True)
-            self.conv3 = layer(channels[1], channels[2], True)
-            self.conv4 = layer(channels[2], channels[3], False)
+            if ain:
+                # torchreid osnet_ain_x1_0: [INin, INin], [plain, INin], [INin, plain]
+                pattern = ((True, True), (False, True), (True, False))
+                self.conv2 = nn.Sequential(*(AinBlock(cin, channels[1], n) for cin, n in
+                                             zip((channels[0], channels[1]), pattern[0])))
+                self.pool2 = pool(channels[1])
+                self.conv3 = nn.Sequential(*(AinBlock(cin, channels[2], n) for cin, n in
+                                             zip((channels[1], channels[2]), pattern[1])))
+                self.pool3 = pool(channels[2])
+                self.conv4 = nn.Sequential(*(AinBlock(cin, channels[3], n) for cin, n in
+                                             zip((channels[2], channels[3]), pattern[2])))
+            else:
+                self.conv2 = nn.Sequential(OSBlock(channels[0], channels[1]),
+                                           OSBlock(channels[1], channels[1]), pool(channels[1]))
+                self.conv3 = nn.Sequential(OSBlock(channels[1], channels[2]),
+                                           OSBlock(channels[2], channels[2]), pool(channels[2]))
+                self.conv4 = nn.Sequential(OSBlock(channels[2], channels[3]),
+                                           OSBlock(channels[3], channels[3]))
             self.conv5 = Conv1x1(channels[3], channels[3])
             self.global_avgpool = nn.AdaptiveAvgPool2d(1)
             self.fc = nn.Sequential(nn.Linear(channels[3], FEATURE_DIM),
                                     nn.BatchNorm1d(FEATURE_DIM), nn.ReLU(inplace=True))
 
         def forward(self, x):                       # (N, 3, 256, 128) -> (N, 512)
-            x = self.conv5(self.conv4(self.conv3(self.conv2(self.maxpool(self.conv1(x))))))
+            x = self.maxpool(self.conv1(x))
+            if ain:
+                x = self.conv4(self.pool3(self.conv3(self.pool2(self.conv2(x)))))
+            else:
+                x = self.conv4(self.conv3(self.conv2(x)))
+            x = self.conv5(x)
             return self.fc(self.global_avgpool(x).flatten(1))
 
     return OSNet()
 
 
-def load_torch_osnet(weights: Path):
-    """The torch network with the checkpoint loaded (weights-only unpickler);
-    every parameter except the ImageNet classifier must match."""
+def _state_dict(weights: Path) -> dict:
+    """The checkpoint's tensors (weights-only unpickler), without a
+    ``module.`` prefix and without the training classifier.
+
+    Denormal (subnormal) values are set to zero: the MSMT17-trained
+    checkpoints hold 20 k - 176 k of them, which made CPU inference 3-17x
+    slower (OSNet-AIN 72 -> 11 ms a crop with this and the session's
+    flush-to-zero); a weight under 1.2e-38 cannot change a feature."""
     import torch
     state = torch.load(str(weights), map_location="cpu", weights_only=True)
-    state = {k.removeprefix("module."): v for k, v in state.items()
-             if not k.removeprefix("module.").startswith("classifier.")}
-    net = _build_osnet_x1_0()
+    state = state.get("state_dict", state)
+    out = {}
+    for key, value in state.items():
+        key = key.removeprefix("module.")
+        if key.startswith("classifier."):
+            continue
+        if value.is_floating_point():
+            tiny = torch.finfo(value.dtype).tiny
+            value = value.masked_fill((value.abs() < tiny) & (value != 0), 0.0)
+        out[key] = value
+    return out
+
+
+def architecture(state: dict) -> str:
+    """Which OSNet a checkpoint holds: OSNet-AIN has instance norm in blocks."""
+    return "osnet_ain_x1_0" if "conv2.0.IN.weight" in state else "osnet_x1_0"
+
+
+def load_torch_osnet(weights: Path):
+    """The torch network with the checkpoint loaded strictly: every parameter
+    except the training classifier must match by name and shape."""
+    state = _state_dict(weights)
+    net = _build_osnet(architecture(state))
     net.load_state_dict(state, strict=True)
     return net.eval()
 
@@ -222,15 +326,16 @@ def export_onnx(weights: Path, target: Path) -> float:
 
 
 class BodyEmbedder:
-    """OSNet x1_0 on its own onnxruntime session (torch fallback). ``available``
-    is False when the weights are missing; nothing is downloaded here."""
-
-    name = "osnet_x1_0"
+    """An OSNet checkpoint on its own onnxruntime session (the ``.onnx`` file
+    next to it; torch fallback). ``available`` is False when the weights are
+    missing; nothing is downloaded here."""
 
     def __init__(self, weights: Path, *, threads: int | None = None,
                  onnx: Path | None = None) -> None:
         self.available = False
         self.backend = "none"
+        self.name = "none"
+        self.weights = weights.name
         self._session = None
         self._model = None
         self._torch = None
@@ -238,7 +343,8 @@ class BodyEmbedder:
             log.info("re-id weights not found (%s); run tools/fetch_models.py", weights)
             return
         try:
-            onnx = onnx if onnx is not None else weights.with_name(ONNX_NAME)
+            self.name = architecture(_state_dict(weights))
+            onnx = onnx if onnx is not None else weights.with_suffix(".onnx")
             if onnx.exists() and self._load_onnx(onnx, threads):
                 self.backend = "onnx"
             else:
@@ -250,7 +356,8 @@ class BodyEmbedder:
                 log.error("re-id model: output %s, expected (1, %d)", probe.shape, FEATURE_DIM)
                 return
             self.available = True
-            log.info("re-id model loaded: OSNet x1_0, ImageNet weights (%s)", self.backend)
+            log.info("re-id model loaded: %s from %s (%s)", self.name, self.weights,
+                     self.backend)
         except Exception as exc:
             log.error("re-id model failed to load: %s", exc)
 
@@ -264,6 +371,8 @@ class BodyEmbedder:
             options.intra_op_num_threads = max(1, int(threads or 2))
             options.inter_op_num_threads = 1
             options.add_session_config_entry("session.intra_op.allow_spinning", "0")
+            # Flush denormal activations to zero on this session's threads only.
+            options.add_session_config_entry("session.set_denormal_as_zero", "1")
             self._session = ort.InferenceSession(str(path), options,
                                                  providers=["CPUExecutionProvider"])
             return True
@@ -287,6 +396,6 @@ class BodyEmbedder:
         return (features / np.maximum(norms, 1e-8)).astype(np.float32)
 
 
-__all__ = ["BodyEmbedder", "FEATURE_DIM", "HEIGHT", "ONNX_NAME", "WEIGHTS_NAME",
-           "WEIGHTS_SHA256", "WEIGHTS_URL", "WIDTH", "body_crop", "export_onnx",
-           "load_torch_osnet", "preprocess"]
+__all__ = ["ARCHITECTURES", "BodyEmbedder", "FEATURE_DIM", "HEIGHT", "ONNX_NAME",
+           "WEIGHTS_NAME", "WEIGHTS_SHA256", "WEIGHTS_URL", "WIDTH", "architecture",
+           "body_crop", "export_onnx", "load_torch_osnet", "preprocess"]
