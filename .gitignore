@@ -89,6 +89,8 @@ training/runs/custom_eval/*
 !training/runs/custom_eval/pi5/
 !training/runs/custom_eval/baseline_2026-11-19/
 !training/runs/custom_eval/v5det_2026-11-19/
+!training/runs/custom_eval/pi_clip_v4heads_2026-11-19/
+!training/runs/custom_eval/pi_clip_v5heads_2026-11-19/
 !training/runs/custom_eval/v5all_2026-11-19/
 
 # ── stray outputs ─────────────────────────────────────────────────────────────
