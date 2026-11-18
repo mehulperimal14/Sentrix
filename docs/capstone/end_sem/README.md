@@ -79,6 +79,24 @@ The verification notes:
 - DINOv3 is cited through its arXiv version.
 - The DPDP Rules are cited through the government's own press release (PIB).
 
+## Poster
+
+`poster/SENTRIX_CPG299_Poster.pdf` is the poster: one A3 landscape page (420 x
+297 mm), made to the department's poster guidelines:
+- a banner at top centre with the title, the five names, the department, CPG
+  No. 299 and the mentor;
+- five numbered panels, read left to right: problem, objectives and
+  learning, how it works, the product, results;
+- three numbered figures and references [1]-[5];
+- no text smaller than 18 pt (24 px).
+
+The numbers come from the same sources as the report.
+
+- `poster/SENTRIX_CPG299_Poster.png`: a preview at twice the size.
+- `poster/poster.html`: the source. It takes the images from `report/figures/`
+  by relative path. To print it, open it in Chrome and choose A3 landscape
+  with no margins.
+
 ## Screenshots
 
 The screenshots were captured on 18 Nov 2026 from the test-mode demo world:
