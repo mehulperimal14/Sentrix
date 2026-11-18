@@ -1,0 +1,63 @@
+{
+  "tag": "2026-11-18",
+  "bar_cosine": 0.55,
+  "videos": [
+    "vid02",
+    "vid03",
+    "vid05",
+    "vid06",
+    "vid07",
+    "wa01",
+    "wa03",
+    "mmtheft",
+    "mmassault",
+    "mmgun",
+    "mmknife",
+    "nvroom2",
+    "vid04",
+    "gun"
+  ],
+  "person_boxes_sampled": 1536,
+  "configs": {
+    "buffalo_l@640": {
+      "faces_on_person_boxes": 817,
+      "faces_per_person_box": 0.532,
+      "same_pairs": 16996,
+      "different_pairs": 362,
+      "auroc": 0.9402,
+      "same_median": 0.4448,
+      "different_median": 0.0211,
+      "same_accepted_at_bar": 0.3474,
+      "different_accepted_at_bar": 0.0,
+      "bar_for_0.1pct_different": 0.3382,
+      "different_max": 0.3561
+    },
+    "buffalo_s@320": {
+      "faces_on_person_boxes": 483,
+      "faces_per_person_box": 0.314,
+      "same_pairs": 7980,
+      "different_pairs": 138,
+      "auroc": 0.9583,
+      "same_median": 0.5243,
+      "different_median": 0.0665,
+      "same_accepted_at_bar": 0.4546,
+      "different_accepted_at_bar": 0.0,
+      "bar_for_0.1pct_different": 0.2691,
+      "different_max": 0.2737
+    },
+    "buffalo_s@640": {
+      "faces_on_person_boxes": 613,
+      "faces_per_person_box": 0.399,
+      "same_pairs": 11724,
+      "different_pairs": 240,
+      "auroc": 0.9496,
+      "same_median": 0.4673,
+      "different_median": 0.0592,
+      "same_accepted_at_bar": 0.3741,
+      "different_accepted_at_bar": 0.0,
+      "bar_for_0.1pct_different": 0.295,
+      "different_max": 0.303
+    }
+  },
+  "seconds": 2495.4
+}

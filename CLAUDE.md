@@ -492,9 +492,12 @@ gave the device's own verdict on **8,956 of 8,956** logged clips; on the data
 of each hand calibration the rule proposes weapon **0.76** (hand 0.75) and
 fire **0.69** (hand 0.70); over the whole log (5.08 h scored) the bars in
 force had **0 onsets** (45 weapon and 4 fire onsets at the floors), with less
-headroom than the rule wants, so it proposes weapon 0.78 and fire 0.75 -
-**not applied**: the owner's call after the replica-gun and flame tests
-(section 4.3). The out-of-domain guard proposed with it was **not built**:
+headroom than the rule wants, so it proposes weapon 0.78 and fire 0.75,
+**applied on the Pi on 2026-11-19** on the owner's word (`--write`, old file
+kept as `scene.json.bak-20261119-005246`; SENTRIX restarted at 00:53 IST and
+loaded weapon 0.78, fire 0.75). Still to do in that room: the replica-gun
+and flame tests (`--check`), since a threat the scene model scores between
+the old and new bar no longer reaches L3 from it alone (section 4.3). The out-of-domain guard proposed with it was **not built**:
 measured, it would have removed nothing (D23). `tests/test_calibrate_room.py`
 (17 tests).
 
@@ -657,7 +660,7 @@ validated** (2 videos / 1 event). Only two rooms are represented.
 | Body re-id, OSNet x1_0 ImageNet (IntrusionSentry's model) vs colour histogram, ByteTrack tracks of the nine train + val videos at 6 Hz (boxes >= 80 px; `wa02` refused) | pairwise (same track >= 2 s apart: 4524; two people in one frame: 2498): AUROC **0.83** vs 0.73; OSNet accepts 43 % of same-person pairs at 1 % different (bar 0.77, the global-id bar); IntrusionSentry's 0.50 accepts 97.8 % same and **97.2 % different**. Identity rule (20 looks, two checks 1 s apart; 1194 / 23546 cases): AUROC 0.96; at **0.85** 37 % same, 0.04 % different (the first D24 bar); 0.80: 70 % / 1.6 % | `training/runs/reid/osnet_x1_0_imagenet/REPORT.md` (`tools/reid_eval.py`, `9eb50a1`) |
 | Body re-id, three OSNet checkpoints on the same crops and pairs (as above): ImageNet x1_0 / MSMT17 x1_0 / **MSMT17 OSNet-AIN x1_0** | pairwise AUROC 0.831 / 0.917 / **0.931**; global-id bar (1 % different) 0.77 / 0.64 / **0.66**; IntrusionSentry's 0.50 accepts 97.2 / 29.4 / 54.4 % different-people pairs. Identity rule AUROC 0.956 / 0.984 / 0.985; bar (<= 0.05 % different, fixed rule) 0.85 / 0.84 / **0.86** accepting 37.3 / 39.0 / **42.3 %** same-person cases (0.038 / 0.030 / 0.042 % different) -> **OSNet-AIN chosen**. Speed, laptop, onnxruntime 2 threads: AIN 72 ms a crop as shipped, **10.3 ms** with denormal weights zeroed + flush-to-zero (x1_0 MSMT17 201 -> 28 ms) | `training/runs/reid/osnet_weights_compare/REPORT.md` |
 | Pi 5 clip engine (ONNX, fast lane, `buffalo_s`; `gun.mov` as a 30 fps camera) | clip compute p50 **8.0 s** at 640 px objects (74 % of clips dropped, decisions 9.3 s old) → **3.9 s at 320 px** (48 %, 4.3 s), 2.2 s at 320 px + 1 scene frame (10 %, 3.2 s); budget 1.6 s. Clip replay of the 9 train + val videos (`wa02` not replayed, partly in-sample): 640 / 320 / 320 + 1 scene frame → L3 weapon 9/9, 9/9, 8/9; fire 3/3, 3/3, 2/3; L4 weapon 6/8, 5/8, 3/8; 0 false onsets at L3+. The Pi profile uses 320 px (`SENTRIX_CLIP_IMGSZ=320`) | `training/runs/custom_eval/pi5/REPORT.md` (knobs `4503b0d`) |
-| Room calibration from the Pi's own log (`tools/calibrate_room.py`, read-only over SSH; clip mode, v4 scene weights; 2026-10-23 → 11-19, 9,092 scene-scored clips = 5.08 h) | replay = the device's own verdict on **8,956 / 8,956** clips (weapon and fire). Rule `max(floor, confirming max + 0.10, single max + 0.01)` on each hand calibration's data: weapon 0.76 (hand 0.75; p99 0.531, max 0.742), fire 0.69 (hand 0.70; confirming max 0.587, single max 0.646). Whole log: weapon per value median 0.190 / p99 0.546 / max 0.760, confirming max 0.650; fire 0.079 / 0.236 / 0.716, confirming max 0.650; onsets at the floors 0.50 / 0.45: 45 / 4; at the bars in force 0.75 / 0.70: **0 / 0** (95 % bound 0.59 per hour); proposed 0.78 / 0.75, not applied | `training/runs/calibration/pi5_demo_room_2026-11-19/REPORT.md` |
+| Room calibration from the Pi's own log (`tools/calibrate_room.py`, read-only over SSH; clip mode, v4 scene weights; 2026-10-23 → 11-19, 9,092 scene-scored clips = 5.08 h) | replay = the device's own verdict on **8,956 / 8,956** clips (weapon and fire). Rule `max(floor, confirming max + 0.10, single max + 0.01)` on each hand calibration's data: weapon 0.76 (hand 0.75; p99 0.531, max 0.742), fire 0.69 (hand 0.70; confirming max 0.587, single max 0.646). Whole log: weapon per value median 0.190 / p99 0.546 / max 0.760, confirming max 0.650; fire 0.079 / 0.236 / 0.716, confirming max 0.650; onsets at the floors 0.50 / 0.45: 45 / 4; at the bars in force 0.75 / 0.70: **0 / 0** (95 % bound 0.59 per hour); proposed 0.78 / 0.75, **applied on the Pi 2026-11-19** (owner) | `training/runs/calibration/pi5_demo_room_2026-11-19/REPORT.md` |
 
 ---
 

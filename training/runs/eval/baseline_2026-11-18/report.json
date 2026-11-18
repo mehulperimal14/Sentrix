@@ -1,0 +1,463 @@
+{
+  "tag": "baseline_2026-11-18",
+  "data": "G:\\Capstone\\data",
+  "frames": 977,
+  "groups": {
+    "old_train": 588,
+    "old_val": 84,
+    "old_test": 93,
+    "new": 212
+  },
+  "detectors": {
+    "weapon_detector_custom_v4": {
+      "weights": "models/v4_custom/weapon_detector_custom_v4.pt",
+      "classes": [
+        "pistol",
+        "stick"
+      ],
+      "public_weapon_test": {
+        "images": 703,
+        "shared_classes": [
+          "pistol"
+        ],
+        "ap50": {
+          "pistol": 0.0074
+        },
+        "image_auroc_vs_background": 0.5062,
+        "n_pos_images": 541,
+        "n_background_images": 47
+      },
+      "custom_weapon": {
+        "old_train": {
+          "n_pos": 144,
+          "n_neg": 373,
+          "image_auroc": 0.8532,
+          "recall@0.25": 0.6736,
+          "fpr@0.25": 0.0054,
+          "recall@0.5": 0.6528,
+          "fpr@0.5": 0.0,
+          "box_ap50": {
+            "pistol": 0.9989,
+            "stick": 1.0
+          }
+        },
+        "old_val": {
+          "n_pos": 55,
+          "n_neg": 23,
+          "image_auroc": 0.7375,
+          "recall@0.25": 0.1273,
+          "fpr@0.25": 0.0,
+          "recall@0.5": 0.0909,
+          "fpr@0.5": 0.0,
+          "box_ap50": {
+            "pistol": 0.3346
+          }
+        },
+        "old_test": {
+          "n_pos": 26,
+          "n_neg": 67,
+          "image_auroc": 0.3335,
+          "recall@0.25": 0.0,
+          "fpr@0.25": 0.0149,
+          "recall@0.5": 0.0,
+          "fpr@0.5": 0.0149,
+          "box_ap50": {
+            "stick": 0.0021
+          }
+        },
+        "new": {
+          "n_pos": 47,
+          "n_neg": 90,
+          "image_auroc": 0.6586,
+          "recall@0.25": 0.2128,
+          "fpr@0.25": 0.0889,
+          "recall@0.5": 0.0213,
+          "fpr@0.5": 0.0,
+          "box_ap50": {
+            "pistol": 0.0
+          }
+        }
+      }
+    },
+    "weapon_detector_real_v3": {
+      "weights": "models/v3_real/weapon_detector_real_v3.pt",
+      "classes": [
+        "knife",
+        "long_gun",
+        "pistol"
+      ],
+      "public_weapon_test": {
+        "images": 703,
+        "shared_classes": [
+          "pistol",
+          "knife"
+        ],
+        "ap50": {
+          "pistol": 0.9078,
+          "knife": 0.9449
+        },
+        "image_auroc_vs_background": 0.99,
+        "n_pos_images": 541,
+        "n_background_images": 47
+      },
+      "custom_weapon": {
+        "old_train": {
+          "n_pos": 144,
+          "n_neg": 373,
+          "image_auroc": 0.5877,
+          "recall@0.25": 0.5694,
+          "fpr@0.25": 0.4531,
+          "recall@0.5": 0.375,
+          "fpr@0.5": 0.1206,
+          "box_ap50": {
+            "pistol": 0.4591
+          }
+        },
+        "old_val": {
+          "n_pos": 55,
+          "n_neg": 23,
+          "image_auroc": 0.4079,
+          "recall@0.25": 0.3818,
+          "fpr@0.25": 0.6087,
+          "recall@0.5": 0.2545,
+          "fpr@0.5": 0.0,
+          "box_ap50": {
+            "pistol": 0.3252
+          }
+        },
+        "old_test": {
+          "n_pos": 26,
+          "n_neg": 67,
+          "image_auroc": 0.3433,
+          "recall@0.25": 0.3077,
+          "fpr@0.25": 0.6418,
+          "recall@0.5": 0.1538,
+          "fpr@0.5": 0.0896,
+          "box_ap50": {}
+        },
+        "new": {
+          "n_pos": 47,
+          "n_neg": 90,
+          "image_auroc": 0.7648,
+          "recall@0.25": 0.5319,
+          "fpr@0.25": 0.1778,
+          "recall@0.5": 0.1489,
+          "fpr@0.5": 0.0444,
+          "box_ap50": {
+            "knife": 0.0,
+            "pistol": 0.0452
+          }
+        }
+      }
+    },
+    "fire_detector_custom_v4": {
+      "weights": "models/v4_custom/fire_detector_custom_v4.pt",
+      "classes": [
+        "fire"
+      ],
+      "public_fire_valid": {
+        "images": 2000,
+        "shared_classes": [
+          "fire"
+        ],
+        "ap50": {
+          "fire": 0.0
+        },
+        "image_auroc_vs_background": 0.4649,
+        "n_pos_images": 967,
+        "n_background_images": 931
+      },
+      "custom_fire": {
+        "old_train": {
+          "n_pos": 11,
+          "n_neg": 373,
+          "image_auroc": 1.0,
+          "recall@0.25": 1.0,
+          "fpr@0.25": 0.0027,
+          "recall@0.5": 1.0,
+          "fpr@0.5": 0.0027,
+          "box_ap50": {
+            "fire": 1.0
+          }
+        },
+        "old_val": {
+          "n_pos": 6,
+          "n_neg": 23,
+          "image_auroc": 0.587,
+          "recall@0.25": 0.0,
+          "fpr@0.25": 0.0,
+          "recall@0.5": 0.0,
+          "fpr@0.5": 0.0,
+          "box_ap50": {
+            "fire": 0.103
+          }
+        },
+        "old_test": {
+          "n_pos": 0,
+          "n_neg": 67,
+          "image_auroc": null,
+          "recall@0.25": null,
+          "fpr@0.25": 0.0,
+          "recall@0.5": null,
+          "fpr@0.5": 0.0,
+          "box_ap50": {}
+        },
+        "new": {
+          "n_pos": 0,
+          "n_neg": 90,
+          "image_auroc": null,
+          "recall@0.25": null,
+          "fpr@0.25": 0.0,
+          "recall@0.5": null,
+          "fpr@0.5": 0.0,
+          "box_ap50": {}
+        }
+      }
+    },
+    "fire_smoke_detector_real_v3": {
+      "weights": "models/v3_real/fire_smoke_detector_real_v3.pt",
+      "classes": [
+        "fire",
+        "smoke"
+      ],
+      "public_fire_valid": {
+        "images": 2000,
+        "shared_classes": [
+          "fire"
+        ],
+        "ap50": {
+          "fire": 0.7976
+        },
+        "image_auroc_vs_background": 0.9908,
+        "n_pos_images": 967,
+        "n_background_images": 931
+      },
+      "custom_fire": {
+        "old_train": {
+          "n_pos": 11,
+          "n_neg": 373,
+          "image_auroc": 0.3753,
+          "recall@0.25": 0.0,
+          "fpr@0.25": 0.0054,
+          "recall@0.5": 0.0,
+          "fpr@0.5": 0.0,
+          "box_ap50": {
+            "fire": 0.0
+          }
+        },
+        "old_val": {
+          "n_pos": 6,
+          "n_neg": 23,
+          "image_auroc": 0.3043,
+          "recall@0.25": 0.0,
+          "fpr@0.25": 0.0,
+          "recall@0.5": 0.0,
+          "fpr@0.5": 0.0,
+          "box_ap50": {
+            "fire": 0.0
+          }
+        },
+        "old_test": {
+          "n_pos": 0,
+          "n_neg": 67,
+          "image_auroc": null,
+          "recall@0.25": null,
+          "fpr@0.25": 0.0,
+          "recall@0.5": null,
+          "fpr@0.5": 0.0,
+          "box_ap50": {}
+        },
+        "new": {
+          "n_pos": 0,
+          "n_neg": 90,
+          "image_auroc": null,
+          "recall@0.25": null,
+          "fpr@0.25": 0.4667,
+          "recall@0.5": null,
+          "fpr@0.5": 0.1667,
+          "box_ap50": {}
+        }
+      }
+    }
+  },
+  "scene": {
+    "weights": "scene_classifier_custom_v4.pt",
+    "thresholds": {
+      "fire": 0.45,
+      "weapon": 0.5,
+      "assault": 0.85,
+      "robbery": 0.6
+    },
+    "temperature": 1.4761427376975904,
+    "custom": {
+      "old_train": {
+        "n": 588,
+        "accuracy": 0.915,
+        "macro_f1": 0.7828,
+        "per_class": {
+          "assault": {
+            "precision": 1.0,
+            "recall": 0.0233,
+            "f1": 0.0455,
+            "n": 43
+          },
+          "fire": {
+            "precision": 0.9167,
+            "recall": 1.0,
+            "f1": 0.9565,
+            "n": 11
+          },
+          "normal": {
+            "precision": 0.8854,
+            "recall": 0.9946,
+            "f1": 0.9369,
+            "n": 373
+          },
+          "robbery": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "n": 17
+          },
+          "weapon": {
+            "precision": 0.9928,
+            "recall": 0.9583,
+            "f1": 0.9753,
+            "n": 144
+          }
+        },
+        "auroc_one_vs_rest": {
+          "fire": 1.0,
+          "weapon": 0.9991,
+          "assault": 1.0,
+          "robbery": 1.0
+        }
+      },
+      "old_val": {
+        "n": 84,
+        "accuracy": 0.5833,
+        "macro_f1": 0.7004,
+        "per_class": {
+          "fire": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "n": 6
+          },
+          "normal": {
+            "precision": 0.3966,
+            "recall": 1.0,
+            "f1": 0.5679,
+            "n": 23
+          },
+          "weapon": {
+            "precision": 1.0,
+            "recall": 0.3636,
+            "f1": 0.5333,
+            "n": 55
+          }
+        },
+        "auroc_one_vs_rest": {
+          "fire": 1.0,
+          "weapon": 0.7862,
+          "assault": null,
+          "robbery": null
+        }
+      },
+      "old_test": {
+        "n": 93,
+        "accuracy": 0.7204,
+        "macro_f1": 0.4188,
+        "per_class": {
+          "normal": {
+            "precision": 0.7204,
+            "recall": 1.0,
+            "f1": 0.8375,
+            "n": 67
+          },
+          "weapon": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "n": 26
+          }
+        },
+        "auroc_one_vs_rest": {
+          "fire": null,
+          "weapon": 0.5603,
+          "assault": null,
+          "robbery": null
+        }
+      },
+      "new": {
+        "n": 212,
+        "accuracy": 0.4292,
+        "macro_f1": 0.1599,
+        "per_class": {
+          "assault": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "n": 13
+          },
+          "normal": {
+            "precision": 0.4265,
+            "recall": 1.0,
+            "f1": 0.598,
+            "n": 90
+          },
+          "robbery": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "n": 62
+          },
+          "weapon": {
+            "precision": 1.0,
+            "recall": 0.0213,
+            "f1": 0.0417,
+            "n": 47
+          }
+        },
+        "auroc_one_vs_rest": {
+          "fire": null,
+          "weapon": 0.8067,
+          "assault": 0.8941,
+          "robbery": 0.6466
+        }
+      }
+    },
+    "public": {
+      "weapon": {
+        "n_pos": 541,
+        "n_neg": 47,
+        "auroc": 0.7872,
+        "recall_at_threshold": 0.3438,
+        "fpr_at_threshold": 0.0213
+      },
+      "fire": {
+        "n_pos": 600,
+        "n_neg": 600,
+        "auroc": 0.8234,
+        "recall_at_threshold": 0.3033,
+        "fpr_at_threshold": 0.0067
+      },
+      "assault": {
+        "n_pos": 600,
+        "n_neg": 600,
+        "auroc": 0.7087,
+        "recall_at_threshold": 0.0,
+        "fpr_at_threshold": 0.0
+      }
+    }
+  },
+  "violence": {
+    "rwf2000_in_sample": {
+      "n_pos": 600,
+      "n_neg": 600,
+      "auroc": 0.9858
+    },
+    "custom_assault_vs_normal": 0.6931
+  },
+  "seconds": 2756.9
+}

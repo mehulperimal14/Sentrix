@@ -61,6 +61,23 @@ replica-gun and flame tests in that room, which can be replayed with
 `--check <log of the test session>`. This report changes nothing on the
 device.
 
+## Applied (2026-11-19, owner's decision)
+
+Rerun read-only just before writing, over 5.13 h scored (the log had grown):
+the proposal was unchanged, weapon 0.78 and fire 0.75, and the replay matched
+the device on 9,042 of 9,042 clips. It was then written on the Pi with
+`--write`:
+- old file kept as `var/calibration/scene.json.bak-20261119-005246`;
+- the new file records the weights it was made for
+  (`scene_classifier_custom_v4.pt`, 57,144,869 bytes).
+
+`sentrix.service` was restarted at 00:53 IST. Its journal shows the scene
+classifier loaded with fire 0.75 and weapon 0.78.
+
+If a new scene model goes onto the Pi, these bars still apply, but they are
+flagged as stale. Calibrate the room again after a few quiet hours on the new
+model.
+
 ## Not measured
 
 - **Real threats in the demo room.** No replica gun or flame test has been

@@ -1,0 +1,333 @@
+{
+  "tag": "cnn_2026-11-18",
+  "model": "cnn",
+  "cue_thresholds": {
+    "aggression": 0.3,
+    "weapon_sound": 0.3,
+    "fire_sound": 0.3,
+    "benign_social": 0.4,
+    "calm_talk": 0.85,
+    "background": 0.4,
+    "siren": 0.3
+  },
+  "audioset_in_sample": true,
+  "audioset": {
+    "clips": {
+      "fire": 86,
+      "scream": 41,
+      "siren": 127,
+      "speech_normal": 121
+    },
+    "cues": {
+      "aggression": {
+        "target": "scream",
+        "auroc_vs_rest": 0.8374,
+        "recall_at_threshold": 0.878,
+        "false_alarm_at_threshold": 0.3204,
+        "bar_at_1pct_false_alarm": 0.7067,
+        "recall_at_that_bar": 0.0488,
+        "auroc_vs_speech": 0.8807
+      },
+      "siren": {
+        "target": "siren",
+        "auroc_vs_rest": 0.9504,
+        "recall_at_threshold": 0.7638,
+        "false_alarm_at_threshold": 0.0363,
+        "bar_at_1pct_false_alarm": 0.4287,
+        "recall_at_that_bar": 0.6929
+      },
+      "fire_sound": {
+        "target": "fire",
+        "auroc_vs_rest": 0.9399,
+        "recall_at_threshold": 0.9651,
+        "false_alarm_at_threshold": 0.1834,
+        "bar_at_1pct_false_alarm": 0.7116,
+        "recall_at_that_bar": 0.2907
+      },
+      "calm_talk": {
+        "target": "speech_normal",
+        "auroc_vs_rest": 0.8406,
+        "recall_at_threshold": 0.0413,
+        "false_alarm_at_threshold": 0.0118,
+        "bar_at_1pct_false_alarm": 0.8355,
+        "recall_at_that_bar": 0.0992,
+        "auroc_vs_scream": 0.7376
+      }
+    }
+  },
+  "videos": {
+    "vid02": {
+      "normal": {
+        "aggression": 0.0,
+        "weapon_sound": 0.0,
+        "fire_sound": 0.0,
+        "benign_social": 0.0,
+        "calm_talk": 0.0,
+        "background": 0.0,
+        "siren": 0.0
+      },
+      "weapon": {
+        "aggression": 0.291,
+        "weapon_sound": 0.0,
+        "fire_sound": 0.037,
+        "benign_social": 0.0,
+        "calm_talk": 0.752,
+        "background": 0.0,
+        "siren": 0.047
+      }
+    },
+    "vid03": {
+      "normal": {
+        "aggression": 0.206,
+        "weapon_sound": 0.0,
+        "fire_sound": 0.14,
+        "benign_social": 0.0,
+        "calm_talk": 0.724,
+        "background": 0.0,
+        "siren": 0.076
+      },
+      "weapon": {
+        "aggression": 0.182,
+        "weapon_sound": 0.0,
+        "fire_sound": 0.092,
+        "benign_social": 0.0,
+        "calm_talk": 0.8,
+        "background": 0.0,
+        "siren": 0.048
+      }
+    },
+    "vid04": {
+      "normal": {
+        "aggression": 0.188,
+        "weapon_sound": 0.0,
+        "fire_sound": 0.067,
+        "benign_social": 0.0,
+        "calm_talk": 0.703,
+        "background": 0.0,
+        "siren": 0.043
+      },
+      "fire": {
+        "aggression": 0.138,
+        "weapon_sound": 0.0,
+        "fire_sound": 0.577,
+        "benign_social": 0.0,
+        "calm_talk": 0.388,
+        "background": 0.0,
+        "siren": 0.092
+      }
+    },
+    "vid05": {
+      "assault": {
+        "aggression": 0.218,
+        "weapon_sound": 0.0,
+        "fire_sound": 0.064,
+        "benign_social": 0.0,
+        "calm_talk": 0.76,
+        "background": 0.0,
+        "siren": 0.047
+      },
+      "weapon": {
+        "aggression": 0.192,
+        "weapon_sound": 0.0,
+        "fire_sound": 0.025,
+        "benign_social": 0.0,
+        "calm_talk": 0.787,
+        "background": 0.0,
+        "siren": 0.019
+      }
+    },
+    "vid06": {
+      "normal": {
+        "aggression": 0.189,
+        "weapon_sound": 0.0,
+        "fire_sound": 0.076,
+        "benign_social": 0.0,
+        "calm_talk": 0.699,
+        "background": 0.0,
+        "siren": 0.043
+      },
+      "fire": {
+        "aggression": 0.19,
+        "weapon_sound": 0.0,
+        "fire_sound": 0.53,
+        "benign_social": 0.0,
+        "calm_talk": 0.715,
+        "background": 0.0,
+        "siren": 0.096
+      }
+    },
+    "vid07": {
+      "normal": {
+        "aggression": 0.263,
+        "weapon_sound": 0.0,
+        "fire_sound": 0.161,
+        "benign_social": 0.0,
+        "calm_talk": 0.784,
+        "background": 0.0,
+        "siren": 0.081
+      },
+      "weapon": {
+        "aggression": 0.237,
+        "weapon_sound": 0.0,
+        "fire_sound": 0.117,
+        "benign_social": 0.0,
+        "calm_talk": 0.761,
+        "background": 0.0,
+        "siren": 0.063
+      }
+    },
+    "gun": {
+      "weapon": {
+        "aggression": 0.245,
+        "weapon_sound": 0.0,
+        "fire_sound": 0.021,
+        "benign_social": 0.0,
+        "calm_talk": 0.767,
+        "background": 0.0,
+        "siren": 0.025
+      }
+    },
+    "wa01": {
+      "normal": {
+        "aggression": 0.181,
+        "weapon_sound": 0.0,
+        "fire_sound": 0.397,
+        "benign_social": 0.0,
+        "calm_talk": 0.395,
+        "background": 0.0,
+        "siren": 0.129
+      },
+      "weapon": {
+        "aggression": 0.224,
+        "weapon_sound": 0.0,
+        "fire_sound": 0.414,
+        "benign_social": 0.0,
+        "calm_talk": 0.421,
+        "background": 0.0,
+        "siren": 0.126
+      }
+    },
+    "wa02": {
+      "normal": {
+        "aggression": 0.244,
+        "weapon_sound": 0.0,
+        "fire_sound": 0.414,
+        "benign_social": 0.0,
+        "calm_talk": 0.424,
+        "background": 0.0,
+        "siren": 0.125
+      },
+      "weapon": {
+        "aggression": 0.246,
+        "weapon_sound": 0.0,
+        "fire_sound": 0.232,
+        "benign_social": 0.0,
+        "calm_talk": 0.461,
+        "background": 0.0,
+        "siren": 0.111
+      }
+    },
+    "wa03": {
+      "normal": {
+        "aggression": 0.186,
+        "weapon_sound": 0.0,
+        "fire_sound": 0.403,
+        "benign_social": 0.0,
+        "calm_talk": 0.402,
+        "background": 0.0,
+        "siren": 0.125
+      },
+      "robbery": {
+        "aggression": 0.184,
+        "weapon_sound": 0.0,
+        "fire_sound": 0.325,
+        "benign_social": 0.0,
+        "calm_talk": 0.384,
+        "background": 0.0,
+        "siren": 0.113
+      }
+    },
+    "mmtheft": {
+      "normal": {
+        "aggression": 0.251,
+        "weapon_sound": 0.0,
+        "fire_sound": 0.1,
+        "benign_social": 0.0,
+        "calm_talk": 0.634,
+        "background": 0.0,
+        "siren": 0.085
+      },
+      "robbery": {
+        "aggression": 0.186,
+        "weapon_sound": 0.0,
+        "fire_sound": 0.214,
+        "benign_social": 0.0,
+        "calm_talk": 0.707,
+        "background": 0.0,
+        "siren": 0.089
+      }
+    },
+    "mmassault": {
+      "normal": {
+        "aggression": 0.262,
+        "weapon_sound": 0.0,
+        "fire_sound": 0.108,
+        "benign_social": 0.0,
+        "calm_talk": 0.72,
+        "background": 0.0,
+        "siren": 0.09
+      },
+      "assault": {
+        "aggression": 0.246,
+        "weapon_sound": 0.0,
+        "fire_sound": 0.01,
+        "benign_social": 0.0,
+        "calm_talk": 0.742,
+        "background": 0.0,
+        "siren": 0.017
+      }
+    },
+    "mmgun": {
+      "weapon": {
+        "aggression": 0.506,
+        "weapon_sound": 0.0,
+        "fire_sound": 0.019,
+        "benign_social": 0.0,
+        "calm_talk": 0.58,
+        "background": 0.0,
+        "siren": 0.043
+      }
+    },
+    "mmknife": {
+      "normal": {
+        "aggression": 0.0,
+        "weapon_sound": 0.0,
+        "fire_sound": 0.0,
+        "benign_social": 0.0,
+        "calm_talk": 0.0,
+        "background": 0.0,
+        "siren": 0.0
+      },
+      "weapon": {
+        "aggression": 0.0,
+        "weapon_sound": 0.0,
+        "fire_sound": 0.0,
+        "benign_social": 0.0,
+        "calm_talk": 0.0,
+        "background": 0.0,
+        "siren": 0.0
+      }
+    },
+    "nvroom2": {
+      "normal": {
+        "aggression": 0.184,
+        "weapon_sound": 0.0,
+        "fire_sound": 0.263,
+        "benign_social": 0.0,
+        "calm_talk": 0.787,
+        "background": 0.0,
+        "siren": 0.106
+      }
+    }
+  }
+}
