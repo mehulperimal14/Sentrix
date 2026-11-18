@@ -36,6 +36,7 @@ lap>=0.5.12                   # ByteTrack assignment; without it track() fails a
 torch>=2.4.0
 torchvision>=0.19.0
 torchaudio>=2.4.0             # log-mel front end for the V3 audio model
+pillow>=10.0.0                # body re-id pre-processing (OSNet, D22); torchvision needs it too
 timm>=1.0.0                   # DINOv2 backbone of the v4 scene classifier
 
 # ── face recognition ──────────────────────────────────────────────────────────
@@ -77,8 +78,9 @@ gpiozero>=2.0.1               # siren relay, LEDs, PIR, door, mains-sense
 pytest>=8.0.0
 
 # ── optional, install explicitly ──────────────────────────────────────────────
-# Appearance re-identification across cameras:
-#   pip install torchreid
+# Body re-identification needs no extra package: OSNet (IntrusionSentry's model
+# family) is built in (sentrix/perception/osnet.py) and its weights are in
+# models/reid/ (python tools/fetch_models.py --check). torchreid is not used.
 #
 # Offline voice SOS:
 #   pip install vosk

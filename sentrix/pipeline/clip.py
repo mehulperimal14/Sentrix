@@ -73,6 +73,7 @@ from typing import Any, Callable
 
 import numpy as np
 
+from sentrix import mode as runtime_mode
 from sentrix.config import settings
 from sentrix.fusion.evidence import (AUDIO_SOURCES, CLASSIFIER_SOURCES, DETECTOR_SOURCES,
                                      ClassEvidence,
@@ -82,7 +83,7 @@ from sentrix.perception.audio import (CUE_NAMES, AudioResult, alignment, audio_v
                                       neutral_reason)
 from sentrix.fusion.policy import LevelPolicy, LevelState, _per_threshold
 from sentrix.perception.detector import Detection, DetectionResult
-from sentrix.perception.identity import FaceCheck, IdentityResult
+from sentrix.perception.identity import FaceCheck, IdentityResult, identity_label
 from sentrix.perception.scene import PRIORITY
 from sentrix.pipeline.fastlane import FastLane, FastLaneFrame, fast_lane_evidence
 from sentrix.pipeline.state import state
@@ -609,7 +610,7 @@ def _with_identity(detections: dict, tracks: dict) -> dict:
     for person in detections.get("persons", []):
         verdict = tracks.get(person.get("track_id"))
         if verdict is not None:
-            person["identity"] = verdict["name"] or verdict["state"]
+            person["identity"] = identity_label(verdict)
     return detections
 
 
@@ -801,10 +802,14 @@ class ClipEngine:
                     identity = pipeline.identity
                     self._check = FaceCheck(tuple(identity.match_faces(newest.image)),
                                             persons, newest.at,
-                                            degraded=not getattr(identity, "available", False))
+                                            degraded=not getattr(identity, "available", False),
+                                            **pipeline.reid.bodies_for(newest.image, persons,
+                                                                       identity))
                     self._identity_at, self._identity_tracks = end, ids
                     calls = 1
-        result = pipeline.track_identity.update(self._check, persons, end)
+        # A body look carries a resident's verdict only at home (D22).
+        result = pipeline.track_identity.update(self._check, persons, end,
+                                                appearance=not runtime_mode.is_armed())
         self._settled = result.authorized
         if newest is None:
             stages.skip("S3_identity", "no persons")
@@ -1085,11 +1090,10 @@ class ClipEngine:
             last.at if last is not None else clip.end,
             robbery=(robbery.score, "robbery" if robbery.confirmed else "normal"))
 
+        # Global ids from the face check's body embeddings (no model call here).
+        global_ids = pipeline.reid.global_ids(self._check, clip.end)
         for person in persons_now:
-            x1, y1, x2, y2 = person.bbox
-            crop = newest.image[max(0, y1):y2, max(0, x1):x2]
-            person.global_id = pipeline.reid.match_or_register(pipeline.reid.embed(crop),
-                                                               clip.end)
+            person.global_id = global_ids.get(person.track_id)
 
         trigger = scores.trigger
         shown = trigger if trigger is not None else newest

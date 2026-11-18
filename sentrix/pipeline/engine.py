@@ -69,7 +69,7 @@ from sentrix.perception.audio import AudioEngine, AudioResult, audio_votes, neut
 from sentrix.perception.behaviour import BehaviourEngine
 from sentrix.perception.detector import Detector
 from sentrix.perception.identity import (FaceCheck, IdentityEngine, IdentityWorker,
-                                         TrackIdentity)
+                                         TrackIdentity, identity_label)
 from sentrix.perception.motion import MotionEngine
 from sentrix.perception.reid import ReIDEngine
 from sentrix.perception.scene import SceneEngine
@@ -431,8 +431,11 @@ class Pipeline:
         else:
             # Replay and evaluation: synchronous, so results are reproducible.
             check = FaceCheck(tuple(self.identity.match_faces(frame)), persons, now,
-                              degraded=not getattr(self.identity, "available", False))
-        identity = self.track_identity.update(check, persons, now)
+                              degraded=not getattr(self.identity, "available", False),
+                              **self.reid.bodies_for(frame, persons, self.identity))
+        # A body look carries a resident's verdict only at home (D22).
+        identity = self.track_identity.update(check, persons, now,
+                                              appearance=not runtime_mode.is_armed())
         self._settled = identity.authorized
         identity_score = self.identity.score(identity, person_present)
 
@@ -462,12 +465,10 @@ class Pipeline:
         else:
             audio_score, audio_label = 0.0, "audio unavailable"
 
-        # Global ids for the dashboard; cheap, and only for tracked people.
+        # Global ids from the face check's body embeddings (no model call here).
+        global_ids = self.reid.global_ids(check, now)
         for person in detections.persons:
-            x1, y1, x2, y2 = person.bbox
-            crop = frame[max(0, y1):y2, max(0, x1):x2]
-            person.global_id = self.reid.match_or_register(
-                self.reid.embed(crop), now)
+            person.global_id = global_ids.get(person.track_id)
 
         return FeatureVector(
             vision=detections.person_score,
@@ -842,7 +843,7 @@ class Pipeline:
         self._strategy = strategy or self._build_strategy()
         identity = getattr(self, "identity", None)
         if getattr(identity, "available", False) and self._identity_worker is None:
-            self._identity_worker = IdentityWorker(identity)
+            self._identity_worker = IdentityWorker(identity, reid=self.reid)
         worker = threading.Thread(target=self._strategy.run, args=(stop,),
                                   daemon=True, name=f"sentrix-inference-{self._strategy.name}")
         worker.start()
@@ -1335,7 +1336,7 @@ def _with_identity(detections: dict, tracks: dict) -> dict:
     for person in detections.get("persons", []):
         verdict = tracks.get(person.get("track_id"))
         if verdict is not None:
-            person["identity"] = verdict["name"] or verdict["state"]
+            person["identity"] = identity_label(verdict)
     return detections
 
 

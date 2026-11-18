@@ -1,0 +1,185 @@
+{
+  "videos": [
+    "vid02",
+    "vid03",
+    "vid05",
+    "vid06",
+    "vid07",
+    "wa01",
+    "wa03",
+    "vid04",
+    "gun"
+  ],
+  "hz": 6.0,
+  "min_height": 80,
+  "min_gap_s": 2.0,
+  "per_video": {
+    "vid02": {
+      "crops": 118,
+      "tracks": 3
+    },
+    "vid03": {
+      "crops": 195,
+      "tracks": 2
+    },
+    "vid05": {
+      "crops": 218,
+      "tracks": 3
+    },
+    "vid06": {
+      "crops": 378,
+      "tracks": 6
+    },
+    "vid07": {
+      "crops": 1867,
+      "tracks": 16
+    },
+    "wa01": {
+      "crops": 84,
+      "tracks": 10
+    },
+    "wa03": {
+      "crops": 16,
+      "tracks": 2
+    },
+    "vid04": {
+      "crops": 237,
+      "tracks": 4
+    },
+    "gun": {
+      "crops": 92,
+      "tracks": 2
+    }
+  },
+  "seconds": 176.6,
+  "backends": {
+    "osnet": {
+      "same_pairs": 4524,
+      "different_pairs": 2498,
+      "same_quantiles": {
+        "1": 0.4517,
+        "5": 0.5516,
+        "25": 0.6626,
+        "50": 0.7506,
+        "75": 0.8362,
+        "95": 0.9128,
+        "99": 0.9442
+      },
+      "different_quantiles": {
+        "1": 0.4754,
+        "5": 0.5143,
+        "25": 0.5711,
+        "50": 0.6148,
+        "75": 0.6593,
+        "95": 0.72,
+        "99": 0.7702
+      },
+      "auroc": 0.8306,
+      "operating_points": [
+        {
+          "different_accepted": 0.05,
+          "threshold": 0.72,
+          "same_accepted": 0.5962
+        },
+        {
+          "different_accepted": 0.01,
+          "threshold": 0.7702,
+          "same_accepted": 0.4346
+        },
+        {
+          "different_accepted": 0.001,
+          "threshold": 0.8356,
+          "same_accepted": 0.2518
+        }
+      ],
+      "at_0.50_intrusionsentry": {
+        "same_accepted": 0.9781,
+        "different_accepted": 0.9716
+      }
+    },
+    "histogram": {
+      "same_pairs": 4524,
+      "different_pairs": 2498,
+      "same_quantiles": {
+        "1": 0.4542,
+        "5": 0.5939,
+        "25": 0.8159,
+        "50": 0.9345,
+        "75": 0.976,
+        "95": 0.9939,
+        "99": 0.9975
+      },
+      "different_quantiles": {
+        "1": 0.2794,
+        "5": 0.4958,
+        "25": 0.7456,
+        "50": 0.8221,
+        "75": 0.8859,
+        "95": 0.948,
+        "99": 0.9692
+      },
+      "auroc": 0.7283,
+      "operating_points": [
+        {
+          "different_accepted": 0.05,
+          "threshold": 0.948,
+          "same_accepted": 0.441
+        },
+        {
+          "different_accepted": 0.01,
+          "threshold": 0.9692,
+          "same_accepted": 0.3011
+        },
+        {
+          "different_accepted": 0.001,
+          "threshold": 0.9779,
+          "same_accepted": 0.2321
+        }
+      ],
+      "at_0.50_intrusionsentry": {
+        "same_accepted": 0.9852,
+        "different_accepted": 0.9492
+      }
+    }
+  },
+  "identity_rule": {
+    "same_cases": 1194,
+    "different_cases": 23546,
+    "auroc": 0.9555,
+    "operating_points": [
+      {
+        "different_accepted": 0.01,
+        "threshold": 0.8106,
+        "same_accepted": 0.6533
+      },
+      {
+        "different_accepted": 0.005,
+        "threshold": 0.8228,
+        "same_accepted": 0.6005
+      },
+      {
+        "different_accepted": 0.001,
+        "threshold": 0.8432,
+        "same_accepted": 0.4296
+      }
+    ],
+    "at_0.80": {
+      "same_accepted": 0.6993,
+      "different_accepted": 0.01571
+    },
+    "at_0.85": {
+      "same_accepted": 0.3727,
+      "different_accepted": 0.00038
+    },
+    "at_0.88": {
+      "same_accepted": 0.165,
+      "different_accepted": 0.0
+    },
+    "at_0.90": {
+      "same_accepted": 0.1064,
+      "different_accepted": 0.0
+    },
+    "looks": 20,
+    "check_gap_s": 1.0
+  }
+}

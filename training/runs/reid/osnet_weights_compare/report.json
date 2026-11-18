@@ -1,0 +1,384 @@
+{
+  "videos": [
+    "vid02",
+    "vid03",
+    "vid05",
+    "vid06",
+    "vid07",
+    "wa01",
+    "wa03",
+    "vid04",
+    "gun"
+  ],
+  "hz": 6.0,
+  "min_height": 80,
+  "min_gap_s": 2.0,
+  "per_video": {
+    "vid02": {
+      "crops": 118,
+      "tracks": 3
+    },
+    "vid03": {
+      "crops": 195,
+      "tracks": 2
+    },
+    "vid05": {
+      "crops": 218,
+      "tracks": 3
+    },
+    "vid06": {
+      "crops": 378,
+      "tracks": 6
+    },
+    "vid07": {
+      "crops": 1867,
+      "tracks": 16
+    },
+    "wa01": {
+      "crops": 84,
+      "tracks": 10
+    },
+    "wa03": {
+      "crops": 16,
+      "tracks": 2
+    },
+    "vid04": {
+      "crops": 237,
+      "tracks": 4
+    },
+    "gun": {
+      "crops": 92,
+      "tracks": 2
+    }
+  },
+  "seconds": 1237.0,
+  "weights": {
+    "osnet_x1_0_imagenet": {
+      "file": "osnet_x1_0_imagenet.pth",
+      "architecture": "osnet_x1_0"
+    },
+    "osnet_x1_0_msmt17": {
+      "file": "osnet_x1_0_msmt17.pth",
+      "architecture": "osnet_x1_0"
+    },
+    "osnet_ain_x1_0_msmt17": {
+      "file": "osnet_ain_x1_0_msmt17.pth",
+      "architecture": "osnet_ain_x1_0"
+    }
+  },
+  "backends": {
+    "osnet_x1_0_imagenet": {
+      "same_pairs": 4524,
+      "different_pairs": 2498,
+      "same_quantiles": {
+        "1": 0.4517,
+        "5": 0.5516,
+        "25": 0.6626,
+        "50": 0.7506,
+        "75": 0.8362,
+        "95": 0.9128,
+        "99": 0.9442
+      },
+      "different_quantiles": {
+        "1": 0.4754,
+        "5": 0.5143,
+        "25": 0.5711,
+        "50": 0.6148,
+        "75": 0.6593,
+        "95": 0.72,
+        "99": 0.7702
+      },
+      "auroc": 0.8306,
+      "operating_points": [
+        {
+          "different_accepted": 0.05,
+          "threshold": 0.72,
+          "same_accepted": 0.5962
+        },
+        {
+          "different_accepted": 0.01,
+          "threshold": 0.7702,
+          "same_accepted": 0.4346
+        },
+        {
+          "different_accepted": 0.001,
+          "threshold": 0.8356,
+          "same_accepted": 0.2518
+        }
+      ],
+      "at_0.50_intrusionsentry": {
+        "same_accepted": 0.9781,
+        "different_accepted": 0.9716
+      }
+    },
+    "osnet_x1_0_msmt17": {
+      "same_pairs": 4524,
+      "different_pairs": 2498,
+      "same_quantiles": {
+        "1": 0.3985,
+        "5": 0.4506,
+        "25": 0.5901,
+        "50": 0.7033,
+        "75": 0.8185,
+        "95": 0.9163,
+        "99": 0.9518
+      },
+      "different_quantiles": {
+        "1": 0.3015,
+        "5": 0.3501,
+        "25": 0.418,
+        "50": 0.4637,
+        "75": 0.5096,
+        "95": 0.5828,
+        "99": 0.638
+      },
+      "auroc": 0.9172,
+      "operating_points": [
+        {
+          "different_accepted": 0.05,
+          "threshold": 0.5828,
+          "same_accepted": 0.7613
+        },
+        {
+          "different_accepted": 0.01,
+          "threshold": 0.638,
+          "same_accepted": 0.6538
+        },
+        {
+          "different_accepted": 0.001,
+          "threshold": 0.6918,
+          "same_accepted": 0.5243
+        }
+      ],
+      "at_0.50_intrusionsentry": {
+        "same_accepted": 0.893,
+        "different_accepted": 0.2938
+      }
+    },
+    "osnet_ain_x1_0_msmt17": {
+      "same_pairs": 4524,
+      "different_pairs": 2498,
+      "same_quantiles": {
+        "1": 0.4538,
+        "5": 0.5119,
+        "25": 0.6202,
+        "50": 0.7274,
+        "75": 0.8516,
+        "95": 0.9322,
+        "99": 0.9675
+      },
+      "different_quantiles": {
+        "1": 0.3526,
+        "5": 0.3946,
+        "25": 0.4612,
+        "50": 0.5067,
+        "75": 0.5447,
+        "95": 0.6066,
+        "99": 0.6638
+      },
+      "auroc": 0.931,
+      "operating_points": [
+        {
+          "different_accepted": 0.05,
+          "threshold": 0.6066,
+          "same_accepted": 0.7851
+        },
+        {
+          "different_accepted": 0.01,
+          "threshold": 0.6638,
+          "same_accepted": 0.6368
+        },
+        {
+          "different_accepted": 0.001,
+          "threshold": 0.7321,
+          "same_accepted": 0.4903
+        }
+      ],
+      "at_0.50_intrusionsentry": {
+        "same_accepted": 0.9609,
+        "different_accepted": 0.5444
+      }
+    },
+    "histogram": {
+      "same_pairs": 4524,
+      "different_pairs": 2498,
+      "same_quantiles": {
+        "1": 0.4542,
+        "5": 0.5939,
+        "25": 0.8159,
+        "50": 0.9345,
+        "75": 0.976,
+        "95": 0.9939,
+        "99": 0.9975
+      },
+      "different_quantiles": {
+        "1": 0.2794,
+        "5": 0.4958,
+        "25": 0.7456,
+        "50": 0.8221,
+        "75": 0.8859,
+        "95": 0.948,
+        "99": 0.9692
+      },
+      "auroc": 0.7283,
+      "operating_points": [
+        {
+          "different_accepted": 0.05,
+          "threshold": 0.948,
+          "same_accepted": 0.441
+        },
+        {
+          "different_accepted": 0.01,
+          "threshold": 0.9692,
+          "same_accepted": 0.3011
+        },
+        {
+          "different_accepted": 0.001,
+          "threshold": 0.9779,
+          "same_accepted": 0.2321
+        }
+      ],
+      "at_0.50_intrusionsentry": {
+        "same_accepted": 0.9852,
+        "different_accepted": 0.9492
+      }
+    }
+  },
+  "identity_rule": {
+    "looks": 20,
+    "check_gap_s": 1.0,
+    "max_different": 0.0005,
+    "by_weights": {
+      "osnet_x1_0_imagenet": {
+        "same_cases": 1194,
+        "different_cases": 23546,
+        "auroc": 0.9555,
+        "operating_points": [
+          {
+            "different_accepted": 0.01,
+            "threshold": 0.8106,
+            "same_accepted": 0.6533
+          },
+          {
+            "different_accepted": 0.005,
+            "threshold": 0.8228,
+            "same_accepted": 0.6005
+          },
+          {
+            "different_accepted": 0.001,
+            "threshold": 0.8432,
+            "same_accepted": 0.4296
+          }
+        ],
+        "at_0.80": {
+          "same_accepted": 0.6993,
+          "different_accepted": 0.01571
+        },
+        "at_0.85": {
+          "same_accepted": 0.3727,
+          "different_accepted": 0.00038
+        },
+        "at_0.88": {
+          "same_accepted": 0.165,
+          "different_accepted": 0.0
+        },
+        "at_0.90": {
+          "same_accepted": 0.1064,
+          "different_accepted": 0.0
+        },
+        "bar": {
+          "threshold": 0.85,
+          "same_accepted": 0.3727,
+          "different_accepted": 0.00038
+        }
+      },
+      "osnet_x1_0_msmt17": {
+        "same_cases": 1194,
+        "different_cases": 23546,
+        "auroc": 0.984,
+        "operating_points": [
+          {
+            "different_accepted": 0.01,
+            "threshold": 0.7519,
+            "same_accepted": 0.7948
+          },
+          {
+            "different_accepted": 0.005,
+            "threshold": 0.7884,
+            "same_accepted": 0.6583
+          },
+          {
+            "different_accepted": 0.001,
+            "threshold": 0.8267,
+            "same_accepted": 0.4539
+          }
+        ],
+        "at_0.80": {
+          "same_accepted": 0.5946,
+          "different_accepted": 0.00344
+        },
+        "at_0.85": {
+          "same_accepted": 0.3342,
+          "different_accepted": 8e-05
+        },
+        "at_0.88": {
+          "same_accepted": 0.1709,
+          "different_accepted": 0.0
+        },
+        "at_0.90": {
+          "same_accepted": 0.1139,
+          "different_accepted": 0.0
+        },
+        "bar": {
+          "threshold": 0.84,
+          "same_accepted": 0.3903,
+          "different_accepted": 0.0003
+        }
+      },
+      "osnet_ain_x1_0_msmt17": {
+        "same_cases": 1194,
+        "different_cases": 23546,
+        "auroc": 0.9848,
+        "operating_points": [
+          {
+            "different_accepted": 0.01,
+            "threshold": 0.8092,
+            "same_accepted": 0.7312
+          },
+          {
+            "different_accepted": 0.005,
+            "threshold": 0.8245,
+            "same_accepted": 0.6432
+          },
+          {
+            "different_accepted": 0.001,
+            "threshold": 0.8515,
+            "same_accepted": 0.4631
+          }
+        ],
+        "at_0.80": {
+          "same_accepted": 0.758,
+          "different_accepted": 0.01321
+        },
+        "at_0.85": {
+          "same_accepted": 0.4715,
+          "different_accepted": 0.00106
+        },
+        "at_0.88": {
+          "same_accepted": 0.2864,
+          "different_accepted": 4e-05
+        },
+        "at_0.90": {
+          "same_accepted": 0.1759,
+          "different_accepted": 0.0
+        },
+        "bar": {
+          "threshold": 0.86,
+          "same_accepted": 0.4229,
+          "different_accepted": 0.00042
+        }
+      }
+    }
+  },
+  "chosen": "osnet_ain_x1_0_msmt17"
+}

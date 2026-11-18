@@ -103,7 +103,8 @@ class IdentityResult:
     #: True when ``authorized`` is the held verdict of an earlier frame.
     held: bool = False
     #: Per tracked person: {track_id: {"state": authorised|unknown|unverified,
-    #: "name": str | None}} (pipeline only; empty from :meth:`IdentityEngine.check`).
+    #: "name": str | None, "via": "face"|"appearance"|None}} (pipeline only;
+    #: empty from :meth:`IdentityEngine.check`).
     tracks: dict = field(default_factory=dict)
 
 
@@ -125,6 +126,10 @@ class FaceCheck:
     persons: tuple = ()
     at: float | None = None
     degraded: bool = False
+    #: ((track_id, unit body embedding), ...) on the same frame (D22), and the
+    #: model that made them: "osnet" | "histogram" | None (none computed).
+    bodies: tuple = ()
+    body_model: str | None = None
 
 
 def person_name(stem: str) -> str:
@@ -441,6 +446,13 @@ class IdentityEngine:
         return self.cfg.unknown_person_score if person_present else 0.0
 
 
+def identity_label(verdict: dict) -> str:
+    """A track's HUD/log label: the name, marked when only the body matched."""
+    if verdict.get("name") and verdict.get("via") == "appearance":
+        return f"{verdict['name']} (body)"
+    return verdict.get("name") or verdict["state"]
+
+
 def _owner(box: tuple, persons: tuple) -> int | None:
     """The track whose person box contains the face centre (the smallest such
     box, so a face in front of someone else's box goes to its own person)."""
@@ -463,10 +475,16 @@ class _Track:
     name: str | None = None
     misses: int = 0            # consecutive unmatched looks at this track's face
     looked: bool = False       # any face ever associated
+    #: Body look (D22): the resident whose face-verified looks this track's
+    #: body matches, on how many checks in a row, the last similarity and when.
+    look_name: str | None = None
+    look_hits: int = 0
+    look_similarity: float = 0.0
+    look_at: float | None = None
 
 
 class TrackIdentity:
-    """Who each tracked person is (CLAUDE.md M4).
+    """Who each tracked person is (CLAUDE.md M4, D22).
 
     Identity was frame-global: one matching face authorised everyone in view
     for 5 s (a stranger walking in beside a resident inherited it), and one
@@ -475,7 +493,9 @@ class TrackIdentity:
     its own state:
 
     * ``authorised`` - its face matched, within ``track_hold_seconds``, and
-      has not since failed to match twice in a row;
+      has not since failed to match twice in a row (``via`` "face"); or, in
+      home mode, no face has been seen on it and its **body** matches the
+      looks of a resident whose face was verified (``via`` "appearance");
     * ``unknown`` - its face was seen and did not match;
     * ``unverified`` - no usable look at its face yet.
 
@@ -483,12 +503,29 @@ class TrackIdentity:
     unverified or unknown person keeps the armed-mode intrusion rule live
     (fail closed). With no person boxes (e.g. a face too close for the person
     detector), every visible face must match.
+
+    **Body looks** (D22; the IntrusionSentry re-id model, OSNet bodies only):
+    whenever a track's face matches a resident on a check, that check's body
+    embedding of the track is kept as one of the resident's looks (the last
+    ``settings.reid.identity_looks``, for ``identity_memory_seconds``). A
+    track whose face has not been seen is compared with them; it counts as
+    that resident once ``identity_hits`` checks in a row find that resident's
+    looks the best match, at >= ``identity_similarity`` and ahead of every
+    other resident by ``identity_margin``. A face always wins: a track whose
+    face was seen and failed is ``unknown`` whatever its clothes, and a
+    resident authorised by face on another track in view is never also
+    someone's body match (one person is not two tracks). In armed mode the
+    pipeline passes ``appearance=False``: only a face clears the intrusion
+    rule there.
     """
 
-    def __init__(self, cfg=None) -> None:
+    def __init__(self, cfg=None, reid_cfg=None) -> None:
         self.cfg = cfg or settings.identity
+        self.reid_cfg = reid_cfg or settings.reid
         self._tracks: dict[int, _Track] = {}
         self._folded_at: float | None = None
+        #: resident -> [(check time, unit body embedding), ...]
+        self._looks: dict[str, list[tuple[float, np.ndarray]]] = {}
 
     def _fold(self, check: FaceCheck) -> None:
         for face in check.faces:
@@ -501,33 +538,92 @@ class TrackIdentity:
                 track.match_at, track.name, track.misses = check.at, face.name, 0
             else:
                 track.misses += 1
+        if check.bodies and check.body_model == "osnet" and self.reid_cfg.identity:
+            self._fold_bodies(check)
 
-    def _state(self, track: _Track, now: float) -> str:
+    def _fold_bodies(self, check: FaceCheck) -> None:
+        cfg, at = self.reid_cfg, check.at
+        for name in list(self._looks):
+            kept = [(t, v) for t, v in self._looks[name]
+                    if at - t <= cfg.identity_memory_seconds]
+            if kept:
+                self._looks[name] = kept[-cfg.identity_looks:]
+            else:
+                del self._looks[name]
+        verified: dict[int, str] = {}
+        for track_id, embedding in check.bodies:
+            track = self._tracks.get(track_id)
+            if track is not None and track.match_at == at and track.name is not None:
+                verified[track_id] = track.name
+                self._looks.setdefault(track.name, []).append((at, embedding))
+        taken = set(verified.values())
+        for track_id, embedding in check.bodies:
+            if track_id in verified:
+                continue
+            track = self._tracks.setdefault(track_id, _Track(at, at))
+            if track.misses > 0:
+                track.look_name, track.look_hits = None, 0      # the face decides
+                continue
+            name, best, second = self._best_look(embedding, taken)
+            track.look_similarity, track.look_at = best, at
+            if (name is not None and best >= cfg.identity_similarity
+                    and best - second >= cfg.identity_margin):
+                track.look_hits = track.look_hits + 1 if track.look_name == name else 1
+                track.look_name = name
+            else:
+                track.look_name, track.look_hits = None, 0
+
+    def _best_look(self, embedding: np.ndarray, exclude: set) -> tuple:
+        """(best resident, its similarity, the runner-up's similarity)."""
+        scores = sorted(((max(float(np.dot(embedding, v)) for _, v in looks), name)
+                         for name, looks in self._looks.items() if name not in exclude),
+                        reverse=True)
+        if not scores:
+            return None, 0.0, -1.0
+        return scores[0][1], scores[0][0], scores[1][0] if len(scores) > 1 else -1.0
+
+    def _state(self, track: _Track, now: float, appearance: bool,
+               taken: set) -> tuple[str, str | None, str | None]:
+        """(state, name, via) of one track."""
         held = (track.match_at is not None
                 and now - track.match_at <= self.cfg.track_hold_seconds)
         if held and track.misses < 2:
-            return "authorised"
-        if track.looked and (track.misses > 0 or not held):
-            return "unknown" if track.misses > 0 else "unverified"
-        return "unverified"
+            return "authorised", track.name, "face"
+        if track.misses > 0:
+            return "unknown", None, None
+        if (appearance and track.look_name is not None
+                and track.look_name not in taken
+                and track.look_hits >= self.reid_cfg.identity_hits
+                and track.look_at is not None
+                and now - track.look_at <= self.cfg.track_hold_seconds):
+            return "authorised", track.look_name, "appearance"
+        return "unverified", None, None
 
-    def update(self, check: FaceCheck, persons: tuple, now: float) -> IdentityResult:
-        """Fold a new face check (if any) and summarise the people in view."""
+    def update(self, check: FaceCheck, persons: tuple, now: float, *,
+               appearance: bool = True) -> IdentityResult:
+        """Fold a new face check (if any) and summarise the people in view.
+        ``appearance`` False (armed mode) lets only a face authorise."""
         if check.degraded:
             return IdentityResult(authorized=False, degraded=True)
         if check.at is not None and check.at != self._folded_at:
             self._folded_at = check.at
             self._fold(check)
 
-        verdicts: dict[int, dict] = {}
+        in_view = []
         for track_id, _box in persons:
             if track_id is None:
                 continue
             track = self._tracks.setdefault(track_id, _Track(now, now))
             track.seen_at = now
-            state = self._state(track, now)
-            verdicts[track_id] = {"state": state,
-                                  "name": track.name if state == "authorised" else None}
+            in_view.append((track_id, track))
+        # A resident authorised by face on one track in view is not also
+        # another track's body match.
+        taken = {track.name for _, track in in_view
+                 if self._state(track, now, False, set())[2] == "face"}
+        verdicts: dict[int, dict] = {}
+        for track_id, track in in_view:
+            state, name, via = self._state(track, now, appearance, taken)
+            verdicts[track_id] = {"state": state, "name": name, "via": via}
         for track_id in [t for t, tr in self._tracks.items()
                          if now - tr.seen_at > self.cfg.track_forget_seconds]:
             del self._tracks[track_id]
@@ -550,6 +646,7 @@ class TrackIdentity:
     def reset(self) -> None:
         self._tracks.clear()
         self._folded_at = None
+        self._looks.clear()
 
 
 class IdentityWorker:
@@ -566,10 +663,14 @@ class IdentityWorker:
     Fail-closed: until the first check nobody is authorised, and
     :class:`TrackIdentity` stops authorising when the latest check is older
     than ``verdict_max_age_seconds`` (worker stalled).
+
+    With a ``reid`` engine each check also carries the people's body
+    embeddings (D22), computed here so they never cost the inference thread.
     """
 
-    def __init__(self, engine: IdentityEngine, cfg=None) -> None:
+    def __init__(self, engine: IdentityEngine, cfg=None, reid=None) -> None:
         self.engine = engine
+        self.reid = reid
         self.cfg = cfg or settings.identity
         self._lock = threading.Lock()
         self._wake = threading.Event()
@@ -625,7 +726,10 @@ class IdentityWorker:
                 continue
             frame, persons, at = job
             try:
-                result = FaceCheck(tuple(self.engine.match_faces(frame)), persons, at)
+                bodies = ({} if self.reid is None
+                          else self.reid.bodies_for(frame, persons, self.engine))
+                result = FaceCheck(tuple(self.engine.match_faces(frame)), persons, at,
+                                   **bodies)
             except Exception as exc:
                 log.error("identity check failed: %s", exc)
                 result = FaceCheck(persons=persons, at=at, degraded=True)
@@ -641,4 +745,4 @@ class IdentityWorker:
 
 __all__ = ["DEFAULT_FACE_MODEL", "EnrolmentCheck", "FACE_MODELS", "FaceCheck", "FaceMatch",
            "IdentityEngine", "IdentityResult", "IdentityWorker", "TrackIdentity",
-           "face_model_name", "person_name"]
+           "face_model_name", "identity_label", "person_name"]
