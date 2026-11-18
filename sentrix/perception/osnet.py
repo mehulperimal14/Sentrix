@@ -42,7 +42,7 @@ torch. The similarity bars in ``settings.reid`` belong to these weights:
 other weights need ``tools/reid_eval.py`` and new bars.
 
 Where SENTRIX uses it: ``sentrix/perception/reid.py`` (global ids, and a
-face-verified resident's look carried to their own new track, CLAUDE.md D22).
+face-verified resident's look carried to their own new track, CLAUDE.md D24).
 """
 
 from __future__ import annotations

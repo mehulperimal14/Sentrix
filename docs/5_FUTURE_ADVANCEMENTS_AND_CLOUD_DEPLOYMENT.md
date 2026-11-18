@@ -45,7 +45,7 @@ deployment section no longer applies: detection stays on the device
 | Alembic baseline for the Portal | needed before any column rename (doc 7 §16 q7) |
 | `tools/bench_link.py` | remote fps, glass-to-glass latency, uplink, CPU |
 | Fitted fusion model | M8; needs real labelled sessions |
-| Re-identification in the deployment room | OSNet-AIN (MSMT17) ships (D22); measure it on demo-room recordings, then consider fine-tuning (§3.4) |
+| Re-identification in the deployment room | OSNet-AIN (MSMT17) ships (D24); measure it on demo-room recordings, then consider fine-tuning (§3.4) |
 | UCF-Crime anomaly model | not wired; polarity bug (doc 2 §6) |
 | Voice SOS | not planned in this repository; the unwired Vosk model was removed in `e7ca89e` |
 | Tier 2 product items | inbound SMS parsing, web push / PWA, owner TOTP, Hindi templates, automated export and erasure jobs, WebRTC video, multi-process Pi layout |
@@ -160,7 +160,7 @@ figures with the de-duplication step described.
 
 ### 3.4 Re-identification
 
-Done (D22): OSNet, the model of the team's IntrusionSentry prototype, is built
+Done (D24): OSNet, the model of the team's IntrusionSentry prototype, is built
 in (`sentrix/perception/osnet.py`, OSNet and OSNet-AIN, torchreid's parameter
 names). Three checkpoints were compared on the nine train + val custom videos
 with a selection rule fixed beforehand (`tools/reid_eval.py`,

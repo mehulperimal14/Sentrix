@@ -807,7 +807,7 @@ class ClipEngine:
                                                                        identity))
                     self._identity_at, self._identity_tracks = end, ids
                     calls = 1
-        # A body look carries a resident's verdict only at home (D22).
+        # A body look carries a resident's verdict only at home (D24).
         result = pipeline.track_identity.update(self._check, persons, end,
                                                 appearance=not runtime_mode.is_armed())
         self._settled = result.authorized

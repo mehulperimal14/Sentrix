@@ -433,7 +433,7 @@ class Pipeline:
             check = FaceCheck(tuple(self.identity.match_faces(frame)), persons, now,
                               degraded=not getattr(self.identity, "available", False),
                               **self.reid.bodies_for(frame, persons, self.identity))
-        # A body look carries a resident's verdict only at home (D22).
+        # A body look carries a resident's verdict only at home (D24).
         identity = self.track_identity.update(check, persons, now,
                                               appearance=not runtime_mode.is_armed())
         self._settled = identity.authorized

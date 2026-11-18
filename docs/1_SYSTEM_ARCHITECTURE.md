@@ -39,7 +39,7 @@ contacts. The Portal is optional: without it the device works as before.
 | Face recognition, per tracked person | Working with `insightface`; **fails closed** without it |
 | Acoustic classifier, 4 s window | Working; under-trained (doc 2). Never above L2 (decision D1) |
 | Violence classifier | Fallback only, used when no scene model is installed |
-| Body re-identification (D22) | OSNet-AIN x1_0 trained on MSMT17 (IntrusionSentry's OSNet family, `models/reid/`, own onnxruntime session), computed with each face check: global ids, and at home a face-verified resident carried to their own track by body; colour histogram (global ids only) without the weights |
+| Body re-identification (D24) | OSNet-AIN x1_0 trained on MSMT17 (IntrusionSentry's OSNet family, `models/reid/`, own onnxruntime session), computed with each face check: global ids, and at home a face-verified resident carried to their own track by body; colour histogram (global ids only) without the weights |
 | 4-second clip engine + fast lane (`SENTRIX_PIPELINE_MODE=clip`) | Built for the Pi; off by default (doc 8 T1, doc 6 §6.10) |
 | SOS assistance requests | Built; off unless `SENTRIX_SOS_ENABLED=1` (doc 7 §7) |
 | Channels: modem SMS, Telegram, e-mail, legacy Twilio | Built, tested with fake transports only; every send needs two switches (doc 7 §8) |

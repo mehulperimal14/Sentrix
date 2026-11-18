@@ -126,7 +126,7 @@ class FaceCheck:
     persons: tuple = ()
     at: float | None = None
     degraded: bool = False
-    #: ((track_id, unit body embedding), ...) on the same frame (D22), and the
+    #: ((track_id, unit body embedding), ...) on the same frame (D24), and the
     #: model that made them: "osnet" | "histogram" | None (none computed).
     bodies: tuple = ()
     body_model: str | None = None
@@ -475,7 +475,7 @@ class _Track:
     name: str | None = None
     misses: int = 0            # consecutive unmatched looks at this track's face
     looked: bool = False       # any face ever associated
-    #: Body look (D22): the resident whose face-verified looks this track's
+    #: Body look (D24): the resident whose face-verified looks this track's
     #: body matches, on how many checks in a row, the last similarity and when.
     look_name: str | None = None
     look_hits: int = 0
@@ -484,7 +484,7 @@ class _Track:
 
 
 class TrackIdentity:
-    """Who each tracked person is (CLAUDE.md M4, D22).
+    """Who each tracked person is (CLAUDE.md M4, D24).
 
     Identity was frame-global: one matching face authorised everyone in view
     for 5 s (a stranger walking in beside a resident inherited it), and one
@@ -504,7 +504,7 @@ class TrackIdentity:
     (fail closed). With no person boxes (e.g. a face too close for the person
     detector), every visible face must match.
 
-    **Body looks** (D22; the IntrusionSentry re-id model, OSNet bodies only):
+    **Body looks** (D24; the IntrusionSentry re-id model, OSNet bodies only):
     whenever a track's face matches a resident on a check, that check's body
     embedding of the track is kept as one of the resident's looks (the last
     ``settings.reid.identity_looks``, for ``identity_memory_seconds``). A
@@ -665,7 +665,7 @@ class IdentityWorker:
     than ``verdict_max_age_seconds`` (worker stalled).
 
     With a ``reid`` engine each check also carries the people's body
-    embeddings (D22), computed here so they never cost the inference thread.
+    embeddings (D24), computed here so they never cost the inference thread.
     """
 
     def __init__(self, engine: IdentityEngine, cfg=None, reid=None) -> None:
