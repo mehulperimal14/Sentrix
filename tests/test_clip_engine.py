@@ -141,6 +141,12 @@ class FakeReID:
     def match_or_register(self, embedding, now=None):
         return None
 
+    def bodies_for(self, frame, persons, identity) -> dict:
+        return {}
+
+    def global_ids(self, check, now) -> dict:
+        return {}
+
     def reset(self) -> None:
         pass
 

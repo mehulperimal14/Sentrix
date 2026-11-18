@@ -181,7 +181,7 @@ class TestTrackIdentity:
         check = FaceCheck((face(RESIDENT_FACE, "alice", 0.8), face(STRANGER_FACE)), TWO, 0.0)
         result = tracks.update(check, TWO, 0.0)
         assert not result.authorized
-        assert result.tracks[1] == {"state": "authorised", "name": "alice"}
+        assert result.tracks[1] == {"state": "authorised", "name": "alice", "via": "face"}
         assert result.tracks[2]["state"] == "unknown"
 
     def test_resident_turning_away_stays_authorised_on_their_track(self):

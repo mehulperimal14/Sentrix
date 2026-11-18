@@ -63,7 +63,6 @@ def check_dependencies(report: Report) -> None:
         "sounddevice": "microphone capture — audio modality is disabled without it",
         "insightface": "recommended face backend (pip install insightface onnxruntime)",
         "face_recognition": "alternative face backend (needs a C++ compiler)",
-        "torchreid": "appearance re-id — falls back to colour histograms",
         "twilio": "SMS and voice alerts — falls back to console",
         "librosa": "audio front-end fallback when torchaudio is absent",
         "pandas": "needed by the notebooks and event-log tooling",
@@ -117,6 +116,18 @@ def check_models(report: Report) -> None:
     else:
         report.add(WARN, "sound model", "PANNs CNN10 not present: the 4-class audio CNN "
                                          "is used (python tools/fetch_models.py)")
+    from sentrix.config import settings as _settings
+    from sentrix.perception.osnet import WEIGHTS_NAME as REID_WEIGHTS
+    body = MODELS_DIR / "reid" / REID_WEIGHTS
+    if _settings.reid.model == "off":
+        report.add(WARN, "body re-id", "off (SENTRIX_REID_MODEL=off)")
+    elif body.exists() and _settings.reid.model != "histogram":
+        report.add(OK, "body re-id", f"reid/{REID_WEIGHTS} (OSNet x1_0, IntrusionSentry), "
+                                     f"{body.stat().st_size / 1e6:.1f} MB; carries a resident "
+                                     f"by body at home: {'on' if _settings.reid.identity else 'off'}")
+    else:
+        report.add(WARN, "body re-id", "colour histogram only (global ids; no body identity): "
+                                       "python tools/fetch_models.py")
     expected = {
         "v3_real/audio_classifier_real_v3.pt": ("audio (V3, fallback)", False),
         "audio_classifier.pt": ("audio (V2 fallback)", False),

@@ -477,12 +477,41 @@ class ReIDConfig:
     similarity in [-1, 1]. The previous build compared them against an L2
     *distance* threshold of 120.0 — unreachable for unit vectors, whose maximum
     separation is 2.0 — so every person collapsed onto a single global id.
+
+    The body embedding is OSNet x1_0 with ImageNet weights, the re-id model of
+    IntrusionSentry (``sentrix/perception/osnet.py``); the colour histogram is
+    the fallback when its weights are missing.
     """
 
+    #: ``auto`` (OSNet when ``models/reid/`` holds its weights, else the colour
+    #: histogram), ``histogram``, or ``off`` (no body embeddings at all).
+    model: str = _env_str("SENTRIX_REID_MODEL", "auto").lower()
+    #: onnxruntime intra-op threads of the OSNet session (its own pool).
+    threads: int = _env_int("SENTRIX_REID_THREADS", 2)
+    #: Global ids: cosine bar of the colour histogram, and of OSNet (the bar
+    #: that accepts 1 % of different-people pairs on the nine train + val
+    #: videos, training/runs/reid/osnet_x1_0_imagenet/REPORT.md).
     match_similarity: float = 0.72
+    osnet_match_similarity: float = 0.77
     gallery_size: int = 200
     #: Forget a gallery entry that has not been matched for this long.
     gallery_ttl_seconds: float = 600.0
+    #: D22: a track whose face has not been seen counts as a resident at home
+    #: when its OSNet body matches that resident's face-verified looks
+    #: (``TrackIdentity``). Never in armed mode, never against a failed face.
+    identity: bool = _env_bool("SENTRIX_REID_IDENTITY", True)
+    #: The bar on the best look, met on ``identity_hits`` checks in a row: 0.85
+    #: accepted 0.04 % of different-people and 37 % of same-person cases on the
+    #: nine train + val videos (20 looks, checks 1 s apart; same report).
+    identity_similarity: float = 0.85
+    identity_hits: int = 2
+    #: How far ahead of every other resident the best match must be (a priori:
+    #: the custom videos hold no two enrolled residents to measure it on).
+    identity_margin: float = 0.05
+    #: A resident's looks: the last ``identity_looks`` face-verified ones, each
+    #: kept this long (clothes change; a new outfit is learnt from the face).
+    identity_looks: int = 20
+    identity_memory_seconds: float = 1800.0
 
 
 # ──────────────────────────────────────────────────────────────────────────────
