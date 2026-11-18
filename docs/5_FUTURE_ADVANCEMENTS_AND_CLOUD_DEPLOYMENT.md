@@ -45,7 +45,7 @@ deployment section no longer applies: detection stays on the device
 | Alembic baseline for the Portal | needed before any column rename (doc 7 §16 q7) |
 | `tools/bench_link.py` | remote fps, glass-to-glass latency, uplink, CPU |
 | Fitted fusion model | M8; needs real labelled sessions |
-| Re-identification with weights trained for it | OSNet x1_0 ships with ImageNet weights (D22); try re-id-trained weights and measure in the demo room (§3.4) |
+| Re-identification in the deployment room | OSNet-AIN (MSMT17) ships (D22); measure it on demo-room recordings, then consider fine-tuning (§3.4) |
 | UCF-Crime anomaly model | not wired; polarity bug (doc 2 §6) |
 | Voice SOS | not planned in this repository; the unwired Vosk model was removed in `e7ca89e` |
 | Tier 2 product items | inbound SMS parsing, web push / PWA, owner TOTP, Hindi templates, automated export and erasure jobs, WebRTC video, multi-process Pi layout |
@@ -160,20 +160,22 @@ figures with the de-duplication step described.
 
 ### 3.4 Re-identification
 
-Done (D22): OSNet x1_0, the model of the team's IntrusionSentry prototype, is
-built in (`sentrix/perception/osnet.py`) with the ImageNet weights
-IntrusionSentry used. On the nine train + val custom videos it separates people
-better than the colour histogram (pairwise AUROC 0.83 vs 0.73), but not well:
-IntrusionSentry's 0.50 bar accepts 97 % of different-people pairs, so SENTRIX
-uses 0.85 on a resident's 20 face-verified looks over two checks (37 % of
-same-person and 0.04 % of different-people cases,
-`training/runs/reid/osnet_x1_0_imagenet/REPORT.md`, `tools/reid_eval.py`).
+Done (D22): OSNet, the model of the team's IntrusionSentry prototype, is built
+in (`sentrix/perception/osnet.py`, OSNet and OSNet-AIN, torchreid's parameter
+names). Three checkpoints were compared on the nine train + val custom videos
+with a selection rule fixed beforehand (`tools/reid_eval.py`,
+`training/runs/reid/osnet_weights_compare/REPORT.md`): IntrusionSentry's
+ImageNet x1_0 (pairwise AUROC 0.83; its 0.50 bar accepts 97 % of
+different-people pairs), x1_0 trained on MSMT17 (0.92) and **OSNet-AIN x1_0
+trained on MSMT17 (0.93), which ships**: at 0.86 on a resident's 20
+face-verified looks over two checks it accepts 42 % of same-person and 0.04 %
+of different-people cases. Its denormal weights are zeroed at load (CPU 72 ->
+10 ms a crop).
 
-Next: weights trained for re-identification (OSNet x1_0 on MSMT17, or OSNet-AIN
-for cross-domain use, both in the torchreid model zoo; the published Market-1501
-rank-1 of OSNet is about 94 %, above the ≥ 85 % objective), measured with
-`tools/reid_eval.py` and then on demo-room recordings. Upgrade path: CLIP-ReID or
-DINOv2 embeddings behind the same cosine matcher.
+Next: measure it on demo-room recordings (the bars come from the nine videos
+they were chosen on); if it is too weak there, fine-tune on face-verified
+tracks from those recordings. Upgrade path: CLIP-ReID or DINOv2 embeddings
+behind the same cosine matcher.
 
 ### 3.5 Pose estimation
 
