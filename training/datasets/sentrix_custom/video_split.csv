@@ -9,3 +9,8 @@ vid07,vid07.mov,train,9,weapon,normal|weapon,82.3,19.8
 wa01,wa01.mp4,train,6,weapon,normal|weapon,34.6,13.5
 wa02,wa02.mp4,test,7,weapon,normal|weapon,31.8,27.0
 wa03,wa03.mp4,train,4,normal,normal,25.0,4.0
+mmtheft,mmtheft.mp4,train,10,robbery,normal|robbery,49.6,4.0
+mmassault,mmassault.mp4,train,6,assault,assault|normal,15.2,4.5
+mmgun,mmgun.mp4,train,6,weapon,normal|weapon,7.6,4.8
+mmknife,mmknife.mp4,train,6,weapon,normal|weapon,11.8,7.9
+nvroom2,nvroom2.mp4,train,1,normal,normal,19.1,0.0

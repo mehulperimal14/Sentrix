@@ -22,10 +22,12 @@ class TestGroundTruth:
         assert "normal" not in THREAT_CLASSES
 
     def test_vendored_labels_are_complete(self):
+        """765 frames of the first ten videos + 212 of the five added on
+        2026-11-18 (all train); val and test are unchanged."""
         frames = load_frames()
-        assert len(frames) == 765
+        assert len(frames) == 977
         by_split = {s: sum(f.split == s for f in frames) for s in ("train", "val", "test")}
-        assert by_split == {"train": 588, "val": 84, "test": 93}
+        assert by_split == {"train": 800, "val": 84, "test": 93}
 
     def test_split_is_by_source_video(self):
         """No video may contribute frames to two splits (leakage)."""

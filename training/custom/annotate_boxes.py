@@ -52,11 +52,20 @@ MODEL_ID = "IDEA-Research/grounding-dino-base"
 PROMPTS = {
     ("weapon", "corridor"): ("a long stick. a wooden rod. a bat.", "stick"),
     ("weapon", "room"): ("a handgun. a pistol. a gun.", "pistol"),
+    ("weapon", "knife"): ("a knife. a blade.", "knife"),
     ("fire", "corridor"): ("fire. a flame.", "fire"),
     ("fire", "room"): ("fire. a flame. a jet of flame.", "fire"),
 }
 #: A weapon box larger than this fraction of the frame is a person, not a gun.
-MAX_AREA = {"stick": 0.20, "pistol": 0.08, "fire": 0.35}
+MAX_AREA = {"stick": 0.20, "pistol": 0.08, "knife": 0.08, "fire": 0.35}
+
+
+def knife_videos() -> set[str]:
+    """Videos whose reviewed weapon segments name a knife (segments.csv notes)."""
+    from sentrix.evaluation.custom_dataset import METADATA_DIR
+    with open(METADATA_DIR / "segments.csv", newline="", encoding="utf-8") as fh:
+        return {r["video_id"] for r in csv.DictReader(fh)
+                if r["label"] == "weapon" and "knife" in r["notes"].lower()}
 
 
 #: Fraction of a weapon box that must fall inside a (grown) person box.
@@ -161,7 +170,11 @@ def main(argv=None) -> int:
     parser.add_argument("--min-score", type=float, default=0.30)
     parser.add_argument("--reject", type=Path, default=None,
                         help="text file of image names whose box was rejected in QC")
+    parser.add_argument("--videos", default=None,
+                        help="annotate only these video ids (comma-separated) and keep the "
+                             "other rows of --out as they are")
     args = parser.parse_args(argv)
+    only = set(args.videos.split(",")) if args.videos else None
 
     import torch
     from PIL import Image
@@ -175,6 +188,15 @@ def main(argv=None) -> int:
     from ultralytics import YOLO
 
     frames = load_frames(root=args.dataset)
+    kept_rows: list[list[str]] = []
+    if only is not None:
+        frames = [f for f in frames if f.video in only]
+        if args.out.exists():
+            with open(args.out, newline="", encoding="utf-8") as fh:
+                reader = csv.reader(fh)
+                next(reader)
+                kept_rows = [r for r in reader if r[2] not in only]
+    knives = knife_videos()
     processor, model = load_model(device)
     person_detector = YOLO(str(ROOT / "models" / "yolov8n.pt"))
     rows: list[dict] = []
@@ -187,7 +209,8 @@ def main(argv=None) -> int:
         if f.label not in ("weapon", "fire"):
             rows.append({**base, "status": "excluded"})
             continue
-        prompt, box_class = PROMPTS[(f.label, scene_of(f.video))]
+        kind = "knife" if f.label == "weapon" and f.video in knives else scene_of(f.video)
+        prompt, box_class = PROMPTS[(f.label, kind)]
         image = Image.open(f.path).convert("RGB")
         w, h = image.size
         persons = (person_boxes(person_detector, image, (processor, model, device))
@@ -220,6 +243,7 @@ def main(argv=None) -> int:
         writer = csv.writer(fh)
         writer.writerow(["image", "split", "video", "label", "status", "box_class",
                          "score", "x1", "y1", "x2", "y2", "width", "height"])
+        writer.writerows(kept_rows)
         for r in rows:
             xyxy = r.get("xyxy", ["", "", "", ""])
             writer.writerow([r["image"], r["split"], r["video"], r["label"], r["status"],
