@@ -66,6 +66,12 @@ ORIGINAL = {
 NEGATIVE_LABELS = {"weapon": {"normal", "fire"}, "fire": {"normal", "weapon"}}
 
 
+def _long(path: Path) -> str:
+    """Roboflow file names exceed Windows' 260-character limit: use \\\\?\\."""
+    text = str(Path(path).resolve())
+    return "\\\\?\\" + text if os.name == "nt" and not text.startswith("\\\\?\\") else text
+
+
 def yolo_line(cls: int, x1, y1, x2, y2, w, h) -> str:
     cx, cy = (x1 + x2) / 2 / w, (y1 + y2) / 2 / h
     bw, bh = (x2 - x1) / w, (y2 - y1) / h
@@ -91,8 +97,10 @@ def sample_original(task: str, split: str, n: int, classes: list[str],
     for img in images[:n]:
         label = ORIGINAL[task] / split / "labels" / (img.stem + ".txt")
         lines = []
-        if label.exists():
-            for line in label.read_text().splitlines():
+        if os.path.exists(_long(label)):
+            with open(_long(label), encoding="utf-8") as fh:
+                text = fh.read()
+            for line in text.splitlines():
                 parts = line.split()
                 if parts and int(parts[0]) in remap:
                     lines.append(" ".join([str(remap[int(parts[0])]), *parts[1:5]]))
@@ -112,7 +120,7 @@ def build_dataset(args, classes: list[str]) -> tuple[Path, dict]:
     def put(split: str, src: Path, name: str, lines: list[str]) -> None:
         (root / "images" / split).mkdir(parents=True, exist_ok=True)
         (root / "labels" / split).mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(src, root / "images" / split / name)
+        shutil.copyfile(_long(src), root / "images" / split / name)
         (root / "labels" / split / (Path(name).stem + ".txt")).write_text(
             "\n".join(lines) + ("\n" if lines else ""))
 
@@ -134,8 +142,9 @@ def build_dataset(args, classes: list[str]) -> tuple[Path, dict]:
             key = f"{split}_excluded"
         stats[key] = stats.get(key, 0) + 1
 
-    for img, lines in sample_original(task, "train", args.rehearsal, classes, args.seed):
-        put("train", img, f"orig_{img.name}", lines)
+    for k, (img, lines) in enumerate(sample_original(task, "train", args.rehearsal, classes,
+                                                     args.seed)):
+        put("train", img, f"orig_{k:05d}{img.suffix}", lines)     # short: no 260-char paths
     stats["train_rehearsal"] = args.rehearsal
 
     data = {"path": str(root), "train": "images/train", "val": "images/val",
@@ -145,11 +154,12 @@ def build_dataset(args, classes: list[str]) -> tuple[Path, dict]:
 
     if args.retention:
         ret_root = root / "retention"
-        for img, lines in sample_original(task, "valid", args.retention, classes, args.seed + 1):
+        for k, (img, lines) in enumerate(sample_original(task, "valid", args.retention, classes,
+                                                         args.seed + 1)):
             (ret_root / "images").mkdir(parents=True, exist_ok=True)
             (ret_root / "labels").mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(img, ret_root / "images" / img.name)
-            (ret_root / "labels" / (img.stem + ".txt")).write_text("\n".join(lines) + "\n")
+            shutil.copyfile(_long(img), ret_root / "images" / f"ret_{k:05d}{img.suffix}")
+            (ret_root / "labels" / f"ret_{k:05d}.txt").write_text("\n".join(lines) + "\n")
         (root / "retention.yaml").write_text(yaml.safe_dump(
             {"path": str(ret_root), "train": "images", "val": "images",
              "names": {i: c for i, c in enumerate(classes)}}, sort_keys=False),

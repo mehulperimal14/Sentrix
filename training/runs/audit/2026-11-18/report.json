@@ -1,0 +1,309 @@
+{
+  "data": "G:\\Capstone\\data",
+  "weapon_data": {
+    "root": "G:\\Capstone\\data\\weapon_data",
+    "classes": [
+      "knife",
+      "long_gun",
+      "pistol"
+    ],
+    "splits": {
+      "train": {
+        "images": 7170,
+        "label_files": 7170,
+        "images_without_label_file": 0,
+        "label_files_without_image": 0,
+        "empty_label_files": 409,
+        "boxes_per_class": {
+          "knife": 2857,
+          "long_gun": 947,
+          "pistol": 3856
+        },
+        "images_per_class": {
+          "knife": 2788,
+          "long_gun": 795,
+          "pistol": 3408
+        },
+        "problems": {},
+        "problem_examples": {}
+      },
+      "valid": {
+        "images": 1599,
+        "label_files": 1599,
+        "images_without_label_file": 0,
+        "label_files_without_image": 0,
+        "empty_label_files": 102,
+        "boxes_per_class": {
+          "knife": 730,
+          "long_gun": 258,
+          "pistol": 678
+        },
+        "images_per_class": {
+          "knife": 687,
+          "long_gun": 212,
+          "pistol": 626
+        },
+        "problems": {},
+        "problem_examples": {}
+      },
+      "test": {
+        "images": 703,
+        "label_files": 703,
+        "images_without_label_file": 0,
+        "label_files_without_image": 0,
+        "empty_label_files": 47,
+        "boxes_per_class": {
+          "knife": 316,
+          "long_gun": 148,
+          "pistol": 254
+        },
+        "images_per_class": {
+          "knife": 312,
+          "long_gun": 116,
+          "pistol": 230
+        },
+        "problems": {},
+        "problem_examples": {}
+      }
+    },
+    "byte_identical_images": {
+      "across_splits": {
+        "train~valid": 0,
+        "train~test": 0,
+        "valid~test": 0
+      },
+      "within_split_extra_copies": {
+        "train": 0,
+        "valid": 0,
+        "test": 0
+      }
+    }
+  },
+  "fire_smoke_data": {
+    "root": "G:\\Capstone\\data\\fire_smoke_data",
+    "classes": [
+      "fire",
+      "smoke"
+    ],
+    "splits": {
+      "train": {
+        "images": 10000,
+        "label_files": 10000,
+        "images_without_label_file": 0,
+        "label_files_without_image": 0,
+        "empty_label_files": 4549,
+        "boxes_per_class": {
+          "fire": 5562,
+          "smoke": 6901
+        },
+        "images_per_class": {
+          "fire": 4903,
+          "smoke": 2733
+        },
+        "problems": {
+          "zero_size_box": 10
+        },
+        "problem_examples": {
+          "zero_size_box": [
+            "AoF05470",
+            "AoF06155",
+            "AoF06439",
+            "AoF06456",
+            "PublicDataset00056"
+          ]
+        }
+      },
+      "valid": {
+        "images": 2000,
+        "label_files": 2000,
+        "images_without_label_file": 0,
+        "label_files_without_image": 0,
+        "empty_label_files": 931,
+        "boxes_per_class": {
+          "fire": 1083,
+          "smoke": 1392
+        },
+        "images_per_class": {
+          "fire": 967,
+          "smoke": 518
+        },
+        "problems": {
+          "zero_size_box": 3,
+          "coord_outside_0_1": 7
+        },
+        "problem_examples": {
+          "zero_size_box": [
+            "AoF07774",
+            "AoF08348",
+            "WEB10669"
+          ],
+          "coord_outside_0_1": [
+            "WEB10770",
+            "WEB10775",
+            "WEB10821",
+            "WEB11090",
+            "WEB11598"
+          ]
+        }
+      }
+    },
+    "byte_identical_images": {
+      "across_splits": {
+        "train~valid": 0
+      },
+      "within_split_extra_copies": {
+        "train": 0,
+        "valid": 0
+      }
+    }
+  },
+  "violence_data": {
+    "root": "G:\\Capstone\\data\\violence_data",
+    "classes": {
+      "fight": {
+        "images": 10110,
+        "empty_files": 0,
+        "source_groups_by_prefix": 1011,
+        "undecodable_in_sample": 0,
+        "sample": 300
+      },
+      "nofight": {
+        "images": 9500,
+        "empty_files": 0,
+        "source_groups_by_prefix": 950,
+        "undecodable_in_sample": 0,
+        "sample": 300
+      }
+    }
+  },
+  "anomaly_data": {
+    "root": "G:\\Capstone\\data\\anomaly_data",
+    "classes": {
+      "anomalous": {
+        "images": 1607,
+        "empty_files": 0,
+        "source_groups_by_prefix": 200,
+        "undecodable_in_sample": 0,
+        "sample": 300
+      },
+      "normal": {
+        "images": 1600,
+        "empty_files": 0,
+        "source_groups_by_prefix": 200,
+        "undecodable_in_sample": 0,
+        "sample": 300
+      }
+    }
+  },
+  "audio_data": {
+    "root": "G:\\Capstone\\data\\audio_data\\audioset_clips",
+    "classes": {
+      "fire": {
+        "files": 106,
+        "formats": {
+          ".wav": 105,
+          ".webm": 1
+        },
+        "wav_seconds": 850.4,
+        "unreadable_wav": 0,
+        "sample_rates": {
+          "22050": 105
+        }
+      },
+      "scream": {
+        "files": 60,
+        "formats": {
+          ".wav": 54,
+          ".webm": 5,
+          ".m4a": 1
+        },
+        "wav_seconds": 392.9,
+        "unreadable_wav": 1,
+        "sample_rates": {
+          "22050": 53
+        }
+      },
+      "siren": {
+        "files": 174,
+        "formats": {
+          ".wav": 154,
+          ".webm": 15,
+          ".part": 3,
+          ".m4a": 2
+        },
+        "wav_seconds": 1259.3,
+        "unreadable_wav": 0,
+        "sample_rates": {
+          "22050": 154
+        }
+      },
+      "speech_normal": {
+        "files": 177,
+        "formats": {
+          ".wav": 156,
+          ".part": 4,
+          ".m4a": 4,
+          ".webm": 13
+        },
+        "wav_seconds": 1179.6,
+        "unreadable_wav": 1,
+        "sample_rates": {
+          "22050": 155
+        }
+      }
+    }
+  },
+  "sentrix_custom": {
+    "root": "G:\\Sentrix\\training\\datasets\\sentrix_custom",
+    "labelled_images": 977,
+    "sampled_frames": 1707,
+    "videos": 15,
+    "segments": 84,
+    "images_per_class_split": {
+      "normal": {
+        "train": 463,
+        "val": 23,
+        "test": 67
+      },
+      "fire": {
+        "train": 11,
+        "val": 6
+      },
+      "weapon": {
+        "train": 191,
+        "val": 55,
+        "test": 26
+      },
+      "assault": {
+        "train": 56
+      },
+      "robbery": {
+        "train": 79
+      }
+    },
+    "frames_status": {
+      "near_duplicate": 656,
+      "ok": 764,
+      "resolved_by_frame_level_visual_review": 213,
+      "blurry": 7,
+      "ambiguous_low_confidence": 67
+    },
+    "boxes_status": {
+      "assault:excluded": 56,
+      "fire:box": 17,
+      "normal:negative": 553,
+      "robbery:excluded": 79,
+      "weapon:box": 163,
+      "weapon:no_confident_box": 79,
+      "weapon:rejected_in_qc": 30
+    },
+    "boxes_per_class": {
+      "fire": 17,
+      "pistol": 119,
+      "stick": 38,
+      "knife": 6
+    },
+    "problems": {},
+    "problem_examples": {}
+  }
+}

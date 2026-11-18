@@ -1,6 +1,7 @@
 # SENTRIX frame-level image dataset
 
-765 labelled frames extracted from 10 source surveillance videos, for
+977 labelled frames extracted from 15 source videos (10 surveillance-style
+videos, plus 5 added on 2026-11-18 - see the end of this file), for
 5-class single-label image classification.
 
 ```
@@ -95,12 +96,12 @@ wa03_t00019.961_f000499.jpg
 
 | class       | train | val | test | total |
 |-------------|-------|-----|------|-------|
-| 0 normal    | 373   | 23  | 67   | 463   |
+| 0 normal    | 463   | 23  | 67   | 553   |
 | 1 fire      | 11    | 6   | 0    | 17    |
-| 2 weapon    | 144   | 55  | 26   | 225   |
-| 3 assault   | 43    | 0   | 0    | 43    |
-| 4 robbery   | 17    | 0   | 0    | 17    |
-| **total**   | 588   | 84  | 93   | 765   |
+| 2 weapon    | 191   | 55  | 26   | 272   |
+| 3 assault   | 56    | 0   | 0    | 56    |
+| 4 robbery   | 79    | 0   | 0    | 79    |
+| **total**   | 800   | 84  | 93   | 977   |
 
 ## Read this before training
 
@@ -121,3 +122,34 @@ wa03_t00019.961_f000499.jpg
   The intended use is as a held-out evaluation set for models trained on
   the larger public corpora (RWF-2000, the Roboflow weapon and fire/smoke
   sets; see docs/2).
+
+## Added on 2026-11-18
+
+Five videos recorded by the team in a hostel room (four in the same room as
+the earlier bedroom videos, one in a second room), all in the **train** split
+(the owner chose to hold none out; they are scored leave-one-video-out):
+
+| id | source file | content | kept frames |
+|---|---|---|---|
+| `mmtheft` | `masked_man.mp4` (handheld, portrait) | masked intruder searches the shoe rack and wardrobes and leaves with items | 99 (robbery 62) |
+| `mmassault` | `masked_man_assault_heavy_metal_hitting.mp4` | masked intruder kicks and strikes a person on the bed with a metal flask | 26 (assault 13) |
+| `mmgun` | `masked_man_with_gun_with_audio.mp4` | handgun pointed at a seated person; phone snatched at gunpoint | 23 (weapon 19) |
+| `mmknife` | `masked_man_with_knife.mp4` | knife attack on a person lying on the bed | 35 (weapon 28) |
+| `nvroom2` | `normal video.mp4` (second room) | three people, ordinary activity | 29 (normal) |
+
+Segments were reviewed by watching timestamped contact sheets (2 frames/s,
+6 frames/s around every boundary) - `annotation_method: claude_visual_review`
+in `segments.csv`, with a note per segment. Frames were extracted by
+`tools/build_custom_dataset.py`, which re-implements this dataset's original
+extraction (`run_config.json`): 6 frames/s in weapon/assault segments, 3
+elsewhere, the same quality filters, pHash de-duplication within a video;
+frames of segments under 0.7 confidence are labelled but dropped
+(`ambiguous_low_confidence`), so they are neither trained on nor scored. A
+carried flask is not labelled a weapon (only the beating is `assault`);
+the masked intruder's searching is `robbery` (the class covers theft).
+Boxes: `annotate_boxes.py --videos ...` (GroundingDINO, label-gated, a new
+`knife` prompt for videos whose weapon segments name a knife), then visual QC:
+13 boxes accepted (7 pistol, 6 knife), 14 rejected (the victim's phone, the
+desk monitor; listed in `box_qc_rejects.txt`). Audit: `tools/audit_labels.py`
+(`training/runs/audit/2026-11-18/REPORT.md`): no problems.
+

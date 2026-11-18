@@ -19,3 +19,18 @@ wa01_t00024.681_f000617.jpg   # dark silhouette, no stick visible
 wa01_t00029.001_f000725.jpg   # beside the head, object not identifiable
 wa02_t00040.681_f001017.jpg   # thin light rod at the bicycle again
 wa02_t00041.321_f001033.jpg   # hands overhead, stick not resolvable
+# 2026-11-18 QC of the new masked-man videos (training/runs/custom/annotation_qc_2026-11-18): the victim's phone, the desk monitor or shirt, not the weapon
+mmgun_t00004.178_f000125.jpg
+mmgun_t00004.846_f000145.jpg
+mmgun_t00005.181_f000155.jpg
+mmgun_t00005.515_f000165.jpg
+mmgun_t00005.849_f000175.jpg
+mmknife_t00008.848_f000265.jpg
+mmknife_t00009.182_f000275.jpg
+mmknife_t00009.349_f000280.jpg
+mmknife_t00009.516_f000285.jpg
+mmknife_t00009.683_f000290.jpg
+mmknife_t00010.017_f000300.jpg
+mmknife_t00010.518_f000315.jpg
+mmknife_t00012.521_f000375.jpg
+mmknife_t00012.688_f000380.jpg

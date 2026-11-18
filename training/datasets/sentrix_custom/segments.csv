@@ -54,3 +54,32 @@ wa03,wa03.mp4,10.5,16.5,normal,0.88,vlm_visual_review,train,person at urinal the
 wa03,wa03.mp4,16.5,18.68,normal,0.80,vlm_frame_review,train,"person takes hold of parked bicycle and turns it; wheels on floor, act still ambiguous in isolation"
 wa03,wa03.mp4,18.68,20.70,robbery,0.88,vlm_frame_review,train,"bicycle lifted clear of the floor and carried away at a run; user-confirmed the bike was carried, not wheeled"
 wa03,wa03.mp4,20.70,29.0,normal,0.95,vlm_visual_review,train,corridor empty again; subject and bicycle gone
+mmtheft,mmtheft.mp4,0.0,8.0,normal,0.85,claude_visual_review,train,handheld phone pan of the empty room; motion blur
+mmtheft,mmtheft.mp4,8.0,10.0,normal,0.9,claude_visual_review,train,door closed then opening; nobody in view
+mmtheft,mmtheft.mp4,10.0,13.5,normal,0.75,claude_visual_review,train,masked person entering through the door; nothing touched yet (pre-threat)
+mmtheft,mmtheft.mp4,13.5,17.5,robbery,0.6,claude_visual_review,train,masked intruder standing by the door and shoe rack; intent not yet shown
+mmtheft,mmtheft.mp4,17.5,23.0,robbery,0.75,claude_visual_review,train,masked intruder rummaging through the shoe rack
+mmtheft,mmtheft.mp4,23.0,27.5,robbery,0.85,claude_visual_review,train,masked intruder takes a dark item from the rack and handles it
+mmtheft,mmtheft.mp4,27.5,40.0,robbery,0.8,claude_visual_review,train,masked intruder searching the open wardrobe
+mmtheft,mmtheft.mp4,40.0,46.0,robbery,0.72,claude_visual_review,train,masked intruder searching behind the second wardrobe; partly hidden
+mmtheft,mmtheft.mp4,46.0,51.5,robbery,0.85,claude_visual_review,train,masked intruder walks out past the camera carrying items
+mmtheft,mmtheft.mp4,51.5,53.64,normal,0.85,claude_visual_review,train,room empty after the intruder leaves
+mmassault,mmassault.mp4,0.0,5.3,normal,0.95,claude_visual_review,train,person lying on the bed using a phone
+mmassault,mmassault.mp4,5.3,8.3,normal,0.75,claude_visual_review,train,door opens and a masked person enters (pre-threat)
+mmassault,mmassault.mp4,8.3,10.0,normal,0.6,claude_visual_review,train,masked intruder approaches carrying a metal flask
+mmassault,mmassault.mp4,10.0,13.2,assault,0.9,claude_visual_review,train,masked intruder kicks and strikes the person on the bed with a metal flask
+mmassault,mmassault.mp4,13.2,16.0,normal,0.5,claude_visual_review,train,intruder walks away swinging the flask; victim gets up and chases
+mmassault,mmassault.mp4,16.0,19.67,normal,0.8,claude_visual_review,train,victim alone at the door
+mmgun,mmgun.mp4,0.0,1.85,normal,0.95,claude_visual_review,train,person seated on the bed using a phone
+mmgun,mmgun.mp4,1.85,2.34,normal,0.6,claude_visual_review,train,masked intruder appears at the door
+mmgun,mmgun.mp4,2.34,7.2,weapon,0.92,claude_visual_review,train,handgun pointed at the seated person; struggle and phone snatched at gunpoint (armed robbery)
+mmgun,mmgun.mp4,7.2,8.3,weapon,0.6,claude_visual_review,train,handgun lowered to the hip while turning away
+mmgun,mmgun.mp4,8.3,11.5,normal,0.6,claude_visual_review,train,intruder leaving through the door
+mmgun,mmgun.mp4,11.5,12.41,normal,0.9,claude_visual_review,train,person alone on the bed
+mmknife,mmknife.mp4,0.0,4.0,normal,0.95,claude_visual_review,train,person lying on the bed using a phone
+mmknife,mmknife.mp4,4.0,8.8,normal,0.55,claude_visual_review,train,door opens; masked intruder at the door with an arm raised; no blade visible
+mmknife,mmknife.mp4,8.8,12.3,weapon,0.85,claude_visual_review,train,masked intruder stabs downward repeatedly at the person on the bed with a knife
+mmknife,mmknife.mp4,12.3,14.4,weapon,0.8,claude_visual_review,train,knife held at the waist while walking away
+mmknife,mmknife.mp4,14.4,17.5,normal,0.55,claude_visual_review,train,intruder leaving through the door
+mmknife,mmknife.mp4,17.5,19.71,normal,0.9,claude_visual_review,train,person alone on the bed
+nvroom2,nvroom2.mp4,0.0,19.07,normal,0.95,claude_visual_review,train,three people in a second room (desk; seated on the bed; one walks in at 10 s and talks); handheld; no threat
