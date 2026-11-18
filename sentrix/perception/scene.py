@@ -91,10 +91,14 @@ SCENE_CLASSES: tuple[str, ...] = ("normal", "fire", "weapon", "assault", "robber
 PRIORITY: tuple[str, ...] = ("fire", "weapon", "assault", "robbery")
 
 #: Weight files, in preference order; first present wins, so promotion is a file
-#: copy. ``SENTRIX_SCENE_WEIGHTS`` overrides. v4_custom is trained on the custom
-#: dataset from generic pretrained weights; v4_finetuned is the v3 violence
-#: ResNet-18 fine-tuned on it (docs/6).
-_WEIGHTS = ("v4_custom/scene_classifier_custom_v4.pt",
+#: copy. ``SENTRIX_SCENE_WEIGHTS`` overrides. v5_room is the v4 recipe (DINOv2,
+#: last 4 blocks) retrained with the five videos of 2026-11-18 (val macro-F1
+#: 0.700 -> 0.743, no held-out normal frame flagged; a room calibration made for
+#: v4 does not carry over - re-calibrate before a device uses it); v4_custom is
+#: trained on the custom dataset from generic pretrained weights; v4_finetuned
+#: is the v3 violence ResNet-18 fine-tuned on it (docs/6).
+_WEIGHTS = ("v5_room/scene_classifier_room_v5.pt",
+            "v4_custom/scene_classifier_custom_v4.pt",
             "v4_finetuned/scene_classifier_ft_v4.pt")
 
 

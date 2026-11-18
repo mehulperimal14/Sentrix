@@ -390,7 +390,7 @@ Against the objectives approved at proposal stage.
 | Inference hot path | < 20 ms | **Not met on CPU**: tick p50 168 ms (§7); each YOLO head 23–25 ms |
 | End-to-end detect → alert | < 2 s | **Not met**: episode onset → committed L3 p95 4.0 s on the custom videos (gate G4 FAIL, `training/runs/custom_eval/m5/gates.json`); weapon 8 of 12 episodes within 2 s |
 | False alarms vs motion baseline | ≥ 60% reduction | **Not yet measured** — needs `tools/baseline.py` and a boring set |
-| ReID rank-1 | ≥ 85% | **Not measured on Market-1501** (the zoo reports 70.1 % MSMT17 -> Market1501 for the shipped OSNet-AIN). Nine custom videos (D24): pairwise AUROC 0.93 (IntrusionSentry's ImageNet weights 0.83); identity rule at 0.86: 42 % of same-person, 0.04 % of different-people cases (`training/runs/reid/osnet_weights_compare/REPORT.md`) |
+| ReID rank-1 | ≥ 85% | **Not measured on Market-1501** (the zoo reports 70.1 % MSMT17 -> Market1501 for the shipped OSNet-AIN). Nine custom videos (D24): pairwise AUROC 0.93 (IntrusionSentry's ImageNet weights 0.83); identity rule at 0.86: 42 % of same-person, 0.04 % of different-people cases (with the five videos of 2026-11-18: bar 0.87, 30 % same-person, 0.020 % different-people, `osnet_ain_14videos`) (`training/runs/reid/osnet_weights_compare/REPORT.md`) |
 | Evidence integrity | tamper-evident | Met — AES-256-GCM + HMAC chained manifest |
 
 The unmeasured rows, and a false-alarm rate with a useful bound (the 3.7

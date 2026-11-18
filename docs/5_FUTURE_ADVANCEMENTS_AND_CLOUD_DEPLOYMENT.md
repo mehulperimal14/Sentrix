@@ -169,7 +169,7 @@ ImageNet x1_0 (pairwise AUROC 0.83; its 0.50 bar accepts 97 % of
 different-people pairs), x1_0 trained on MSMT17 (0.92) and **OSNet-AIN x1_0
 trained on MSMT17 (0.93), which ships**: at 0.86 on a resident's 20
 face-verified looks over two checks it accepts 42 % of same-person and 0.04 %
-of different-people cases. Its denormal weights are zeroed at load (CPU 72 ->
+of different-people cases (0.87 on all 14 videos with the masked-man scenes: 30 % / 0.020 %). Its denormal weights are zeroed at load (CPU 72 ->
 10 ms a crop).
 
 Next: measure it on demo-room recordings (the bars come from the nine videos
