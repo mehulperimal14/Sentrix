@@ -1,4 +1,7 @@
 @import 'tailwindcss';
+/* The apps' builds start at their own folder: the shared components' classes
+   live here and must be scanned too. */
+@source '../';
 @import './tokens.css';
 @import '@fontsource-variable/anek-latin/wdth.css';
 @import '@fontsource-variable/noto-sans/wght.css';
