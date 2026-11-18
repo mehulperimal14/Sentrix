@@ -1,4 +1,4 @@
-"""Body re-identification: IntrusionSentry's OSNet, shipped as OSNet-AIN (D22).
+"""Body re-identification: IntrusionSentry's OSNet, shipped as OSNet-AIN (D24).
 
 Pins the model port (crop, pre-processing, weights, ONNX parity), the
 ``ReIDEngine`` (backends, bodies with each face check, global ids) and the
@@ -229,7 +229,7 @@ def test_a_check_without_bodies_keeps_previous_ids():
     assert engine.global_ids(check(2.0, [(1, BOX1)]), 2.0) == ids
 
 
-# ── the identity rule (D22) ─────────────────────────────────────────────────
+# ── the identity rule (D24) ─────────────────────────────────────────────────
 def test_a_verified_residents_body_carries_their_verdict_to_a_new_track():
     result = verified_then_new_track(TrackIdentity(), body=rotated(A, 0.97))
     assert result.tracks[2] == {"state": "authorised", "name": "alice", "via": "appearance"}

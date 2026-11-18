@@ -1,0 +1,154 @@
+{
+  "tag": "fire_candidate_2026-11-19",
+  "data": "G:\\Capstone\\data",
+  "frames": 977,
+  "groups": {
+    "old_train": 588,
+    "old_val": 84,
+    "old_test": 93,
+    "new": 212
+  },
+  "detectors": {
+    "weapon_detector_custom_v4": {
+      "weights": "models\\v4_custom\\weapon_detector_custom_v4.pt",
+      "classes": [
+        "pistol",
+        "stick"
+      ],
+      "public_weapon_test": {
+        "images": 703,
+        "shared_classes": [
+          "pistol"
+        ],
+        "ap50": {
+          "pistol": 0.0074
+        },
+        "image_auroc_vs_background": 0.5062,
+        "n_pos_images": 541,
+        "n_background_images": 47
+      },
+      "custom_weapon": {
+        "voting_classes": [
+          "pistol"
+        ],
+        "old_train": {
+          "n_pos": 144,
+          "n_neg": 373,
+          "image_auroc": 0.7621,
+          "recall@0.25": 0.5,
+          "fpr@0.25": 0.0027,
+          "recall@0.5": 0.5,
+          "fpr@0.5": 0.0,
+          "box_ap50": {
+            "pistol": 0.9989,
+            "stick": 1.0
+          }
+        },
+        "old_val": {
+          "n_pos": 55,
+          "n_neg": 23,
+          "image_auroc": 0.7478,
+          "recall@0.25": 0.1273,
+          "fpr@0.25": 0.0,
+          "recall@0.5": 0.0909,
+          "fpr@0.5": 0.0,
+          "box_ap50": {
+            "pistol": 0.3346
+          }
+        },
+        "old_test": {
+          "n_pos": 26,
+          "n_neg": 67,
+          "image_auroc": 0.4701,
+          "recall@0.25": 0.0,
+          "fpr@0.25": 0.0149,
+          "recall@0.5": 0.0,
+          "fpr@0.5": 0.0149,
+          "box_ap50": {
+            "stick": 0.0021
+          }
+        },
+        "new": {
+          "n_pos": 47,
+          "n_neg": 90,
+          "image_auroc": 0.3527,
+          "recall@0.25": 0.0,
+          "fpr@0.25": 0.0222,
+          "recall@0.5": 0.0,
+          "fpr@0.5": 0.0,
+          "box_ap50": {
+            "pistol": 0.0
+          }
+        }
+      }
+    },
+    "candidate": {
+      "weights": "training\\runs\\custom\\detector\\room_fire_v5\\candidate.pt",
+      "classes": [
+        "fire"
+      ],
+      "public_fire_valid": {
+        "images": 2000,
+        "shared_classes": [
+          "fire"
+        ],
+        "ap50": {
+          "fire": 0.4866
+        },
+        "image_auroc_vs_background": 0.8839,
+        "n_pos_images": 967,
+        "n_background_images": 931
+      },
+      "custom_fire": {
+        "voting_classes": [
+          "fire"
+        ],
+        "old_train": {
+          "n_pos": 11,
+          "n_neg": 373,
+          "image_auroc": 1.0,
+          "recall@0.25": 1.0,
+          "fpr@0.25": 0.0,
+          "recall@0.5": 0.9091,
+          "fpr@0.5": 0.0,
+          "box_ap50": {
+            "fire": 1.0
+          }
+        },
+        "old_val": {
+          "n_pos": 6,
+          "n_neg": 23,
+          "image_auroc": 0.9638,
+          "recall@0.25": 0.0,
+          "fpr@0.25": 0.0,
+          "recall@0.5": 0.0,
+          "fpr@0.5": 0.0,
+          "box_ap50": {
+            "fire": 0.5893
+          }
+        },
+        "old_test": {
+          "n_pos": 0,
+          "n_neg": 67,
+          "image_auroc": null,
+          "recall@0.25": null,
+          "fpr@0.25": 0.0,
+          "recall@0.5": null,
+          "fpr@0.5": 0.0,
+          "box_ap50": {}
+        },
+        "new": {
+          "n_pos": 0,
+          "n_neg": 90,
+          "image_auroc": null,
+          "recall@0.25": null,
+          "fpr@0.25": 0.0,
+          "recall@0.5": null,
+          "fpr@0.5": 0.0,
+          "box_ap50": {}
+        }
+      }
+    }
+  },
+  "seconds": 149.6
+}

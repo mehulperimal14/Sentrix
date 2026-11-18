@@ -1,0 +1,227 @@
+{
+  "videos": [
+    "vid02",
+    "vid03",
+    "vid05",
+    "vid06",
+    "vid07",
+    "wa01",
+    "wa03",
+    "mmtheft",
+    "mmassault",
+    "mmgun",
+    "mmknife",
+    "nvroom2",
+    "vid04",
+    "gun"
+  ],
+  "hz": 6.0,
+  "min_height": 80,
+  "min_gap_s": 2.0,
+  "per_video": {
+    "vid02": {
+      "crops": 118,
+      "tracks": 3
+    },
+    "vid03": {
+      "crops": 195,
+      "tracks": 2
+    },
+    "vid05": {
+      "crops": 218,
+      "tracks": 3
+    },
+    "vid06": {
+      "crops": 378,
+      "tracks": 6
+    },
+    "vid07": {
+      "crops": 1867,
+      "tracks": 16
+    },
+    "wa01": {
+      "crops": 84,
+      "tracks": 10
+    },
+    "wa03": {
+      "crops": 16,
+      "tracks": 2
+    },
+    "mmtheft": {
+      "crops": 241,
+      "tracks": 3
+    },
+    "mmassault": {
+      "crops": 164,
+      "tracks": 3
+    },
+    "mmgun": {
+      "crops": 135,
+      "tracks": 3
+    },
+    "mmknife": {
+      "crops": 201,
+      "tracks": 8
+    },
+    "nvroom2": {
+      "crops": 269,
+      "tracks": 3
+    },
+    "vid04": {
+      "crops": 237,
+      "tracks": 4
+    },
+    "gun": {
+      "crops": 92,
+      "tracks": 2
+    }
+  },
+  "seconds": 917.5,
+  "weights": {
+    "osnet_ain_x1_0_msmt17": {
+      "file": "osnet_ain_x1_0_msmt17.pth",
+      "architecture": "osnet_ain_x1_0"
+    }
+  },
+  "backends": {
+    "osnet_ain_x1_0_msmt17": {
+      "same_pairs": 6891,
+      "different_pairs": 2908,
+      "same_quantiles": {
+        "1": 0.4423,
+        "5": 0.5085,
+        "25": 0.623,
+        "50": 0.725,
+        "75": 0.8407,
+        "95": 0.9406,
+        "99": 0.9699
+      },
+      "different_quantiles": {
+        "1": 0.3516,
+        "5": 0.3928,
+        "25": 0.4511,
+        "50": 0.5,
+        "75": 0.5409,
+        "95": 0.6024,
+        "99": 0.661
+      },
+      "auroc": 0.9349,
+      "operating_points": [
+        {
+          "different_accepted": 0.05,
+          "threshold": 0.6024,
+          "same_accepted": 0.7983
+        },
+        {
+          "different_accepted": 0.01,
+          "threshold": 0.661,
+          "same_accepted": 0.6469
+        },
+        {
+          "different_accepted": 0.001,
+          "threshold": 0.7313,
+          "same_accepted": 0.485
+        }
+      ],
+      "at_0.50_intrusionsentry": {
+        "same_accepted": 0.9584,
+        "different_accepted": 0.5
+      }
+    },
+    "histogram": {
+      "same_pairs": 6891,
+      "different_pairs": 2908,
+      "same_quantiles": {
+        "1": 0.3828,
+        "5": 0.4996,
+        "25": 0.7573,
+        "50": 0.9067,
+        "75": 0.9698,
+        "95": 0.9939,
+        "99": 0.9974
+      },
+      "different_quantiles": {
+        "1": 0.2329,
+        "5": 0.3944,
+        "25": 0.7021,
+        "50": 0.8073,
+        "75": 0.8762,
+        "95": 0.9462,
+        "99": 0.9686
+      },
+      "auroc": 0.6806,
+      "operating_points": [
+        {
+          "different_accepted": 0.05,
+          "threshold": 0.9462,
+          "same_accepted": 0.3734
+        },
+        {
+          "different_accepted": 0.01,
+          "threshold": 0.9686,
+          "same_accepted": 0.2582
+        },
+        {
+          "different_accepted": 0.001,
+          "threshold": 0.9773,
+          "same_accepted": 0.2024
+        }
+      ],
+      "at_0.50_intrusionsentry": {
+        "same_accepted": 0.9496,
+        "different_accepted": 0.9061
+      }
+    }
+  },
+  "identity_rule": {
+    "looks": 20,
+    "check_gap_s": 1.0,
+    "max_different": 0.0005,
+    "by_weights": {
+      "osnet_ain_x1_0_msmt17": {
+        "same_cases": 1500,
+        "different_cases": 25408,
+        "auroc": 0.9658,
+        "operating_points": [
+          {
+            "different_accepted": 0.01,
+            "threshold": 0.8148,
+            "same_accepted": 0.6307
+          },
+          {
+            "different_accepted": 0.005,
+            "threshold": 0.8316,
+            "same_accepted": 0.5107
+          },
+          {
+            "different_accepted": 0.001,
+            "threshold": 0.8573,
+            "same_accepted": 0.376
+          }
+        ],
+        "at_0.80": {
+          "same_accepted": 0.6953,
+          "different_accepted": 0.01503
+        },
+        "at_0.85": {
+          "same_accepted": 0.4033,
+          "different_accepted": 0.00189
+        },
+        "at_0.88": {
+          "same_accepted": 0.2493,
+          "different_accepted": 4e-05
+        },
+        "at_0.90": {
+          "same_accepted": 0.152,
+          "different_accepted": 0.0
+        },
+        "bar": {
+          "threshold": 0.87,
+          "same_accepted": 0.3007,
+          "different_accepted": 0.0002
+        }
+      }
+    }
+  },
+  "chosen": "osnet_ain_x1_0_msmt17"
+}

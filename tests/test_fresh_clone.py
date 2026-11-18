@@ -20,7 +20,7 @@ class TestBundledData:
         monkeypatch.delenv("SENTRIX_CUSTOM_DATASET", raising=False)
         monkeypatch.delenv("SENTRIX_CUSTOM_VIDEOS", raising=False)
         frames = load_frames()
-        assert len(frames) == 765 and all(f.path.exists() for f in frames)
+        assert len(frames) == 977 and all(f.path.exists() for f in frames)
         assert all(v.path().exists() for v in videos_for("all"))
 
 

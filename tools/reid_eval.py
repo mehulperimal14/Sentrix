@@ -5,7 +5,7 @@ Runs the person detector with ByteTrack over the nine train + val videos
 embeds every tracked person crop with each body backend: one or more OSNet
 checkpoints (``--weights``; default the shipped one, ``sentrix/perception/
 osnet.py``) and the colour histogram ``ReIDEngine`` used before OSNet. With
-several checkpoints the report names the one the D22 rule chooses: the most
+several checkpoints the report names the one the D24 rule chooses: the most
 same-person cases accepted at its own bar (the smallest 0.01 step that
 accepts <= 0.05 % of different-people cases).
 
@@ -160,7 +160,7 @@ def _spread(items: list, cap: int) -> list:
 
 def rule_scores(rows: list[dict], key: str, looks_cap: int, check_gap: float,
                 min_gap: float) -> tuple[np.ndarray, np.ndarray]:
-    """The identity rule of ``TrackIdentity`` (D22) on tracks: a resident's
+    """The identity rule of ``TrackIdentity`` (D24) on tracks: a resident's
     look set (up to ``looks_cap`` crops of one track) against two probes of a
     track ``check_gap`` s apart; the rule passes when both probes' best match
     over the looks clears the bar, so each score is the smaller of the two.
@@ -224,7 +224,7 @@ def rule_summary(same: np.ndarray, different: np.ndarray) -> dict:
         out[f"at_{threshold:.2f}"] = {
             "same_accepted": round(float((same >= threshold).mean()), 4),
             "different_accepted": round(float((different >= threshold).mean()), 5)}
-    # The D22 bar, fixed before any comparison: the smallest 0.01 step at which
+    # The D24 bar, fixed before any comparison: the smallest 0.01 step at which
     # the rule accepts <= MAX_DIFFERENT of the different-people cases.
     for step in range(0, 101):
         bar = round(step / 100, 2)
@@ -236,7 +236,7 @@ def rule_summary(same: np.ndarray, different: np.ndarray) -> dict:
     return out
 
 
-#: The identity bar's ceiling on accepted different-people cases (D22).
+#: The identity bar's ceiling on accepted different-people cases (D24).
 MAX_DIFFERENT = 0.0005
 
 
@@ -329,7 +329,7 @@ def main(argv: list[str] | None = None) -> int:
         lines.append(f"IntrusionSentry's threshold 0.50 on {name}: accepts "
                      f"{osn['same_accepted']:.1%} of same-person and "
                      f"{osn['different_accepted']:.1%} of different-people pairs.")
-    lines += ["", f"## Identity rule (D22): {args.looks} looks, two checks "
+    lines += ["", f"## Identity rule (body looks, TrackIdentity): {args.looks} looks, two checks "
               f"{args.check_gap:g} s apart", "",
               f"Bar: the smallest 0.01 step accepting <= {MAX_DIFFERENT:.2%} of "
               "different-people cases; chosen: the most same-person cases at its "

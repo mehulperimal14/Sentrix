@@ -34,6 +34,7 @@ trajectories that mixed several people together.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -125,15 +126,27 @@ class DetectionResult:
 # Weight files, in preference order. First one present wins, so a V3 promotion
 # is a file copy rather than a code change.
 _PERSON_WEIGHTS = ("yolov8n.pt",)
-_WEAPON_WEIGHTS = ("v4_custom/weapon_detector_custom_v4.pt",
+_WEAPON_WEIGHTS = ("v5_room/weapon_detector_room_v5.pt",
+                   "v4_custom/weapon_detector_custom_v4.pt",
                    "v4_finetuned/weapon_detector_ft_v4.pt",
                    "v3_real/weapon_detector_real_v3.pt")
-_FIRE_WEIGHTS = ("v4_custom/fire_detector_custom_v4.pt",
+_FIRE_WEIGHTS = ("v5_room/fire_detector_room_v5.pt",
+                 "v4_custom/fire_detector_custom_v4.pt",
                  "v4_finetuned/fire_smoke_detector_ft_v4.pt",
                  "v3_real/fire_smoke_detector_real_v3.pt")
 
 
+#: An explicit weights file per role (like ``SENTRIX_SCENE_WEIGHTS``): used as
+#: given, never silently replaced by the next candidate when it is missing.
+_OVERRIDES = {_WEAPON_WEIGHTS: "SENTRIX_WEAPON_WEIGHTS", _FIRE_WEIGHTS: "SENTRIX_FIRE_WEIGHTS"}
+
+
 def _resolve(candidates: tuple[str, ...]):
+    import os
+    override = os.getenv(_OVERRIDES.get(candidates, ""), "").strip()
+    if override:
+        path = Path(override)
+        return path if path.exists() else None
     for name in candidates:
         path = model_path(*name.split("/"))
         if path.exists():

@@ -180,6 +180,19 @@ def test_average_precision_and_auroc_helpers():
     assert eval_models.auroc([], [0.1]) is None
 
 
+def test_detector_weights_can_be_pinned_per_role(monkeypatch, tmp_path):
+    """SENTRIX_WEAPON_WEIGHTS / SENTRIX_FIRE_WEIGHTS, like SENTRIX_SCENE_WEIGHTS:
+    used as given, a missing file is never replaced by the next candidate."""
+    from sentrix.perception import detector
+    weights = tmp_path / "w.pt"
+    weights.write_bytes(b"x")
+    monkeypatch.setenv("SENTRIX_WEAPON_WEIGHTS", str(weights))
+    assert detector._resolve(detector._WEAPON_WEIGHTS) == weights
+    monkeypatch.setenv("SENTRIX_FIRE_WEIGHTS", str(tmp_path / "missing.pt"))
+    assert detector._resolve(detector._FIRE_WEIGHTS) is None
+    assert detector._resolve(detector._PERSON_WEIGHTS).name == "yolov8n.pt"
+
+
 def test_knife_videos_come_from_segment_notes():
     sys.path.insert(0, str(ROOT / "training" / "custom"))
     import annotate_boxes

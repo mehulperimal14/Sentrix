@@ -497,15 +497,17 @@ class ReIDConfig:
     gallery_size: int = 200
     #: Forget a gallery entry that has not been matched for this long.
     gallery_ttl_seconds: float = 600.0
-    #: D22: a track whose face has not been seen counts as a resident at home
+    #: D24: a track whose face has not been seen counts as a resident at home
     #: when its OSNet body matches that resident's face-verified looks
     #: (``TrackIdentity``). Never in armed mode, never against a failed face.
     identity: bool = _env_bool("SENTRIX_REID_IDENTITY", True)
     #: The bar on the best look, met on ``identity_hits`` checks in a row: the
-    #: smallest 0.01 step accepting <= 0.05 % of different-people cases on the
-    #: nine train + val videos (20 looks, checks 1 s apart): 0.86, which
-    #: accepted 0.042 % of different-people and 42 % of same-person cases.
-    identity_similarity: float = 0.86
+    #: smallest 0.01 step accepting <= 0.05 % of different-people cases (20
+    #: looks, checks 1 s apart). On the nine train + val videos that was 0.86;
+    #: with the five videos of 2026-11-18 (14 videos, the masked-man scenes
+    #: included) it is 0.87: 0.020 % of different-people and 30 % of
+    #: same-person cases (training/runs/reid/osnet_ain_14videos/REPORT.md).
+    identity_similarity: float = 0.87
     identity_hits: int = 2
     #: How far ahead of every other resident the best match must be (a priori:
     #: the custom videos hold no two enrolled residents to measure it on).
