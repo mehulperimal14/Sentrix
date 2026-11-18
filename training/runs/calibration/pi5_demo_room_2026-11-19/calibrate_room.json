@@ -1,0 +1,215 @@
+{
+  "sources": {
+    "tool": "tools/calibrate_room.py",
+    "at": "2026-11-19T00:42:08",
+    "logs": 32,
+    "first": "events_20261023_175605_18082d5f53f2.jsonl",
+    "last": "events_20261119_000006_1b2e4ee7de56.jsonl",
+    "since": null,
+    "until": null,
+    "exclude": [],
+    "source": [
+      "live"
+    ],
+    "weights": {
+      "name": "scene_classifier_custom_v4.pt",
+      "bytes": 57144869
+    },
+    "rule": {
+      "confirm_margin": 0.1,
+      "single_margin": 0.01,
+      "cap": 0.95
+    }
+  },
+  "classes": [
+    {
+      "class": "weapon",
+      "observations": 9092,
+      "scored_values": 17218,
+      "scored_hours": 5.082,
+      "in_force": 0.75,
+      "modes": [
+        "clip",
+        "tick"
+      ],
+      "proposed": 0.78,
+      "floor": 0.5,
+      "confirm_max": 0.6504,
+      "single_max": 0.7602,
+      "set_by": "single max + 0.01",
+      "capped": false,
+      "percentiles": {
+        "median": 0.1896,
+        "p99": 0.5464,
+        "p99.9": 0.6668,
+        "max": 0.7602
+      },
+      "at": {
+        "floor": {
+          "bar": 0.5,
+          "onsets": 45,
+          "confirmed": 92,
+          "per_hour": 8.855
+        },
+        "proposed": {
+          "bar": 0.78,
+          "onsets": 0,
+          "confirmed": 0,
+          "per_hour": 0.0
+        },
+        "in_force": {
+          "bar": 0.75,
+          "onsets": 0,
+          "confirmed": 0,
+          "per_hour": 0.0
+        }
+      },
+      "upper_bound_per_hour": 0.59,
+      "top": [
+        {
+          "time": "2026-11-18T21:02:30",
+          "session": "1b2e4ee7de56",
+          "confirm": 0.6504,
+          "single": 0.6681,
+          "mode": "clip"
+        },
+        {
+          "time": "2026-10-24T04:12:48",
+          "session": "dc2cb4794810",
+          "confirm": 0.6374,
+          "single": 0.6417,
+          "mode": "clip"
+        },
+        {
+          "time": "2026-10-24T04:13:50",
+          "session": "dc2cb4794810",
+          "confirm": 0.6277,
+          "single": 0.6318,
+          "mode": "clip"
+        },
+        {
+          "time": "2026-11-18T21:02:20",
+          "session": "1b2e4ee7de56",
+          "confirm": 0.6188,
+          "single": 0.6891,
+          "mode": "clip"
+        },
+        {
+          "time": "2026-10-24T04:15:17",
+          "session": "dc2cb4794810",
+          "confirm": 0.6178,
+          "single": 0.6184,
+          "mode": "clip"
+        },
+        {
+          "time": "2026-10-24T04:13:43",
+          "session": "dc2cb4794810",
+          "confirm": 0.6144,
+          "single": 0.6176,
+          "mode": "clip"
+        }
+      ],
+      "replay_check": {
+        "clips": 8956,
+        "agree": 8956,
+        "disagree": []
+      },
+      "warnings": []
+    },
+    {
+      "class": "fire",
+      "observations": 9092,
+      "scored_values": 17218,
+      "scored_hours": 5.082,
+      "in_force": 0.7,
+      "modes": [
+        "clip",
+        "tick"
+      ],
+      "proposed": 0.75,
+      "floor": 0.45,
+      "confirm_max": 0.6498,
+      "single_max": 0.7164,
+      "set_by": "confirming max + 0.10",
+      "capped": false,
+      "percentiles": {
+        "median": 0.0792,
+        "p99": 0.2361,
+        "p99.9": 0.5685,
+        "max": 0.7164
+      },
+      "at": {
+        "floor": {
+          "bar": 0.45,
+          "onsets": 4,
+          "confirmed": 9,
+          "per_hour": 0.787
+        },
+        "proposed": {
+          "bar": 0.75,
+          "onsets": 0,
+          "confirmed": 0,
+          "per_hour": 0.0
+        },
+        "in_force": {
+          "bar": 0.7,
+          "onsets": 0,
+          "confirmed": 0,
+          "per_hour": 0.0
+        }
+      },
+      "upper_bound_per_hour": 0.59,
+      "top": [
+        {
+          "time": "2026-10-28T04:48:59",
+          "session": "ead5bf51243e",
+          "confirm": 0.6498,
+          "single": 0.6526,
+          "mode": "clip"
+        },
+        {
+          "time": "2026-11-02T00:36:48",
+          "session": "459e75c2883b",
+          "confirm": 0.6275,
+          "single": 0.7164,
+          "mode": "clip"
+        },
+        {
+          "time": "2026-10-28T04:48:55",
+          "session": "ead5bf51243e",
+          "confirm": 0.5922,
+          "single": 0.6078,
+          "mode": "clip"
+        },
+        {
+          "time": "2026-10-27T23:04:14",
+          "session": "300b30f6eb16",
+          "confirm": 0.5865,
+          "single": 0.6459,
+          "mode": "clip"
+        },
+        {
+          "time": "2026-11-02T00:36:41",
+          "session": "459e75c2883b",
+          "confirm": 0.5685,
+          "single": 0.6188,
+          "mode": "clip"
+        },
+        {
+          "time": "2026-11-02T00:36:34",
+          "session": "459e75c2883b",
+          "confirm": 0.5657,
+          "single": 0.5684,
+          "mode": "clip"
+        }
+      ],
+      "replay_check": {
+        "clips": 8956,
+        "agree": 8956,
+        "disagree": []
+      },
+      "warnings": []
+    }
+  ],
+  "checks": []
+}

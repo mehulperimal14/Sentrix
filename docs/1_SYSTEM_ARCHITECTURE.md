@@ -182,6 +182,9 @@ overrides after the first live run, `CLAUDE.md` §5 and M1):
 Scene thresholds come from `var/calibration/scene.json` or
 `SENTRIX_SCENE_THRESHOLDS` when set, else from the checkpoint raised to the
 floors weapon 0.50, fire 0.45, assault and robbery 0.60.
+`tools/calibrate_room.py` proposes and writes that file from the device's own
+event log of a quiet period (D23); a file made for other scene weights is
+still applied but flagged (the scene engine's log, `tools/doctor.py`).
 
 **Identity** has no input into threat evidence. It feeds the armed-mode
 intrusion rule, the SOS entry-delay disarm and the display. It is **per

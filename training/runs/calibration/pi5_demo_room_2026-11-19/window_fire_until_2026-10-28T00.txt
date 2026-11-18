@@ -1,0 +1,14 @@
+32 event log(s), events_20261023_175605_18082d5f53f2.jsonl .. events_20261119_000006_1b2e4ee7de56.jsonl
+
+== fire ==
+  scored: 4273 clip/tick observations, 8078 values, 2.40 h
+  per value: median 0.068, p99 0.2105, p99.9 0.5214, max 0.6459
+  highest confirming value 0.5865, highest single value 0.6459
+  at floor     0.45: 2 onset(s), 4 confirmed observation(s)
+  at proposed  0.69: 0 onset(s), 0 confirmed observation(s)
+  at in_force  0.45: 2 onset(s), 4 confirmed observation(s)
+  PROPOSED 0.69 (set by confirming max + 0.10); 0 onsets in 2.40 h -> 95 % upper bound 1.248 per hour
+  replay check: same verdict as the device on 4137 of 4137 clips (at the bar it applied)
+    2026-10-27T23:04:14  confirm 0.587  single 0.646  clip 300b30f6eb16
+    2026-10-27T23:49:04  confirm 0.474  single 0.591  clip 25a901ec1eff
+    2026-10-27T23:49:12  confirm 0.473  single 0.549  clip 25a901ec1eff

@@ -27,6 +27,12 @@ ticks. Effective thresholds are therefore, in order of precedence: a
 deployment calibration (``var/calibration/scene.json`` or
 ``SENTRIX_SCENE_THRESHOLDS`` as JSON, e.g. ``{"weapon": 0.55}``), else the
 checkpoint's value raised to ``ThreatConfig.scene_threshold_floor``.
+``tools/calibrate_room.py`` writes that file from the device's own event log
+and names the weights it was made for (``calibrated.weights``); a room bar
+belongs to one model, so a calibration made for other weights is still
+applied (the floors alone gave the demo room its false alarms) but flagged
+(``calibration_stale``, the threshold source, ``tools/doctor.py``) until the
+room is calibrated again.
 
 Temporal behaviour
 ------------------
@@ -259,6 +265,29 @@ def _valid_thresholds(values: dict, origin: str) -> dict[str, float]:
     return kept
 
 
+def weights_identity(path: Path | None) -> dict[str, Any] | None:
+    """What a calibration records about the weights it was made for: the
+    checkpoint's file name and size (a stat, no hashing at start-up). The
+    checkpoint, not its ONNX twin: both runtimes serve the same model."""
+    if path is None:
+        return None
+    try:
+        return {"name": Path(path).name, "bytes": Path(path).stat().st_size}
+    except OSError:
+        return None
+
+
+def calibration_weights() -> dict[str, Any] | None:
+    """The weights the deployment calibration file says it was made for, if any."""
+    path = CALIBRATION_DIR / "scene.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except Exception:
+        return None
+    weights = (data.get("calibrated") or {}).get("weights") if isinstance(data, dict) else None
+    return weights if isinstance(weights, dict) and weights.get("name") else None
+
+
 def deployment_thresholds() -> dict[str, float]:
     """Per-deployment threshold overrides, file first then environment."""
     overrides: dict[str, float] = {}
@@ -297,6 +326,8 @@ class SceneEngine:
         self.temperature = 1.0
         self.thresholds: dict[str, float] = {c: 0.5 for c in PRIORITY}
         self.threshold_source = "default"
+        #: True when the deployment calibration names other weights than these.
+        self.calibration_stale = False
         self._buffer: deque[tuple[float, np.ndarray]] = deque(maxlen=64)
         self._last: SceneResult = SceneResult()
         if self.cfg.enabled:
@@ -334,7 +365,7 @@ class SceneEngine:
             self.temperature = float(meta.get("temperature", 1.0) or 1.0)
             self.thresholds.update({k: float(v) for k, v in
                                     (meta.get("thresholds") or {}).items() if k in PRIORITY})
-            self._apply_threshold_policy()
+            self._apply_threshold_policy(path)
             self._backend = self._model = model
             self._device = f"{backend}:cpu"
             self.runtime = backend
@@ -388,7 +419,7 @@ class SceneEngine:
             self.thresholds.update({k: float(v) for k, v in
                                     (ckpt.get("thresholds") or {}).items()
                                     if k in PRIORITY})
-            self._apply_threshold_policy()
+            self._apply_threshold_policy(path)
             self._model = net
             self.weights_name = path.name
             log.info("scene classifier loaded: %s (%s, %dpx, T=%.2f, thr=%s)",
@@ -398,7 +429,7 @@ class SceneEngine:
             log.error("scene classifier failed to load from %s: %s", path, exc)
             self._model = None
 
-    def _apply_threshold_policy(self) -> None:
+    def _apply_threshold_policy(self, path: Path | None = None) -> None:
         # Floors first, then any class a deployment calibration names. A
         # calibration of one class must not drop the floors of the others (a
         # weapon-only override used to put fire back at the checkpoint's 0.35,
@@ -411,6 +442,15 @@ class SceneEngine:
         if overrides:
             self.thresholds.update(overrides)
             self.threshold_source += f"; deployment calibration ({', '.join(sorted(overrides))})"
+            made_for, loaded = calibration_weights(), weights_identity(path)
+            if made_for and loaded and (made_for.get("name"), made_for.get("bytes")) != (
+                    loaded["name"], loaded["bytes"]):
+                self.calibration_stale = True
+                self.threshold_source += (f"; calibrated for other weights "
+                                          f"({made_for.get('name')})")
+                log.warning("the room calibration was made for %s, not %s: its bars are "
+                            "applied, but calibrate this room again "
+                            "(tools/calibrate_room.py)", made_for.get("name"), loaded["name"])
 
     @property
     def available(self) -> bool:
@@ -477,4 +517,5 @@ class SceneEngine:
 
 __all__ = ["SCENE_CLASSES", "PRIORITY", "SceneEngine", "SceneResult",
            "base_fingerprint", "build_scene_model", "decide_label",
-           "deployment_thresholds", "exported_scene", "merge_delta", "scene_runtime"]
+           "calibration_weights", "deployment_thresholds", "exported_scene", "merge_delta",
+           "scene_runtime", "weights_identity"]
