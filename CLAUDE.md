@@ -500,7 +500,16 @@ branch's room-calibration work, its D23, stays there).
   on held-out normal frames; old-val AUROC weapon 0.748 -> 0.871, fire
   0.587 -> 0.964; public pistol AP50 0.007 -> 0.699, knife 0.717, fire
   0.000 -> 0.487). Replay: the new gun and knife scenes reach L3, weapon
-  episodes at L3 8/12 -> 11/14, false L3 onsets unchanged (1).
+  episodes at L3 9/14 -> 11/14, fire at L5 2/3 -> 0/3 (L3, L4 unchanged),
+  false L3 onsets unchanged (1).
+  One known false box: the v5 weapon head calls the dark bag the masked thief\n  holds in `mmtheft` a "pistol" (0.67), which lifts that robbery episode to L3\n  (the robbery evidence itself stays at L2). Robbery frames are excluded from\n  detector training; mark weapon-free robbery videos as negatives next time.
+* **v5 room scene classifier** (`models/v5_room/scene_classifier_room_v5.pt`, the v4
+  DINOv2 recipe with the new videos): passed its bars (old-val macro-F1
+  0.700 -> 0.743, no held-out normal frame flagged) but ships **opt-in**
+  (`SENTRIX_SCENE_WEIGHTS`): a room calibration made for v4 does not carry
+  over, so a device switches with a re-calibration in its room, never by a
+  `git pull`. With all three v5 models the 15-video replay has 0 false L3
+  onsets (1 before) and frame macro-F1 0.729 (0.519).
 * **Calibration checks, thresholds unchanged**: sound (PANNs aggression
   catches 12 % of AudioSet screams at 0.30, 22 % at its 1 % false-alarm bar,
   in-sample; no room audio exists), faces (no different-people pair reaches
@@ -510,8 +519,8 @@ branch's room-calibration work, its D23, stays there).
   pnnx in `.venv`; NCNN exports of the three heads (parity within 1e-5;
   slower than ONNX on this x86 laptop, 11-12 vs 9-10 ms a head at 320 px).
 * Not measured: the demo room (no recordings yet), the Pi's CPU cost of the
-  re-ID and the new heads, the scene model retrain (if it passes, it ships
-  with a room re-calibration before the Pi uses it).
+  re-ID and the new heads, the v5 scene model in the room (opt-in; it switches
+  with a room re-calibration).
 
 ## 3. Git history
 
@@ -665,7 +674,9 @@ validated** (2 videos / 1 event). Only two rooms are represented.
 | Pi 5 live in the demo room (clip mode, 320 px, ONNX; 2026-10-23/24, ~10 h; no simulated alerts) | 8077 clips: scene p(weapon) per scored keyframe median 0.19, p99 0.53, p99.9 0.65, max 0.742; at the 0.50 floor **16 clips confirmed = the 16 weapon L3s** (scene alone; the weapon detector never confirmed; 5 of their SOS requests declined as false alarms on the Pi); at >= 0.60 none. Per-deployment threshold set to weapon 0.75 on the Pi (`var/calibration/scene.json`). Not yet measured: a replica gun in that room | the Pi's own event log (`var/events/`, private), read-only analysis 2026-10-24 |
 | Pi 5 demo room, fire (2026-10-23 and 10-27: 16,927 clips, 12.1 h; 5,435 scored by the scene model, 5.7 h, no flame in view) | scene p(fire) per keyframe median 0.073, p99 0.212, p99.9 0.494, max 0.646; the confirming second keyframe never above 0.587; confirmed clips at 0.45 / 0.50 / 0.55 / >= 0.60: 4 / 1 / 1 / 0 (the 2 false fire L3s); the fire detector drew no fire box. Per-deployment threshold **fire 0.70** (owner approved 2026-10-28) next to weapon 0.75 | the Pi's event log and database (read-only analysis 2026-10-28) |
 | Body re-id, three OSNet checkpoints on the custom videos (ByteTrack tracks, same track >= 2 s apart vs two people in one frame; `wa02` refused) | nine videos: pairwise AUROC ImageNet x1_0 0.831 / MSMT17 x1_0 0.917 / **MSMT17 OSNet-AIN 0.931** (chosen); identity rule (20 looks, two checks) at each one's bar (<= 0.05 % different): 37.3 / 39.0 / 42.3 % same-person. 14 videos (with the new ones): AIN pairwise 0.935, global-id bar 0.66 (1 % different), identity bar **0.87** (30.1 % same, 0.020 % different) | `training/runs/reid/osnet_weights_compare/`, `osnet_ain_14videos/` |
-| v5 room detector heads vs v4 (held-out: old val = gun + vid04; `wa02` reported only) | weapon: false alarms at 0.25 on normal frames 0.0 / 0.015 (= v4), old-val AUROC 0.748 -> **0.871**, recall@0.25 0.13 -> 0.22, public test pistol AP50 0.007 -> **0.699**, knife **0.717**, `wa02` AUROC 0.47 -> 0.90; fire: old-val AUROC 0.587 -> **0.964**, false alarms 0 / 0, public fire AP50 0.000 -> **0.487** (vid04's flame still under 0.25). Replay of 15 videos: weapon at L3 8/12 -> 11/14, the new gun/knife scenes L2 -> L3, 1 false L3 onset before and after | `training/runs/eval/detectors_2026-11-19/`, `fire_candidate_2026-11-19/`, `custom_eval/baseline_2026-11-19/`, `v5det_2026-11-19/` |
+| v5 room detector heads vs v4 (held-out: old val = gun + vid04; `wa02` reported only) | weapon: false alarms at 0.25 on normal frames 0.0 / 0.015 (= v4), old-val AUROC 0.748 -> **0.871**, recall@0.25 0.13 -> 0.22, public test pistol AP50 0.007 -> **0.699**, knife **0.717**, `wa02` AUROC 0.47 -> 0.90; fire: old-val AUROC 0.587 -> **0.964**, false alarms 0 / 0, public fire AP50 0.000 -> **0.487** (vid04's flame still under 0.25). Replay of 15 videos: weapon at L3 9/14 -> 11/14 (fire at L5 2/3 -> 0/3, L3 and L4 unchanged), the new gun/knife scenes L2 -> L3, 1 false L3 onset before and after | `training/runs/eval/detectors_2026-11-19/`, `fire_candidate_2026-11-19/`, `custom_eval/baseline_2026-11-19/`, `v5det_2026-11-19/` |
+| Pi configuration replay (clip mode, ONNX 320 px, fast lane, v4 scene; 14 train + val videos) | v4 heads / v5 heads: false L3 onsets 0 / 0; weapon at L3 9/11 / 9/11, L4 5 / 4, L5 4 / 3; fire at L3 3/3 / 3/3, **L4 2 / 0, L5 1 / 0**; val frame macro-F1 0.405 / 0.509; held-out val episodes identical. At 320 px the v5 heads add no L3 catches and lose fire corroboration on the training fire videos v4 had memorised; the Pi runs v5 heads since main `2867bdf` (pin v4 fire with `SENTRIX_FIRE_WEIGHTS` to restore those L4s - the owner decides) | `training/runs/custom_eval/pi_clip_v4heads_2026-11-19/`, `pi_clip_v5heads_2026-11-19/` |
+| v5 room scene classifier vs v4 (as the product runs it, floors applied) | LOVO over 14 videos: tuned macro-F1 0.433 (mmgun 1.00, mmknife 0.54; assault and robbery 0). Held out: old-val macro-F1 0.700 -> **0.743**, weapon recall 0.36 -> 0.45 (AUROC 0.786 -> 0.843), 0 of 90 held-out normal frames flagged (= v4); public stills: same ranking, weapon recall at the bar 0.34 -> 0.09, false alarms 2.1 % -> 0 % | `training/runs/custom/scene_cv/dino_b_last4_v5/`, `eval/scene_room_v5_fp16/` |
 | Sound, faces (no room data; in-sample or proxy) | PANNs on AudioSet clips (in-sample): siren AUROC 0.98 (91 % at 0.30), aggression 0.97 (12 % at 0.30; 22 % at the 1 % bar 0.21), fire sound 0.54. Faces (14 videos, same track vs two people in a frame): no different-people pair at the 0.55 bar for buffalo_l @640 (max 0.36) or buffalo_s @320 (max 0.27); faces found on 53 % / 31 % of person boxes | `training/runs/eval_audio/`, `eval_faces/2026-11-18/` |
 | Pi 5 clip engine (ONNX, fast lane, `buffalo_s`; `gun.mov` as a 30 fps camera) | clip compute p50 **8.0 s** at 640 px objects (74 % of clips dropped, decisions 9.3 s old) → **3.9 s at 320 px** (48 %, 4.3 s), 2.2 s at 320 px + 1 scene frame (10 %, 3.2 s); budget 1.6 s. Clip replay of the 9 train + val videos (`wa02` not replayed, partly in-sample): 640 / 320 / 320 + 1 scene frame → L3 weapon 9/9, 9/9, 8/9; fire 3/3, 3/3, 2/3; L4 weapon 6/8, 5/8, 3/8; 0 false onsets at L3+. The Pi profile uses 320 px (`SENTRIX_CLIP_IMGSZ=320`) | `training/runs/custom_eval/pi5/REPORT.md` (knobs `4503b0d`) |
 
