@@ -219,57 +219,67 @@ def slim():
 
 
 # 7. Body re-identification ---------------------------------------------------
-# training/runs/reid/osnet_x1_0_imagenet/REPORT.md
+# (a) pairs on the nine train + val videos: training/runs/reid/osnet_x1_0_imagenet/REPORT.md
+#     (histogram 0.7283, ImageNet 0.8306) and osnet_weights_compare/REPORT.md
+#     (x1_0 MSMT17 0.9172, AIN MSMT17 0.931).
+# (b) identity rule at each model's bar, nine videos: osnet_weights_compare/REPORT.md
+#     (ImageNet 0.85: 37.3 % / 0.038 %; x1_0 0.84: 39.0 / 0.030; AIN 0.86: 42.3 / 0.042);
+#     shipped, fourteen videos: osnet_ain_14videos/REPORT.md (AIN 0.87: 30.1 / 0.020).
 def reid():
-    fig, (a, b) = plt.subplots(1, 2, figsize=(6.3, 2.4))
-    names = ["Colour\nhistogram", "OSNet x1_0\n(pairs)", "OSNet, identity\nrule (D22)"]
-    au = [0.7283, 0.8306, 0.9555]
-    bars = a.bar(range(3), au, 0.55, color=[GREY, BLUE, GREEN])
+    fig, (a, b) = plt.subplots(1, 2, figsize=(6.4, 2.6))
+    names = ["Colour\nhistogram", "OSNet\nImageNet", "OSNet\nMSMT17", "OSNet-AIN\nMSMT17"]
+    au = [0.7283, 0.8306, 0.9172, 0.931]
+    bars = a.bar(range(4), au, 0.6, color=[GREY, GREY, BLUE, GREEN])
     label_bars(a, bars, fmt="{:.2f}", dy=0.01)
-    a.set_xticks(range(3), names)
+    a.set_xticks(range(4), names, fontsize=7)
     a.set_ylim(0.5, 1.02)
-    a.set_ylabel("AUROC")
+    a.set_ylabel("AUROC (pairs)")
     a.set_title("(a) Same vs different person")
 
-    bars_x = ["0.80", "0.85\n(shipped)", "0.88"]
-    same = [69.9, 37.3, 16.5]
-    diff = [1.57, 0.04, 0.00]
-    x = range(3)
-    s1 = b.bar([i - 0.19 for i in x], same, 0.38, color=GREEN, label="Same person accepted (%)")
-    s2 = b.bar([i + 0.19 for i in x], diff, 0.38, color=RED, label="Different person accepted (%)")
-    label_bars(b, s1, fmt="{:.1f}", dy=1)
-    label_bars(b, s2, fmt="{:.2f}", dy=1)
-    b.set_xticks(list(x), bars_x)
-    b.set_xlabel("Cosine bar")
-    b.set_ylim(0, 85)
-    b.set_title("(b) Identity rule at three bars")
-    b.legend(frameon=False, loc="upper right", fontsize=7)
+    labels = ["ImageNet\n0.85", "MSMT17\n0.84", "AIN\n0.86", "AIN 0.87\n(shipped,\n14 videos)"]
+    same = [37.3, 39.0, 42.3, 30.1]
+    diff = [0.038, 0.030, 0.042, 0.020]
+    x = range(4)
+    s1 = b.bar(list(x), same, 0.6, color=[GREY, BLUE, GREEN, GREEN])
+    label_bars(b, s1, fmt="{:.0f}%", dy=1)
+    for i, d in zip(x, diff):
+        b.text(i, 3, f"diff.\n{d:.3f}%", ha="center", va="bottom", fontsize=6.5, color="white")
+    b.set_xticks(list(x), labels, fontsize=6.8)
+    b.set_ylim(0, 55)
+    b.set_ylabel("Same person accepted (%)")
+    b.set_title("(b) Identity rule at its bar")
     fig.tight_layout()
     save(fig, "fig_reid")
 
 
 # 8. Scene scores in the demo room (Raspberry Pi 5, no threat in view) ---------
-# CLAUDE.md §4.3: weapon over 8077 clips (~10 h): median 0.19, p99 0.53,
-# p99.9 0.65, max 0.742; fire over 5435 scored clips (5.7 h): median 0.073,
-# p99 0.212, p99.9 0.494, max 0.646. Floors 0.50 / 0.45; room thresholds 0.75 / 0.70.
+# training/runs/calibration/pi5_demo_room_2026-11-19/calibrate_room.json: the whole
+# log 2026-10-23 .. 11-19 (9,092 scene-scored clips, 5.08 h): weapon median 0.1896,
+# p99 0.5464, p99.9 0.6668, max 0.7602; fire 0.0792, 0.2361, 0.5685, 0.7164.
+# Floors 0.50 / 0.45; hand thresholds 0.75 / 0.70; calibrated, in force since
+# 2026-11-19: 0.78 / 0.75.
 def room():
-    fig, ax = plt.subplots(figsize=(6.0, 2.5))
+    fig, ax = plt.subplots(figsize=(6.0, 2.6))
     q = ["Median", "p99", "p99.9", "Max"]
-    weapon = [0.19, 0.53, 0.65, 0.742]
-    fire = [0.073, 0.212, 0.494, 0.646]
+    weapon = [0.1896, 0.5464, 0.6668, 0.7602]
+    fire = [0.0792, 0.2361, 0.5685, 0.7164]
     x = range(4)
     bw = ax.bar([i - 0.19 for i in x], weapon, 0.38, color=BLUE, label="p(weapon)")
     bf = ax.bar([i + 0.19 for i in x], fire, 0.38, color=ORANGE, label="p(fire)")
     label_bars(ax, bw, fmt="{:.2f}", dy=0.01)
     label_bars(ax, bf, fmt="{:.2f}", dy=0.01)
-    for y, c, txt in ((0.50, BLUE, "weapon floor 0.50"), (0.75, BLUE, "weapon, this room 0.75"),
-                      (0.45, ORANGE, "fire floor 0.45"), (0.70, ORANGE, "fire, this room 0.70")):
+    # (y, colour, label, x, label offset): the two room lines are 0.03 apart, so
+    # one label sits above its line and the other below, clear of the bars.
+    for y, c, txt, lx, dy in ((0.50, BLUE, "weapon floor 0.50", -0.42, 0.008),
+                              (0.45, ORANGE, "fire floor 0.45", -0.42, -0.04),
+                              (0.78, BLUE, "weapon, this room 0.78", 0.42, 0.008),
+                              (0.75, ORANGE, "fire, this room 0.75", 0.42, -0.04)):
         ax.axhline(y, color=c, ls=":" if "floor" in txt else "--", lw=0.9)
-        ax.text(-0.42, y + 0.008, txt, color=c, fontsize=6.8, ha="left")
+        ax.text(lx, y + dy, txt, color=c, fontsize=6.8, ha="left")
     ax.set_xticks(list(x), q)
-    ax.set_ylim(0, 0.85)
+    ax.set_ylim(0, 0.9)
     ax.set_ylabel("Scene-model probability")
-    ax.legend(frameon=False, loc="upper left", bbox_to_anchor=(0.0, 0.5))
+    ax.legend(frameon=False, loc="upper center", bbox_to_anchor=(0.5, -0.12), ncol=2)
     fig.tight_layout()
     save(fig, "fig_room_scores")
 
@@ -291,6 +301,7 @@ def gantt():
         ("React frontend v2", "2026-10-28", "2026-11-18", ORANGE),
         ("UX clean-up, wiring audit", "2026-11-01", "2026-11-02", ORANGE),
         ("Body re-identification (OSNet)", "2026-11-18", "2026-11-19", BLUE),
+        ("New videos, v5 detector heads, room calibration", "2026-11-18", "2026-11-20", GREEN),
         ("Report, poster, video, evaluations", "2026-11-18", "2026-12-05", GREY),
     ]
     fig, ax = plt.subplots(figsize=(6.3, 3.2))
@@ -317,7 +328,7 @@ def tests():
         ("Perception and fusion", 276), ("Channels and send guard", 244), ("SOS engine and machine", 238),
         ("Recording and microphone", 223), ("Pi hardware and deploy kit", 213), ("Contracts and integration", 168),
         ("Link, tunnel, path table", 160), ("Local Console and web security", 159), ("Clip engine and fast lane", 148),
-        ("Portal accounts and onboarding", 144), ("Evaluation, deploy, tools", 92), ("Pipeline, records, live loop", 63),
+        ("Portal accounts and onboarding", 144), ("Evaluation, deploy, tools", 118), ("Pipeline, records, live loop", 63),
     ]
     fig, ax = plt.subplots(figsize=(6.0, 3.0))
     names = [a for a, _ in areas][::-1]
@@ -326,7 +337,7 @@ def tests():
     for b, v in zip(bars, vals):
         ax.text(v + 3, b.get_y() + b.get_height() / 2, str(v), va="center", fontsize=7.5)
     ax.set_yticks(range(len(vals)), names, fontsize=8)
-    ax.set_xlabel("Automated tests (2128 in total)")
+    ax.set_xlabel("Automated tests (2154 in total)")
     ax.set_xlim(0, 310)
     fig.tight_layout()
     save(fig, "fig_tests")

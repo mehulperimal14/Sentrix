@@ -1,6 +1,11 @@
 # End-semester report (CPG-299, December 2026)
 
-`SENTRIX_CPG299_EndSem_Report.pdf` is the compiled report (106 pages, A4).
+`SENTRIX_CPG299_EndSem_Report.pdf` is the compiled report (109 pages, A4).
+It was last updated on 19 Nov 2026, with:
+- the five videos added on 18 Nov (977 frames from 15 videos);
+- the v5 detector heads;
+- the room calibration tool and the Pi's thresholds of 0.78 / 0.75 (D23);
+- the shipped OSNet-AIN body model at a bar of 0.87 (D24).
 `report/` holds its LaTeX source.
 
 ## Format
@@ -28,15 +33,25 @@ and each one names its source.
 
 - Model and replay results: `docs/6_CUSTOM_DATASET_EVALUATION.md`, `training/runs/custom_eval/**`
 - Raspberry Pi results: `training/runs/custom_eval/pi5/REPORT.md`
-- Re-identification results: `training/runs/reid/osnet_x1_0_imagenet/REPORT.md`
+- Re-identification results:
+  - `training/runs/reid/osnet_x1_0_imagenet/REPORT.md`
+  - `osnet_weights_compare/REPORT.md`
+  - `osnet_ain_14videos/REPORT.md`
+- Retrained detector heads:
+  - `training/runs/eval/detectors_2026-11-19/report.json`
+  - `training/runs/eval/fire_candidate_2026-11-19/report.json`
+  - the 15-video replays `training/runs/custom_eval/baseline_2026-11-19/` and `v5det_2026-11-19/`
+- The v4 scene model on the five new videos: `training/runs/eval/baseline_2026-11-18/report.json`
+- Room calibration: `training/runs/calibration/pi5_demo_room_2026-11-19/REPORT.md`
 - Slim scene heads: `training/runs/custom/slim/REPORT.md`
 - Live diagnosis and demo-room calibration: `CLAUDE.md` sections 4.3 and 5
 - Bill of materials: `docs/8_RASPBERRY_PI5_INTEGRATION.md` section 8
 
-Test results were measured on 18 Nov 2026:
+Test results were measured on 18 and 19 Nov 2026:
 
 | Suite | Branch and commit | Result |
 |---|---|---|
+| pytest | `sentrix/portal` `5127b3c` | 2154 passed in 386.6 s (19 Nov) |
 | pytest | `sentrix/portal` `3e1e296` | 2125 passed in 378.9 s |
 | pytest | `sentrix/frontend-v2` `c1241c1` | 2243 passed, 1 skipped |
 | Vitest | `sentrix/frontend-v2` `c1241c1` | 15 of 15 passed |

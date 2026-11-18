@@ -12,7 +12,7 @@
 \hline\rowhead
 \thead{Challenge} & \thead{How it was addressed}\\ \hline
 False alarms in a room the models had never seen (about 171 weapon episodes per hour in the first live run) & Diagnosed from the replayable event log; confirmation, person gate, corroboration and per-room thresholds; measured by committed level\\ \hline
-Very little labelled data (341\,s, two rooms; one robbery event) & Splits by video, LOVO selection, a pre-registered bar, experimental classes capped at Level~2, and a recording feature to collect deployment-room data\\ \hline
+Very little labelled data (466\,s from three rooms; two robbery events) & Splits by video, LOVO selection, a pre-registered bar, experimental classes capped at Level~2, and a recording feature to collect deployment-room data\\ \hline
 A video preview at 0.6\,fps and a 3\,s tick on a 24-thread laptop & Found ONNX Runtime spin-waiting and a blocking capture loop; separate capture, inference, identity and preview threads\\ \hline
 A transformer backbone on a four-core board & 4\,s clip engine with a stage cascade, ONNX, 320\,px object stage and a fast lane; slim CNNs tried and rejected under a fixed protocol\\ \hline
 Aligning sound with video and telling a fight from play & Time-stamped audio windows that vote only when aligned, non-overlapping fresh windows, background and banter cues\\ \hline

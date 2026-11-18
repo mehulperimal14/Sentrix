@@ -148,6 +148,27 @@ Rules that matter for hardware:
   is outbound `wss://`; the firewall admits SSH and the console from the LAN
   (and the setup hotspot) only.
 
+**Per-room thresholds (D23).** In a room it has never seen, the scene
+classifier's normal scores can sit above its floors: the demo unit raised 16
+weapon and 2 fire Level 3s from the classifier alone before its room
+thresholds were set.
+
+`tools/calibrate_room.py` sets those thresholds from the unit's own event
+log. It replays the clip engine's confirmation rule on the logged keyframe
+scores of a quiet period at every threshold:
+- two keyframes per clip;
+- for a weapon, a person seen in the last 2 s, rebuilt from the logged boxes.
+
+It then proposes `max(floor, highest confirming value + 0.10, highest single
+score + 0.01)` and writes `var/calibration/scene.json` on `--write`.
+
+On the demo unit (2026-11-19) the replay gave the device's own decision on
+8,956 of 8,956 clips. The rule reproduced the two hand-set thresholds within
+0.01, and weapon 0.78 / fire 0.75 are now in force
+(`training/runs/calibration/pi5_demo_room_2026-11-19/REPORT.md`).
+
+Steps: deploy/pi5/README.md, step 15.
+
 The three-process layout of the first plan (capture, inference, web in
 separate processes with a shared-memory ring buffer) was **not built**. It is
 the fallback if Gate A fails with the link and console running (docs/7 §16 q5).

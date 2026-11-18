@@ -67,7 +67,7 @@ Level shown next to a different TCI & Hysteresis restarted on every band change;
 Incident rows mixing frames & Type frozen at the first non-normal frame, reason and TCI from the peak, identity hard-coded. & Peak snapshot frozen from one tick (M3)\\ \hline
 Snapshots of team members & Any unenrolled person added a fixed 0.15 to the TCI. & Unknown person = Level~2 only, snapshots from Level~3 (M1, D2, D4)\\ \hline
 Face enrolment failed & The browser asked for the webcam the server held; uploads compared \code{x.jpg} with \code{x} and always failed. & Enrol from the device's own camera with quality checks (M4)\\ \hline
-One face authorised everyone & Identity was per frame: one resident in view authorised every person for 5\,s. & Per-track identity (M4); body re-identification (D22)\\ \hline
+One face authorised everyone & Identity was per frame: one resident in view authorised every person for 5\,s. & Per-track identity (M4); body re-identification (D24)\\ \hline
 \end{tabularx}
 \end{table}
 
@@ -84,10 +84,10 @@ The lesson that shaped the rest of the project is that the problem was not one m
 \begin{tabularx}{\textwidth}{|L{2.6cm}|L{3.3cm}|Y|}
 \hline\rowhead
 \thead{Need} & \thead{Chosen} & \thead{Alternatives and reason for the choice}\\ \hline
-Object detection & YOLOv8n (person) + YOLO11n weapon and fire heads, ByteTrack & Faster R-CNN is too slow for a Pi; YOLO11n has fewer parameters at similar accuracy; ByteTrack adds track ids at almost no cost. RT-DETR, YOLOv10, YOLOv12 and YOLO26 (2024--2026) were reviewed; NMS-free YOLO26 is the candidate for the single detector of M7 \cite{zhao2024rtdetr, wang2024yolov10, tian2025yolov12, jocher2026yolo26}.\\ \hline
+Object detection & YOLOv8n (person) + YOLO11n weapon (handgun, knife, long gun) and fire heads, ByteTrack & Faster R-CNN is too slow for a Pi; YOLO11n has fewer parameters at similar accuracy; ByteTrack adds track ids at almost no cost. RT-DETR, YOLOv10, YOLOv12 and YOLO26 (2024--2026) were reviewed; NMS-free YOLO26 is the candidate for the single detector of M7 \cite{zhao2024rtdetr, wang2024yolov10, tian2025yolov12, jocher2026yolo26}.\\ \hline
 Scene classifier & DINOv2 ViT-B/14, last 4 blocks fine-tuned & ResNet-18 (LOVO macro-F1 0.210), MobileNetV3-L (0.229) and EfficientNet-B0 (0.211) all failed the 0.396 bar; DINOv2 reached 0.440. DINOv3 (2025) is the next backbone to test \cite{simeoni2025dinov3}.\\ \hline
 Faces & InsightFace \code{buffalo\_l} (laptop) / \code{buffalo\_s} (Pi): SCRFD + ArcFace & dlib and \code{face\_recognition} are slower and weaker on small faces.\\ \hline
-Body re-identification & OSNet x1\_0 (ImageNet weights), ONNX & Colour histograms (AUROC 0.73 vs 0.83); torchreid does not install on Python 3.14, so the network was re-implemented with the same parameter names.\\ \hline
+Body re-identification & OSNet-AIN x1\_0 trained on MSMT17, ONNX & On the same pairs: colour histograms (AUROC 0.73), the ImageNet weights of the earlier prototype (0.83) and OSNet x1\_0 on MSMT17 (0.92) against 0.93; torchreid does not install on Python 3.14, so the network was re-implemented with the same parameter names.\\ \hline
 Sound & PANNs CNN10 (AudioSet, 25\,MB), ONNX Runtime & AST (346\,MB, 10\,s input) and CNN14 (327\,MB) are too heavy; the team's 4-class CNN was trained on 375 clips only (kept as fallback). CED (2024) is a compact successor to evaluate \cite{dinkel2024ced}.\\ \hline
 Inference runtime & ONNX Runtime on the Pi; PyTorch on the laptop & PyTorch is about 5 times slower than NCNN or ONNX on the Pi for YOLO; NCNN path written but no export yet.\\ \hline
 Device web & FastAPI + Uvicorn, WebSockets, SQLite (WAL) & Flask lacks native async and WebSockets; SQLite needs no server on the Pi.\\ \hline

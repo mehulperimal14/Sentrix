@@ -24,7 +24,7 @@ Test-mode demo world & \code{tools/demo\_reset.py} and \code{tools/demo\_run.py}
 \end{table}
 
 \paragraph{Evaluation tools.} Every measurement in this chapter was produced by a tool in the repository, and the report it wrote is committed under \code{training/runs/}:
-\code{tools/eval\_custom\_frames.py} (per-image scores), \code{tools/replay\_custom\_videos.py} (the ten videos through \code{Pipeline.process} at 6\,Hz with true timestamps, tick or clip mode, with the videos' own soundtracks), \code{tools/replay\_decisions.py} (re-decides a recorded live event log under the current rules), \code{tools/bench\_live.py} and \code{tools/bench\_clip.py} (the live loop with a video file as a 30\,fps camera), \code{tools/reid\_eval.py} (body re-identification pairs), and \code{tools/gate\_report.py} (the release gates). All of them run inside the side-effect-free harness described in Section~\ref{sec:investigative}, and all refuse the test video \code{wa02} unless it is evaluated as part of the full set.
+\code{tools/eval\_custom\_frames.py} (per-image scores), \code{tools/replay\_custom\_videos.py} (the labelled videos through \code{Pipeline.process} at 6\,Hz with true timestamps, tick or clip mode, with the videos' own soundtracks), \code{tools/replay\_decisions.py} (re-decides a recorded live event log under the current rules), \code{tools/bench\_live.py} and \code{tools/bench\_clip.py} (the live loop with a video file as a 30\,fps camera), \code{tools/reid\_eval.py} (body re-identification pairs), \code{tools/eval\_models.py} (every vision model on every dataset it applies to), \code{tools/calibrate\_room.py} (per-room thresholds from the device's own log), and \code{tools/gate\_report.py} (the release gates). All of them run inside the side-effect-free harness described in Section~\ref{sec:investigative}, and all refuse the test video \code{wa02} unless it is evaluated as part of the full set.
 
 %--------------------------------------------------------------
 \section{Experimental Analysis}
@@ -35,12 +35,12 @@ Test-mode demo world & \code{tools/demo\_reset.py} and \code{tools/demo\_run.py}
 \paragraph{Data sources.} Three kinds of data were used.
 \begin{enumerate}
 \item \textbf{Public corpora} for the first (v3) models: RWF-2000 violence clips \cite{cheng2021rwf}, Roboflow weapon and fire/smoke image sets, and AudioSet clips \cite{gemmeke2017audioset} for the first sound model. An audit of their splits (\code{tools/audit\_splits.py}) found that 52.7\,\% of the RWF-2000 validation rows shared source videos with training and that 12.2\,\% of the weapon and 20.0\,\% of the fire validation images were near-duplicates of training images, so their published scores are optimistic. They were used only for pre-training and rehearsal.
-\item \textbf{The SENTRIX custom dataset}: ten videos recorded by the team---a bedroom with replica handguns and aerosol flame jets, and a corridor filmed by CCTV with a long stick, an assault and a bicycle theft. From them, 765 frames were hand-reviewed and labelled into five classes (\tabref{tab:dataset}).
-\item \textbf{Deployment logs}: the demonstration Pi's own event log in the demo room (about 12 hours, no threat present) and the event log of the first live laptop session (18.3 minutes). These are used for calibration and regression, never for training.
+\item \textbf{The SENTRIX custom dataset}: ten videos recorded by the team---a bedroom with replica handguns and aerosol flame jets, and a corridor filmed by CCTV with a long stick, an assault and a bicycle theft. From them, 765 frames were hand-reviewed and labelled into five classes (\tabref{tab:dataset}); five more videos added in November bring the set to 977 frames (\tabref{tab:dataset-new}).
+\item \textbf{Deployment logs}: the demonstration Pi's own event log in the demo room (about 12 hours, no threat present, and later its whole log from 23 October to 19 November) and the event log of the first live laptop session (18.3 minutes). These are used for calibration and regression, never for training.
 \end{enumerate}
 
 \begin{table}[htbp]
-\caption{The custom dataset (frames per class and split; splits by source video)}
+\caption{The custom dataset as used for the v4 models (the first ten videos; frames per class and split; splits by source video)}
 \label{tab:dataset}
 \centering\tablefont
 \begin{tabular}{|l|c|c|c|c|}
@@ -55,6 +55,24 @@ Robbery & 17 & 0 & 0 & 17\\ \hline
 \end{tabular}
 \end{table}
 
+\paragraph{Five videos added in November.} On 18 November 2026 the team added five videos: four masked-intruder scenes in the bedroom (a handgun pointed at a seated person, a knife attack, a beating with a metal flask, and a theft from the wardrobes) and one ordinary scene in a second room (\tabref{tab:dataset-new}). They were extracted with the original sampling rules and reviewed segment by segment, and they joined the training split; no video was held out. Grounding DINO proposed 27 boxes for them; 13 were kept after visual checks (7 pistol, 6 knife) and 14 rejected (a phone, a monitor). The dataset now holds 977 frames from fifteen videos and 180 checked boxes.
+
+\begin{table}[htbp]
+\caption{The five videos added on 18 November 2026 (all in the training split)}
+\label{tab:dataset-new}
+\centering\tablefont
+\begin{tabularx}{\textwidth}{|l|Y|c|}
+\hline\rowhead
+\thead{Video} & \thead{Content} & \thead{Frames kept}\\ \hline
+mmtheft & Masked intruder searches the shoe rack and wardrobes and leaves with items & 99 (robbery 62)\\ \hline
+mmassault & Masked intruder strikes a person on the bed with a metal flask & 26 (assault 13)\\ \hline
+mmgun & Handgun pointed at a seated person; a phone snatched at gunpoint & 23 (weapon 19)\\ \hline
+mmknife & Knife attack on a person lying on the bed & 35 (weapon 28)\\ \hline
+nvroom2 & Second room: three people, ordinary activity & 29 (normal)\\ \hline
+\textbf{Total} & normal 90, weapon 47, assault 13, robbery 62 & \textbf{212}\\ \hline
+\end{tabularx}
+\end{table}
+
 \paragraph{Cleaning and pruning.} Frames were sampled at 3--8\,fps, near-duplicates were dropped with a perceptual hash, and every kept frame was reviewed by a person. For video replay a label \emph{timeline} was built from every sampled frame: a kept frame carries its reviewed label; a dropped near-duplicate inherits its kept twin's label only if the twin is within 1\,s (a perceptual hash barely registers a flame jet, so a ``duplicate'' 5\,s away can differ in exactly the object that decides the label), otherwise it keeps its own segment label if that segment was confident ($\geq 0.7$), otherwise it is not scored. A replay tick is scored against the nearest sample within 0.25\,s.
 
 \paragraph{Annotation and feature extraction.} Bounding boxes for the YOLO heads were proposed by Grounding DINO \cite{liu2024groundingdino} but kept only when gated by the reviewed frame label, a held-object check (the box must overlap a person's hands region) and a visual quality check: 167 boxes were kept and 16 rejected. The scene classifier sees each frame resized to 224\,px with ImageNet normalisation; the body embedder sees person crops padded to an aspect ratio of 0.5 and resized to 256$\times$128; the sound tagger sees 4\,s of 16\,kHz mono audio as a log-mel spectrogram. \figref{fig:datapipe} summarises the workflow.
@@ -63,12 +81,12 @@ Robbery & 17 & 0 & 0 & 17\\ \hline
 \centering
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[node distance=4mm, s/.style={draw, rounded corners=2pt, fill=sxlight, font=\scriptsize, align=center, text width=2.2cm, minimum height=10mm}, a/.style={-{Stealth[length=1.6mm]}, thick}]
-\node[s] (v) {10 source videos\\(2 rooms)};
+\node[s] (v) {15 source videos\\(3 rooms)};
 \node[s, right=of v] (f) {Frame sampling\\3--8\,fps};
 \node[s, right=of f] (h) {Perceptual-hash\\de-duplication};
-\node[s, right=of h] (r) {Human review:\\765 labelled frames};
+\node[s, right=of h] (r) {Human review:\\977 labelled frames};
 \node[s, right=of r] (t) {Label timeline\\(1\,s rule)};
-\node[s, below=6mm of r] (b) {Grounding DINO boxes,\\label-gated + QC\\(167 kept, 16 rejected)};
+\node[s, below=6mm of r] (b) {Grounding DINO boxes,\\label-gated + QC\\(180 kept, 30 rejected)};
 \node[s, below=6mm of t] (sp) {Split by video:\\7 train, 2 val, 1 test};
 \node[s, left=of b] (tr) {Training: DINOv2 head,\\YOLO11n heads};
 \node[s, left=of tr] (cv) {LOVO selection on\\9 videos, OOF\\temperature, thresholds};
@@ -216,7 +234,7 @@ so 3.7 minutes of normal footage can only show a rate below about 60 per hour. R
 \end{algorithmic}
 \end{algorithm}
 
-\paragraph{Body re-identification for residents.} \algref{alg:reid} decides when a track whose face is not visible may still be treated as an enrolled resident at home. The bar of 0.85 was chosen from the measured trade-off (Section~\ref{sec:results}): it accepts 37\,\% of same-person cases and 0.04\,\% of different-people cases.
+\paragraph{Body re-identification for residents.} \algref{alg:reid} decides when a track whose face is not visible may still be treated as an enrolled resident at home. The bar of 0.87 was chosen by a rule fixed in advance (Section~\ref{sec:results}): on fourteen videos it accepts 30\,\% of same-person cases and 0.020\,\% of different-people cases.
 
 \begin{algorithm}[htbp]
 \caption{Resident identity from body appearance (home mode only)}
@@ -229,7 +247,7 @@ so 3.7 minutes of normal footage can only show a rate below about 60 per hour. R
   \State $m_r \gets \max_{\ell \in \mathcal{L}_r} \cos(b_k, \ell)$
 \EndFor
 \State $r^\star \gets \arg\max_r m_r$; \ \ $\Delta \gets m_{r^\star} - \max_{r \neq r^\star} m_r$
-\If{$m_{r^\star} \geq 0.85$ \textbf{and} $\Delta \geq 0.05$ on this check \textbf{and} the previous one} \Return authorised as $r^\star$ (via appearance) \EndIf
+\If{$m_{r^\star} \geq 0.87$ \textbf{and} $\Delta \geq 0.05$ on this check \textbf{and} the previous one} \Return authorised as $r^\star$ (via appearance) \EndIf
 \State \Return unverified
 \end{algorithmic}
 \end{algorithm}
@@ -458,7 +476,7 @@ Testing is layered (\figref{fig:tests}):
 \subsection{Test Results}
 \label{sec:test-results}
 \begin{itemize}
-\item \textbf{Device and Portal suite} (branch \code{sentrix/portal}, commit \code{3e1e296}, with body re-identification): \textbf{2125 passed} in 378.9\,s on the laptop. The device guard blocked 4 webcam/microphone attempts and the socket guard 2 network attempts---all made deliberately by the tests that check those guards.
+\item \textbf{Device and Portal suite} (branch \code{sentrix/portal}, commit \code{5127b3c}, with body re-identification, the v5 detector heads and room calibration): \textbf{2154 passed} in 386.6\,s on the laptop. The device guard blocked 4 webcam/microphone attempts and the socket guard 2 network attempts---all made deliberately by the tests that check those guards.
 \item \textbf{Frontend branch} (\code{sentrix/frontend-v2}, commit \code{c1241c1}, the React applications): Python suite \textbf{2243 passed, 1 skipped} in 385.4\,s; Vitest unit tests \textbf{15 of 15} passed; Playwright browser tests \textbf{22 of 23} passed at desktop and phone sizes. The failing case (TC-29) is the owner adding an emergency contact: the page did not show the ``ask the contact to confirm'' step within 15\,s. It is a known defect to be fixed before the final demonstration; adding contacts through onboarding is covered by passing tests.
 \item \textbf{Live smoke run} (Portal and device as two real processes linked over a real WebSocket, demo reel): every Local Console page and 14 GET APIs gave the same status directly and through the tunnel; ``scene gun'' produced a PENDING weapon request 8.0--9.8\,s after the clip started and ``scene fire'' 11.6--11.9\,s; approval reached the device as DISPATCHED in 0.01--0.28\,s; MJPEG ran at 29.9\,fps directly and 13.6\,fps through the tunnel (cap 15). Five defects found in the run were fixed with regression tests.
 \item \textbf{Live on the Raspberry~Pi~5 with the Render Portal and Telegram:} detections in the demo room opened assistance requests that were prompted on the Pi's screen and the owner's phone; requests were declined with the PIN, expired unanswered, and in one case approved, dispatched and resolved on the Desk. These were false alarms from the scene classifier in the new room, and they are the data from which the room thresholds were set (Section~\ref{sec:results}).
@@ -533,6 +551,40 @@ Frame AUROC of the scene model, weapon / fire & 0.93 / 0.999 & -- & --\\ \hline
 
 These numbers are encouraging but not a validation: seven of the ten videos were used in training, and 3.7 minutes of normal footage can only bound the false-alarm rate at 60 per hour, far above what a home needs. Two release gates measured on this data fail: G2 (handgun episodes confirmed within 2\,s: 8 of 12) and G4 (onset to Level~3 at the 95th percentile: 4.0\,s against 2\,s).
 
+\subsection{Detector heads retrained on fifteen videos}
+The weapon and fire heads were retrained from the v4 heads on all 977 frames (fifteen videos, 180 boxes) with 2000 public images mixed back in, so that the public classes are not forgotten. The weapon head gained knife and long-gun classes. Each head had to pass bars fixed before training:
+\begin{itemize}
+\item no rise in false alarms on the held-out normal frames of the validation and test videos;
+\item validation weapon AUROC not lower by more than 0.02 (fire: not lower);
+\item public pistol (fire) AP50 not lower.
+\end{itemize}
+Both passed (\tabref{tab:v5heads}). On the held-out validation videos the weapon head's frame AUROC rose from 0.748 to 0.871 and the fire head's from 0.587 to 0.964, with no new false alarms. On the public test sets, which the v4 heads had forgotten, pistol AP50 went from 0.007 to 0.699, and the new knife class reached 0.717.
+
+In the replay of all fifteen videos, 11 of 14 weapon episodes reach Level~3 instead of 9: the new handgun and knife scenes now raise an assistance request. The false Level~3 onset count is unchanged at 1 in 4.9 minutes of normal footage. Two results did not improve:
+\begin{itemize}
+\item the two flames that reached Level~5 now stop at Level~4;
+\item the small aerosol flame of \code{vid04} still scores below the fire head's vote.
+\end{itemize}
+The five new videos are in the training split, so their replay is in-sample.
+
+The scene classifier was not retrained in this step. Measured on the five new videos it recognises the new scenes poorly: accuracy 0.43, macro-F1 0.16, 1 of 47 weapon frames. It raised no false weapon or fire alarm on their 90 normal frames.
+
+\begin{table}[htbp]
+\caption{v4 and v5 detector heads (held-out validation: gun, vid04; replay: all fifteen videos, tick mode at 6\,Hz with their soundtracks, partly in-sample)}
+\label{tab:v5heads}
+\centering\tablefont
+\begin{tabularx}{\textwidth}{|Y|C{3.0cm}|C{3.0cm}|}
+\hline\rowhead
+\thead{Measure} & \thead{v4 heads} & \thead{v5 heads}\\ \hline
+Validation frame AUROC, weapon / fire & 0.748 / 0.587 & \textbf{0.871 / 0.964}\\ \hline
+False alarms on held-out normal frames at 0.25 (validation / test), weapon & 0.000 / 0.015 & 0.000 / 0.015\\ \hline
+Public test AP50: pistol / knife / fire & 0.007 / -- / 0.000 & \textbf{0.699 / 0.717 / 0.487}\\ \hline
+Weapon episodes at Level 3 / 4 / 5 & 9/14, 6/14, 2/14 & \textbf{11/14}, 6/14, 2/14\\ \hline
+Flame episodes at Level 3 / 4 / 5 & 3/3, 2/3, 2/3 & 3/3, 2/3, 0/3\\ \hline
+False onsets at Level 3 (4.9 normal minutes) & 1 & 1\\ \hline
+\end{tabularx}
+\end{table}
+
 \subsection{Real-time performance}
 \figref{fig:liveloop} shows the live loop on the laptop before and after the M2 repair, measured with \code{tools/bench\_live.py} on a video with four faces. Separating capture, inference and preview, turning off the ONNX Runtime spin-wait and moving face recognition to its own thread raised the preview from 0.6 to 29.7\,fps and the AI rate from 0.32 to 5.6 decisions per second (tick p50 168\,ms, frame age p50 198\,ms).
 
@@ -563,22 +615,67 @@ To make the scene stage fit the Pi, MobileNetV3-L and EfficientNet-B0 heads were
 \end{figure}
 
 \subsection{Body re-identification}
-\figref{fig:reid} shows the evaluation of body matching on ByteTrack tracks of the nine training and validation videos (4524 same-person pairs, 2498 different-people pairs). OSNet separates people better than colour histograms (AUROC 0.83 vs 0.73), and the identity rule---20 looks, two checks in a row---reaches AUROC 0.96. The earlier IntrusionSentry prototype matched bodies at a cosine of 0.50, which on these features accepts 97.8\,\% of same-person pairs but also 97.2\,\% of different people; SENTRIX uses 0.85, which accepts 37\,\% of same-person cases and 0.04\,\% of different people, so a wrong match is rare and can at most hide a Level~2 notice at home.
+\figref{fig:reid} shows the evaluation of body matching on ByteTrack tracks of the nine training and validation videos (4524 same-person pairs, 2498 different-people pairs).
+\begin{itemize}
+\item \textbf{Same weights as the prototype.} The earlier IntrusionSentry prototype used OSNet x1\_0 with ImageNet weights. These separate people better than colour histograms (AUROC 0.83 against 0.73).
+\item \textbf{Re-identification-trained weights.} OSNet x1\_0 and OSNet-AIN x1\_0, both trained for re-identification on MSMT17, do better still (0.92 and 0.93). OSNet-AIN was chosen by a rule fixed before the comparison: the most same-person cases at a bar that accepts at most 0.05\,\% of different people.
+\item \textbf{Speed.} These checkpoints contain denormal weights, which made CPU inference 6--17 times slower. Zeroing them brought OSNet-AIN to 10.3\,ms per crop with unchanged features.
+\end{itemize}
+With the five November videos (fourteen videos; 1500 same-person and 25,408 different-people cases of the identity rule), the bar moved from 0.86 to 0.87. The rule, 20 looks and two checks in a row, reaches AUROC 0.97 and accepts 30\,\% of same-person cases and 0.020\,\% of different people.
+
+The prototype's cosine bar of 0.50 would have accepted 97.2\,\% of different people on the ImageNet features and 50\,\% on the shipped ones. At SENTRIX's bar a wrong match is rare, and it can at most hide a Level~2 notice at home.
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth]{figures/fig_reid.pdf}
-\caption{Body re-identification: (a) separation of same and different people; (b) acceptance at three bars of the identity rule}
+\caption{Body re-identification: (a) separation of same and different people with four body models (nine videos); (b) the identity rule at each model's bar, and the shipped OSNet-AIN bar on fourteen videos}
 \label{fig:reid}
 \end{figure}
 
 \subsection{Calibration in the demonstration room}
 In about ten hours after the Pi was installed in the demo room, the scene classifier alone raised 16 weapon Level~3 alarms (the weapon detector confirmed none), and later two fire Level~3 alarms, with no weapon or flame present. The Pi's own logs (8077 clips for weapon, 5435 scored clips for fire) show why (\figref{fig:room}): in this room the classifier's p(weapon) has a median of 0.19 but a 99.9th percentile of 0.65 and a maximum of 0.742, above the 0.50 floor; p(fire) peaks at 0.646 against a 0.45 floor. Per-room thresholds of 0.75 (weapon) and 0.70 (fire) remove every one of these false alarms. The cost is stated openly: a small flame that the classifier scores below 0.70 (the held-out vid04 peaks at 0.636 in clip mode) no longer reaches Level~3 from the classifier alone and needs the fire detector; the replica-gun and replica-flame tests in that room are part of the remaining work.
 
+\paragraph{Calibration from the device's own log.} Setting those thresholds meant reading the Pi's log by hand, and every new room or new model would need it again. A tool now does it by a rule fixed in advance (\code{tools/calibrate\_room.py}, decision D23). It reads the device's own event log for a period the team asserts was quiet, and replays the device's confirmation rule at every possible threshold. On the Pi that rule is two keyframes per clip, with a weapon keyframe counting only if a person was seen in the last 2\,s; the replay rebuilds that gate from the logged person boxes. It then proposes
+\begin{equation}
+\theta_c = \max\big(\text{floor}_c,\ \hat{c}_c + 0.10,\ \hat{s}_c + 0.01\big),
+\label{eq:calib}
+\end{equation}
+rounded up to 0.01, where $\hat{c}_c$ is the highest value at which a quiet clip would still have been confirmed and $\hat{s}_c$ the highest single score. The tool also checks itself: wherever the device logged its own decision, the replay at the device's threshold must reach the same one.
+
+On the Pi it was run over SSH and read the logs without changing anything on the device. \tabref{tab:calib} shows the results:
+\begin{itemize}
+\item \textbf{Check:} the replay matched the device's own decision on all 8,956 logged clips.
+\item \textbf{Hand thresholds reproduced:} on the data each hand threshold was set from, the rule gives weapon 0.76 (hand: 0.75) and fire 0.69 (hand: 0.70).
+\item \textbf{Whole log:} from 23 October to 19 November the scene model scored 9,092 clips (5.1\,h). The thresholds in force gave no confirmation at all, against 45 weapon and 4 fire onsets at the floors. The 95\,\% upper bound is 0.59 false onsets per hour.
+\end{itemize}
+
+The margins were thinner than the rule asks for. One keyframe reached p(weapon) 0.760, above the 0.75 threshold, and a fire confirmation reached 0.650, 0.05 under it. On 19 November the owner therefore approved the proposal, weapon 0.78 and fire 0.75, and it is now in force on the Pi (\figref{fig:room}).
+
+The calibration file records the scene model it was made for. If another model loads, the device keeps the thresholds but flags them as stale, so a retrained model is followed by a new calibration.
+
+The cost is the same as before, one step higher: a replica gun or flame scored between the old and new thresholds no longer reaches Level~3 from the scene model alone. The replica tests in that room, which the tool can replay with \code{--check}, are still to do.
+
+\begin{table}[htbp]
+\caption{Room calibration of the demonstration Pi from its own log (clip mode, v4 scene model)}
+\label{tab:calib}
+\centering\tablefont
+\begin{tabularx}{\textwidth}{|Y|C{3.2cm}|C{3.2cm}|}
+\hline\rowhead
+\thead{Measure} & \thead{Weapon} & \thead{Fire}\\ \hline
+Data each hand threshold was set from: scored time & 1.96\,h & 2.40\,h\\ \hline
+\quad highest single score / confirming value & 0.742 / 0.590 & 0.646 / 0.587\\ \hline
+\quad threshold set by hand / by \eqnref{eq:calib} & 0.75 / 0.76 & 0.70 / 0.69\\ \hline
+Whole log (23 Oct -- 19 Nov, 5.1\,h scored): median / p99 / max score & 0.190 / 0.546 / 0.760 & 0.079 / 0.236 / 0.716\\ \hline
+\quad onsets at the floor / at the hand threshold & 45 at 0.50 / 0 at 0.75 & 4 at 0.45 / 0 at 0.70\\ \hline
+\quad proposed and in force since 19 Nov & \textbf{0.78} & \textbf{0.75}\\ \hline
+Replay agrees with the device's own decision & \multicolumn{2}{c|}{8,956 of 8,956 clips}\\ \hline
+\end{tabularx}
+\end{table}
+
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.92\textwidth]{figures/fig_room_scores.pdf}
-\caption{Scene-classifier probabilities in the demo room with no threat present, with the default floors and the room thresholds}
+\caption{Scene-classifier probabilities in the demo room with no threat present (whole log, 5.1\,h scored), with the default floors and the calibrated room thresholds}
 \label{fig:room}
 \end{figure}
 
@@ -592,10 +689,10 @@ In about ten hours after the Pi was installed in the demo room, the scene classi
 \begin{tabularx}{\textwidth}{|L{2.4cm}|Y|Y|}
 \hline\rowhead
 \thead{Aspect} & \thead{Published work} & \thead{SENTRIX}\\ \hline
-Handgun alarm & Faster R-CNN alarm after five successive detections fired correctly in 27 of 30 test scenes \cite{olmos2018handgun} & YOLO11n + DINOv2 with 2-of-3 confirmation and a person gate: 9 of 12 episodes at Level~3, 0 false onsets in 3.7 normal minutes; room thresholds from the device's own logs\\ \hline
+Handgun alarm & Faster R-CNN alarm after five successive detections fired correctly in 27 of 30 test scenes \cite{olmos2018handgun} & YOLO11n + DINOv2 with 2-of-3 confirmation and a person gate: 9 of 12 episodes at Level~3, 0 false onsets in 3.7 normal minutes (11 of 14 on fifteen videos with the v5 heads); room thresholds calibrated from the device's own logs\\ \hline
 Violence & Flow-gated 3D-CNN: 87.25\,\% test accuracy on RWF-2000 \cite{cheng2021rwf}; audio-visual fusion improves XD-Violence \cite{wu2020xdviolence} & ResNet-18 on RWF-2000: 0.832 macro-F1 on a contaminated split; in the product a fight needs video \emph{and} aligned aggression audio, with a banter rule\\ \hline
 Audio tagging & PANNs: best model 0.439 mAP on AudioSet \cite{kong2020panns} & PANNs CNN10 at 40\,ms per 4\,s window on a CPU, 527 labels mapped to 7 cues, votes only when time-aligned\\ \hline
-Re-identification & OSNet: state of the art on six re-ID datasets with re-ID training \cite{zhou2019osnet} & ImageNet-weight OSNet tied to an access decision: AUROC 0.96, 0.04\,\% false accepts at the shipped bar\\ \hline
+Re-identification & OSNet: state of the art on six re-ID datasets with re-ID training \cite{zhou2019osnet} & OSNet-AIN trained on MSMT17 tied to an access decision: AUROC 0.97, 0.020\,\% false accepts at the shipped bar (fourteen videos)\\ \hline
 Evaluation & Frame accuracy, mAP or AUROC on curated test sets & Committed-level episodes, false onsets per hour with exact Poisson bounds, onset latency; pre-registered model selection\\ \hline
 Alert flow & Detection only, or direct alerting & Owner-approved request, PIN-protected false alarms, duress PIN, safety defaults, ``unanswered'' never ``safe''\\ \hline
 Deployment & GPU servers or cloud analysis \cite{shi2016edge} & All inference on a Raspberry~Pi~5; video, faces and evidence stay at home\\ \hline
@@ -610,7 +707,7 @@ Industry practice & Cloud face recognition in doorbells (2025) \cite{perez2025ri
 \begin{enumerate}
 \item \textbf{The decision rules matter more than any single model.} The same models produced 9 Level~3 onsets in 18 minutes or none, depending only on confirmation and corroboration rules.
 \item \textbf{Training on one's own footage beats bigger public datasets.} A self-supervised backbone fine-tuned on 765 frames of the target setting outperformed models trained on thousands of public images on every held-out measure except the one class (stick) that the custom data barely contained.
-\item \textbf{A new room is a new distribution.} Thresholds valid on the training rooms produced false alarms in the demo room until the room's own logs set them; per-room calibration and deployment-room recordings are part of installing the product, not an afterthought.
+\item \textbf{A new room is a new distribution.} Thresholds valid on the training rooms produced false alarms in the demo room until the room's own logs set them; per-room calibration (now a tool that replays the device's own rule) and deployment-room recordings are part of installing the product, not an afterthought.
 \item \textbf{Measuring what the user experiences changes the conclusions.} Per-frame accuracy looked acceptable while the product was unusable; committed-level metrics with confidence bounds showed both the progress and how little normal footage had been seen.
 \item \textbf{The Pi can run the whole product, but not yet within the latency target.} With the clip engine and ONNX it analyses every other clip and decides within about 4\,s; the transformer backbone is the bottleneck.
 \item \textbf{Safety must be designed into the alert flow.} Silence is not safety, a PIN prevents an intruder from cancelling, and a duress path protects a coerced owner; all of these are testable logic, and the tests found real defects.
@@ -626,7 +723,7 @@ Industry practice & Cloud face recognition in doorbells (2025) \cite{perez2025ri
 \begin{tabularx}{\textwidth}{|L{2.4cm}|Y|L{1.6cm}|}
 \hline\rowhead
 \thead{Objective} & \thead{What was built and the evidence} & \thead{Status}\\ \hline
-O1 Multimodal AI pipeline & Weapon and fire detection (YOLO11n), scene and fight classification (DINOv2), faces (InsightFace), bodies (OSNet), sound (PANNs CNN10), in tick and clip pipelines; handgun 9/12 and flame 3/3 at Level~3 on replay; 29.7\,fps preview and 5.6\,Hz AI on a laptop; 3.9\,s per clip on the Pi & Achieved; Pi latency target open\\ \hline
+O1 Multimodal AI pipeline & Weapon (handgun, knife, long gun) and fire detection (YOLO11n), scene and fight classification (DINOv2), faces (InsightFace), bodies (OSNet-AIN), sound (PANNs CNN10), in tick and clip pipelines; handgun 9/12 and flame 3/3 at Level~3 on replay (weapon 11/14 on fifteen videos); 29.7\,fps preview and 5.6\,Hz AI on a laptop; 3.9\,s per clip on the Pi & Achieved; Pi latency target open\\ \hline
 O2 Fusion into a TCI & The learned XGBoost fusion of the mid-semester version was retired: it had been fitted to synthetic labels with the meaning of identity inverted and ranked threats worse than its own inputs. It was replaced by transparent, time-aligned evidence rules that produce the same 0--1 TCI and five levels, with every decision re-derivable from the log; live false onsets at Level~3+ fell from 9 to 0 & Achieved with a changed method\\ \hline
 O3 Tamper-evident evidence & AES-256-GCM bundles with HKDF keys, SHA-256 digests and an HMAC-signed hash-chained manifest; pre-roll clips in clip mode; a verifier checks every digest and the signed chain & Achieved\\ \hline
 O4 Physical edge unit & Raspberry~Pi~5 unit with Camera Module 3, USB microphone, PIR, door and mains inputs, LEDs and a siren relay; bill of materials about Rs.\,40,500 including tools; parametric enclosure; running in the demo room as a systemd service. The ESP32 and DHT22 design of the proposal was replaced by the Pi~5 for camera and audio quality & Achieved (budget revised)\\ \hline

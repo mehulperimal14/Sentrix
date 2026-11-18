@@ -117,7 +117,7 @@ a model score and the alarm:
 |---|---|
 | Confirmation | a source must cross its threshold on 2 of its last 3 fresh evaluations |
 | Person gate | weapon votes count only with a person seen in the last 2 s |
-| Thresholds | the checkpoint's, raised to at least weapon 0.50 / fire 0.45; a per-room calibration may replace them |
+| Thresholds | the checkpoint's, raised to at least weapon 0.50 / fire 0.45; a per-room calibration may replace them (`tools/calibrate_room.py` writes it from the device's own log, D23) |
 | Modalities | video detector (YOLO heads), video classifier (scene / violence model: one modality), audio (only when its 4 s window overlaps the frame within 1.5 s; otherwise *unavailable*, never "calm") |
 | One visual modality confirmed | L3 (snapshot and evidence; SOS prompt) |
 | Two modalities confirmed for one class (detector + scene, or video + aligned audio, e.g. a pistol box and a gunshot) | L4; L5 when the weaker is well above threshold, or when all three agree |
@@ -365,11 +365,12 @@ disabled):
 
 ```bash
 python tools/eval_custom_frames.py --splits train,val,test --tag local    # per image
-python tools/replay_custom_videos.py --videos all --tag local             # 10 videos end to end
+python tools/replay_custom_videos.py --videos all --tag local             # 15 videos end to end
 python tools/replay_custom_videos.py --videos all --mode clip --tag local_clip   # clip engine
 python tools/custom_eval_table.py custom local                            # compare with a published run
 python tools/gate_report.py --replay training/runs/custom_eval/local/replay_all.json
 python tools/replay_decisions.py var/events/<session>.jsonl               # current rules on a recorded session
+python tools/calibrate_room.py                                          # per-room thresholds from the device's own log (read-only; --write)
 ```
 
 Your runs land in `training/runs/custom_eval/<tag>/` (ignored by git). The
@@ -385,7 +386,7 @@ Never tune or select on the test video `wa02`.
 | `sentrix/` | The device: `perception/` (detector, scene, identity, audio, behaviour, motion, re-id), `fusion/` (evidence rules, TCI, level policy), `pipeline/` (engine, 4 s clip engine, fast lane, incidents, event log, state), `runtime/` (torch/onnx/ncnn backends), `sos/` (machine, policy, PINs, templates, sweeper, service), `alerting/` (send guard, dispatch, channels: router, modem, Telegram, e-mail, Twilio), `link/` (client, protocol, tunnel, command rules), `io/` (cameras, demo reel, siren, GPIO, node, Wi-Fi, watchdog), `storage/` (SQLite), `evidence/` (vault), `web/` (Local Console), `evaluation/` |
 | `sentrix_portal/` | The Portal: `routes/` (auth, onboarding, home, household, contacts, consent, settings, SOS, Desk, admin, privacy, link hub, device proxy, hooks), `services/` (accounts, hub, SOS, notify, retention), templates and static files |
 | `models/` | Weights the runtime loads: `v4_custom/` (default: DINOv2 scene classifier, YOLO11n weapon and fire heads), `v3_real/`, `v5_slim/` (slim scene heads, experimental), `yolov8n.pt`, and provenance checkpoints |
-| `training/` | `custom/` trainers, `datasets/sentrix_custom/` (765 frames, 10 videos, ground truth), `notebooks/`, `scripts/` (legacy trainers), `runs/` (the reports the docs cite) |
+| `training/` | `custom/` trainers, `datasets/sentrix_custom/` (977 frames, 15 videos, ground truth), `notebooks/`, `scripts/` (legacy trainers), `runs/` (the reports the docs cite) |
 | `notebooks/` | TCI analysis: feature contract, calibration, thresholds |
 | `tools/` | doctor, setup_env, provision_device, demo_reset, demo_run, benchmarks (`bench_live`, `bench_clip`), replay and evaluation, gate report, model export, `portal_pg_check` |
 | `tests/` | The test suite; `tests/e2e/` holds the product-flow world |
@@ -418,9 +419,11 @@ Never tune or select on the test video `wa02`.
 
 ## Status and limits
 
-Everything below ran on the maintainer laptop (Windows 11, Python 3.14, CPU
-torch). **Nothing has run on a Raspberry Pi, a real modem, a real Telegram bot,
-a real e-mail account or a live Postgres yet.**
+Most of the rows below ran on the maintainer laptop (Windows 11, Python 3.14, CPU
+torch). The Raspberry Pi 5 demo unit has run the clip profile in the demo room
+since 2026-10-23, linked to the Render Portal, with the owner's prompt on
+Telegram in test mode. **Nothing has run on a real modem, a real e-mail account
+or a live Postgres yet.**
 
 | Area | State | Evidence |
 |---|---|---|
@@ -428,8 +431,9 @@ a real e-mail account or a live Postgres yet.**
 | Portal + device as two processes | working on the laptop | docs/7 §17: provisioning → activation → wizard → claim → tunnel → real detection → approve → Desk → closed; decline, expiry, Portal outage |
 | Detection to SOS request | working on bundled clips | docs/7 §17: PENDING weapon request 8.0–9.8 s after `scene gun`; fire 11.6–11.9 s after `scene fire` |
 | Remote view through the tunnel | working, capped | docs/7 §17: MJPEG 29.9 fps direct, 13.6 fps tunnelled (cap 15) |
-| Telegram, e-mail, modem SMS, Twilio | code and fake-transport tests only | no provider accounts or modem used |
-| Raspberry Pi 5 hardware | code and mock-pin tests only | bench checks still to do (deploy/pi5/README.md) |
+| Telegram, e-mail, modem SMS, Twilio | Telegram live on the demo unit (test mode); the rest code and fake-transport tests only | Telegram bot in polling mode to the two allowlisted team chats; no e-mail account or modem used |
+| Raspberry Pi 5 | clip profile running in the demo room; siren, PIR, door and mains not bench-checked | `training/runs/custom_eval/pi5/REPORT.md` (clip p50 3.9 s at 320 px); bench checks still to do (deploy/pi5/README.md) |
+| Room calibration (D23) | run on the demo unit 2026-11-19 | `training/runs/calibration/pi5_demo_room_2026-11-19/REPORT.md`: same decision as the device on 8,956 of 8,956 clips; weapon 0.78, fire 0.75 in force |
 | 4 s clip engine | replay meets Gate A's detection criterion; too slow on the laptop | `training/runs/custom_eval/clip/`: weapon L3 9/12 with the fast lane, fire 3/3, 0 false onsets; ONNX + fast lane compute p95 2145 ms vs a 1.6 s budget |
 | Training recordings on the dashboard (D20), a USB microphone in any port (D21) | working on the laptop | `tests/test_recorder.py` (real OpenCV and ffmpeg round trips), `tests/test_recording_*.py`; the card driven in a browser against a synthetic camera; the microphone chooser against a fake sound library only. Not yet run on the Pi or with a real microphone |
 | Slim scene heads (`models/v5_slim/`) | not usable for alarms | `training/runs/custom/slim/REPORT.md`: LOVO macro-F1 0.229 (MobileNetV3-L) vs 0.440 (DINOv2) |

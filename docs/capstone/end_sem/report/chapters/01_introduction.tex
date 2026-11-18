@@ -78,7 +78,7 @@ The product is made of two programs that share one code base (\figref{fig:overvi
 \thead{Rule} & \thead{Default behaviour}\\ \hline
 Confirmation & A source counts for a class only after crossing its threshold on 2 of its last 3 \emph{fresh} evaluations (at most 3\,s apart); a cached value never confirms itself.\\ \hline
 Person gate & Weapon votes count only if a person was seen in the last 2\,s.\\ \hline
-Thresholds & The model's own, raised to at least weapon 0.50 and fire 0.45; a per-room calibration file may raise them (the demo room uses weapon 0.75 and fire 0.70).\\ \hline
+Thresholds & The model's own, raised to at least weapon 0.50 and fire 0.45; a per-room calibration file, written from the device's own log by \code{tools/calibrate\_room.py}, may raise them (the demo room uses weapon 0.78 and fire 0.75).\\ \hline
 Modalities & Video detector (YOLO heads), video classifier (scene or violence model, counted as one), audio (only when its 4\,s window overlaps the frame within 1.5\,s; otherwise \emph{unavailable}, never ``calm'').\\ \hline
 One visual modality & Level~3 band (0.45--0.62).\\ \hline
 Two modalities & Level~4 at threshold, rising to Level~5 as the weaker modality nears certainty (0.70--0.95); three modalities at least 0.86 (Level~5).\\ \hline
@@ -119,8 +119,8 @@ The goal is a working, deployable prototype of the complete product---device, Po
 SENTRIX solves the problem with five design choices, each detailed in Chapters~\ref{ch:method}--\ref{ch:impl}:
 \begin{enumerate}
 \item \textbf{All inference at the edge.} Every model runs on the device; the Portal never sees continuous video. The Raspberry~Pi~5 uses a 4\,s clip engine and ONNX models to fit its four CPU cores.
-\item \textbf{Confirmed, multimodal evidence instead of single-frame scores.} $k$-of-$n$ confirmation, a person gate, per-room thresholds and the rule that Level~4 and above need two independent modalities.
-\item \textbf{Models trained on the team's own footage.} A DINOv2 scene classifier and YOLO11n heads trained on 765 reviewed frames from ten videos, selected by leave-one-video-out cross-validation without touching the test video; a body re-identification model so a resident who turns away is not mistaken for a stranger.
+\item \textbf{Confirmed, multimodal evidence instead of single-frame scores.} $k$-of-$n$ confirmation, a person gate, per-room thresholds set from the device's own log, and the rule that Level~4 and above need two independent modalities.
+\item \textbf{Models trained on the team's own footage.} A DINOv2 scene classifier trained on 765 reviewed frames from ten videos, selected by leave-one-video-out cross-validation without touching the test video; YOLO11n weapon (handgun, knife, long gun) and fire heads retrained on 977 frames from fifteen videos; a body re-identification model so a resident who turns away is not mistaken for a stranger.
 \item \textbf{An owner-approved SOS flow with safety defaults.} The owner decides; corroborated threats, fire and a device that goes offline during an alarm still reach the contacts; silence is never read as safety.
 \item \textbf{Measured, not assumed.} A side-effect-free evaluation harness, committed-level metrics with confidence bounds, and more than 2,200 automated tests run under rules that forbid any test from sending a real alert.
 \end{enumerate}
@@ -196,7 +196,7 @@ The problem is defined as: \emph{given a live camera stream (and optionally an a
 \hline\rowhead
 \thead{S. No.} & \thead{Constraint}\\ \hline
 1 & \textbf{Compute:} four Cortex-A76 cores and no accelerator on the Pi~5; DINOv2 ViT-B/14 alone takes about 1.2\,s per frame there, so the full per-frame stack would run below 1\,Hz.\\ \hline
-2 & \textbf{Data:} 341\,s of labelled footage from two rooms (765 frames, 10 videos); assault and robbery appear in only one or two videos and cannot be validated.\\ \hline
+2 & \textbf{Data:} 466\,s of labelled footage from three rooms (977 frames, 15 videos; the first ten videos give 341\,s and 765 frames); assault and robbery appear in only three and two episodes and cannot be validated.\\ \hline
 3 & \textbf{Hardware interfaces:} the Pi~5 has no analogue audio input and no hardware H.264 encoder; OpenCV cannot open its CSI camera (Picamera2 is required); RPi.GPIO does not work on the Pi~5 (gpiozero with lgpio is used); GPIO pins are 3.3\,V.\\ \hline
 4 & \textbf{Budget:} a student project; free or low-cost hosting (Render Starter instance, about \$7 per month) and an \rupee40{,}500 device bill of materials including tools.\\ \hline
 5 & \textbf{Safety and law:} no test, evaluation, replay or demo may send a real alert; no automatic call to 112; personal data handled under consent.\\ \hline
@@ -248,11 +248,11 @@ Section~\ref{sec:validation} validates each objective against what was built and
 The project followed an iterative, measurement-driven engineering cycle (detailed in Chapter~\ref{ch:method}):
 \begin{enumerate}
 \item \textbf{Build a baseline and measure it the way the product is used.} The first prototype's models were evaluated per image and by replaying whole videos through the real pipeline.
-\item \textbf{Collect and label the team's own data.} Ten videos were recorded, 765 frames reviewed and labelled, boxes annotated with a label-gated teacher model, and the data split strictly by source video.
+\item \textbf{Collect and label the team's own data.} Fifteen videos were recorded (ten by October, five more in November), 977 frames reviewed and labelled, boxes annotated with a label-gated teacher model, and the data split strictly by source video.
 \item \textbf{Train and select without touching the test video.} Candidates were compared by leave-one-video-out cross-validation on nine videos, confirmed on validation, and tested once.
 \item \textbf{Run it live, diagnose, repair.} A recorded live session was reconstructed exactly from its event log; every root cause was fixed with a regression test and the log re-decided under the new rules (milestones M1--M5).
 \item \textbf{Build the product around the detector.} Portal, SOS engine, link, channels, hardware I/O and clip engine were built in eight parallel tracks against a written contract, integrated, tested end to end and reviewed adversarially.
-\item \textbf{Deploy and measure on the target.} The Pi~5 unit was brought up in the demo room; its own logs set per-room thresholds; the clip engine was benchmarked on the Pi.
+\item \textbf{Deploy and measure on the target.} The Pi~5 unit was brought up in the demo room; its own logs set per-room thresholds, first by hand and then by a calibration tool that replays the device's own rule; the clip engine was benchmarked on the Pi.
 \end{enumerate}
 
 \section{Project Outcomes and Deliverables}
@@ -261,11 +261,11 @@ The project followed an iterative, measurement-driven engineering cycle (detaile
 \item \textbf{Device software} (\code{sentrix/}): perception (detector, scene, identity, re-identification, audio, motion, behaviour), evidence and fusion rules, level policy, tick and clip pipelines, incidents, event log, evidence vault, SOS engine, channels, link client, hardware I/O, recorder, Local Console API.
 \item \textbf{Portal} (\code{sentrix\_portal/}): accounts, activation, two-factor sign-in, onboarding, household and contacts, SOS pages, Desk, administration, privacy, link hub and tunnel.
 \item \textbf{Two React applications} (\code{frontend/}): the device screen with its alert takeover and PIN pad, and the Portal app for owners, contacts, the Desk and administrators.
-\item \textbf{Trained models} (\code{models/}): DINOv2 ViT-B/14 five-class scene classifier (57\,MB delta checkpoint), YOLO11n weapon and fire heads, OSNet x1\_0 body embedder (ONNX), PANNs CNN10 sound tagger (ONNX), plus the rejected slim heads for reference.
-\item \textbf{Custom dataset} (\code{training/datasets/sentrix\_custom/}): 765 reviewed frames, ten source videos, label timelines and boxes.
-\item \textbf{Evaluation and tooling:} the side-effect-free harness, video replay, committed-level metrics, gate report, live and clip benchmarks, model export, re-id evaluation, the doctor (pre-flight) tool and demo tools.
+\item \textbf{Trained models} (\code{models/}): DINOv2 ViT-B/14 five-class scene classifier (57\,MB delta checkpoint), YOLO11n weapon (handgun, knife, long gun) and fire heads retrained on fifteen videos (v5), OSNet-AIN x1\_0 body embedder trained on MSMT17 (ONNX), PANNs CNN10 sound tagger (ONNX), plus the rejected slim heads for reference.
+\item \textbf{Custom dataset} (\code{training/datasets/sentrix\_custom/}): 977 reviewed frames, fifteen source videos, label timelines and boxes.
+\item \textbf{Evaluation and tooling:} the side-effect-free harness, video replay, committed-level metrics, gate report, live and clip benchmarks, model export, per-model evaluation (vision, sound, faces), re-id evaluation, room calibration from the device's own log, the doctor (pre-flight) tool and demo tools.
 \item \textbf{Hardware:} the Raspberry~Pi~5 unit design (pin table, power design, bill of materials), the \code{deploy/pi5} installer and systemd units, and the parametric enclosure (OpenSCAD, STL and 3MF exports, interference checks).
-\item \textbf{Documentation:} nine numbered specifications, a roadmap, the decision log (D1--D22) and this report.
+\item \textbf{Documentation:} nine numbered specifications, a roadmap, the decision log (D1--D24) and this report.
 \end{itemize}
 
 \section{Novelty of Work}
