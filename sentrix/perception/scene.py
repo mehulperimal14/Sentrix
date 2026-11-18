@@ -88,6 +88,12 @@ PRIORITY: tuple[str, ...] = ("fire", "weapon", "assault", "robbery")
 #: copy. ``SENTRIX_SCENE_WEIGHTS`` overrides. v4_custom is trained on the custom
 #: dataset from generic pretrained weights; v4_finetuned is the v3 violence
 #: ResNet-18 fine-tuned on it (docs/6).
+#:
+#: ``models/v5_room/scene_classifier_room_v5.pt`` (the v4 recipe retrained with
+#: the five videos of 2026-11-18: val macro-F1 0.700 -> 0.743, no held-out
+#: normal frame flagged) is **opt-in**: a room calibration made for v4 does not
+#: carry over, so a device switches with ``SENTRIX_SCENE_WEIGHTS`` set to that
+#: file and a re-calibration under it, never by a ``git pull`` alone.
 _WEIGHTS = ("v4_custom/scene_classifier_custom_v4.pt",
             "v4_finetuned/scene_classifier_ft_v4.pt")
 
