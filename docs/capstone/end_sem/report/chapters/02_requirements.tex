@@ -6,34 +6,43 @@
 \section{Literature Survey}
 \label{sec:lit}
 
+The survey was organised around four research questions (RQs), which follow from the problem statement of Chapter~\ref{ch:intro}:
+\begin{description}[leftmargin=0pt,labelsep=0.5em]
+\item[RQ1 (alarms in an unseen room).] Can handguns and visible flames be detected in a room the models were not trained in, with few enough false alarms---including false alarms about the residents themselves---that a household keeps the system switched on? Which training data and decision rules does that need?
+\item[RQ2 (time-aligned fusion).] How should video and live audio be combined so that a sound counts only when it describes the moment being judged, and so that a fight can be told from play?
+\item[RQ3 (the full stack at the edge).] Can detection, scene classification, faces, bodies and sound run together on a Raspberry~Pi~5 at a latency that is useful in an emergency?
+\item[RQ4 (owner verification).] How can the owner verify an alarm before anyone is alerted, without leaving the household unprotected when the owner cannot answer?
+\end{description}
+Each topic below ends with what the surveyed work answers for these questions, and Section~\ref{sec:lit-summary} brings the answers together.
+
 \subsection{Related Work}
 \label{sec:related}
 
-\paragraph{Object detection for weapons and fire.} Single-stage detectors made real-time detection practical: YOLO frames detection as one regression from image to boxes and class probabilities \cite{redmon2016yolo}, and its successors in the Ultralytics family (YOLOv8 \cite{ultralytics_yolov8} and YOLO11 \cite{ultralytics_yolo11}) are the de facto choice for embedded detection, pre-trained on COCO \cite{lin2014coco}. Olmos \emph{et al.} built an automatic handgun alarm for surveillance video and showed that the false-positive rate, not recall, is the obstacle to deployment, which they reduced with a dedicated training set and a temporal activation rule \cite{olmos2018handgun}. Muhammad \emph{et al.} showed that a fine-tuned CNN detects fire in surveillance video with high accuracy and few false alarms \cite{muhammad2018fire}. Tracking by association of every detection box (ByteTrack) keeps identities of people across frames at low cost \cite{zhang2022bytetrack}, and open-set detectors such as Grounding DINO \cite{liu2024groundingdino} can propose boxes for any named object, which SENTRIX uses only as a label-gated teacher to annotate its own frames.
+\paragraph{Object detection for weapons and fire.} Single-stage detectors made real-time detection practical: YOLO frames detection as one regression from image to boxes and class probabilities \cite{redmon2016yolo}, and its successors in the Ultralytics family (YOLOv8 \cite{ultralytics_yolov8} and YOLO11 \cite{ultralytics_yolo11}) are the de facto choice for embedded detection, pre-trained on COCO \cite{lin2014coco}. Olmos \emph{et al.} built an automatic handgun alarm for surveillance video and showed that the false-positive rate, not recall, is the obstacle to deployment, which they reduced with a dedicated training set and a temporal activation rule \cite{olmos2018handgun}. Muhammad \emph{et al.} showed that a fine-tuned CNN detects fire in surveillance video with high accuracy and few false alarms \cite{muhammad2018fire}. Tracking by association of every detection box (ByteTrack) keeps identities of people across frames at low cost \cite{zhang2022bytetrack}, and open-set detectors such as Grounding DINO \cite{liu2024groundingdino} can propose boxes for any named object, which SENTRIX uses only as a label-gated teacher to annotate its own frames. \emph{For RQ1:} detection itself is mature, but these papers judge it per frame on curated sets, and Olmos \emph{et al.}'s temporal rule shows that the rule turning detections into an alarm decides the false-alarm rate.
 
-\paragraph{Violence and anomaly detection in video.} Early work detected fights in hockey and movie clips with hand-crafted motion features \cite{bermejo2011violence}. RWF-2000 collected 2000 real-world surveillance clips and proposed a flow-gated network \cite{cheng2021rwf}; UCF-Crime framed anomaly detection as multiple-instance ranking on weakly labelled long videos \cite{sultani2018anomaly}; and XD-Violence showed that adding audio to video improves violence detection under weak supervision \cite{wu2020xdviolence}. These datasets are invaluable for pre-training, but their clips are curated and their test splits share cameras and settings with training, so their scores do not predict false alarms in a new home.
+\paragraph{Violence and anomaly detection in video.} Early work detected fights in hockey and movie clips with hand-crafted motion features \cite{bermejo2011violence}. RWF-2000 collected 2000 real-world surveillance clips and proposed a flow-gated network \cite{cheng2021rwf}; UCF-Crime framed anomaly detection as multiple-instance ranking on weakly labelled long videos \cite{sultani2018anomaly}; and XD-Violence showed that adding audio to video improves violence detection under weak supervision \cite{wu2020xdviolence}. These datasets are invaluable for pre-training, but their clips are curated and their test splits share cameras and settings with training, so their scores do not predict false alarms in a new home. \emph{For RQ1 and RQ2:} sound adds information to video, but these benchmarks cannot tell how many false alarms a model will raise in an unseen room.
 
-\paragraph{Vision backbones, transfer and calibration.} Residual networks \cite{he2016resnet} and vision transformers \cite{dosovitskiy2021vit} are the standard backbones. DINOv2 learns general-purpose visual features without labels and transfers with a small head and little data \cite{oquab2024dinov2}, which is why SENTRIX's scene classifier fine-tunes only the last four blocks of a DINOv2 ViT-B/14. Mobile networks such as MobileNetV3 \cite{howard2019mobilenetv3} and EfficientNet \cite{tan2019efficientnet} are 20--40 times cheaper but, as Section~\ref{sec:results} shows, did not generalise across videos on our data even with knowledge distillation \cite{hinton2015distilling}. Modern networks are also over-confident; temperature scaling is a simple, effective calibration \cite{guo2017calibration}, applied to every SENTRIX classifier.
+\paragraph{Vision backbones, transfer and calibration.} Residual networks \cite{he2016resnet} and vision transformers \cite{dosovitskiy2021vit} are the standard backbones. DINOv2 learns general-purpose visual features without labels and transfers with a small head and little data \cite{oquab2024dinov2}, which is why SENTRIX's scene classifier fine-tunes only the last four blocks of a DINOv2 ViT-B/14. Mobile networks such as MobileNetV3 \cite{howard2019mobilenetv3} and EfficientNet \cite{tan2019efficientnet} are 20--40 times cheaper but, as Section~\ref{sec:results} shows, did not generalise across videos on our data even with knowledge distillation \cite{hinton2015distilling}. Modern networks are also over-confident; temperature scaling is a simple, effective calibration \cite{guo2017calibration}, applied to every SENTRIX classifier. \emph{For RQ1 and RQ3:} self-supervised features are the best hope of generalising from a few hundred frames, but they are also the heaviest stage on a single-board computer.
 
-\paragraph{Audio event detection.} Converting audio to log-mel spectrograms and classifying with CNNs became standard with ESC-50 \cite{piczak2015esc} and the work of Salamon and Bello on augmentation \cite{salamon2017deep}. AudioSet supplied a 527-class ontology and two million labelled clips \cite{gemmeke2017audioset}, on which large CNNs were trained \cite{hershey2017cnn}; PANNs released pretrained taggers such as CNN10 and CNN14 \cite{kong2020panns}. Surveillance-specific work detects screams, glass breaking and gunshots in noise \cite{foggia2015audio}, and a systematic review of audio surveillance lists background noise and privacy as the main open issues \cite{crocco2016audio}.
+\paragraph{Audio event detection.} Converting audio to log-mel spectrograms and classifying with CNNs became standard with ESC-50 \cite{piczak2015esc} and the work of Salamon and Bello on augmentation \cite{salamon2017deep}. AudioSet supplied a 527-class ontology and two million labelled clips \cite{gemmeke2017audioset}, on which large CNNs were trained \cite{hershey2017cnn}; PANNs released pretrained taggers such as CNN10 and CNN14 \cite{kong2020panns}. Surveillance-specific work detects screams, glass breaking and gunshots in noise \cite{foggia2015audio}, and a systematic review of audio surveillance lists background noise and privacy as the main open issues \cite{crocco2016audio}. \emph{For RQ2:} a general tagger such as PANNs gives usable cues without sound data of our own, but none of these works ties a sound tag to the video frame being judged.
 
-\paragraph{Faces and person re-identification.} ArcFace's additive angular margin gives highly discriminative face embeddings \cite{deng2019arcface}, and SCRFD makes face detection efficient on small devices \cite{guo2022scrfd}; both are part of the InsightFace models SENTRIX uses. Person re-identification matches whole bodies across views: the triplet loss \cite{hermans2017triplet}, part-based models \cite{sun2018pcb} and the lightweight omni-scale OSNet \cite{zhou2019osnet} are representative, and a survey summarises the field \cite{ye2022reid}.
+\paragraph{Faces and person re-identification.} ArcFace's additive angular margin gives highly discriminative face embeddings \cite{deng2019arcface}, and SCRFD makes face detection efficient on small devices \cite{guo2022scrfd}; both are part of the InsightFace models SENTRIX uses. Person re-identification matches whole bodies across views: the triplet loss \cite{hermans2017triplet}, part-based models \cite{sun2018pcb} and the lightweight omni-scale OSNet \cite{zhou2019osnet} are representative, and a survey summarises the field \cite{ye2022reid}. \emph{For RQ1:} faces recognise residents only when they face the camera; bodies could bridge the gaps, but the surveyed work reports ranking accuracy, not the false-accept rate an access decision needs.
 
-\paragraph{Multimodal fusion.} Surveys of multimodal fusion distinguish early, late and hybrid fusion and point out the problem of asynchronous modalities and of deciding how much to trust each \cite{atrey2010fusion, baltrusaitis2019multimodal}. Gradient-boosted trees such as XGBoost \cite{chen2016xgboost} are a common late-fusion learner, but they need real labelled sessions to be fitted to.
+\paragraph{Multimodal fusion.} Surveys of multimodal fusion distinguish early, late and hybrid fusion and point out the problem of asynchronous modalities and of deciding how much to trust each \cite{atrey2010fusion, baltrusaitis2019multimodal}. Gradient-boosted trees such as XGBoost \cite{chen2016xgboost} are a common late-fusion learner, but they need real labelled sessions to be fitted to. \emph{For RQ2:} the surveys name asynchrony as the problem, but give no rule for a live stream in which one modality may be missing or stale.
 
-\paragraph{Edge computing and system security.} Edge computing places computation near the data source to cut latency and bandwidth and to keep data private \cite{shi2016edge}. The software stack rests on PyTorch \cite{paszke2019pytorch}, OpenCV \cite{bradski2000opencv} and ONNX Runtime \cite{onnxruntime}; the security mechanisms follow NIST and IETF standards for authenticated encryption \cite{nist80038d}, hashing \cite{fips1804}, one-time passwords \cite{rfc6238}, password hashing \cite{rfc9106} and WebSockets \cite{rfc6455}.
+\paragraph{Edge computing and system security.} Edge computing places computation near the data source to cut latency and bandwidth and to keep data private \cite{shi2016edge}. The software stack rests on PyTorch \cite{paszke2019pytorch}, OpenCV \cite{bradski2000opencv} and ONNX Runtime \cite{onnxruntime}; the security mechanisms follow NIST and IETF standards for authenticated encryption \cite{nist80038d}, hashing \cite{fips1804}, one-time passwords \cite{rfc6238}, password hashing \cite{rfc9106} and WebSockets \cite{rfc6455}. \emph{For RQ3:} every component exists as a portable, standard tool; what is missing is a measurement of all of them together on one board.
 
-\paragraph{Recent developments (2024--2026): detectors.} RT-DETR showed that a transformer detector can beat YOLO in real time (53.1\,\% AP on COCO at 108\,fps on a T4) \cite{zhao2024rtdetr}; YOLOv10 removed non-maximum suppression with consistent dual assignments \cite{wang2024yolov10}; YOLOv12 made the family attention-centric (40.6\,\% mAP at 1.64\,ms for the nano model) \cite{tian2025yolov12}; and Ultralytics' YOLO26, released in January 2026, is end-to-end and NMS-free and targets CPUs and edge devices \cite{jocher2026yolo26}. For weapons, a 2025 review of 101 papers reports precision between 78 and 99.5\,\% but finds real-world validation limited and evaluation inconsistent \cite{murugan2025weaponreview}, and a 2026 study shows that NMS-free YOLOv10s and YOLO26s cut weapon-detection latency on a Jetson Nano from about 300\,ms to 125--130\,ms, because post-processing, not inference, dominated \cite{fierrosilva2026yolo26weapon}. Indoor fire detection improved with nano YOLO variants (95.6\,\% mAP@50 on more than 5,000 smart-factory images) \cite{zhang2024firefactory}, and the FASDD dataset added more than 120,000 flame and smoke images \cite{wang2025fasdd}.
+\paragraph{Recent developments (2024--2026): detectors.} RT-DETR showed that a transformer detector can beat YOLO in real time (53.1\,\% AP on COCO at 108\,fps on a T4) \cite{zhao2024rtdetr}; YOLOv10 removed non-maximum suppression with consistent dual assignments \cite{wang2024yolov10}; YOLOv12 made the family attention-centric (40.6\,\% mAP at 1.64\,ms for the nano model) \cite{tian2025yolov12}; and Ultralytics' YOLO26, released in January 2026, is end-to-end and NMS-free and targets CPUs and edge devices \cite{jocher2026yolo26}. For weapons, a 2025 review of 101 papers reports precision between 78 and 99.5\,\% but finds real-world validation limited and evaluation inconsistent \cite{murugan2025weaponreview}, and a 2026 study shows that NMS-free YOLOv10s and YOLO26s cut weapon-detection latency on a Jetson Nano from about 300\,ms to 125--130\,ms, because post-processing, not inference, dominated \cite{fierrosilva2026yolo26weapon}. Indoor fire detection improved with nano YOLO variants (95.6\,\% mAP@50 on more than 5,000 smart-factory images) \cite{zhang2024firefactory}, and the FASDD dataset added more than 120,000 flame and smoke images \cite{wang2025fasdd}. \emph{For RQ1 and RQ3:} newer detectors are faster at the edge, but the review confirms that real-world validation is the weak point.
 
-\paragraph{Recent developments: violence, anomalies and sound.} Vision-language models now drive video anomaly detection: VadCLIP adapts a frozen CLIP under weak supervision (84.51\,\% AP on XD-Violence, 88.02\,\% AUC on UCF-Crime) \cite{wu2024vadclip}; LAVAD needs no training at all, scoring captions with a large language model (80.28\,\% AUC on UCF-Crime) \cite{zanella2024lavad}; Holmes-VAU targets explanations with more than 70,000 annotations \cite{zhang2025holmesvau}; and a 2026 review organises the field by supervision setting \cite{wu2026vadreview}. In the home, SmartHome-Bench (1,203 camera videos) shows that multimodal LLMs still have significant limitations \cite{zhao2025smarthomebench}. Audio-visual violence detection names modality asynchrony as a key challenge \cite{sun2024msbt} and gains by aligning audio and motion features before fusing them (86.07\,\% AP on XD-Violence) \cite{jin2025aligning}. For sound alone, consistent ensemble distillation reaches 49.0 mAP on AudioSet with a 10-million-parameter model \cite{dinkel2024ced}, and a gunshot detector tested with blank guns runs on a Raspberry Pi Zero 2W at 99\,\% accuracy \cite{khan2025gunshot}.
+\paragraph{Recent developments: violence, anomalies and sound.} Vision-language models now drive video anomaly detection: VadCLIP adapts a frozen CLIP under weak supervision (84.51\,\% AP on XD-Violence, 88.02\,\% AUC on UCF-Crime) \cite{wu2024vadclip}; LAVAD needs no training at all, scoring captions with a large language model (80.28\,\% AUC on UCF-Crime) \cite{zanella2024lavad}; Holmes-VAU targets explanations with more than 70,000 annotations \cite{zhang2025holmesvau}; and a 2026 review organises the field by supervision setting \cite{wu2026vadreview}. In the home, SmartHome-Bench (1,203 camera videos) shows that multimodal LLMs still have significant limitations \cite{zhao2025smarthomebench}. Audio-visual violence detection names modality asynchrony as a key challenge \cite{sun2024msbt} and gains by aligning audio and motion features before fusing them (86.07\,\% AP on XD-Violence) \cite{jin2025aligning}. For sound alone, consistent ensemble distillation reaches 49.0 mAP on AudioSet with a 10-million-parameter model \cite{dinkel2024ced}, and a gunshot detector tested with blank guns runs on a Raspberry Pi Zero 2W at 99\,\% accuracy \cite{khan2025gunshot}. \emph{For RQ2:} the newest audio-visual models confirm that aligning before fusing helps, but they run offline, on edited clips and on servers.
 
-\paragraph{Recent developments: backbones, identity and edge hardware.} DINOv3 (2025) scales self-supervised learning to a 7-billion-parameter teacher and releases distilled ViT-B and ViT-L students \cite{simeoni2025dinov3}. Re-identification surveys now centre on domain generalisation \cite{lee2025dgreid} and on domain shift, including people changing clothes \cite{nguyen2024reidshift}. Edge benchmarks compare YOLOv8, EfficientDet-Lite and SSD on Raspberry Pi 3, 4 and 5, a Coral TPU and a Jetson Orin Nano \cite{alqahtani2024edge}, and Raspberry Pi released the AI HAT+ (13 or 26 TOPS, October 2024) \cite{rpi2024aihat} and the AI HAT+ 2 (40 TOPS, January 2026) \cite{rpi2026aihat2}.
+\paragraph{Recent developments: backbones, identity and edge hardware.} DINOv3 (released 2025, published 2026) scales self-supervised learning to a 7-billion-parameter teacher and releases distilled ViT-B and ViT-L students \cite{simeoni2025dinov3}. Re-identification surveys now centre on domain generalisation \cite{lee2025dgreid} and on domain shift, including people changing clothes \cite{nguyen2024reidshift}. Edge benchmarks compare YOLOv8, EfficientDet-Lite and SSD on Raspberry Pi 3, 4 and 5, a Coral TPU and a Jetson Orin Nano \cite{alqahtani2024edge}, and Raspberry Pi released the AI HAT+ (13 or 26 TOPS, October 2024) \cite{rpi2024aihat} and the AI HAT+ 2 (40 TOPS, January 2026) \cite{rpi2026aihat2}. \emph{For RQ3:} accelerators for the Pi~5 now exist, so the latency gap is a matter of engineering rather than of principle.
 
-\paragraph{Recent developments: policy and industry.} Police are asking for evidence before they respond: Seattle dispatches to burglar alarms only with audio, video or witness confirmation since October 2024 \cite{seattle2024alarm}. India notified the DPDP Rules in November 2025 \cite{pib2025dpdp} and the EU adopted its AI Act in 2024 \cite{eu2024aiact}, while cloud face recognition in consumer doorbells drew public objections in December 2025 \cite{perez2025ringfaces}.
+\paragraph{Recent developments: policy and industry.} Police are asking for evidence before they respond: Seattle dispatches to burglar alarms only with audio, video or witness confirmation since October 2024 \cite{seattle2024alarm}. India notified the DPDP Rules in November 2025 \cite{pib2025dpdp} and the EU adopted its AI Act in 2024 \cite{eu2024aiact}, while cloud face recognition in consumer doorbells drew public objections in December 2025 \cite{perez2025ringfaces}. \emph{For RQ4:} police already want evidence before they respond, and households object to their faces leaving the home, yet no surveyed system asks the owner before alerting others.
 
 These works confirm SENTRIX's direction---end-to-end detectors, self-supervised backbones, time-aligned audio, edge accelerators, evidence before dispatch, data kept at home---and sharpen its gaps: none of them is evaluated by committed alarm level in a real home, and the strongest anomaly models rely on large language models that would take video out of the house.
 
-\paragraph{Literature survey by team member.} \tabref{tab:litsurvey} lists the 40 papers the members studied, in the department's format: eight per member, the last two of each from 2024--2026.
+\paragraph{Literature survey by team member.} \tabref{tab:litsurvey} lists the 40 papers the members studied, in the department's format: eight per member, the last two of each from 2024--2026. Each member surveyed the area they built: object detection, fire and weapon alarms (Kartik Garg, papers 1--8); faces and person re-identification (Akshay Ranveer, 9--16); sound and audio tagging (Prashant Gagneja, 17--24); violence and anomaly detection and self-supervised backbones (Harshit Mishra, 25--32); and false alarms, edge computing, calibration, evaluation and security (Mehul Perimal, 33--40). For each paper the table gives the tools or technology it used, its main finding and its reference, so the findings quoted in the topics above can be traced to a row.
 
 \input{chapters/02a_lit_table}
 
@@ -77,15 +86,20 @@ The lesson that shaped the rest of the project is that the problem was not one m
 \label{sec:tools-survey}
 \tabref{tab:toolsurvey} compares the main technology choices with the alternatives that were considered.
 
-\begin{table}[htbp]
-\caption{Technology choices and the alternatives considered}
-\label{tab:toolsurvey}
-\centering\tablefont
-\begin{tabularx}{\textwidth}{|L{2.6cm}|L{3.3cm}|Y|}
+\begingroup\tablefont
+\begin{longtable}{|L{2.6cm}|L{3.3cm}|L{7.45cm}|}
+\caption{Technology choices and the alternatives considered}\label{tab:toolsurvey}\\
 \hline\rowhead
 \thead{Need} & \thead{Chosen} & \thead{Alternatives and reason for the choice}\\ \hline
+\endfirsthead
+\hline\rowhead
+\thead{Need} & \thead{Chosen} & \thead{Alternatives and reason for the choice}\\ \hline
+\endhead
+\multicolumn{3}{r}{\footnotesize\itshape continued on next page}\\
+\endfoot
+\endlastfoot
 Object detection & YOLOv8n (person) + YOLO11n weapon and fire heads, ByteTrack & Faster R-CNN is too slow for a Pi; YOLO11n has fewer parameters at similar accuracy; ByteTrack adds track ids at almost no cost. RT-DETR, YOLOv10, YOLOv12 and YOLO26 (2024--2026) were reviewed; NMS-free YOLO26 is the candidate for the single detector of M7 \cite{zhao2024rtdetr, wang2024yolov10, tian2025yolov12, jocher2026yolo26}.\\ \hline
-Scene classifier & DINOv2 ViT-B/14, last 4 blocks fine-tuned & ResNet-18 (LOVO macro-F1 0.210), MobileNetV3-L (0.229) and EfficientNet-B0 (0.211) all failed the 0.396 bar; DINOv2 reached 0.440. DINOv3 (2025) is the next backbone to test \cite{simeoni2025dinov3}.\\ \hline
+Scene classifier & DINOv2 ViT-B/14, last 4 blocks fine-tuned & ResNet-18 (LOVO macro-F1 0.210), MobileNetV3-L (0.229) and EfficientNet-B0 (0.211) all failed the 0.396 bar; DINOv2 reached 0.440. DINOv3 (2026) is the next backbone to test \cite{simeoni2025dinov3}.\\ \hline
 Faces & InsightFace \code{buffalo\_l} (laptop) / \code{buffalo\_s} (Pi): SCRFD + ArcFace & dlib and \code{face\_recognition} are slower and weaker on small faces.\\ \hline
 Body re-identification & OSNet-AIN x1\_0 trained on MSMT17, ONNX & On the same pairs: colour histograms (AUROC 0.73), the ImageNet weights of the earlier prototype (0.83) and OSNet x1\_0 on MSMT17 (0.92) against 0.93; torchreid does not install on Python 3.14, so the network was re-implemented with the same parameter names.\\ \hline
 Sound & PANNs CNN10 (AudioSet, 25\,MB), ONNX Runtime & AST (346\,MB, 10\,s input) and CNN14 (327\,MB) are too heavy; the team's 4-class CNN was trained on 375 clips only (kept as fallback). CED (2024) is a compact successor to evaluate \cite{dinkel2024ced}.\\ \hline
@@ -96,11 +110,20 @@ Frontend & React 19, TypeScript, Vite, Tailwind CSS 4, TanStack Query & Server-r
 Hosting & Render Starter, Singapore, Docker & Oracle Always Free (planned long-term), Railway (closed sign-ups); Render keeps the tested SQLite path and never sleeps.\\ \hline
 Phone alerts & Telegram Bot API (demo); e-mail API; 4G modem SMS & WhatsApp Cloud API built but Meta's business set-up was out of reach; Twilio kept as a guarded legacy path.\\ \hline
 Edge hardware & Raspberry~Pi~5 8\,GB + Camera Module 3 & ESP32-S3 (weak camera and audio path), Jetson Orin Nano (about four times the price), Coral and NCS2 (discontinued); the AI HAT+ (26 TOPS, 2024) and AI HAT+ 2 (40 TOPS, 2026) are reserved as upgrades \cite{rpi2024aihat, rpi2026aihat2}.\\ \hline
-\end{tabularx}
-\end{table}
+\end{longtable}
+\endgroup
 
 \subsection{Summary}
+\label{sec:lit-summary}
 SENTRIX builds on mature components---YOLO detectors, a self-supervised DINOv2 backbone, ArcFace faces, OSNet bodies, PANNs sound tags---but its contribution lies in what the literature leaves out. It evaluates by committed alarm level rather than per frame, trains and selects on footage split strictly by video and confirms on a held-out video, fuses modalities only when they are independent and time-aligned, puts the owner in the loop with safety defaults, and runs entirely at the edge on a Raspberry~Pi~5 while keeping the owner connected through a privacy-preserving Portal. Where earlier work reports a component score, this project reports what a household would experience, together with the uncertainty of every number.
+
+\paragraph{Answers to the research questions.}
+\begin{description}[leftmargin=0pt,labelsep=0.5em]
+\item[RQ1.] The literature supplies strong detectors and backbones but no evidence about false alarms in an unseen room. Its own temporal rules, and our first live run (Section~\ref{sec:problem-analysis}), show that the decision rule, the training footage and per-room thresholds matter as much as the model. SENTRIX answers RQ1 with footage of its own rooms, confirmation rules and per-room calibration (Sections~\ref{sec:tci} and~\ref{sec:results}).
+\item[RQ2.] Sound helps violence detection, and aligning before fusing helps more, but the published work is offline. SENTRIX time-stamps every audio window, lets it vote only when it overlaps the frame, and holds a fight at Level~2 when laughter or calm talk is heard (Section~\ref{sec:tci}).
+\item[RQ3.] Single detectors run fast at the edge and accelerators for the Pi exist, but the full stack had not been measured on one board. SENTRIX measures it on a Pi~5: it works, but its decisions are about 4\,s old against a 2\,s target (Section~\ref{sec:results}).
+\item[RQ4.] Practice and policy point to verification before dispatch, yet no surveyed system puts the owner in the loop. SENTRIX's assistance request, with PINs, a duress path and safety defaults, is its answer (Section~\ref{sec:sos-design}).
+\end{description}
 
 %--------------------------------------------------------------
 \section{Software Requirements Specification}
@@ -126,6 +149,7 @@ SENTRIX is a new, self-contained product with two cooperating programs (\figref{
 \subsubsection{Product Features}
 \tabref{tab:fr} lists the functional requirements with their priorities.
 
+\begingroup\tablefont
 \begin{longtable}{|C{1.0cm}|L{10.4cm}|C{1.6cm}|}
 \caption{Functional requirements}\label{tab:fr}\\
 \hline\rowhead
@@ -137,25 +161,26 @@ SENTRIX is a new, self-contained product with two cooperating programs (\figref{
 \multicolumn{3}{r}{\footnotesize\itshape continued on next page}\\
 \endfoot
 \endlastfoot
-\tablefont FR-1 & \tablefont Read video from a Pi camera, USB webcam, RTSP stream, video file or demo reel; keep only the newest frame for inference. & \tablefont High\\ \hline
-\tablefont FR-2 & \tablefont Detect persons (with track ids), handguns and fire in each analysed frame or clip. & \tablefont High\\ \hline
-\tablefont FR-3 & \tablefont Classify each scene into normal, fire, weapon, assault, robbery with calibrated probabilities. & \tablefont High\\ \hline
-\tablefont FR-4 & \tablefont Recognise enrolled residents per tracked person; carry a face-verified resident to their own track by body appearance at home. & \tablefont High\\ \hline
-\tablefont FR-5 & \tablefont Tag audio windows into aggression, weapon sound, fire sound, laughter, calm talk, background and alarm-sound cues (e.g. a smoke alarm, or an ambulance or police vehicle passing outside), each with a time window. & \tablefont Medium\\ \hline
-\tablefont FR-6 & \tablefont Confirm evidence ($k$-of-$n$), apply the person gate and modality rules, and compute the TCI with per-input contributions. & \tablefont High\\ \hline
-\tablefont FR-7 & \tablefont Commit an alarm level with dwell timers and step it down after 5\,s without support. & \tablefont High\\ \hline
-\tablefont FR-8 & \tablefont Open, update and close incidents from one peak tick; seal an encrypted evidence bundle and a snapshot from Level~3. & \tablefont High\\ \hline
-\tablefont FR-9 & \tablefont Open one assistance request per device for a confirmed Level~3 alarm class; prompt the owner on Portal, device screen, Telegram and e-mail; SMS when offline. & \tablefont High\\ \hline
-\tablefont FR-10 & \tablefont Accept approve, false alarm (PIN), I'm checking, duress PIN, I'm safe and Request help now; apply reminders, lapse warning, expiry and safety defaults. & \tablefont High\\ \hline
-\tablefont FR-11 & \tablefont Let the Desk acknowledge and resolve requests with an outcome that sets the incident verdict. & \tablefont High\\ \hline
-\tablefont FR-12 & \tablefont Show the alarm level, the Portal link and faults on three status LEDs. & \tablefont High\\ \hline
-\tablefont FR-13 & \tablefont Provision devices, create customers with activation codes, run the seven-step onboarding, confirm contacts by consent link, and claim a device. & \tablefont High\\ \hline
-\tablefont FR-14 & \tablefont Show the device's own pages and live video to the owner through the Portal tunnel, within the household's consents. & \tablefont High\\ \hline
-\tablefont FR-15 & \tablefont Record training video (raw frames and microphone) on request of the device administrator, or the owner with a step-up; downloads on the home network only. & \tablefont Medium\\ \hline
-\tablefont FR-16 & \tablefont Export all of a household's data and erase the account on request; apply retention to logs, events and snapshots. & \tablefont Medium\\ \hline
-\tablefont FR-17 & \tablefont Keep a hash-chained audit log on the Portal and an event log on the device for every decision. & \tablefont High\\ \hline
-\tablefont FR-18 & \tablefont Refuse every outbound message unless live switches are on and, in test mode, the recipient is allowlisted; never contact an emergency number. & \tablefont High\\ \hline
+FR-1 & Read video from a Pi camera, USB webcam, RTSP stream, video file or demo reel; keep only the newest frame for inference. & High\\ \hline
+FR-2 & Detect persons (with track ids), handguns and fire in each analysed frame or clip. & High\\ \hline
+FR-3 & Classify each scene into normal, fire, weapon, assault, robbery with calibrated probabilities. & High\\ \hline
+FR-4 & Recognise enrolled residents per tracked person; carry a face-verified resident to their own track by body appearance at home. & High\\ \hline
+FR-5 & Tag audio windows into aggression, weapon sound, fire sound, laughter, calm talk, background and alarm-sound cues (e.g. a smoke alarm, or an ambulance or police vehicle passing outside), each with a time window. & Medium\\ \hline
+FR-6 & Confirm evidence ($k$-of-$n$), apply the person gate and modality rules, and compute the TCI with per-input contributions. & High\\ \hline
+FR-7 & Commit an alarm level with dwell timers and step it down after 5\,s without support. & High\\ \hline
+FR-8 & Open, update and close incidents from one peak tick; seal an encrypted evidence bundle and a snapshot from Level~3. & High\\ \hline
+FR-9 & Open one assistance request per device for a confirmed Level~3 alarm class; prompt the owner on Portal, device screen, Telegram and e-mail; SMS when offline. & High\\ \hline
+FR-10 & Accept approve, false alarm (PIN), I'm checking, duress PIN, I'm safe and Request help now; apply reminders, lapse warning, expiry and safety defaults. & High\\ \hline
+FR-11 & Let the Desk acknowledge and resolve requests with an outcome that sets the incident verdict. & High\\ \hline
+FR-12 & Show the alarm level, the Portal link and faults on three status LEDs. & High\\ \hline
+FR-13 & Provision devices, create customers with activation codes, run the seven-step onboarding, confirm contacts by consent link, and claim a device. & High\\ \hline
+FR-14 & Show the device's own pages and live video to the owner through the Portal tunnel, within the household's consents. & High\\ \hline
+FR-15 & Record training video (raw frames and microphone) on request of the device administrator, or the owner with a step-up; downloads on the home network only. & Medium\\ \hline
+FR-16 & Export all of a household's data and erase the account on request; apply retention to logs, events and snapshots. & Medium\\ \hline
+FR-17 & Keep a hash-chained audit log on the Portal and an event log on the device for every decision. & High\\ \hline
+FR-18 & Refuse every outbound message unless live switches are on and, in test mode, the recipient is allowlisted; never contact an emergency number. & High\\ \hline
 \end{longtable}
+\endgroup
 
 \subsubsection{Operating Environment}
 Device: Raspberry~Pi~OS (Debian Trixie) on a Raspberry~Pi~5 8\,GB, Python 3.13 with system site packages (Picamera2, lgpio); or Windows/Linux/macOS with Python 3.10--3.14. Portal: a Docker container on Render (Python slim image) with a persistent disk. Clients: any current browser on a phone or computer.
@@ -224,7 +249,7 @@ PIR / door / mains & GPIO23/24/16 & Debounced inputs with pull-ups; mains sensed
 %--------------------------------------------------------------
 \section{Cost Analysis}
 \label{sec:cost}
-Prices were checked at Indian retailers on 14 October 2026; ``$\approx$'' marks a price that could not be confirmed (\tabref{tab:bom}). The software has no licence cost: every library and model used is open source (licences in \code{THIRD\_PARTY.md}).
+Prices were checked at Indian retailers on 14 October 2026; ``$\approx$'' marks a price that could not be confirmed. \tabref{tab:bom} lists the bench kit, the parts needed to run SENTRIX on a desk (about \rupee31,100). \tabref{tab:cost2} adds the integration kit that makes it a wall-mounted unit---a 12\,V supply with a UPS, a 4G modem for SMS, and a sealed box---the tools, the one-time total of about \rupee40,100, and the running costs: about \rupee600 a month for the Portal and \rupee200 for the SIM. The software has no licence cost: every library and model used is open source (licences in \code{THIRD\_PARTY.md}).
 
 \begin{table}[htbp]
 \caption{Bill of materials of the Raspberry~Pi~5 unit (Order 1: bench kit)}
@@ -272,7 +297,8 @@ Telegram bot, e-mail API, open-source software & 0\\ \hline
 \label{sec:risk}
 Risks were assessed with a Failure Mode and Effects Analysis: severity (S) and likelihood (L) on a 1--5 scale, risk priority number RPN = S $\times$ L (\tabref{tab:fmea}). Scores are the team's judgement after mitigation planning; the mitigations are implemented unless marked ``planned''.
 
-\begin{longtable}{|C{0.8cm}|L{3.6cm}|C{0.5cm}|C{0.5cm}|C{0.8cm}|L{6.1cm}|}
+\begingroup\tablefont
+\begin{longtable}{|C{0.8cm}|L{3.5cm}|C{0.5cm}|C{0.5cm}|C{0.8cm}|L{5.8cm}|}
 \caption{Failure Mode and Effects Analysis}\label{tab:fmea}\\
 \hline\rowhead
 \thead{ID} & \thead{Failure mode} & \thead{S} & \thead{L} & \thead{RPN} & \thead{Mitigation}\\ \hline
@@ -282,14 +308,15 @@ Risks were assessed with a Failure Mode and Effects Analysis: severity (S) and l
 \endhead
 \endfoot
 \endlastfoot
-\tablefont R-1 & \tablefont False alarms in a room the models have never seen & \tablefont 4 & \tablefont 4 & \tablefont 16 & \tablefont $k$-of-$n$ confirmation, person gate, per-room thresholds from the device's own logs, Level~4+ only with two modalities; deployment-room recordings for training.\\ \hline
-\tablefont R-2 & \tablefont A test or demo sends a real alert & \tablefont 5 & \tablefont 2 & \tablefont 10 & \tablefont Test mode by default, send guard re-reading switches on every message, allowlist, test banner, test harness forcing all switches off and blocking non-loopback sockets.\\ \hline
-\tablefont R-3 & \tablefont A real threat missed (low recall) & \tablefont 5 & \tablefont 3 & \tablefont 15 & \tablefont Two visual sources (detector and scene model), fast lane, evidence logged for review; limits stated honestly; more data planned.\\ \hline
-\tablefont R-4 & \tablefont Pi too slow for the models & \tablefont 3 & \tablefont 4 & \tablefont 12 & \tablefont Clip engine, ONNX, 320\,px object stage, fast lane; Hailo AI HAT+ or the laptop as hub as fallbacks (planned).\\ \hline
-\tablefont R-5 & \tablefont Internet or Wi-Fi outage during an alarm & \tablefont 4 & \tablefont 3 & \tablefont 12 & \tablefont Detection, evidence and the request work offline; outbox replays on reconnect; modem SMS; the Portal alerts contacts if the device goes offline during an alarm.\\ \hline
-\tablefont R-6 & \tablefont Owner cannot answer (asleep, coerced) & \tablefont 5 & \tablefont 2 & \tablefont 10 & \tablefont Safety defaults, duress PIN, ``unanswered is never safe'', reminders and SMS after 10 minutes unseen.\\ \hline
-\tablefont R-7 & \tablefont Leak of faces or video & \tablefont 5 & \tablefont 1 & \tablefont 5 & \tablefont Data stay on the device; tunnel views follow consents; encrypted evidence; outbound-only link; erasure and retention.\\ \hline
-\tablefont R-8 & \tablefont Account takeover on the Portal & \tablefont 4 & \tablefont 2 & \tablefont 8 & \tablefont Argon2id, step-up for sensitive actions, TOTP for staff, activation back-off, CSRF and CSP, audit chain.\\ \hline
-\tablefont R-9 & \tablefont Power cut or SD card full & \tablefont 3 & \tablefont 2 & \tablefont 6 & \tablefont UPS-backed 12\,V bus, mains-loss alert, systemd watchdog, recording caps that keep 2\,GB free for evidence, log rotation and retention.\\ \hline
-\tablefont R-10 & \tablefont A resident shown as a stranger (or the reverse) & \tablefont 2 & \tablefont 3 & \tablefont 6 & \tablefont Per-track identity, body re-identification at a bar that accepted 0.04\,\% of different people; identity never lowers threat evidence.\\ \hline
+R-1 & False alarms in a room the models have never seen & 4 & 4 & 16 & $k$-of-$n$ confirmation, person gate, per-room thresholds from the device's own logs, Level~4+ only with two modalities; deployment-room recordings for training.\\ \hline
+R-2 & A test or demo sends a real alert & 5 & 2 & 10 & Test mode by default, send guard re-reading switches on every message, allowlist, test banner, test harness forcing all switches off and blocking non-loopback sockets.\\ \hline
+R-3 & A real threat missed (low recall) & 5 & 3 & 15 & Two visual sources (detector and scene model), fast lane, evidence logged for review; limits stated honestly; more data planned.\\ \hline
+R-4 & Pi too slow for the models & 3 & 4 & 12 & Clip engine, ONNX, 320\,px object stage, fast lane; Hailo AI HAT+ or the laptop as hub as fallbacks (planned).\\ \hline
+R-5 & Internet or Wi-Fi outage during an alarm & 4 & 3 & 12 & Detection, evidence and the request work offline; outbox replays on reconnect; modem SMS; the Portal alerts contacts if the device goes offline during an alarm.\\ \hline
+R-6 & Owner cannot answer (asleep, coerced) & 5 & 2 & 10 & Safety defaults, duress PIN, ``unanswered is never safe'', reminders and SMS after 10 minutes unseen.\\ \hline
+R-7 & Leak of faces or video & 5 & 1 & 5 & Data stay on the device; tunnel views follow consents; encrypted evidence; outbound-only link; erasure and retention.\\ \hline
+R-8 & Account takeover on the Portal & 4 & 2 & 8 & Argon2id, step-up for sensitive actions, TOTP for staff, activation back-off, CSRF and CSP, audit chain.\\ \hline
+R-9 & Power cut or SD card full & 3 & 2 & 6 & UPS-backed 12\,V bus, mains-loss alert, systemd watchdog, recording caps that keep 2\,GB free for evidence, log rotation and retention.\\ \hline
+R-10 & A resident shown as a stranger (or the reverse) & 2 & 3 & 6 & Per-track identity, body re-identification at a bar that accepted 0.04\,\% of different people; identity never lowers threat evidence.\\ \hline
 \end{longtable}
+\endgroup

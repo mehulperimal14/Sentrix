@@ -4,6 +4,7 @@
 %==============================================================
 
 \section{Challenges Faced}
+\tabref{tab:challenges} lists the main challenges the team met and how each was addressed. The first two---false alarms in a room the models had never seen, and very little labelled data---shaped the project more than any other.
 \begin{table}[H]
 \caption{Main challenges and how they were addressed}
 \label{tab:challenges}
@@ -24,6 +25,7 @@ Many parallel workstreams & A written contract and eight tracks in separate work
 \end{table}
 
 \section{Relevant Subjects}
+\tabref{tab:subjects} maps the subjects of the curriculum to the parts of SENTRIX where they were applied.
 \begin{table}[H]
 \caption{Subjects of the curriculum applied in the project}
 \label{tab:subjects}
@@ -50,12 +52,12 @@ Engineering Design & Enclosure CAD, interference checks, bill of materials and c
 The project required knowledge well beyond computer science, and members taught each other as each area came up. \textbf{Electronics:} LED drive, fuses, optocouplers for mains sensing, and the Pi's power and current limits. \textbf{Mechanical design:} a parametric enclosure from the manufacturer's mechanical drawings, tolerances for 3D printing and a tilting camera pod. \textbf{Acoustics:} microphone sample rates, aliasing, and how television, laughter and shouting differ in a tagger's labels. \textbf{Law and ethics:} consent of everyone filmed, the DPDP Act's consent, notice and erasure duties, and never contacting emergency services automatically. \textbf{Human factors:} what a frightened person can do on a phone, accessible contrast and touch targets, plain-language copy, and a duress path. \textbf{Operations:} cloud hosting, cost control, and deployment on a headless device.
 
 \section{Peer Assessment Matrix}
-Each member rates the contribution of every member, including themselves, from 1 (minimum) to 5 (maximum). The ratings are entered by the members at submission.
+Each member rates the contribution of every member, including themselves, from 1 (minimum) to 5 (maximum). The ratings are entered by the members at submission (\tabref{tab:peer}).
 
 \begin{table}[H]
 \caption{Peer assessment matrix (ratings 1--5)}
 \label{tab:peer}
-\centering
+\centering\tablefont
 \renewcommand{\arraystretch}{1.6}
 \begin{tabular}{|c|l|C{1.5cm}|C{1.5cm}|C{1.5cm}|C{1.5cm}|C{1.5cm}|}
 \cline{3-7}
@@ -99,7 +101,10 @@ All members & Testers and demonstrators & Recording sessions, rehearsals, review
 \end{figure}
 
 \section{Student Outcomes Description and Performance Indicators}
-\begin{longtable}{|C{0.9cm}|L{5.6cm}|L{6.9cm}|}
+\tabref{tab:so} maps each student outcome and performance indicator of the course to the work in this project that demonstrates it.
+
+\begingroup\tablefont
+\begin{longtable}{|C{0.9cm}|L{5.5cm}|L{6.8cm}|}
 \caption{SO1--SO7 mapping for the course UCS794 Capstone Project}\label{tab:so}\\
 \hline\rowhead
 \thead{SO} & \thead{SO Description} & \thead{Outcome}\\ \hline
@@ -110,20 +115,21 @@ All members & Testers and demonstrators & Recording sessions, rehearsals, review
 \multicolumn{3}{r}{\footnotesize\itshape continued on next page}\\
 \endfoot
 \endlastfoot
-\tablefont 1.1 & \tablefont Ability to identify and formulate problems related to the computational domain & \tablefont Identified that home alarms fail through false alarms, cloud dependence and lack of owner control, and formulated detection as committed alarm levels with measurable false-onset rates.\\ \hline
-\tablefont 1.2 & \tablefont Apply engineering, science and mathematics to obtain analytical, numerical and statistical solutions & \tablefont Defined the evidence and TCI formulas, used Poisson and Clopper--Pearson bounds, ROC analysis and temperature scaling to choose and judge models.\\ \hline
-\tablefont 2.1 & \tablefont Design computing systems to address needs and build prototypes that meet design specifications & \tablefont Designed and built the device, Portal, two web apps and the Pi~5 unit with enclosure against a written SRS and contract.\\ \hline
-\tablefont 2.2 & \tablefont Ability to analyse the economic trade-offs in computing systems & \tablefont Compared edge and cloud inference costs, Pi 8\,GB vs 4\,GB, slim vs large models, and hosting options (Render vs Oracle).\\ \hline
-\tablefont 3.1 & \tablefont Prepare and present documents according to computing standards and protocols & \tablefont Produced nine specifications, a decision log, an SRS following ISO/IEC/IEEE 29148, test documentation following 29119-3, and this report with IEEE references.\\ \hline
-\tablefont 3.3 & \tablefont Communicate effectively with peers using technical knowledge & \tablefont Coordinated eight parallel tracks through a shared contract, code reviews and integration notes.\\ \hline
-\tablefont 4.1 & \tablefont Aware of ethical and professional responsibilities in computing solutions & \tablefont Test mode by default, no automatic call to 112, consent of everyone filmed, data kept on the device, honest reporting of limits.\\ \hline
-\tablefont 4.3 & \tablefont Evaluate solutions considering environmental, societal and economic contexts & \tablefont Assessed privacy under the DPDP Act, the societal cost of false alarms, energy of edge vs cloud, and the cost to a household.\\ \hline
-\tablefont 5.1 & \tablefont Participate in the development and selection of ideas to meet objectives & \tablefont Proposed and compared fusion approaches, slim models and hardware platforms, selecting them by pre-registered criteria.\\ \hline
-\tablefont 5.2 & \tablefont Plan, share and execute task responsibilities in a team & \tablefont Split work by subsystem and by track with clear ownership and milestones (M1--M11).\\ \hline
-\tablefont 6.1 & \tablefont Perform experimentation and analyse the results & \tablefont Ran LOVO cross-validation, video replays, live and Pi benchmarks and re-identification experiments.\\ \hline
-\tablefont 6.2 & \tablefont Analyse and interpret data, make judgements and draw conclusions & \tablefont Interpreted the room's score distributions to set thresholds, rejected the slim heads and the 0.50 re-id bar on evidence.\\ \hline
-\tablefont 7.1 & \tablefont Explore and utilise resources to enhance self-learning & \tablefont Learned DINOv2, PANNs, OSNet, Picamera2, gpiozero, React and cloud deployment from papers, datasheets and documentation.\\ \hline
+1.1 & Ability to identify and formulate problems related to the computational domain & Identified that home alarms fail through false alarms, cloud dependence and lack of owner control, and formulated detection as committed alarm levels with measurable false-onset rates.\\ \hline
+1.2 & Apply engineering, science and mathematics to obtain analytical, numerical and statistical solutions & Defined the evidence and TCI formulas, used Poisson and Clopper--Pearson bounds, ROC analysis and temperature scaling to choose and judge models.\\ \hline
+2.1 & Design computing systems to address needs and build prototypes that meet design specifications & Designed and built the device, Portal, two web apps and the Pi~5 unit with enclosure against a written SRS and contract.\\ \hline
+2.2 & Ability to analyse the economic trade-offs in computing systems & Compared edge and cloud inference costs, Pi 8\,GB vs 4\,GB, slim vs large models, and hosting options (Render vs Oracle).\\ \hline
+3.1 & Prepare and present documents according to computing standards and protocols & Produced nine specifications, a decision log, an SRS following ISO/IEC/IEEE 29148, test documentation following 29119-3, and this report with IEEE references.\\ \hline
+3.3 & Communicate effectively with peers using technical knowledge & Coordinated eight parallel tracks through a shared contract, code reviews and integration notes.\\ \hline
+4.1 & Aware of ethical and professional responsibilities in computing solutions & Test mode by default, no automatic call to 112, consent of everyone filmed, data kept on the device, honest reporting of limits.\\ \hline
+4.3 & Evaluate solutions considering environmental, societal and economic contexts & Assessed privacy under the DPDP Act, the societal cost of false alarms, energy of edge vs cloud, and the cost to a household.\\ \hline
+5.1 & Participate in the development and selection of ideas to meet objectives & Proposed and compared fusion approaches, slim models and hardware platforms, selecting them by pre-registered criteria.\\ \hline
+5.2 & Plan, share and execute task responsibilities in a team & Split work by subsystem and by track with clear ownership and milestones (M1--M11).\\ \hline
+6.1 & Perform experimentation and analyse the results & Ran LOVO cross-validation, video replays, live and Pi benchmarks and re-identification experiments.\\ \hline
+6.2 & Analyse and interpret data, make judgements and draw conclusions & Interpreted the room's score distributions to set thresholds, rejected the slim heads and the 0.50 re-id bar on evidence.\\ \hline
+7.1 & Explore and utilise resources to enhance self-learning & Learned DINOv2, PANNs, OSNet, Picamera2, gpiozero, React and cloud deployment from papers, datasheets and documentation.\\ \hline
 \end{longtable}
+\endgroup
 
 \section{Brief Analytical Assessment}
-SENTRIX is a complete, working product whose strongest results are in the system around the models: the evidence rules removed every false onset at Level~3 and above from the replayed live session and the labelled videos; the assistance flow handles the owner who approves, declines, is coerced or cannot answer; and the device keeps private data at home while the owner keeps control from anywhere. Its measured detection---9 of 12 handgun episodes and all flames at Level~3---comes from two rooms and partly from training videos, and the false-alarm rate is bounded only loosely by the little normal footage available, so it is evidence of feasibility rather than a validated rate. On the Raspberry~Pi~5 the product runs end to end but decides in about 4\,s rather than 2\,s. The project's main analytical contribution is its method: every claim is produced by a tool from committed data, model choices are fixed before they are tested, and limits are reported alongside results. The path to a validated product is clear and mostly a matter of data: deployment-room recordings, a single detector trained on them, a fitted fusion model from real verdicts, and a hardware accelerator for the Pi.
+SENTRIX is a working end-to-end prototype of the product. Some items are still open: one interface defect (TC-29), Telegram delivery from the Render Portal to re-check, two release gates (G2, G4), and the Pi's 2\,s latency target. Its strongest results are in the system around the models: the evidence rules removed every false onset at Level~3 and above from the replayed live session and the labelled videos; the assistance flow handles the owner who approves, declines, is coerced or cannot answer; and the device keeps private data at home while the owner keeps control from anywhere. Its measured detection---9 of 12 handgun episodes and all flames at Level~3---comes from two rooms and partly from training videos, and the false-alarm rate is bounded only loosely by the little normal footage available, so it is evidence of feasibility rather than a validated rate. On the Raspberry~Pi~5 the product runs end to end but decides in about 4\,s rather than 2\,s. The project's main analytical contribution is its method: every claim is produced by a tool from committed data, model choices are fixed before they are tested, and limits are reported alongside results. The path to a validated product is clear and mostly a matter of data: deployment-room recordings, a single detector trained on them, a fitted fusion model from real verdicts, and a hardware accelerator for the Pi.

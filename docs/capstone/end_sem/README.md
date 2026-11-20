@@ -1,19 +1,33 @@
 # End-semester report (CPG-299, December 2026)
 
-`SENTRIX_CPG299_EndSem_Report.pdf` is the compiled report (111 pages, A4).
-It was last updated on 19 Nov 2026, with:
-- the five videos added on 18 Nov (977 frames from 15 videos);
-- the v5 detector heads;
-- the room calibration tool and the Pi's thresholds of 0.78 / 0.75 (D23);
-- the shipped OSNet-AIN body model at a bar of 0.87 (D24).
-`report/` holds its LaTeX source.
+`SENTRIX_CPG299_EndSem_Report.pdf` is the compiled report (124 pages, A4).
+It was last updated on 20 Nov 2026, after an audit against the department's
+report, IEEE-reference and PPT/poster guidelines and the coordinator's e-mail:
+- research questions RQ1-RQ4 open the literature survey (Section 2.1), each
+  topic says what it answers, and Section 2.1.5 answers each question;
+- every figure, table and algorithm is cited in the text, and the diagrams
+  (work breakdown, use case, class, sequence, state machine, activity, data
+  flow) and Algorithms 5.1-5.5 are explained step by step;
+- a comparison with published alarm rules on the same replayed scores
+  (Figure 5.21, `tools/baseline_alarm_rules.py`);
+- test results from the current `main`, a results table per feature area and
+  a table tracing every functional requirement to its tests;
+- the format rules applied literally: Times New Roman, 14 pt bold headings at
+  every level, 10 pt tables and captions, algorithms numbered by chapter,
+  nothing in the margins, 1.5 spacing in the front matter;
+- the 87 references in the department's IEEE form.
+Earlier on 19 Nov it gained the five videos added on 18 Nov (977 frames from
+15 videos), the v5 detector heads, the room calibration tool with the Pi's
+thresholds of 0.78 / 0.75 (D23) and the OSNet-AIN body model at a bar of
+0.87 (D24). `report/` holds its LaTeX source.
 
 ## Format
 
 The report follows the department's *Report Format Guidelines*: A4 portrait,
-1" top/bottom/right and 1.5" left margins, Times, 16 pt bold chapter names,
-14 pt bold headings, 12 pt text, 1.5 line spacing, 10 pt table text and
-captions, page numbers bottom centre, IEEE numbered references. The headings
+1" top/bottom/right and 1.5" left margins, Times New Roman, 16 pt bold chapter
+names, 14 pt bold headings, 12 pt text, 1.5 line spacing, 10 pt table text and
+captions, page numbers bottom centre, IEEE numbered references. Code and file
+names are in Courier New, one size smaller than the text around them. The headings
 copy the look of the department's LaTeX template: right-aligned titles over a
 thick rule. The chapters and sections follow the template's table of contents.
 
@@ -24,8 +38,10 @@ cd report
 tectonic main.tex
 ```
 
-Overleaf works too: upload `report/`, choose pdfLaTeX, and compile twice (BibTeX
-runs automatically). The charts come from `report/make_figures.py`, which writes
+The report uses `fontspec` with the Times New Roman installed on Windows, so
+it needs XeTeX (Tectonic is XeTeX). On Overleaf: upload `report/`, choose
+XeLaTeX, and compile twice (BibTeX runs automatically); Overleaf has Times New
+Roman only if the font files are uploaded with the source. The charts come from `report/make_figures.py`, which writes
 `report/figures/*.pdf`. Every number in it is copied from a committed report,
 and each one names its source.
 
@@ -46,19 +62,22 @@ and each one names its source.
 - Slim scene heads: `training/runs/custom/slim/REPORT.md`
 - Live diagnosis and demo-room calibration: `CLAUDE.md` sections 4.3 and 5
 - Bill of materials: `docs/8_RASPBERRY_PI5_INTEGRATION.md` section 8
+- Published alarm rules on the same replay: `training/runs/custom_eval/baseline_rules/m11b_replay_all.json`
+  (`tools/baseline_alarm_rules.py`; it checks that its SENTRIX row reproduces the replay's own Level-3 numbers)
 
-Test results were measured on 18 and 19 Nov 2026:
+Test results quoted in the report:
 
-| Suite | Branch and commit | Result |
+| Suite | Commit | Result |
 |---|---|---|
-| pytest | `sentrix/portal` `5127b3c` | 2154 passed in 386.6 s (19 Nov) |
-| pytest | `sentrix/portal` `3e1e296` | 2125 passed in 378.9 s |
-| pytest | `sentrix/frontend-v2` `c1241c1` | 2243 passed, 1 skipped |
-| Vitest | `sentrix/frontend-v2` `c1241c1` | 15 of 15 passed |
-| Playwright | `sentrix/frontend-v2` `c1241c1` | 22 of 23 passed; adding a contact fails (test case TC-29) |
+| pytest | `main` `37146c3` (20 Nov) | 2,281 collected: 2,279 passed, 2 failed in 409 s. One failure was a fault in the test (it compared served bytes with a copy whose line endings had been converted; fixed in a pull request); the other, a link-client timing test, passed when run again alone |
+| Vitest | `c1241c1` (now in `main`) | 15 of 15 passed |
+| Playwright | `c1241c1` (now in `main`) | 22 of 23 passed; adding a contact fails (test case TC-29) |
 
 All 87 references were checked against the publisher, DOI or official page on
-18 Nov 2026. The mid-semester references that could not be verified are not used.
+18 Nov 2026, and their form against the department's IEEE guide on 20 Nov
+(web pages, software and standards in the guide's online and standard forms,
+article numbers, conference locations, full author lists for six-author papers).
+The mid-semester references that could not be verified are not used.
 
 30 of the references are from 2024–2026. They cover:
 - newer detectors (RT-DETR, YOLOv10, YOLOv12, YOLO26) and recent weapon and
@@ -73,21 +92,22 @@ All 87 references were checked against the publisher, DOI or official page on
 
 They appear in the need analysis, the research gaps, the "recent developments"
 part of the literature review (Section 2.1.1), the literature table (two per
-member), the comparison table (Section 5.5.8) and the future work.
+member), the comparison table and chart (Section 5.5.9) and the future work.
 
 The verification notes:
-- DINOv3 is cited through its arXiv version.
+- DINOv3 is cited through its TMLR article (May 2026, OpenReview 2NlGyqNjns).
 - The DPDP Rules are cited through the government's own press release (PIB).
 
 ## Poster
 
 `poster/SENTRIX_CPG299_Poster.pdf` is the poster: one A3 landscape page (420 x
 297 mm), made to the department's poster guidelines:
-- a banner at top centre with the title, the five names, the department, CPG
-  No. 299 and the mentor;
+- a banner centred on the sheet with the full title, the five names, the
+  mentor, the department and institute in full, and CPG No. 299;
 - five numbered panels, read left to right: problem, objectives and
   learning, how it works, the product, results;
-- three numbered figures and references [1]-[5];
+- three numbered figures, each cited in the text, with a line interpreting the
+  results chart; references [1]-[6] and a tools line;
 - no text smaller than 18 pt (24 px).
 
 The numbers come from the same sources as the report.

@@ -1,0 +1,91 @@
+{
+  "tool_commit": "5acc7f0",
+  "replay": "m11b/replay_all.csv",
+  "replay_commit": "ba0bf17",
+  "mode": "tick",
+  "inference_hz": 6.0,
+  "videos": [
+    "vid02",
+    "vid03",
+    "vid04",
+    "vid05",
+    "vid06",
+    "vid07",
+    "gun",
+    "wa01",
+    "wa02",
+    "wa03"
+  ],
+  "thresholds": {
+    "scene_weapon": 0.5,
+    "scene_fire": 0.45,
+    "detector_weapon": 0.55,
+    "detector_fire": 0.5
+  },
+  "grace_s": 1.0,
+  "rules": {
+    "single_frame": "alarm on any tick with one source over its bar",
+    "five_successive": "alarm once one source is over its bar on 5 consecutive ticks (Olmos et al., 2018)",
+    "sentrix": "the replay's committed Level 3+ (logged)"
+  },
+  "results": {
+    "single_frame": {
+      "weapon": {
+        "caught": 9,
+        "episodes": 12,
+        "median_latency_s": 0.134
+      },
+      "fire": {
+        "caught": 3,
+        "episodes": 3,
+        "median_latency_s": 0.077
+      },
+      "false_onsets": 2,
+      "false_onsets_per_hour": 32.635,
+      "false_onsets_per_hour_ci95": [
+        3.9523,
+        117.8889
+      ],
+      "normal_minutes": 3.68
+    },
+    "five_successive": {
+      "weapon": {
+        "caught": 9,
+        "episodes": 12,
+        "median_latency_s": 0.674
+      },
+      "fire": {
+        "caught": 3,
+        "episodes": 3,
+        "median_latency_s": 0.653
+      },
+      "false_onsets": 0,
+      "false_onsets_per_hour": 0.0,
+      "false_onsets_per_hour_ci95": [
+        0.0,
+        60.1933
+      ],
+      "normal_minutes": 3.68
+    },
+    "sentrix": {
+      "weapon": {
+        "caught": 9,
+        "episodes": 12,
+        "median_latency_s": 0.168
+      },
+      "fire": {
+        "caught": 3,
+        "episodes": 3,
+        "median_latency_s": 0.077
+      },
+      "false_onsets": 0,
+      "false_onsets_per_hour": 0.0,
+      "false_onsets_per_hour_ci95": [
+        0.0,
+        60.1933
+      ],
+      "normal_minutes": 3.68
+    }
+  },
+  "sentrix_reproduces_replay": true
+}

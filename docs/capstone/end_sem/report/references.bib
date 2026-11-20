@@ -2,7 +2,18 @@
 % Every entry was checked against the publisher, DOI (Crossref), arXiv,
 % RFC Editor, NIST CSRC, BIS, the MeitY gazette or the official web page on
 % 18 November 2026. Earlier (mid-semester) references that could not be
-% verified are not used.
+% verified are not used. Brought in line with the department's IEEE
+% reference guide on 20 November 2026 (web pages and software as
+% electronic entries, standards as standard entries, article numbers,
+% conference locations). BibTeX reads an at-sign even in a comment, so
+% comments here never use one.
+
+% IEEEtran.bst control entry: print a repeated author's name instead of a
+% dash. It takes effect through \bstctlcite{IEEEexample:BSTcontrol} right
+% after \begin{document}.
+@IEEEtranBSTCTL{IEEEexample:BSTcontrol,
+  CTLdash_repeated_names = "no"
+}
 
 @book{sampson2011false,
   author    = {R. Sampson},
@@ -12,31 +23,27 @@
   publisher = {U.S. Department of Justice, Office of Community Oriented Policing Services},
   address   = {Washington, DC, USA},
   year      = {2011},
-  month     = aug,
   url       = {https://popcenter.asu.edu/sites/default/files/problems/PDFs/false_alarms_2nded.pdf}
 }
 
 @book{ncrb2022,
   author    = {{National Crime Records Bureau}},
-  title     = {Crime in India 2022: Statistics},
-  volume    = {I},
-  publisher = {NCRB, Ministry of Home Affairs, Government of India},
+  title     = {Crime in India 2022: Statistics\textup{, vol.~I}},
+  publisher = {NCRB, Ministry of Home Affairs},
   address   = {New Delhi, India},
   year      = {2023},
-  month     = dec,
   url       = {https://www.ncrb.gov.in/crime-in-india-year-wise.html?year=2022}
 }
 
 @techreport{cag2020delhi,
   author      = {{Comptroller and Auditor General of India}},
-  title       = {Performance Audit of Manpower and Logistics Management in {Delhi} Police},
+  title       = {Performance Audit of Manpower and Logistics Management in {Delhi Police}},
   institution = {Union Government (Ministry of Home Affairs)},
   address     = {New Delhi, India},
-  type        = {Report},
+  type        = {Rep.},
   number      = {15 of 2020},
   year        = {2020},
-  month       = sep,
-  note        = {Ch. 5, Police Control Room},
+  month       = {Sept.},
   url         = {https://cag.gov.in/en/audit-report/details/112172}
 }
 
@@ -50,18 +57,16 @@
   doi       = {10.1109/CVPR.2016.91}
 }
 
-@misc{ultralytics_yolov8,
+@electronic{ultralytics_yolov8,
   author       = {G. Jocher and A. Chaurasia and J. Qiu},
-  title        = {Ultralytics {YOLOv8}, version 8.0.0},
-  howpublished = {Ultralytics},
+  title        = {\emph{Ultralytics {YOLOv8}, version 8.0.0}},
   year         = {2023},
   url          = {https://github.com/ultralytics/ultralytics}
 }
 
-@misc{ultralytics_yolo11,
+@electronic{ultralytics_yolo11,
   author       = {G. Jocher and J. Qiu},
-  title        = {Ultralytics {YOLO11}, version 11.0.0},
-  howpublished = {Ultralytics},
+  title        = {\emph{Ultralytics {YOLO11}, version 11.0.0}},
   year         = {2024},
   url          = {https://github.com/ultralytics/ultralytics}
 }
@@ -84,6 +89,7 @@
   volume  = {6},
   pages   = {18174--18183},
   year    = {2018},
+  month   = mar,
   doi     = {10.1109/ACCESS.2018.2812835}
 }
 
@@ -190,6 +196,7 @@
   author    = {A. Dosovitskiy and others},
   title     = {An image is worth 16x16 words: Transformers for image recognition at scale},
   booktitle = {Proc. Int. Conf. Learn. Represent. (ICLR)},
+  address   = {Virtual Event},
   year      = {2021},
   url       = {https://openreview.net/forum?id=YicbFdNTTy}
 }
@@ -228,7 +235,9 @@
   author       = {G. Hinton and O. Vinyals and J. Dean},
   title        = {Distilling the knowledge in a neural network},
   howpublished = {arXiv:1503.02531},
-  year         = {2015}
+  year         = {2015},
+  month        = mar,
+  url          = {https://arxiv.org/abs/1503.02531}
 }
 
 @inproceedings{deng2019arcface,
@@ -245,6 +254,7 @@
   author    = {J. Guo and J. Deng and A. Lattas and S. Zafeiriou},
   title     = {Sample and computation redistribution for efficient face detection},
   booktitle = {Proc. Int. Conf. Learn. Represent. (ICLR)},
+  address   = {Virtual Event},
   year      = {2022},
   url       = {https://openreview.net/forum?id=RhB1AdoFfGE}
 }
@@ -263,7 +273,9 @@
   author       = {A. Hermans and L. Beyer and B. Leibe},
   title        = {In defense of the triplet loss for person re-identification},
   howpublished = {arXiv:1703.07737},
-  year         = {2017}
+  year         = {2017},
+  month        = mar,
+  url          = {https://arxiv.org/abs/1703.07737}
 }
 
 @inproceedings{sun2018pcb,
@@ -279,7 +291,7 @@
 }
 
 @article{ye2022reid,
-  author  = {M. Ye and others},
+  author  = {M. Ye and J. Shen and G. Lin and T. Xiang and L. Shao and S. C. H. Hoi},
   title   = {Deep learning for person re-identification: A survey and outlook},
   journal = {IEEE Trans. Pattern Anal. Mach. Intell.},
   volume  = {44},
@@ -291,7 +303,7 @@
 }
 
 @article{kong2020panns,
-  author  = {Q. Kong and others},
+  author  = {Q. Kong and Y. Cao and T. Iqbal and Y. Wang and W. Wang and M. D. Plumbley},
   title   = {{PANNs}: Large-scale pretrained audio neural networks for audio pattern recognition},
   journal = {IEEE/ACM Trans. Audio, Speech, Lang. Process.},
   volume  = {28},
@@ -417,7 +429,8 @@
   booktitle = {Proc. Adv. Neural Inf. Process. Syst. (NeurIPS)},
   volume    = {32},
   address   = {Vancouver, BC, Canada},
-  year      = {2019}
+  year      = {2019},
+  pages     = {8026--8037}
 }
 
 @article{bradski2000opencv,
@@ -431,17 +444,17 @@
   month   = nov
 }
 
-@misc{onnxruntime,
+@electronic{onnxruntime,
   author       = {{Microsoft}},
-  title        = {{ONNX Runtime}, version 1.29.0},
+  title        = {\emph{{ONNX Runtime}, version 1.29.0}},
   year         = {2026},
-  url          = {https://onnxruntime.ai/},
-  note         = {Accessed: Nov. 18, 2026}
+  url          = {https://onnxruntime.ai/}
 }
 
 @misc{rpi5brief,
   author       = {{Raspberry Pi Ltd}},
   title        = {Raspberry {Pi} 5 Product Brief},
+  howpublished = {Raspberry {Pi} 5 datasheet},
   year         = {2026},
   month        = nov,
   url          = {https://datasheets.raspberrypi.com/rpi5/raspberry-pi-5-product-brief.pdf}
@@ -469,7 +482,7 @@
 
 @techreport{fips1804,
   author      = {{National Institute of Standards and Technology}},
-  title       = {Secure Hash Standard ({SHS})},
+  title       = {{Secure Hash Standard (SHS)}},
   institution = {U.S. Dept. of Commerce},
   address     = {Gaithersburg, MD, USA},
   type        = {FIPS PUB},
@@ -487,7 +500,8 @@
   number      = {6238},
   year        = {2011},
   month       = may,
-  doi         = {10.17487/RFC6238}
+  doi         = {10.17487/RFC6238},
+  url         = {https://www.rfc-editor.org/rfc/rfc6238}
 }
 
 @techreport{rfc9106,
@@ -497,8 +511,9 @@
   type        = {RFC},
   number      = {9106},
   year        = {2021},
-  month       = sep,
-  doi         = {10.17487/RFC9106}
+  month       = {Sept.},
+  doi         = {10.17487/RFC9106},
+  url         = {https://www.rfc-editor.org/rfc/rfc9106}
 }
 
 @techreport{rfc6455,
@@ -509,50 +524,57 @@
   number      = {6455},
   year        = {2011},
   month       = dec,
-  doi         = {10.17487/RFC6455}
+  doi         = {10.17487/RFC6455},
+  url         = {https://www.rfc-editor.org/rfc/rfc6455}
 }
 
-@misc{iec62676,
-  title        = {Video Surveillance Systems for Use in Security Applications, {Part 1: System Requirements, Section 1: General}},
-  howpublished = {IS 16910 (Part 1/Sec 1):2018, Bureau of Indian Standards, New Delhi, India (identical to IEC 62676-1-1:2013)},
+% A standard entry prints "organization type": the designation is split between
+% the two fields (a standard with neither draws a BibTeX warning); number
+% stays empty, else IEEEtran inserts a thin space into it.
+@standard{iec62676,
+  title        = {Video Surveillance Systems for Use in Security Applications---Part 1: System Requirements, Section 1: General},
+  organization = {IS},
+  type         = {16910 (Part 1/Sec 1):2018 (identical to IEC 62676-1-1:2013)},
   year         = {2018}
 }
 
-@misc{dpdp2023,
+@manual{dpdp2023,
   title        = {The Digital Personal Data Protection Act, 2023},
-  howpublished = {Act No. 22 of 2023, Gazette of India, Extraordinary, Part II, Sec. 1, Ministry of Law and Justice (Legislative Dept.), New Delhi, India},
+  howpublished = {Act No. 22 of 2023, Gazette of India, Extraordinary, Pt. II, Sec. 1},
   year         = {2023},
-  month        = aug,
+  month        = {Aug.~11,},
   url          = {https://www.meity.gov.in/static/uploads/2024/06/2bf1f0e9f04e6fb4f8fef35e82c42aa5.pdf}
 }
 
-@misc{owasp2021,
+@electronic{owasp2021,
   author       = {{OWASP Foundation}},
-  title        = {{OWASP} Top 10:2021},
+  title        = {\emph{{OWASP} Top 10:2021}},
   year         = {2021},
   url          = {https://owasp.org/Top10/2021/}
 }
 
-@misc{wcag21,
+@manual{wcag21,
   author       = {A. Kirkpatrick and J. {O Connor} and A. Campbell and M. Cooper},
   title        = {Web Content Accessibility Guidelines ({WCAG}) 2.1},
   howpublished = {W3C Recommendation},
   year         = {2018},
-  month        = jun,
+  month        = {Jun.~5,},
   url          = {https://www.w3.org/TR/2018/REC-WCAG21-20180605/}
 }
 
-@misc{iso29119,
-  title        = {Software and Systems Engineering -- Software Testing -- Part 3: Test Documentation},
-  howpublished = {ISO/IEC/IEEE 29119-3:2021},
+@standard{iso29119,
+  title        = {Software and Systems Engineering---Software Testing---Part 3: Test Documentation},
+  organization = {ISO/IEC/IEEE},
+  type         = {29119-3:2021},
   year         = {2021},
   month        = oct,
   doi          = {10.1109/IEEESTD.2021.9591577}
 }
 
-@misc{iso29148,
-  title        = {Systems and Software Engineering -- Life Cycle Processes -- Requirements Engineering},
-  howpublished = {ISO/IEC/IEEE 29148:2018},
+@standard{iso29148,
+  title        = {Systems and Software Engineering---Life Cycle Processes---Requirements Engineering},
+  organization = {ISO/IEC/IEEE},
+  type         = {29148:2018},
   year         = {2018},
   month        = nov,
   doi          = {10.1109/IEEESTD.2018.8559686}
@@ -578,12 +600,13 @@
   number  = {4},
   pages   = {404--413},
   year    = {1934},
+  month   = dec,
   doi     = {10.1093/biomet/26.4.404}
 }
 
-@misc{telegrambotapi,
+@electronic{telegrambotapi,
   author       = {{Telegram}},
-  title        = {Telegram Bot {API}},
+  title        = {\emph{Telegram Bot {API}}},
   year         = {2026},
   url          = {https://core.telegram.org/bots/api}
 }
@@ -594,6 +617,7 @@
   author    = {Y. Zhao and others},
   title     = {{DETRs} beat {YOLOs} on real-time object detection},
   booktitle = {Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR)},
+  address   = {Seattle, WA, USA},
   year      = {2024},
   pages     = {16965--16974},
   doi       = {10.1109/CVPR52733.2024.01605}
@@ -604,6 +628,7 @@
   title     = {{YOLOv10}: Real-time end-to-end object detection},
   booktitle = {Proc. Adv. Neural Inf. Process. Syst. (NeurIPS)},
   volume    = {37},
+  address   = {Vancouver, BC, Canada},
   year      = {2024},
   pages     = {107984--108011},
   doi       = {10.52202/079017-3429}
@@ -614,37 +639,37 @@
   title     = {{YOLOv12}: Attention-centric real-time object detectors},
   booktitle = {Proc. Adv. Neural Inf. Process. Syst. (NeurIPS)},
   volume    = {38},
+  address   = {San Diego, CA, USA, and Mexico City, Mexico},
   year      = {2025},
   pages     = {87151--87175},
   doi       = {10.52202/085713-2627}
 }
 
 @misc{jocher2026yolo26,
-  author       = {G. Jocher and others},
+  author       = {G. Jocher and J. Qiu and M. Liu and S. Lyu and F. C. Akyon and M. E. Kalfaoglu},
   title        = {Ultralytics {YOLO26}: Unified real-time end-to-end vision models},
   howpublished = {arXiv:2606.03748},
   year         = {2026},
-  month        = jun
+  month        = jun,
+  url          = {https://arxiv.org/abs/2606.03748}
 }
 
 @article{fierrosilva2026yolo26weapon,
   author  = {C. J. {Fierro Silva} and C. Del-Valle-Soto and C. Bran and J. Varela-Ald{\'a}s},
   title   = {Comparative analysis of previous {YOLO} detectors and {YOLOv26s} for real-time weapon detection in video surveillance},
   journal = {Front. Comput. Sci.},
-  volume  = {8},
-  pages   = {Art. no. 1789702},
+  volume  = {8, Art. no. 1789702},
   year    = {2026},
   month   = apr,
   doi     = {10.3389/fcomp.2026.1789702}
 }
 
 @article{murugan2025weaponreview,
-  author  = {T. Murugan and others},
+  author  = {T. Murugan and N. A. N. M. Badusha and A. R. O. A. Semaihi and M. M. R. Alkindi and E. M. R. Alnaqbi and G. H. T. Alketbi},
   title   = {{AI}-based weapon detection for security surveillance: Recent research advances (2016--2025)},
   journal = {Electronics},
   volume  = {14},
-  number  = {23},
-  pages   = {Art. no. 4609},
+  number  = {23, Art. no. 4609},
   year    = {2025},
   month   = nov,
   doi     = {10.3390/electronics14234609}
@@ -655,21 +680,21 @@
   title   = {An improved fire and smoke detection method based on {YOLOv8n} for smart factories},
   journal = {Sensors},
   volume  = {24},
-  number  = {15},
-  pages   = {Art. no. 4786},
+  number  = {15, Art. no. 4786},
   year    = {2024},
   month   = jul,
   doi     = {10.3390/s24154786}
 }
 
 @article{wang2025fasdd,
-  author  = {M. Wang and others},
+  author  = {M. Wang and P. Yue and L. Jiang and D. Yu and T. Tuo and J. Li},
   title   = {An open flame and smoke detection dataset for deep learning in remote sensing based fire detection},
   journal = {Geo-Spatial Inf. Sci.},
   volume  = {28},
   number  = {2},
   pages   = {511--526},
   year    = {2025},
+  month   = mar,
   doi     = {10.1080/10095020.2024.2347922}
 }
 
@@ -679,8 +704,8 @@
   booktitle = {Proc. AAAI Conf. Artif. Intell.},
   volume    = {38},
   number    = {6},
+  address   = {Vancouver, BC, Canada},
   year      = {2024},
-  month     = mar,
   pages     = {6074--6082},
   doi       = {10.1609/aaai.v38i6.28423}
 }
@@ -689,6 +714,7 @@
   author    = {L. Zanella and W. Menapace and M. Mancini and Y. Wang and E. Ricci},
   title     = {Harnessing large language models for training-free video anomaly detection},
   booktitle = {Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR)},
+  address   = {Seattle, WA, USA},
   year      = {2024},
   pages     = {18527--18536},
   doi       = {10.1109/CVPR52733.2024.01753}
@@ -698,6 +724,7 @@
   author    = {H. Zhang and others},
   title     = {{Holmes-VAU}: Towards long-term video anomaly understanding at any granularity},
   booktitle = {Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR)},
+  address   = {Nashville, TN, USA},
   year      = {2025},
   pages     = {13843--13853},
   doi       = {10.1109/CVPR52734.2025.01292}
@@ -719,6 +746,7 @@
   author    = {S. Sun and X. Gong},
   title     = {Multi-scale bottleneck transformer for weakly supervised multimodal violence detection},
   booktitle = {Proc. IEEE Int. Conf. Multimedia Expo (ICME)},
+  address   = {Niagara Falls, ON, Canada},
   year      = {2024},
   pages     = {1--6},
   doi       = {10.1109/ICME57554.2024.10688202}
@@ -728,8 +756,7 @@
   author  = {W. Jin and L. Zhu and J. Sun},
   title   = {Aligning first, then fusing: A novel weakly supervised multimodal violence detection method},
   journal = {Knowl.-Based Syst.},
-  volume  = {322},
-  pages   = {Art. no. 113709},
+  volume  = {322, Art. no. 113709},
   year    = {2025},
   month   = jul,
   doi     = {10.1016/j.knosys.2025.113709}
@@ -739,6 +766,7 @@
   author    = {H. Dinkel and Y. Wang and Z. Yan and J. Zhang and Y. Wang},
   title     = {{CED}: Consistent ensemble distillation for audio tagging},
   booktitle = {Proc. IEEE Int. Conf. Acoust., Speech Signal Process. (ICASSP)},
+  address   = {Seoul, South Korea},
   year      = {2024},
   pages     = {291--295},
   doi       = {10.1109/ICASSP48485.2024.10446348}
@@ -749,28 +777,26 @@
   title   = {A deep learning-based gunshot detection {IoT} system with enhanced security features and testing using blank guns},
   journal = {IoT},
   volume  = {6},
-  number  = {1},
-  pages   = {Art. no. 5},
+  number  = {1, Art. no. 5},
   year    = {2025},
   month   = jan,
   doi     = {10.3390/iot6010005}
 }
 
-@misc{simeoni2025dinov3,
-  author       = {O. Sim{\'e}oni and others},
-  title        = {{DINOv3}},
-  howpublished = {arXiv:2508.10104},
-  year         = {2025},
-  month        = aug,
-  note         = {Published in Trans. Mach. Learn. Res., 2026}
+@article{simeoni2025dinov3,
+  author  = {O. Sim{\'e}oni and others},
+  title   = {{DINOv3}},
+  journal = {Trans. Mach. Learn. Res.},
+  year    = {2026},
+  month   = may,
+  url     = {https://openreview.net/forum?id=2NlGyqNjns}
 }
 
 @article{lee2025dgreid,
   author  = {H. Lee and J. Park and J. Oh and C. Eom},
   title   = {Domain generalization for person re-identification: A survey towards domain-agnostic person matching},
   journal = {Neurocomputing},
-  volume  = {649},
-  pages   = {Art. no. 130763},
+  volume  = {649, Art. no. 130763},
   year    = {2025},
   month   = oct,
   doi     = {10.1016/j.neucom.2025.130763}
@@ -780,6 +806,7 @@
   author    = {V. D. Nguyen and others},
   title     = {Tackling domain shifts in person re-identification: A survey and analysis},
   booktitle = {Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. Workshops (CVPRW)},
+  address   = {Seattle, WA, USA},
   year      = {2024},
   pages     = {4149--4159},
   doi       = {10.1109/CVPRW63382.2024.00418}
@@ -788,11 +815,10 @@
 @inproceedings{alqahtani2024edge,
   author    = {D. K. Alqahtani and M. A. Cheema and A. N. Toosi},
   title     = {Benchmarking deep learning models for object detection on edge computing devices},
-  booktitle = {Service-Oriented Computing (ICSOC 2024)},
+  booktitle = {Proc. 22nd Int. Conf. Service-Oriented Comput. (ICSOC)},
   series    = {LNCS},
   volume    = {15404},
-  address   = {Singapore},
-  publisher = {Springer},
+  address   = {Tunis, Tunisia},
   year      = {2025},
   pages     = {142--150},
   doi       = {10.1007/978-981-96-0805-8_11}
@@ -802,88 +828,82 @@
   author    = {X. Zhao and others},
   title     = {{SmartHome-Bench}: A comprehensive benchmark for video anomaly detection in smart homes using multi-modal large language models},
   booktitle = {Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. Workshops (CVPRW)},
+  address   = {Nashville, TN, USA},
   year      = {2025},
   pages     = {3975--3985},
   doi       = {10.1109/CVPRW67362.2025.00382}
 }
 
-@misc{rpi2024aihat,
+@electronic{rpi2024aihat,
   author = {{Raspberry Pi Ltd}},
-  title  = {Introducing the {Raspberry Pi AI HAT+} with up to 26 {TOPS}},
+  title  = {\emph{Introducing the {Raspberry Pi AI HAT+} with up to 26 {TOPS}}},
   year   = {2024},
-  month  = oct,
+  month  = {Oct.~24},
   url    = {https://www.raspberrypi.com/news/raspberry-pi-ai-hat/}
 }
 
-@misc{rpi2026aihat2,
+@electronic{rpi2026aihat2,
   author = {{Raspberry Pi Ltd}},
-  title  = {Introducing the {Raspberry Pi AI HAT+ 2}: Generative {AI} on {Raspberry Pi 5}},
+  title  = {\emph{Introducing the {Raspberry Pi AI HAT+ 2}: Generative {AI} on {Raspberry Pi 5}}},
   year   = {2026},
-  month  = jan,
+  month  = {Jan.~15},
   url    = {https://www.raspberrypi.com/news/introducing-the-raspberry-pi-ai-hat-plus-2-generative-ai-on-raspberry-pi-5/}
 }
 
-@misc{eu2024aiact,
+@manual{eu2024aiact,
   author       = {{European Parliament and Council of the European Union}},
   title        = {Regulation ({EU}) 2024/1689 laying down harmonised rules on artificial intelligence ({Artificial Intelligence Act})},
   howpublished = {Off. J. Eur. Union, L series},
   year         = {2024},
-  month        = jul,
+  month        = {Jul.~12,},
   url          = {http://data.europa.eu/eli/reg/2024/1689/oj}
 }
 
-@misc{pib2025dpdp,
+@electronic{pib2025dpdp,
   author = {{Press Information Bureau, Government of India}},
-  title  = {Government notifies {DPDP} Rules to empower citizens and protect privacy},
+  title  = {\emph{Government notifies {DPDP} Rules to empower citizens and protect privacy}},
   year   = {2025},
-  month  = nov,
+  month  = {Nov.~14},
   url    = {https://www.pib.gov.in/PressReleasePage.aspx?PRID=2190014}
 }
 
-@misc{perez2025ringfaces,
+@electronic{perez2025ringfaces,
   author = {S. Perez},
-  title  = {Amazon's {Ring} rolls out controversial, {AI}-powered facial-recognition feature to video doorbells},
-  howpublished = {TechCrunch},
+  title  = {\emph{Amazon's {Ring} rolls out controversial, {AI}-powered facial-recognition feature to video doorbells}},
   year   = {2025},
-  month  = dec,
+  month  = {Dec.~9},
   url    = {https://techcrunch.com/2025/12/09/amazons-ring-rolls-out-controversial-ai-powered-facial-recognition-feature-to-video-doorbells/}
 }
 
-@misc{silberling2026ringflock,
+@electronic{silberling2026ringflock,
   author = {A. Silberling},
-  title  = {Amazon's {Ring} cancels partnership with {Flock}, a network of {AI} cameras used by {ICE}, feds, and police},
-  howpublished = {TechCrunch},
+  title  = {\emph{Amazon's {Ring} cancels partnership with {Flock}, a network of {AI} cameras used by {ICE}, feds, and police}},
   year   = {2026},
-  month  = feb,
+  month  = {Feb.~13},
   url    = {https://techcrunch.com/2026/02/13/amazons-ring-cancels-partnership-with-flock-a-network-of-ai-cameras-used-by-ice-feds-and-police/}
 }
 
 @book{ncrb2025cii2023,
   author    = {{National Crime Records Bureau}},
-  title     = {Crime in India 2023: Statistics},
-  volume    = {I},
-  publisher = {NCRB, Ministry of Home Affairs, Government of India},
+  title     = {Crime in India 2023: Statistics\textup{, vol.~I}},
+  publisher = {NCRB, Ministry of Home Affairs},
   address   = {New Delhi, India},
   year      = {2025},
-  month     = sep,
   url       = {https://www.ncrb.gov.in/uploads/files/1CrimeinIndia2023PartI1.pdf}
 }
 
-@techreport{mha2026erss,
+@misc{mha2026erss,
   author      = {{Ministry of Home Affairs, Government of India}},
-  title       = {Emergency Response Support System ({ERSS} 2.0) Guidelines},
-  institution = {Ministry of Home Affairs},
+  title       = {{Emergency Response Support System (ERSS 2.0)} Guidelines},
   address     = {New Delhi, India},
-  type        = {Guidelines},
   year        = {2026},
   month       = jan,
   url         = {https://www.mha.gov.in/files/inline-documents/GuidelinesERSS20_03112026.pdf}
 }
 
-@misc{seattle2024alarm,
+@electronic{seattle2024alarm,
   author = {{City of Seattle}},
-  title  = {Home alarm system monitoring},
+  title  = {\emph{Alarm system monitoring}},
   year   = {2024},
-  url    = {https://seattle.gov/business-regulations/alarm-system-monitoring},
-  note   = {Verified response in effect from Oct. 1, 2024; accessed Nov. 18, 2026}
+  url    = {https://seattle.gov/business-regulations/alarm-system-monitoring}
 }
