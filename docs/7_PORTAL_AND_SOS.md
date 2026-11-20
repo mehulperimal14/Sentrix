@@ -1264,7 +1264,11 @@ resident".
 A request opens only at a **confirmed L3+ commit** of `sos.alarm_classes`
 (weapon, fire, and `assault` - which reaches L3 only when the video fight and
 time-aligned aggression audio agree, D15). Robbery and an uncorroborated
-fight are capped at L2 and never prompt. **An unrecognised person never opens
+fight are capped at L2 and never prompt, unless `SENTRIX_ROBBERY_ALARM=1`
+(D26) adds `robbery` to `sos.alarm_classes`: a robbery the scene model
+confirms with a person in view is then an L3 request for the owner only (the
+safety defaults alert no contact for it; a Portal running with the same key
+applies the device-offline rule to it). **An unrecognised person never opens
 a request** (D8 as amended by D15): the pipeline caps it at L2 in home and
 armed mode (`ThreatConfig.intrusion_level` 0.30, held under the L3 threshold
 whatever the configuration). One open request per device:

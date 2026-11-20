@@ -669,7 +669,8 @@ object is visible. Classes:
 | visible flame | yes | lighter flame, small controlled flame in a tray |
 | assault (staged fight) | L3 only with aligned aggression audio (D15) | **with sound**: shouting, screaming, a slap on a cushion; actors agree a script and a stop word |
 | play-fighting / banter | must stay ≤ L2, labelled banter (D15 banter rule) | the same moves as the staged fight, with laughter and calm talk; as many clips as the fight |
-| robbery, stick, smoke | no, experimental (≤ L2) | record a few for later work only |
+| robbery (masked theft) | L3 with `SENTRIX_ROBBERY_ALARM=1` (D26, the demo unit), else experimental (≤ L2) | a masked person searching the room and taking things, and quiet-room footage for its bar (`tools/calibrate_room.py`) |
+| stick, smoke | no, experimental (≤ L2) | record a few for later work only |
 
 **Audio with every clip (D15).** The microphone you will deploy (USB), at
 the device, recorded together with the video so the two stay in sync: the
