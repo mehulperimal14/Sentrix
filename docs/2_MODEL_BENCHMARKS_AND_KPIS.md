@@ -184,9 +184,10 @@ stands.
 | Precision | 91.47% |
 | Recall | 85.17% |
 
-Per class, **mAP@50-95** (not mAP@50 as v2.1 stated): `knife` 53.5% ·
-`long_gun` 63.1% · `pistol` 68.1%. Mean = 61.56% = the overall mAP@50-95 above,
-which is how the mislabelling is detectable.
+The per-class figures v2.1 reported are **mAP@50-95**, not mAP@50 as it
+stated (e.g. `long_gun` 63.1% · `pistol` 68.1%): their mean over every class
+is the overall mAP@50-95 above (61.56%), which is how the mislabelling is
+detectable.
 
 Converged cleanly — mAP@50 moved 0.9077 → 0.9082 over the final three epochs with
 LR annealed to 4e-5.

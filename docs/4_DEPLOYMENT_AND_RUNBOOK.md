@@ -111,7 +111,6 @@ reviewable.
 | `SENTRIX_MIC_DEVICE` | No | Which input to open: empty = automatic (USB, a newer one first, then another input plugged in while running, then the default; headsets, Bluetooth hands-free and virtual microphones never), or a PortAudio index or name substring (`python tools/doctor.py` lists them) |
 | `SENTRIX_RECORDING_ENABLED`, `SENTRIX_RECORD_*` | No | Training recordings on the device admin's *Record video* page (§9 "Recordings and disk"; doc 7 §3.4) |
 | `SENTRIX_ARMED` | No | ARMED at first start (later changes persist in `var/mode.json`) |
-| `SENTRIX_SIREN` | No | `auto` \| `gpio` \| `sound` \| `console` |
 | `RETENTION_DAYS` | No | Default 30 (§8) |
 | `SENTRIX_USER_*`, `SENTRIX_CAMERA_LOCATION` | No | Dispatch package fields for a standalone device |
 
@@ -178,7 +177,7 @@ request for an app path is a JSON 404; owners use the Portal app instead.
 | `/admin/sos` | help requests: the open one, history, PIN answers; in test mode the demo controls (close the incident, the disclosed scripted trigger) |
 | `/admin/recordings` | *Record video*: start, stop, download and delete training recordings (D20) |
 | `/admin/faces` | face gallery: capture from the camera, upload, remove (the owner can also do it in the Portal app, People) |
-| `/admin/hardware` | profile, telemetry, camera and microphone (or "not connected"), LEDs, siren and sensors, siren test, services |
+| `/admin/hardware` | profile, telemetry, camera and microphone (or "not connected"), LEDs and sensors, services |
 | `/admin/network` | Portal link (reconnect), alert channels (send a test), who watched through the Portal |
 | `/setup/wifi` | Wi-Fi setup, only while `SENTRIX_SETUP_MODE=1` |
 
@@ -356,8 +355,8 @@ missing, and a `.json` sidecar).
   `interrupted` and, with ffmpeg, the video is remuxed and the sound put back
   in. No action is needed.
 - **Never commit a recording.** `.gitignore` ignores `*.avi`, `*.mkv`, `*.wav`
-  and `rec_*.json` outside the tracked siren sound; keep downloads on team
-  machines, with the consent forms of everyone filmed (ROADMAP §15.1).
+  and `rec_*.json`; keep downloads on team machines, with the consent forms of
+  everyone filmed (ROADMAP §15.1).
 
 ---
 
@@ -377,8 +376,6 @@ missing, and a `.json` sidecar).
 | Red banner "no outbound channel" | SOS on but no channel can send | Enable channels and a transport, or accept the LC prompt only |
 | Device shows "offline" on the Portal | link down, wrong `SENTRIX_PORTAL_URL`, or no identity | `/api/link` on the device; `tools/doctor.py` link rows |
 | Portal sign-in lands back on `/login` | (fixed) session commit after the redirect | Fixed in `640e713` (doc 7 §17) |
-| Siren test answers 409 | siren line disarmed (`SENTRIX_SIREN_ARMED=0` or the arming key) | Arm it |
-| Siren does nothing | `ConsoleSiren` selected | `siren_is_real` in `/api/health` |
 | High TCI in an empty room | should not happen | `doctor` asserts empty-scene TCI < 0.10; the TCI leaves 0 only on confirmed evidence, so read the reason on Device admin → Diagnostics |
 | No *Record video* page | looking on the Portal (the Portal app has no recording page), or the device runs a build from before 2026-10-28 | Open the device's console on the LAN with the device password → Device admin → *Record video* (§9 "Recordings and disk"); update the device |
 | No *Download* or *Delete* buttons | the console is open in a browser on the Pi itself (the video would land on its SD card) | Open the device's console from a laptop on the home Wi-Fi at the address the page names |

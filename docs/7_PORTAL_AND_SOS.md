@@ -55,12 +55,12 @@ SENTRIX never calls 112 itself. Every SOS text says so. In test mode the
 
 | Part | Process | Code | Role |
 |---|---|---|---|
-| Pipeline | device: `python -m sentrix` | `sentrix/pipeline/`, `perception/`, `fusion/` | Detection, levels, incidents, evidence, siren. This work added one hook: at a committed L3 the pipeline hands the incident to the SOS service |
+| Pipeline | device: `python -m sentrix` | `sentrix/pipeline/`, `perception/`, `fusion/` | Detection, levels, incidents, evidence. This work added one hook: at a committed L3 the pipeline hands the incident to the SOS service |
 | Local Console (LC) | device, same process | `sentrix/web/` | The device app on the home network (`http://<device>:8000`, password `SENTRIX_PASSWORD`): the wall view and alert screen on the device's screen, device admin pages on the LAN, and the JSON API the Portal app reads through the tunnel (doc 9) |
 | SOS service | device, same process | `sentrix/sos/` | The assistance-request state machine, timers, PINs, texts, and recovery after a restart |
 | Channels | device, same process | `sentrix/alerting/channels/` | Outbox and router; 4G modem SMS; Telegram and e-mail only when no Portal is linked; legacy Twilio (off unless enabled) |
 | Link client | device, same process | `sentrix/link/` | One outbound WebSocket to the Portal: heartbeats, an outbox of events, state and video on demand, the tunnel, and commands that the device checks itself |
-| Hardware I/O | device, same process | `sentrix/io/` | Siren relay, LEDs, PIR, door, mains sense, telemetry, Pi camera, Wi-Fi setup (docs/8); no buzzer or speaker (D19) |
+| Hardware I/O | device, same process | `sentrix/io/` | Status LEDs, PIR, door, mains sense, telemetry, Pi camera, Wi-Fi setup (docs/8); no siren (D25), buzzer or speaker (D19) |
 | Portal | cloud: `python -m sentrix_portal` | `sentrix_portal/` | The Portal app (React) and its JSON API `/api/v2`: accounts, onboarding, the device hub, the `/d/{device_id}/…` proxy, the SOS mirror (and its timers while a device is offline), Telegram, WhatsApp (D17) and e-mail, the Desk, contact pages, privacy |
 
 One device process owns all the device parts (§1.2). On the laptop the device
@@ -95,8 +95,8 @@ same process runs with the Pi camera (docs/8).
 * The device **does not trust the Portal**. Every command and every tunnelled
   request is checked on the device (roles, consents, step-up, rate limits) and
   written to `remote_audit`. SMS go only to numbers in the profile, at most 30
-  a day. No command can disable the siren or the evidence vault, and none runs
-  a shell (§5.6, §5.7).
+  a day. No command can disable the evidence vault, and none runs a shell
+  (§5.6, §5.7).
 * Faces, embeddings, evidence images and continuous video **stay on the
   device**. The Portal relays them on demand and stores none of them. It keeps
   one consented SOS snapshot per request for 30 days (§1.3, §12).
@@ -155,7 +155,7 @@ responder console) + confirmed emergency contacts → Desk resolves.
 |    node, gpio, channels (+modem),   | cmds|    contacts, privacy; offline mirror     |
 |    sos (engine + sweeper), link     | tun.|  cloud SOS authority (device offline)    |
 |  SQLite var/sentrix.db, vault, faces|     |  channel router: Telegram, e-mail        |
-|  siren relay, LEDs, PIR, door, mains|     |  Postgres (internal network only)        |
+|  LEDs, PIR, door, mains sense       |     |  Postgres (internal network only)        |
 +------------------+------------------+     +------------------------------------------+
    LAN :8000 (LC)  |  USB 4G modem (SMS)
 ```
@@ -179,21 +179,21 @@ responder console) + confirmed emergency contacts → Desk resolves.
   `http://127.0.0.1:8000`. `tools/demo_run.py start` starts both (§15 item 3).
   Pi 5 T1 (software built, not yet run on a Pi): the same device process on
   the Pi. Pi T3 (hub, plan only, no code):
-  the hub is the "device" to the Portal; the Pi node exposes modem and siren as
+  the hub is the "device" to the Portal; the Pi node exposes the modem as
   node commands (docs/8 T3).
 
 ### 1.3 What lives where
 
 | Data | Device | Portal | Rule |
 |---|---|---|---|
-| Detection, levels, incidents, siren, evidence vault, `EVIDENCE_AES_KEY` | yes (authority) | metadata mirror only | edge first |
+| Detection, levels, incidents, evidence vault, `EVIDENCE_AES_KEY` | yes (authority) | metadata mirror only | edge first |
 | Face gallery, embeddings, evidence images, continuous video | **only here** | streamed on demand through the tunnel, never stored | D12 |
 | Training recordings (raw video + sound, `var/recordings/`) | **only here**, until the device admin downloads them on the LAN; deleted after 14 days | never: the tunnel refuses downloads and deletes to every role (the owner may start, stop and list them, §5.7) | D12, D20 |
 | SOS snapshot | yes | **one** consented snapshot per request, 30 days, may show faces | D12 amended |
 | Profile, household, contacts, consents | encrypted cache (for offline SOS) | **authority** | |
 | SOS requests | creates them; authority until the cloud has the request *and* the heartbeat is lost | mirror; authority while the device is offline | §7.6 |
 | Accounts, roles, sessions | LC keeps only `SENTRIX_PASSWORD` (device admin) | authority | D14: Portal password hashes never reach the device |
-| Messages out | modem SMS, LC prompt, siren, legacy Twilio | Telegram, e-mail, Desk | §8.3 |
+| Messages out | modem SMS, LC prompt, legacy Twilio | Telegram, e-mail, Desk | §8.3 |
 
 ---
 
@@ -211,7 +211,7 @@ responder console) + confirmed emergency contacts → Desk resolves.
 | `sentrix/link/` | `protocol.py`, `client.py`, `tunnel.py`, `tunnel_auth.py`, `policy.py` (the tunnel path table), `commands.py`, `profile.py` |
 | `sentrix/storage/` | `database.py`, `models.py`, `requests.py` (assistance requests and their hash chains), `link_store.py`, `notifications.py` (the device outbox) |
 | `sentrix/web/` | The Local Console: `routes.py`, `auth.py`, `hardening.py`, `sos_routes.py`, `setup_routes.py`, `node_routes.py`, `link_routes.py`, `channel_routes.py`, `recording_routes.py` (D20), `streaming.py`, templates and external JS |
-| `sentrix/io/` | Camera sources (`sources.py`, `picamera.py`, `demo_reel.py`), siren (`actuators.py`), GPIO, node telemetry, sensors, Wi-Fi, systemd watchdog, the training recorder (`recorder.py`, D20) |
+| `sentrix/io/` | Camera sources (`sources.py`, `picamera.py`, `demo_reel.py`), GPIO, node telemetry, sensors, Wi-Fi, systemd watchdog, the training recorder (`recorder.py`, D20) |
 | `sentrix_portal/` | `app.py`, `db.py`, `models.py`, `settings.py`, `security.py`, `hardening.py`; `routes/` (auth, home, onboarding, household, settings, privacy, admin, consent, link_hub, device_proxy, sos, desk, contacts, hooks); `services/` (accounts, hub, sos, notify, retention) |
 | `tools/` | `provision_device.py`, `demo_reset.py`, `demo_run.py`, `portal_pg_check.py`, `export_models.py`, `bench_clip.py`, plus the evaluation tools (docs/4 §7) |
 | `deploy/portal/`, `deploy/pi5/` | Portal Docker/Caddy deployment; Pi systemd unit, installer and network profiles |
@@ -264,8 +264,7 @@ Frozen names in other files (keep them working and keep their signatures):
 `storage/requests.py` (`REQUEST_LOCK`, `append_event`, `create_request`,
 `transition`, `try_transition`, `import_event`, `request_dict`,
 `event_dict`), `alerting/dispatch.py` (`SendOutcome`,
-`DispatchService.send(package_id, authority, *, by)`), `io/actuators.py`
-(`build_siren`, `Actuator.activate/deactivate/name/is_real`, `siren_test`),
+`DispatchService.send(package_id, authority, *, by)`),
 `link/profile.py` (every public function), `web/routes.py`
 (`health_payload`; `require_auth` left with the HTML pages, D22), `sentrix_portal/services/{hub,sos,accounts,notify,retention}.py`
 (every public function), `sentrix_portal/security.py` (`require_role`,
@@ -277,9 +276,8 @@ Frozen names in other files (keep them working and keep their signatures):
 |---|---|
 | `sentrix/io/picamera.py` | `PiCameraSource` (guarded `picamera2` import); `latest_lores()`, the low-resolution analysis stream for the clip engine |
 | `sentrix/io/gpio.py`, `node.py`, `sensors.py`, `network.py`, `watchdog.py` | GPIO service (`build_service`, `preflight`: LEDs, PIR, door, mains sense, tamper); telemetry; BME280/DHT22; nmcli Wi-Fi (`scan() -> [{ssid, signal, security}]`, `connect(ssid, psk) -> {ok, error}`, `status() -> {connected, ssid, ip, via}`); systemd readiness and watchdog |
-| `sentrix/io/actuators.py` | The siren on gpiozero behind `build_siren` / `Actuator` / `siren_test` |
 | `sentrix/io/sources.py`, `demo_reel.py` | `picamera:`, `demo-reel:` and the other camera specs; source names are redacted |
-| `sentrix/web/node_routes.py` | `GET /api/node` (with `microphone`), `POST /api/node/siren-test` (via `actuators.siren_test`) |
+| `sentrix/web/node_routes.py` | `GET /api/node` (with `microphone`) |
 | `sentrix/io/recorder.py` | `Recorder` (`start`, `stop`, `wait`, `close`; the O(1) taps `on_frame`, `on_audio`; `status`, `list`, `path_for`, `delete`, `prune`, `recover`), `RecorderError(code, message, status)`: constant-frame-rate MJPEG AVI, the 16 kHz track muxed by ffmpeg (else a `.wav`), sidecar, caps, crash recovery (D20) |
 | `sentrix/web/recording_routes.py`; the *Record video* page of the device app (`frontend/apps/device`, `/admin/recordings`; `frontend/packages/ui/src/recordings.tsx`) | `/api/recordings*`, `/media/recording/{file}` (§9.2): the device admin; start, stop and the list also the owner through the Portal (§5.7; the Portal app has no button for it) |
 | `sentrix/perception/audio.py` | The microphone chooser (D21): `rank_inputs`, `devices_fingerprint`, `is_usb`, `Resampler`, `AudioEngine.status()`; sample listeners (`add_sample_listener`) feed the clip buffer and the recorder 16 kHz mono blocks |
@@ -350,7 +348,7 @@ this order, and `CLAUDE.md` M10 records each track's result:
 
 | Track | Scope |
 |---|---|
-| **T-HW** | Pi hardware I/O and deploy: Picamera2 source, gpiozero actuators and inputs, sensors, node telemetry, `run.sh` Pi path, `requirements-pi.txt`, `deploy/pi5/`, doctor hardware checks, LC Node API |
+| **T-HW** | Pi hardware I/O and deploy: Picamera2 source, gpiozero LEDs and inputs, sensors, node telemetry, `run.sh` Pi path, `requirements-pi.txt`, `deploy/pi5/`, doctor hardware checks, LC Node API |
 | **T-CLIP** | 4-second clip engine, fast lane, runtime backends, model export, `bench_clip`, clip-mode replay, `SENTRIX_FACE_MODEL` |
 | **T-CH** | Channel router, persistent outbox, retries, dedupe; Telegram, e-mail (Brevo/Resend HTTPS), modem SMS (pyserial AT), Twilio wrapper; legacy notifier routed through the router |
 | **T-SOS** | Device SOS engine (machine, policy, templates, sweeper, recovery, verdict semantics, duress, repeat throttle, Request help now), pipeline hook, LC SOS JSON API, dispatch packages |
@@ -428,7 +426,6 @@ from the environment at use time. `settings.test_mode` mirrors
 | `tunnel_inline_body_bytes` / `tunnel_chunk_bytes` | — | 256 KiB | Inline base64 up to this; larger in BODY chunks |
 | `tunnel_max_request_bytes` / `tunnel_max_response_bytes` | — | 11 MiB / 16 MiB | |
 | `sms_daily_cap` | — | 30 | `sms.send` from the cloud |
-| `siren_test_min_interval_seconds` / `siren_test_seconds` | — | 60 / 1 | |
 | `media_requests_per_minute` | — | 60 | Tunnelled media per user |
 
 ### 3.3 `settings.channels` — `ChannelConfig` (and the guard's env)
@@ -462,13 +459,10 @@ Secrets (env names only, read at use time): `TELEGRAM_BOT_TOKEN`,
 |---|---|---|---|
 | `gpio.enabled` | `SENTRIX_GPIO_ENABLED` | False | GPIO service (LEDs, inputs) |
 | `gpio.pin_factory` | `SENTRIX_GPIO_PIN_FACTORY` | "" | "" auto (lgpio on a Pi, mock elsewhere) / lgpio / mock |
-| `gpio.siren_pin` / `siren_active_high` | — / `SENTRIX_SIREN_ACTIVE_HIGH` | 17 / True | NPN driver, `gpio=17=op,dl` keeps it off at boot |
 | `gpio.led_green_pin` / `led_amber_pin` / `led_red_pin` | — | 5 / 12 / 13 | Amber kept off GPIO6 (UPS HAT); docs/8 §6 pin table |
 | `gpio.pir_pin` / `door_pin` / `door_pull_up` | — | 23 / 24 / True | |
 | `gpio.mains_sense_pin` / `mains_present_low` | — | 16 / True | PC817 output low while mains present |
 | `gpio.input_bounce_seconds` | — | 0.05 | |
-| `gpio.siren_max_on_seconds` | `SENTRIX_SIREN_MAX_ON_SECONDS` | 90 | One relay on-period never exceeds this |
-| `gpio.siren_arm_pin` / `siren_armed` | `SENTRIX_SIREN_ARM_PIN` / `SENTRIX_SIREN_ARMED` | None / True | Arming key sense input; `siren_armed=False` refuses siren tests (409) |
 | `gpio.tamper_pin` | `SENTRIX_TAMPER_PIN` | None | Enclosure lid switch |
 | `node.enabled` | `SENTRIX_NODE_ENABLED` | False | Telemetry service |
 | `node.profile` | `SENTRIX_PROFILE` | laptop | laptop / pi5-clip / pi5-hailo / pi5-node / hub |
@@ -799,7 +793,7 @@ then requires a new claim (transfer issues a new claim code).
 
 | Type | Dir | When | Fields |
 |---|---|---|---|
-| `hello` | D→C | first message | `device_id`, `serial`, `firmware` (git short hash), `app_version`, `protocol` (1), `session_id`, `profile_version` (active cache, 0 if none), `outbox` {`head_seq`, `tail_seq`, `depth`, `epoch`}, `capabilities` [tunnel, video, state, sms, siren, gpio, clip], `test_mode`, `armed`, `health` (`sentrix.web.routes.health_payload()`: the redacted `/api/health` field set, incl. `audio`), `time_ms` |
+| `hello` | D→C | first message | `device_id`, `serial`, `firmware` (git short hash), `app_version`, `protocol` (1), `session_id`, `profile_version` (active cache, 0 if none), `outbox` {`head_seq`, `tail_seq`, `depth`, `epoch`}, `capabilities` [tunnel, video, state, sms, gpio, clip], `test_mode`, `armed`, `health` (`sentrix.web.routes.health_payload()`: the redacted `/api/health` field set, incl. `audio`), `time_ms` |
 | `welcome` | C→D | reply to hello | `device_id`, `claimed`, `server_time_ms`, `profile_version` (latest; the device expects a push when newer), `resend_from_seq` (cloud's highest contiguous stored seq), `subscriptions` {`state`: bool, `video`: always null (the hub sends `video.subscribe` with the viewer's actor right after, so the device checks consent per actor)}, `heartbeat_seconds` |
 | `heartbeat` | D→C | every `heartbeat_seconds` (10 s) | `camera_online`, `video_fps`, `ai_hz`, `frame_age_ms`, `audio`, `armed`, `alarm` {level, incident_id, incident_type}, `open_request_id`, `node` {cpu_temp_c, throttled, under_voltage, mains, ext5v_v}, `modem` {present, registered, signal_dbm, sms_today}, `channels` {outbound_ready}, `outbox_depth`, `remote_viewers`, `uptime_s`, `profile_version`, `time_ms` |
 | `event` | D→C | outbox (§5.5) | `seq`, `kind`, `priority`, `at` (ISO), `payload` |
@@ -873,7 +867,7 @@ The device does not trust the Portal. Every command carries the acting
 `actor` (an `Actor` dict); the device checks its own rules, writes a
 `remote_audit` row (`link_store.record_remote`) and answers `command.result`.
 Anything not listed is refused with `unknown_command`. No command runs a shell
-or code, disables the siren or the evidence vault. `link/commands.py` is a
+or code, or disables the evidence vault. `link/commands.py` is a
 **thin wrapper**: parse `args`, `Actor.from_dict(actor)`, call the method in
 the last column, map the `SosResult` (or dict) to `command.result` (`ok`,
 `code`, `status`, `message`, `result`).
@@ -884,7 +878,6 @@ the last column, map the `SosResult` (or dict) to `command.result` (`ok`,
 | `sos.update` | `request_id`, `event` (`protocol.SOS_UPDATE_EVENTS`: acknowledge, resolve, delivered, delivery_failed, contacts_notified, device_offline, device_online, seen, notification), `detail` | actor cloud/operator/contact; applied through `states.next_state` | `sos.cloud_event(...)` |
 | `verdict.set` | `incident_id`, `verdict`, `note`, `pin` (FALSE) | owner/member | TRUE: `database.set_verdict(..., by=actor.ref, actor_type=actor.event_actor_type)`; FALSE: `sos.false_verdict(...)` |
 | `mode.set` | `armed`, `pin` | arm: owner/member; disarm: SOS PIN (duress → disarm + silent request) | `sos.set_mode(...)` |
-| `siren.test` | — | owner + step-up ≤ 300 s; ≤ 1/min process-wide (shared with `POST /api/node/siren-test`); 1 s | `actuators.siren_test(pipeline.siren, actor=...)` |
 | `sms.send` | `to`, `text`, `request_id` | only numbers in `link.profile.sms_allowlist()` (owner, CONFIRMED contacts, Desk); ≤ 30/day; never while test mode refuses it (guard) | `registry.get("channels").enqueue(...)` (`modem_sms`) |
 | `token.rotate` | — | owner + step-up; answered by `token.issue` | T-LINK |
 | `unpair` | — | owner + step-up; wipe token (`token.json`) and profile (`link.profile.wipe()`) | T-LINK |
@@ -995,7 +988,6 @@ call; every request → `remote_audit`):
 | gallery writes (`POST /api/authorized/upload`, `POST /authorized/upload`, `POST /api/authorized/capture`, `DELETE /api/authorized/*`) | owner | consent `face_recognition`; DELETE needs step-up. The Portal app's People page (owner) uses them; the device admin's Faces page on the LAN too |
 | `POST /api/incidents/*/verdict`, `POST /api/sos/*`, `POST /api/dispatch/*` | owner, member | |
 | HOME/ARMED (`POST /api/mode`) | owner, member | the route checks the SOS PIN |
-| `POST /api/node/siren-test` | owner | step-up; 1/min (the Portal app has no button for it) |
 | recording status: `GET /api/recordings` (status and list) | owner | no step-up (D20) |
 | recording start: `POST /api/recordings/start` | owner | step-up (D20) |
 | recording stop: `POST /api/recordings/stop` | owner | no step-up: stopping is never blocked (D20). The Portal app has no recording controls |
@@ -1275,7 +1267,7 @@ time-aligned aggression audio agree, D15). Robbery and an uncorroborated
 fight are capped at L2 and never prompt. **An unrecognised person never opens
 a request** (D8 as amended by D15): the pipeline caps it at L2 in home and
 armed mode (`ThreatConfig.intrusion_level` 0.30, held under the L3 threshold
-whatever the configuration). No siren at L3. One open request per device:
+whatever the configuration). One open request per device:
 later incidents (including the 300 s rollover) attach to it.
 
 The armed-intrusion path below is kept behind `sos.intrusion_requests`
@@ -1306,7 +1298,7 @@ four more blocks, each with a safe idle value:
 | Key | Content |
 |---|---|
 | `contributions` | For the leading class: one row per input - `video detector`, `scene model` / `violence model`, `audio` (or `audio (banter)`, `audio (aggression)`), `people`, `motion`, `identity`, `sensors` - with `value`, `detail` and `effect` (`raises`, `holds at L2` - banter -, `gated`, `below confirmation`, `gate ok`/`gate failed`, `context`, `unavailable`); an unknown people count is shown as unknown |
-| `audio` | The audio window heard for this tick: `status` (`aligned`, `stale`, `future`, `untimed`, `unclassified` - no model or failed inference -, `self_output` - the device's own siren -, `disabled`), `lag_s` (frame time minus window end), `tolerance_s`, `model` (`panns_cnn10`, `cnn`, `quiet`), `cues` (aggression, weapon_sound, fire_sound, benign_social = laughter, calm_talk, background = TV/music/radio, siren), `start`/`end` (monotonic), `wall_end`, `counted` (a new, non-overlapping observation), `neutral` (why an aligned window did not vote, e.g. background) |
+| `audio` | The audio window heard for this tick: `status` (`aligned`, `stale`, `future`, `untimed`, `unclassified` - no model or failed inference -, `disabled`), `lag_s` (frame time minus window end), `tolerance_s`, `model` (`panns_cnn10`, `cnn`, `quiet`), `cues` (aggression, weapon_sound, fire_sound, benign_social = laughter, calm_talk, background = TV/music/radio, siren = alarm sounds heard in the room: a smoke alarm or a siren outside), `start`/`end` (monotonic), `wall_end`, `counted` (a new, non-overlapping observation), `neutral` (why an aligned window did not vote, e.g. background) |
 | `fusion` | `class`, `state`, `rule` (`single`, `corroborated`, `three modalities`, `audio only`, `corroboration only`, `fight corroborated`, `banter`, `mixed audio`, `experimental`, `unrecognised person (L2 only)`...), `modalities`, `context` (`persons_recent`, `motion`), `sensors` (seconds since the last PIR/door event) |
 
 Event-log tick rows are schema 5: the same `audio` and `fusion` records, the
@@ -1365,8 +1357,8 @@ current_service() -> the registered "sos" service, else a shared NullSosService
   and the package of that incident**: the legacy L4 SMS, the L4 dispatch
   package and the L5 voice call are skipped (D8: SMS only offline or unseen
   after 10 min; the L4 SMS folds into the `rise4` reminder, the L5 call into
-  `rise5`; the one package per request opens at L3). The siren stays. Without
-  the SOS service the legacy path is unchanged.
+  `rise5`; the one package per request opens at L3). Without the SOS service
+  the legacy path is unchanged.
 * `SosTrigger`: incident_id, level, incident_type, evidence_state, tci,
   reason, session_id, camera_id, armed, at_wall, at_mono, snapshot_path,
   evidence_bundle, evidence_hash, votes, simulated.
@@ -1687,7 +1679,7 @@ Twilio client unless `SENTRIX_TWILIO_ENABLED=1` .
 
 | Side | Channels |
 |---|---|
-| Device | `modem_sms` (offline prompt, SOS to contacts/Desk, `sms.send`), `modem_call` (optional L5), legacy `twilio_*` (only when enabled), LC prompt, siren; `telegram`/`email` **only** in standalone mode (no link configured) |
+| Device | `modem_sms` (offline prompt, SOS to contacts/Desk, `sms.send`), `modem_call` (optional L5), legacy `twilio_*` (only when enabled), LC prompt; `telegram`/`email` **only** in standalone mode (no link configured) |
 | Portal | `telegram`, `email`, Desk console, contact pages; `twilio_sms` as an optional backup when the device is gone |
 
 Standalone LC (no Portal, no contacts): `ALERT_PHONE_NUMBER` (or the profile
@@ -1765,8 +1757,7 @@ leave).
 | POST | `/api/mode` | `routes.py` | JSON `{armed, pin}` → `sos.set_mode`; `{mode}` or `{detail, code}` |
 | POST | `/api/incidents/{id}/verdict` | `routes.py` | form `verdict`, `note`, `pin`; FALSE → `sos.false_verdict` (403 `pin_invalid`, 429 `pin_locked`, 404) |
 | POST | `/api/dispatch/{id}/send/{authority}` | `routes.py` | POLICE / FIRE / MEDICAL → `sos.approve_package`; 409 `conflict` for SENT/CANCELLED/EXPIRED; `{status: sent|failed}` |
-| GET | `/api/node` | T-HW | the `state.node` block; `gpio` = `{siren, leds: {green, amber, red}, pir, door, mains}`; also `siren`, `siren_arming`, `siren_test`, `camera`, `microphone` (`AudioEngine.status()`, null with audio off; D21), `services` |
-| POST | `/api/node/siren-test` | T-HW | device admin or owner + step-up (policy.py); `actuators.siren_test` (1 s; ≤ 1/min, shared with the command; 429 with `Retry-After`); 409 `conflict` while the siren line is disarmed |
+| GET | `/api/node` | T-HW | the `state.node` block; `gpio` = `{leds: {green, amber, red}, pir, door, mains}`; also `camera`, `microphone` (`AudioEngine.status()`, null with audio off; D21), `services` |
 | GET | `/api/link` | T-LINK | the `state.link` block + `remote_viewers` |
 | GET | `/api/link/remote-audit?limit` | T-LINK | `remote_audit` rows |
 | POST | `/api/link/reconnect` | T-LINK | device admin |
@@ -1864,7 +1855,6 @@ builds its device calls as `/d/<id>/api/...`, `/d/<id>/video` and
 | SOS decline / I'm safe | ✓ (PIN) | ✓ (PIN) | ✓ (PIN) | ✗ | ✗ |
 | Dispatch send (approve with authority) | ✓ | ✓ | ✓ | ✗ | ✗ |
 | HOME/ARMED | ✓ (disarm: PIN) | ✓ (disarm: PIN) | ✓ (disarm: PIN) | ✗ | ✗ |
-| Test siren | ✓ | ✓ step-up | ✗ | ✗ | ✗ |
 | Training recordings: start / stop, list, download / delete (D20) | ✓ (on the LAN; capability `record`) | ✓ step-up / ✓ / ✗ (capability `record`; files on the LAN only) | ✗ | ✗ | ✗ |
 | Profile, contacts, PINs, settings, privacy | — | ✓ (step-up for safety settings/PINs) | view | ✗ | ✗ |
 | Members (invite/remove) | — | ✓ | ✗ | ✗ | ✗ |
@@ -1980,7 +1970,7 @@ Device JSONL audit rows (`EventLog.audit(event, **detail)`): existing
 `gallery_enrolled`, `gallery_removed`, `gallery_rejected` (+ `by`); new
 `sos_created`, `sos_transition`, `sos_notification`, `verdict_set`,
 `dispatch_sent`, `mode_set`, `login`, `login_failed`, `remote_access`,
-`siren_test` *(`actuators.siren_test`)*, `incident_closed`
+`incident_closed`
 *(`request_close_incident`)*, `profile_applied`, `link_connected`,
 `link_lost`, `channel_suppressed`, `node_input` (input, value) and
 `node_alert` (kind, detail) *(T-HW)*. `mode_set` *(`mode.set_armed`)*.
@@ -2009,7 +1999,7 @@ Portal `audit_log` events: `auth.login`, `auth.login_failed`, `auth.logout`,
 `contact.declined`, `consent.granted`, `consent.withdrawn`, `sos.<event>`,
 `desk.acknowledged`, `desk.resolved`, `contact_page.opened`,
 `action_link.used`, `telegram.linked`, `telegram.callback`, `verdict.set`,
-`mode.set`, `siren.test`, `privacy.export`, `privacy.erasure_requested`,
+`mode.set`, `privacy.export`, `privacy.erasure_requested`,
 `security.admin_then_new_ip`; added by T-ACCT: `auth.activation_failed`,
 `auth.totp_failed`, `auth.recovery_code_used`, `auth.recovery_codes_regenerated`,
 `auth.step_up_failed`, `auth.email_verified`, `account.updated`,
@@ -2041,10 +2031,9 @@ Portal `audit_log` events: `auth.login`, `auth.login_failed`, `auth.logout`,
   created), `portal_app` (`create_app(PortalSettings.for_tests(tmp_path))`),
   `fake_router` (`(router, transports)`: a `FakeTransport` per channel, memory
   outbox, `live_test_policy()`). After every test the listener and service
-  registries, the runtime mode (`MODE_PATH` is per-test), the cached profile,
-  the siren-test limiter, the siren arming source and the shared GPIO pin
-  factory are reset. Tracks use these instead of their own
-  copies.
+  registries, the runtime mode (`MODE_PATH` is per-test), the cached profile
+  and the shared GPIO pin factory are reset. Tracks use these instead of their
+  own copies.
 * Never a real alert: transports are `FakeTransport`; the guard refuses by
   default.
 * Databases are temporary files. Never `var/sentrix.db`.
@@ -2104,7 +2093,7 @@ version.
    * `tools/demo_run.py [--dir] start | scene NAME | close | trigger KIND |
      clips`. `start` runs `python -m sentrix_portal` (workers on) and `python
      -m sentrix` (SOS, channels, link to `http://127.0.0.1:<portal port>`, node
-     on, GPIO off, console siren, `SENTRIX_AUDIO=0`) with every path in the
+     on, GPIO off, `SENTRIX_AUDIO=0`) with every path in the
      demo directory. It forces test mode on, `SENTRIX_LIVE_ALERTS` and every
      channel switch to 0, blanks provider keys and `SENTRIX_USER_*`, takes
      `SENTRIX_TEST_RECIPIENTS` from the environment only and sets
@@ -2177,8 +2166,6 @@ protocol (§5.4, §5.5, §5.6, §5.7), the device store (§6.1), SOS (§7.1, §7
 §7.8, §7.9), channels (§8.2), the console (§9.1, §9.2), back-off (§10) and the
 Portal endpoints (§11). What was not applied is in §16 q7–q11. The rest:
 
-* `Actuator` gained `armed` and `status()`; `siren_test`'s result gained
-  `armed`.
 * Clip mode: the HUD's "AI STALLED" limit is `max(stale_overlay_seconds, hop *
   (1 + budget_fraction))`. `AudioEngine.classify_window(samples, rms)` and
   `add_sample_listener(callback(samples, end_at))` feed the clip buffer the
@@ -2238,10 +2225,10 @@ Contract-review findings answered differently (with the reason):
 
 Still open:
 
-3. Siren relay polarity — **settled by T-HW** as active-high (NPN driver,
-   `gpio=17=op,dl`; `SENTRIX_SIREN_ACTIVE_HIGH=0` with `gpio=17=op,dh` for
-   opto boards); docs/8 §6 has the pin table. Still to verify on the bench
-   with an LED in place of the siren (`deploy/pi5/README.md`).
+3. Siren relay polarity — **withdrawn by D25**. No siren (2026-11-20): the
+   owner removed the siren from the demo unit; the siren left the hardware,
+   code, console, settings, installer and docs; L5 keeps the legacy voice
+   call; GPIO17 is free.
 4. Whether owners may ever log in to the LC directly (currently: no — LC keeps
    `SENTRIX_PASSWORD` only; owners use the Portal or the LC via the tunnel).
 5. The multi-process Pi layout (review blocker) is deferred by the
