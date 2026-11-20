@@ -26,12 +26,16 @@ def _built():
 
 def test_every_app_path_serves_the_app(portal):
     from fastapi.testclient import TestClient
+    from sentrix_portal.routes.spa import INDEX
     index = _built()
+    # Compared as bytes: the file is served as stored, and a build on Windows
+    # leaves CR line endings that reading it as text would turn into LF.
+    raw = INDEX.read_bytes()
     client = TestClient(portal, follow_redirects=False)
     for path in APP_PATHS:
         response = client.get(path, headers={"accept": "text/html"})
         assert response.status_code == 200, path
-        assert response.text == index, path
+        assert response.content == raw, path
         headers = response.headers
         csp = headers["content-security-policy"]
         assert "script-src 'self'" in csp and "unsafe-inline" not in csp, path
