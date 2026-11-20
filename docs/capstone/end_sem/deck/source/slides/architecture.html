@@ -1,0 +1,36 @@
+<section id="architecture" data-n="8">
+<p class="eyebrow">05 · Architecture</p>
+<h2 style="margin-bottom:24px">One device at home, one Portal in the cloud</h2>
+<!-- host 1664x620. frame 380,0,868,620. inputs 0,38,300,140. perc 404,48,456,120. evid 404,192,456,120. tci 404,336,456,120. inc 404,480,456,120. lc 916,192,304,120. leds 916,336,304,120. contacts 1324,24,340,124. owner 1324,196,340,124. portal 1324,368,340,160. link label 916,552,304. -->
+<div style="position:relative; width:1664px; height:620px">
+<div class="frame" style="left:380px; top:0; width:868px; height:620px"><p class="framelabel">DEVICE · RASPBERRY PI 5</p></div>
+<svg aria-label="Arrows: the home inputs feed perception; perception, evidence rules, TCI and incident run in order; evidence feeds the Local Console and the TCI the status LEDs; an outbound link runs from the incident stage to the Portal, which asks the owner, who alerts the contacts and the Desk" style="position:absolute; left:0; top:0" width="1664" height="620" viewBox="0 0 1664 620">
+<defs>
+<marker id="ah" orient="auto" markerWidth="5" markerHeight="5" refX="2" refY="2" overflow="visible"><path d="M0 0 L4 2 L0 4 Z" fill="#1B2030" stroke="none"/></marker>
+<marker id="as" orient="auto" markerWidth="5" markerHeight="5" refX="2" refY="2" overflow="visible"><path d="M0 0 L4 2 L0 4 Z" fill="#2E5A66" stroke="none"/></marker>
+</defs>
+<path d="M300 108 H398" fill="none" stroke="#1B2030" stroke-width="3" marker-end="url(#ah)"/>
+<path d="M632 168 V186" fill="none" stroke="#1B2030" stroke-width="3" marker-end="url(#ah)"/>
+<path d="M632 312 V330" fill="none" stroke="#1B2030" stroke-width="3" marker-end="url(#ah)"/>
+<path d="M632 456 V474" fill="none" stroke="#1B2030" stroke-width="3" marker-end="url(#ah)"/>
+<path d="M860 252 H910" fill="none" stroke="#1B2030" stroke-width="3" marker-end="url(#ah)"/>
+<path d="M860 396 H910" fill="none" stroke="#1B2030" stroke-width="3" marker-end="url(#ah)"/>
+<path d="M860 540 H1284 V448 H1318" fill="none" stroke="#2E5A66" stroke-width="3" stroke-linejoin="round" marker-end="url(#as)"/>
+<path d="M1494 368 V326" fill="none" stroke="#2E5A66" stroke-width="3" marker-end="url(#as)"/>
+<path d="M1494 196 V154" fill="none" stroke="#2E5A66" stroke-width="3" marker-end="url(#as)"/>
+</svg>
+<div class="node" style="left:0; top:38px; width:300px; height:140px"><h3>Home inputs</h3><p class="t">Camera Module 3<br>USB microphone</p></div>
+<div class="node hot" style="left:404px; top:48px; width:456px; height:120px"><h3><span class="acc">1</span> · Perception</h3><p class="t">YOLO&#160;· DINOv2&#160;· faces&#160;· OSNet&#160;· PANNs sound</p></div>
+<div class="node hot" style="left:404px; top:192px; width:456px; height:120px"><h3><span class="acc">2</span> · Evidence rules</h3><p class="t">2-of-3 confirmation&#160;· person&#160;gate&#160;· modalities</p></div>
+<div class="node hot" style="left:404px; top:336px; width:456px; height:120px"><h3><span class="acc">3</span> · TCI → Level 1–5</h3><p class="t">Strongest confirmed class evidence</p></div>
+<div class="node hot" style="left:404px; top:480px; width:456px; height:120px"><h3><span class="acc">4</span> · Incident and SOS</h3><p class="t">Snapshot&#160;· AES-GCM&#160;evidence&#160;· request</p></div>
+<div class="node" style="left:916px; top:192px; width:304px; height:120px"><h3>Local Console</h3><p class="t">Device screen and admin pages</p></div>
+<div class="node" style="left:916px; top:336px; width:304px; height:120px"><h3>Status LEDs</h3><p class="t">Green&#160;running&#160;· amber&#160;fault&#160;· red&#160;alarm</p></div>
+<div class="node" style="left:1324px; top:24px; width:340px; height:124px"><h3>Contacts, Desk</h3><p class="t">Dispatch: address, snapshot, timeline</p></div>
+<div class="node" style="left:1324px; top:196px; width:340px; height:124px"><h3>Owner</h3><p class="t">Help, false alarm (PIN) or checking</p></div>
+<div class="node cloud" style="left:1324px; top:368px; width:340px; height:160px"><h3>Portal (Render)</h3><p class="t">Always on: accounts, contacts, Desk, tunnel to the device’s pages</p></div>
+<p class="edgelabel" style="position:absolute; left:916px; top:554px; width:320px">Outbound-only secure link</p>
+</div>
+<p class="src" style="margin-top:14px">All inference runs on the device; faces, evidence and continuous video stay at home.</p>
+<aside>Read left to right. Camera Module 3 and the USB microphone feed one Python process on the Pi, in four stages: perception produces votes, the evidence rules confirm them, the TCI and level policy commit a level, and an incident with encrypted evidence follows, with an SOS request for weapon or fire. Three LEDs show running, attention or alarm. The device opens only an outbound, encrypted link to the Portal, always on at Render, which asks the owner and then alerts the contacts and the Desk.</aside>
+</section>

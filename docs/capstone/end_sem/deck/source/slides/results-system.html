@@ -1,0 +1,14 @@
+<section id="results-system" data-n="14">
+<p class="eyebrow">09 · Results</p>
+<h2>What the product does, with its limits</h2>
+<div class="grid3" style="gap:40px 56px">
+<div class="stat rise" style="--i:0"><p class="num second">9 → 0</p><p class="txt">alarm onsets at Level 3+ when the first live session (18 minutes) is re-decided under the final rules</p></div>
+<div class="stat rise" style="--i:1"><p class="num">11/14 · 3/3</p><p class="txt">weapon and flame episodes reaching Level 3 on replay of our labelled recordings with the retrained heads</p></div>
+<div class="stat rise" style="--i:2"><p class="num">8.0 → 3.9 s</p><p class="txt">to analyse one 4&#160;s clip on the Pi 5 (640&#160;→&#160;320&#160;px, same Level 3 recall); laptop: 29.7&#160;fps video, 5.6&#160;decisions/s</p></div>
+<div class="stat rise" style="--i:3"><p class="num second">0.02%</p><p class="txt">of different people accepted by the body match at the shipped bar (body re-ID model OSNet-AIN)</p></div>
+<div class="stat rise" style="--i:4"><p class="num">0.78 / 0.75</p><p class="txt">room thresholds from the Pi’s own log; the tool agreed with the device on 8,956 of 8,956 clips</p></div>
+<div class="stat rise" style="--i:5"><p class="num second">2,279</p><p class="txt">of 2,281 automated tests pass (the 2 failures are in test code, not the product); 22 of 23 browser journeys pass</p></div>
+</div>
+<p class="src" style="margin-top:34px"><b class="acc">Limits:</b> the replay is partly in-sample, and 4.9 normal minutes (1 false Level 3) are far too little to claim a false-alarm rate; the weapon detector is not yet room-calibrated (7 false Level 3s in the demo room, 18–20 Nov), and the Pi’s fire head does not yet recognise a live flame in that room; Pi decisions are about 4&#160;s old against a 2&#160;s target, and the 1.6&#160;s compute budget per clip needs an accelerator.</p>
+<aside>Six numbers. The rules took the first live session from nine Level 3 onsets to none. With the retrained detector heads, 11 of 14 weapon episodes and every flame reach Level 3. On the Pi, a 320-pixel detector input halved the time per clip to 3.9 seconds with no Level 3 episode lost. The body match almost never accepts a stranger. A calibration tool set the demo room’s thresholds from the Pi’s own log and agreed with the device on every clip, but it does not yet cover the detectors. The test suite passes apart from two faults in test code. This is evidence of feasibility, not a validated false-alarm rate.</aside>
+</section>

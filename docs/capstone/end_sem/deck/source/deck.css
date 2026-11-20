@@ -1,0 +1,214 @@
+:root {
+  --ivory: #F7F4EE;
+  --stone: #EEE9E0;
+  --card: #FDFCF9;
+  --ink: #1B2030;
+  --body: #434A58;
+  --muted: #5F6470;
+  --rule: #D8D0C3;
+  --bar: #B9AFA0;
+  --accent: #B3412A;
+  --accent-soft: #F5E4DA;
+  --accent-ink: #8C3220;
+  --second: #2E5A66;
+  --second-soft: #DFE8E8;
+}
+
+body { font-family: 'Hanken Grotesk', Arial, sans-serif; color: var(--body); }
+
+section {
+  padding: 88px 128px 150px;
+  background: var(--ivory);
+  color: var(--body);
+  font-family: 'Hanken Grotesk', Arial, sans-serif;
+}
+section::after {
+  content: attr(data-n);
+  position: absolute;
+  right: 128px;
+  bottom: 56px;
+  font-family: 'Hanken Grotesk', Arial, sans-serif;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--muted);
+}
+section.stone { background: var(--stone); }
+section.cover { padding: 112px 128px 112px; }
+section.cover::after { content: none; }
+
+/* Type */
+h1, h2 { font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; color: var(--ink); }
+h2 { font-size: 66px; line-height: 1.04; letter-spacing: -0.5px; margin-bottom: 36px; }
+h3 {
+  font-family: 'Hanken Grotesk', Arial, sans-serif;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--ink);
+  margin-bottom: 10px;
+}
+p { font-size: 28px; line-height: 1.45; }
+.eyebrow {
+  font-family: 'Hanken Grotesk', Arial, sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--accent);
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 32px;
+}
+.small { font-size: 24px; line-height: 1.4; }
+.txt { font-size: 24px; line-height: 1.42; color: var(--body); }
+.lead { font-size: 28px; line-height: 1.45; color: var(--body); }
+.muted { color: var(--muted); }
+.ink { color: var(--ink); }
+.acc { color: var(--accent); }
+.sec { color: var(--second); }
+.src { font-size: 24px; line-height: 1.35; color: var(--muted); }
+.label {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Layout helpers */
+.row { display: flex; gap: 32px; }
+.col { display: flex; flex-direction: column; gap: 20px; }
+.grow { flex: 1; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 28px; }
+.grid4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 24px; }
+
+/* Cards */
+.card {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 26px 30px;
+  box-shadow: 0 1px 2px rgba(27, 32, 48, 0.04), 0 10px 28px rgba(27, 32, 48, 0.05);
+}
+.card.accent { background: var(--accent-soft); border-color: var(--accent-soft); box-shadow: none; }
+.card.second { background: var(--second-soft); border-color: var(--second-soft); box-shadow: none; }
+.card.ink { background: var(--ink); border-color: var(--ink); box-shadow: none; }
+
+/* Ruled stat column: a hairline on top, a large number, a line of text */
+.stat { border-top: 2px solid var(--ink); padding-top: 22px; }
+
+/* Big numbers */
+.num {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 84px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: -0.5px;
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+.num.second { color: var(--second); }
+.num.ink { color: var(--ink); }
+
+/* Ruled list rows (contents, objectives) */
+.ruled { border-top: 1px solid var(--rule); }
+.ruled.last { border-bottom: 1px solid var(--rule); }
+.idx {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 52px;
+  font-weight: 400;
+  line-height: 1;
+  color: var(--accent);
+}
+
+/* Objective labels: the sans, so O1 never reads as 01 */
+.oid {
+  font-family: 'Hanken Grotesk', Arial, sans-serif;
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 1px;
+  color: var(--accent);
+}
+
+/* Tables: hairlines only */
+table { font-size: 24px; color: var(--body); width: 100%; border: 0; border-top: 2px solid var(--ink); border-collapse: collapse; }
+th, td { border: 0; border-bottom: 1px solid var(--rule); padding: 12px 18px; text-align: left; vertical-align: top; }
+th { color: var(--ink); font-weight: 700; }
+tr.head { background: var(--stone); }
+section.stone tr.head { background: var(--card); }
+
+/* Pills */
+.pill {
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.3;
+  border-radius: 999px;
+  padding: 7px 20px;
+  background: var(--second-soft);
+  color: var(--second);
+  white-space: nowrap;
+}
+.pill.warn { background: var(--accent-soft); color: var(--accent-ink); }
+.tag {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+
+/* Diagram nodes */
+.node {
+  position: absolute;
+  box-sizing: border-box;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 14px 20px;
+  box-shadow: 0 1px 2px rgba(27, 32, 48, 0.04), 0 8px 22px rgba(27, 32, 48, 0.05);
+}
+.node h3 { font-size: 27px; margin-bottom: 4px; }
+.t { font-size: 24px; line-height: 1.3; color: var(--body); }
+.node.hot { background: var(--accent-soft); border-color: #EBCDBD; box-shadow: none; }
+.node.cloud { background: var(--second-soft); border-color: #C6D6D7; box-shadow: none; }
+.frame {
+  position: absolute;
+  box-sizing: border-box;
+  background: var(--stone);
+  border: 1px solid var(--rule);
+  border-radius: 18px;
+  padding: 12px 24px;
+}
+.framelabel {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  line-height: 1.2;
+  color: var(--muted);
+}
+.edgelabel { font-size: 24px; line-height: 1.3; color: var(--second); }
+
+/* Bars (native charts) */
+.barrow { display: flex; align-items: center; gap: 22px; }
+.barlabel { width: 300px; font-size: 26px; color: var(--ink); }
+.bar { height: 48px; border-radius: 3px; background: var(--bar); }
+.bar.accent { background: var(--accent); }
+.bar.second { background: var(--second); }
+.barval { font-size: 28px; font-weight: 700; color: var(--ink); }
+
+/* Screenshot mats */
+.mat {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  padding: 14px;
+  box-shadow: 0 1px 2px rgba(27, 32, 48, 0.05), 0 14px 34px rgba(27, 32, 48, 0.08);
+}
+
+/* Arrival motion */
+.rise { animation: rise 600ms ease-out both; animation-delay: calc(var(--i, 0) * 110ms); }
+@keyframes rise { from { opacity: 0; transform: translateY(24px); } }

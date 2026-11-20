@@ -108,7 +108,7 @@ Device web & FastAPI + Uvicorn, WebSockets, SQLite (WAL) & Flask lacks native as
 Portal & FastAPI, SQLAlchemy, SQLite on a 1\,GB disk (Postgres-ready) & Same language and guard code as the device; Postgres DDL checked for deployment at scale.\\ \hline
 Frontend & React 19, TypeScript, Vite, Tailwind CSS 4, TanStack Query & Server-rendered Jinja pages (the earlier version) could not deliver the alert takeover and live updates cleanly.\\ \hline
 Hosting & Render Starter, Singapore, Docker & Oracle Always Free (planned long-term), Railway (closed sign-ups); Render keeps the tested SQLite path and never sleeps.\\ \hline
-Phone alerts & Telegram Bot API (demo); e-mail API; 4G modem SMS & WhatsApp Cloud API built but Meta's business set-up was out of reach; Twilio kept as a guarded legacy path.\\ \hline
+Phone alerts & Telegram Bot API (demo); e-mail API; SMS through an optional 4G modem (not on the demo unit) & WhatsApp Cloud API built but Meta's business set-up was out of reach; Twilio kept as a guarded legacy path.\\ \hline
 Edge hardware & Raspberry~Pi~5 8\,GB + Camera Module 3 & ESP32-S3 (weak camera and audio path), Jetson Orin Nano (about four times the price), Coral and NCS2 (discontinued); the AI HAT+ (26 TOPS, 2024) and AI HAT+ 2 (40 TOPS, 2026) are reserved as upgrades \cite{rpi2024aihat, rpi2026aihat2}.\\ \hline
 \end{longtable}
 \endgroup
@@ -202,20 +202,20 @@ Device: Raspberry~Pi~OS (Debian Trixie) on a Raspberry~Pi~5 8\,GB, Python 3.13 w
 \begin{tabularx}{\textwidth}{|L{3.0cm}|L{2.4cm}|Y|}
 \hline\rowhead
 \thead{Device} & \thead{Interface} & \thead{Requirement}\\ \hline
-Camera Module 3 & CSI (22-pin) & Picamera2: 1280$\times$720 main stream for preview and evidence, 640-wide frames for analysis, 15 fps in clip mode.\\ \hline
+Camera Module 3 & CSI ribbon (22-pin), CAM port & Picamera2: 1280$\times$720 main stream for preview and evidence, 640-wide frames for analysis, 15 fps in clip mode.\\ \hline
 USB microphone & USB audio & Any USB port, plugged before or after start; opened at its native rate and resampled to 16\,kHz mono.\\ \hline
-Status LEDs & GPIO5/12/13 & Green, amber, red, 330\,$\Omega$ each; patterns for link, faults and level.\\ \hline
-PIR / door / mains & GPIO23/24/16 & Debounced inputs with pull-ups; mains sensed through a PC817 optocoupler.\\ \hline
-4G modem & USB & AT commands over serial (PDU SMS); NetworkManager failover for data.\\ \hline
+Status LEDs & GPIO 5/12/13 (pins 29/32/33) & Green, amber, red, 330\,$\Omega$ each; patterns for link, faults and level.\\ \hline
+Power & USB-C & Official Raspberry~Pi 27\,W supply (5.1\,V, 5\,A).\\ \hline
 \end{tabularx}
 \end{table}
+The software also supports optional GPIO inputs (a PIR motion sensor, a door contact and mains sensing) and a USB 4G modem for SMS; none of them is fitted on the demonstration unit.
 
 \subsubsection{Software Interfaces}
 \begin{itemize}
 \item \textbf{Device JSON API} (\code{/api/...}): session, state, incidents, verdicts, SOS, faces, recordings, node, health; live state over the \code{/ws/threat} WebSocket and video as MJPEG on \code{/video}.
 \item \textbf{Portal JSON API v2} (\code{/api/v2/...}): session, auth, onboarding, home, devices, activity, household, members, contacts, audit, settings, privacy, SOS, Desk, admin; JSON errors with a stable code; CSRF header on every state change.
 \item \textbf{Link protocol v1}: the device's outbound WebSocket to \code{/device/v1/link} with a bearer identity, heartbeats, an outbox with acknowledgements, the tunnel and the binary video relay.
-\item \textbf{Third-party services:} Telegram Bot API \cite{telegrambotapi} (polling mode), an e-mail HTTP API, and the modem's AT command set; all behind the send guard.
+\item \textbf{Third-party services:} Telegram Bot API \cite{telegrambotapi} (polling mode), an e-mail HTTP API, and, for an optional 4G modem, its AT command set; all behind the send guard.
 \item \textbf{Model runtimes:} PyTorch \cite{paszke2019pytorch}, ONNX Runtime \cite{onnxruntime}; storage in SQLite (WAL) on both sides.
 \end{itemize}
 
@@ -249,48 +249,45 @@ PIR / door / mains & GPIO23/24/16 & Debounced inputs with pull-ups; mains sensed
 %--------------------------------------------------------------
 \section{Cost Analysis}
 \label{sec:cost}
-Prices were checked at Indian retailers on 14 October 2026; ``$\approx$'' marks a price that could not be confirmed. \tabref{tab:bom} lists the bench kit, the parts needed to run SENTRIX on a desk (about \rupee31,100). \tabref{tab:cost2} adds the integration kit that makes it a wall-mounted unit---a 12\,V supply with a UPS, a 4G modem for SMS, and a sealed box---the tools, the one-time total of about \rupee40,100, and the running costs: about \rupee600 a month for the Portal and \rupee200 for the SIM. The software has no licence cost: every library and model used is open source (licences in \code{THIRD\_PARTY.md}).
+Prices were checked at Indian retailers on 14 October 2026 (\code{docs/8\_RASPBERRY\_PI5\_INTEGRATION.md}, Section~8); ``$\approx$'' marks a price that could not be confirmed. \tabref{tab:bom} lists the bought electronic parts of the demonstration unit as it is built and running: about \rupee29,340 in all. \tabref{tab:cost2} lists the other costs: the printed case with its screws and camera pivot bolt, tools, and about \rupee600 a month for the Portal. The software has no licence cost: every library and model used is open source (licences in \code{THIRD\_PARTY.md}).
 
-\begin{table}[htbp]
-\caption{Bill of materials of the Raspberry~Pi~5 unit (Order 1: bench kit)}
+\begin{table}[htb]
+\caption{Bill of materials of the Raspberry~Pi~5 demonstration unit (as built)}
 \label{tab:bom}
 \centering\tablefont
 \begin{tabularx}{\textwidth}{|Y|L{2.8cm}|R{2.0cm}|}
 \hline\rowhead
 \thead{Item} & \thead{Source} & \multicolumn{1}{c|}{\thead{Price (Rs.)}}\\ \hline
 Raspberry~Pi~5, 8\,GB & thingbits & 19,852\\ \hline
-Official 27\,W USB-C power supply & Robocraze & 1,255\\ \hline
-Official Active Cooler (mandatory) & thingbits & 531\\ \hline
+Official Raspberry~Pi 27\,W USB-C power supply (5.1\,V, 5\,A) & Robocraze & 1,255\\ \hline
+Official Active Cooler & thingbits & 531\\ \hline
 microSD SanDisk High Endurance 128\,GB & Flipkart & 3,699\\ \hline
-Camera Module 3 (Wide, 102$^\circ$; Standard Rs.\,3,245) & Robocraze & 4,379\\ \hline
-Pi~5 camera cable, 22-pin Standard--Mini & thingbits & 117\\ \hline
-RTC cell ML-2020 (rechargeable) & -- & $\approx$ 500\\ \hline
+Camera Module 3, standard lens (the case's window fits it) & Robu & 3,245\\ \hline
+Pi~5 camera ribbon cable, 22-pin Standard--Mini (CSI) & thingbits & 117\\ \hline
 USB microphone (Scalebee) & Robocraze & 289\\ \hline
-PIR HC-SR505 & Robocraze / thingbits & 73\\ \hline
-MC-38 door reed switch & Robocraze & 52\\ \hline
-Breadboard, jumpers, LEDs, resistors & -- & $\approx$ 350\\ \hline
-\multicolumn{2}{|r|}{\textbf{Subtotal, bench kit}} & \textbf{$\approx$ 31,100}\\ \hline
+Three 5\,mm LEDs (green, amber, red), 330\,$\Omega$ resistors, jumper wires & -- & $\approx$ 350\\ \hline
+\multicolumn{2}{|r|}{\textbf{Total, demonstration unit}} & \textbf{$\approx$ 29,340}\\ \hline
 \end{tabularx}
+
+\vspace{2pt}
+{\footnotesize\raggedright Prices from \code{docs/8}, Section~8. The standard-lens camera is the one fitted (\code{docs/8} prices it at Rs.\,3,245, against Rs.\,4,379 for the Wide); the LEDs, resistors and wires are priced as \code{docs/8}'s line ``breadboard, jumpers, LEDs, resistors''. The 3D-printed case has no \code{docs/8} price and is listed without one in \tabref{tab:cost2}.\par}
 \end{table}
 
-\begin{table}[htbp]
-\caption{Integration kit, running costs and total}
+\begin{table}[htb]
+\caption{Other costs: case, tools and running costs}
 \label{tab:cost2}
 \centering\tablefont
 \begin{tabularx}{\textwidth}{|Y|R{3.2cm}|}
 \hline\rowhead
 \thead{Item} & \multicolumn{1}{c|}{\thead{Cost (Rs.)}}\\ \hline
-Integration kit (Order 2): BIS-marked 12\,V adapter (566), router mini UPS 12\,V 3\,A (2,399), 12\,V$\to$5.2\,V 6\,A converter (119), fuses and PC817 ($\approx$80), 4G modem Quectel EC200U-CN (2,236), SIM ($\approx$300), IP65 box, fan, glands and mount ($\approx$900--1,500) & $\approx$ 7,050\\ \hline
-Tools (multimeter, soldering kit, micro-HDMI cable, panel meter, etc.) & $\approx$ 2,000\\ \hline
-\textbf{Device total (one time)} & \textbf{$\approx$ 40,100}\\ \hline
-3D-printed enclosure (PLA, own printer or campus lab) & material only\\ \hline
-Portal hosting on Render: Starter instance + 1\,GB disk & \$7.25 per month ($\approx$ Rs.\,600)\\ \hline
-SIM for the modem & $\approx$ 200 per month\\ \hline
+3D-printed case, revision F (PLA, own printer or campus lab), with its screws and the camera's M3 pivot bolt and nut & material only\\ \hline
+Tools, if not already owned (multimeter, soldering kit, micro-HDMI cable); not part of the unit & $\approx$ 2,000\\ \hline
+Portal hosting on Render: Starter instance + 1\,GB disk & \$7.25/month ($\approx$\,600)\\ \hline
 Telegram bot, e-mail API, open-source software & 0\\ \hline
 \end{tabularx}
 \end{table}
 
-\paragraph{Cost comparison.} The cheapest configuration (Camera Module 3 Standard, 64\,GB card) costs about Rs.\,35,600, and a confirmed 4\,GB Pi~5 would bring it to about Rs.\,27,950. Running the same models in the cloud instead---streaming the camera to a GPU instance---was estimated at Rs.\,11,200--40,600 per month for GPU time plus about Rs.\,1,500 of mobile data, i.e.\ the device pays for itself within one to four months, works when the Internet is down and keeps everyone's video at home. A production version would also drop the bench-only items (breadboard, tools) and buy in volume. To keep the Portal bill near zero, the Render service is suspended between evaluation sessions (about \$3--4 in total instead of about \$10) and the long-term plan is an Oracle Always Free virtual machine in India.
+\paragraph{Cost comparison.} With a 64\,GB card instead of the 128\,GB one (Rs.\,1,250 less) the unit costs about Rs.\,28,090, and a 4\,GB Pi~5, at a price not yet confirmed, would save about Rs.\,7,500 more. Running the same models in the cloud instead---streaming the camera to a GPU instance---was estimated at Rs.\,11,200--40,600 per month for GPU time plus about Rs.\,1,500 of mobile data, so the unit pays for itself in under three months, works when the Internet is down and keeps everyone's video at home, and a production version would buy in volume. The Portal stays on Render, always on, for the evaluations; the long-term plan is an Oracle Always Free virtual machine in India, which would bring the hosting bill to zero.
 
 %--------------------------------------------------------------
 \section{Risk Analysis}
@@ -312,11 +309,11 @@ R-1 & False alarms in a room the models have never seen & 4 & 4 & 16 & $k$-of-$n
 R-2 & A test or demo sends a real alert & 5 & 2 & 10 & Test mode by default, send guard re-reading switches on every message, allowlist, test banner, test harness forcing all switches off and blocking non-loopback sockets.\\ \hline
 R-3 & A real threat missed (low recall) & 5 & 3 & 15 & Two visual sources (detector and scene model), fast lane, evidence logged for review; limits stated honestly; more data planned.\\ \hline
 R-4 & Pi too slow for the models & 3 & 4 & 12 & Clip engine, ONNX, 320\,px object stage, fast lane; Hailo AI HAT+ or the laptop as hub as fallbacks (planned).\\ \hline
-R-5 & Internet or Wi-Fi outage during an alarm & 4 & 3 & 12 & Detection, evidence and the request work offline; outbox replays on reconnect; modem SMS; the Portal alerts contacts if the device goes offline during an alarm.\\ \hline
-R-6 & Owner cannot answer (asleep, coerced) & 5 & 2 & 10 & Safety defaults, duress PIN, ``unanswered is never safe'', reminders and SMS after 10 minutes unseen.\\ \hline
+R-5 & Internet or Wi-Fi outage during an alarm & 4 & 3 & 12 & Detection, evidence and the request work offline; outbox replays on reconnect; a phone hotspot as fallback network; the Portal alerts contacts if the device goes offline during an alarm.\\ \hline
+R-6 & Owner cannot answer (asleep, coerced) & 5 & 2 & 10 & Safety defaults, duress PIN, ``unanswered is never safe'', reminders at 2, 5, 10 and 20 minutes.\\ \hline
 R-7 & Leak of faces or video & 5 & 1 & 5 & Data stay on the device; tunnel views follow consents; encrypted evidence; outbound-only link; erasure and retention.\\ \hline
 R-8 & Account takeover on the Portal & 4 & 2 & 8 & Argon2id, step-up for sensitive actions, TOTP for staff, activation back-off, CSRF and CSP, audit chain.\\ \hline
-R-9 & Power cut or SD card full & 3 & 2 & 6 & UPS-backed 12\,V bus, mains-loss alert, systemd watchdog, recording caps that keep 2\,GB free for evidence, log rotation and retention.\\ \hline
-R-10 & A resident shown as a stranger (or the reverse) & 2 & 3 & 6 & Per-track identity, body re-identification at a bar that accepted 0.04\,\% of different people; identity never lowers threat evidence.\\ \hline
+R-9 & Power cut or SD card full & 3 & 3 & 9 & Official 27\,W supply; the service restarts at boot under a systemd watchdog; the Portal alerts contacts if the device goes offline during an alarm; recording caps that keep 2\,GB free for evidence, log rotation and retention.\\ \hline
+R-10 & A resident shown as a stranger (or the reverse) & 2 & 3 & 6 & Per-track identity, body re-identification at a bar that accepted 0.020\,\% of different people; identity never lowers threat evidence.\\ \hline
 \end{longtable}
 \endgroup

@@ -1,0 +1,24 @@
+<section id="detection" data-n="11" class="stone">
+<p class="eyebrow">08 · How it works</p>
+<h2>A model score is never an alarm on its own</h2>
+<div class="row" style="gap:44px; align-items:flex-start">
+<div class="col" style="width:700px; gap:14px">
+<div class="card rise" style="--i:0; padding:16px 26px"><h3><span class="acc">1</span> · Confirm</h3><p class="txt">A source counts only after crossing its threshold on 2 of its last 3 fresh evaluations</p></div>
+<div class="card rise" style="--i:1; padding:16px 26px"><h3><span class="acc">2</span> · Gate</h3><p class="txt">Weapon votes count only with a person seen in the last 2 seconds</p></div>
+<div class="card rise" style="--i:2; padding:16px 26px"><h3><span class="acc">3</span> · Corroborate</h3><p class="txt">Level 4 and above need two independent modalities: detector box, scene model, aligned sound</p></div>
+<div class="card rise" style="--i:3; padding:16px 26px"><h3><span class="acc">4</span> · Calibrate</h3><p class="txt">A tool sets each room’s scene thresholds from the device’s own log (demo room: weapon 0.78, fire 0.75)</p></div>
+</div>
+<div class="col grow" style="gap:18px">
+<table>
+<tr class="head"><th style="width:22%">Level</th><th style="width:22%">TCI</th><th style="width:56%">What happens</th></tr>
+<tr><td style="color:#1B2030">1 Secure</td><td>&lt; 0.20</td><td>Logged</td></tr>
+<tr><td style="color:#1B2030">2 Suspicious</td><td>0.20–0.40</td><td>Incident on the dashboard; the most an unknown person reaches</td></tr>
+<tr><td style="color:#1B2030">3 Elevated</td><td>0.40–0.65</td><td>Snapshot, encrypted evidence, SOS request to the owner</td></tr>
+<tr><td style="color:#1B2030">4 High</td><td>0.65–0.85</td><td>Two modalities agree: dispatch package prepared</td></tr>
+<tr><td style="color:#1B2030">5 Critical</td><td>≥ 0.85</td><td>Strongly corroborated: the most urgent level</td></tr>
+</table>
+<p class="src">TCI = the strongest confirmed class evidence. Published rules, so every level can be re-derived from the votes in the log.</p>
+</div>
+</div>
+<aside>Our first live run raised about 171 false weapon alarms an hour, every one from a single frame of the scene model just over its threshold. So four rules now stand between a score and an alarm. The TCI is the strongest confirmed evidence, and it maps to five levels with fixed side effects. An unrecognised person is presence, not threat: it stops at Level 2.</aside>
+</section>

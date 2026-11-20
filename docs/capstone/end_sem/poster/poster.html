@@ -4,122 +4,252 @@
 <meta charset="utf-8">
 <title>SENTRIX poster (CPG-299, A3 landscape)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=Space+Grotesk:wght@600;700&amp;display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wdth,wght@0,75..100,400..700;1,75..100,400..700&amp;family=Instrument+Serif:ital@0;1&amp;display=swap" rel="stylesheet">
 <style>
-@page { size: 1587px 1123px; margin: 0 }
-html, body { margin: 0; background: #F6F5F1 }
+/* SENTRIX poster, CPG-299. One A3 landscape page (420 x 297 mm).
+   Nothing on the page is smaller than 24 px (18 pt). To print: Chrome, A3 landscape, no margins. */
+:root {
+  /* One palette with the deck (deck.css): ivory, ink, terracotta, deep teal */
+  --ground: #F7F4EE;
+  --ink: #1B2030;
+  --body: #434A58;
+  --muted: #5F6470;
+  --rule: #D8D0C3;
+  --accent: #B3412A;
+  --accent-ink: #8C3220;
+  --slate: #2E5A66;
+  --bar: #B9AFA0;
+  --l1: #EEE9E0; --l2: #F5E4DA; --l3: #E3A58F; --l4: #B3412A; --l5: #8C3220;
+  --serif: 'Instrument Serif', 'Times New Roman', serif;
+  --sans: 'Instrument Sans', Arial, sans-serif;
+}
+@page { size: 420mm 297mm; margin: 0 }
+html, body { margin: 0; width: 420mm; height: 297mm; overflow: hidden; background: var(--ground) }
+body { -webkit-print-color-adjust: exact; print-color-adjust: exact }
+p, h1, h2, ul, ol { margin: 0; padding: 0 }
+p, li { text-wrap: pretty }
+.cap, .stats li, .reading { text-wrap: balance }
+
+.poster { width: 420mm; height: 297mm; box-sizing: border-box; padding: 22px 40px 18px; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--ground); color: var(--body); font-family: var(--sans); font-stretch: 90%; font-size: 24px; line-height: 1.22; font-kerning: normal }
+
+/* Banner: logo, title block and CPG number, closed by a double rule */
+.banner { flex: none; display: grid; grid-template-columns: 150px minmax(0, 1fr) 150px; align-items: center; padding-bottom: 12px; border-bottom: 2px solid var(--ink); position: relative }
+.banner::after { content: ""; position: absolute; left: 0; right: 0; bottom: -7px; height: 1px; background: var(--ink) }
+.banner .logo { width: 112px; height: 102px; object-fit: contain; justify-self: start }
+.titles { text-align: center }
+h1 { font-weight: 400; color: var(--ink) }
+h1 .wm { display: block; font-family: var(--serif); font-size: 58px; line-height: 1; letter-spacing: .1em; margin-right: -.1em }
+h1 .wm i { font-style: normal; color: var(--accent) }
+h1 .sub { display: block; font-family: var(--serif); font-style: italic; font-size: 35px; line-height: 1.1; margin-top: 1px }
+.names { margin-top: 8px; color: var(--ink); font-weight: 600 }
+.names .mentor { font-weight: 400 }
+.affil { color: var(--muted) }
+.cpg { justify-self: end; text-align: right; line-height: 1 }
+.cpg .k { display: block; letter-spacing: .08em; color: var(--muted) }
+.cpg .v { display: block; font-family: var(--serif); font-size: 84px; line-height: .86; color: var(--accent); margin-top: 6px }
+
+/* Three columns, hairline gutters */
+.main { flex: 1; min-height: 0; display: grid; grid-template-columns: 364px 402px minmax(0, 1fr); margin-top: 24px }
+.col { min-height: 0; display: flex; flex-direction: column; padding: 0 22px }
+.col:first-child { padding-left: 0 }
+.col:last-child { padding-right: 0 }
+.col + .col { border-left: 1px solid var(--rule) }
+.panel { display: flex; flex-direction: column; min-height: 0 }
+.panel + .panel { margin-top: 20px }
+
+.ph { display: flex; align-items: baseline; gap: 12px; padding-top: 10px; margin-bottom: 12px; border-top: 1px solid var(--rule); position: relative }
+.ph::before { content: ""; position: absolute; left: 0; top: -2px; width: 52px; height: 3px; background: var(--accent) }
+.ph .n { font-family: var(--serif); font-size: 38px; line-height: 1; color: var(--accent) }
+.ph h2 { font-family: var(--serif); font-weight: 400; font-size: 38px; line-height: 1; color: var(--ink) }
+
+.kicker { font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); line-height: 1.1 }
+.strong { color: var(--ink); font-weight: 600 }
+.cap { color: var(--muted) }
+.cap b { color: var(--ink); font-weight: 600 }
+
+/* 01 */
+.big { font-family: var(--serif); font-size: 104px; line-height: .84; color: var(--accent); margin: 4px 0 12px }
+
+/* 02 */
+.checks { list-style: none; display: grid; row-gap: 3px }
+.checks li { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: baseline }
+.checks svg { width: 21px; height: 21px; transform: translateY(3px) }
+.checks .next { color: var(--accent) }
+.learned { margin-top: 16px }
+.learned ul { list-style: none; margin-top: 6px; display: grid; row-gap: 3px }
+.learned li { display: grid; grid-template-columns: 30px minmax(0, 1fr) }
+.learned li::before { content: "—"; color: var(--accent) }
+
+/* 03 */
+.flow { list-style: none; position: relative; padding-left: 38px }
+.flow::before { content: ""; position: absolute; left: 10px; top: 10px; bottom: 24px; width: 2px; background: var(--rule) }
+.flow li { position: relative }
+.flow li + li { margin-top: 15px }
+.flow li::before { content: ""; position: absolute; left: -38px; top: 1px; width: 22px; height: 22px; box-sizing: border-box; border-radius: 50%; background: var(--ground); border: 2px solid var(--accent) }
+.flow li.end::before { background: var(--accent) }
+.flow .kicker { display: block; margin-bottom: 2px }
+.levels { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px }
+.levels span { padding: 1px 8px 2px; border-radius: 5px; color: var(--ink); white-space: nowrap }
+.levels .l1 { background: var(--l1) } .levels .l2 { background: var(--l2) } .levels .l3 { background: var(--l3) }
+.levels .l4 { background: var(--l4); color: #FFFFFF } .levels .l5 { background: var(--l5); color: #FFFFFF }
+.flowcap { margin-top: 14px }
+
+/* 04 */
+.unit { display: grid; grid-template-columns: 310px minmax(0, 1fr); column-gap: 30px; align-items: center }
+.hero { position: relative; width: 310px; height: 230px }
+.render { position: absolute; left: 0; top: 0; width: 218px; height: 196px; overflow: hidden }
+.render img { position: absolute; width: 309.8px; left: -45.3px; top: -26.9px; filter: brightness(1.032); mix-blend-mode: multiply }
+.mk { position: absolute; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%; background: var(--ink); color: #FFFFFF; font-weight: 600; font-stretch: 100%; line-height: 30px; text-align: center; box-shadow: 0 0 0 2px var(--ground) }
+.phone { position: absolute; left: 206px; top: 20px; width: 104px; height: 210px; box-sizing: border-box; border: 5px solid var(--ink); border-radius: 19px; overflow: hidden; background: #FFFFFF; box-shadow: 0 12px 24px -12px rgba(27, 32, 48, .5) }
+.phone img { display: block; width: 94px; margin-top: -10px }
+.unitcap { grid-column: 1 / -1; margin-top: 10px }
+.parts { list-style: none; display: grid; row-gap: 4px; margin-top: 2px }
+.parts li { display: grid; grid-template-columns: 38px minmax(0, 1fr); align-items: baseline }
+.parts .d { display: inline-block; width: 28px; height: 28px; border-radius: 50%; background: var(--ink); color: #FFFFFF; font-weight: 600; font-stretch: 100%; line-height: 28px; text-align: center }
+.parts .p { display: inline-block; width: 28px; text-align: center; color: var(--accent); font-weight: 600 }
+
+/* 05 */
+.results { display: grid; grid-template-columns: minmax(0, 1fr) 306px; column-gap: 26px }
+.chart { position: relative; display: grid; grid-template-columns: 188px minmax(0, 1fr); row-gap: 7px; align-items: center; line-height: 1.1 }
+.chart::before { content: ""; position: absolute; left: 188px; top: -5px; bottom: -5px; width: 1.5px; background: var(--ink) }
+.chart .lab { white-space: nowrap }
+.chart .row { display: flex; align-items: center; gap: 10px; white-space: nowrap; font-variant-numeric: tabular-nums }
+.chart .bar { height: 22px; border-radius: 2px; background: var(--bar) }
+.chart .bar.own { background: var(--slate) }
+.chart .zero { width: 4px; height: 22px; background: var(--accent) }
+.chart .best { color: var(--accent); font-weight: 600 }
+.chartcap { margin-top: 10px }
+.reading { margin-top: 8px; color: var(--ink); font-weight: 600 }
+.stats { list-style: none; border-left: 1px solid var(--rule); padding-left: 24px; display: grid; row-gap: 9px; align-content: start }
+.stats .num { display: block; font-family: var(--serif); font-size: 46px; line-height: .92; color: var(--accent); white-space: nowrap }
+
+/* Footer */
+.foot { flex: none; margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--rule); color: var(--muted); display: grid; grid-template-columns: minmax(0, 1fr) 340px; column-gap: 28px }
+.foot b { color: var(--ink); font-weight: 600 }
+.foot .tools { border-left: 1px solid var(--rule); padding-left: 24px }
 </style>
 </head>
 <body>
-<div style="width: 1587px; height: 1123px; box-sizing: border-box; padding: 18px 20px; background: #F6F5F1; color: #2E3847; font-family: 'Inter', Arial, sans-serif; font-size: 24px; line-height: 1.28; display: flex; flex-direction: column; gap: 14px; overflow: hidden">
+<div class="poster">
 
-<header style="flex: none; display: grid; grid-template-columns: 96px minmax(0, 1fr) 96px; column-gap: 16px; align-items: center; background: #FFFFFF; border: 2px solid #CBD3DC; border-top: 8px solid #C2410C; border-radius: 14px; padding: 6px 18px 8px; line-height: 1.2">
-<img src="../report/figures/tiet_logo.png" alt="Thapar Institute of Engineering and Technology logo" style="grid-column: 1; grid-row: 1; width: 96px; height: 88px; object-fit: contain">
-<h1 style="grid-column: 2; grid-row: 1; margin: 0; text-align: center; text-wrap: balance; font-family: 'Space Grotesk', Arial, sans-serif; font-size: 42px; line-height: 1.03; font-weight: 700; color: #0F1B2D"><span style="color: #C2410C">SENTRIX:</span> Intelligent Multimodal Edge Threat Intelligence and Physical Security System</h1>
-<span aria-hidden="true" style="grid-column: 3; grid-row: 1"></span>
-<p style="grid-column: 1 / -1; margin: 4px 0 0; text-align: center; color: #0F1B2D"><span style="font-weight: 600">Kartik Garg · Akshay Ranveer · Prashant Gagneja · Harshit Mishra · Mehul Perimal</span> · Mentor: Dr. Ashutosh Mishra</p>
-<p style="grid-column: 1 / -1; margin: 0; text-align: center; color: #4A5565">Computer Science and Engineering Department, Thapar Institute of Engineering and Technology · CPG No. 299</p>
+<header class="banner">
+  <img class="logo" src="../report/figures/tiet_logo.png" alt="Thapar Institute of Engineering and Technology logo">
+  <div class="titles">
+    <h1><span class="wm">SENTRIX<i>:</i></span><span class="sub">Intelligent Multimodal Edge Threat Intelligence and Physical Security System</span></h1>
+    <p class="names">Kartik Garg · Akshay Ranveer · Prashant Gagneja · Harshit Mishra · Mehul Perimal<span class="mentor"> · Mentor: Dr. Ashutosh Mishra</span></p>
+    <p class="affil">Computer Science and Engineering Department, Thapar Institute of Engineering and Technology</p>
+  </div>
+  <p class="cpg"><span class="k">CPG No.</span><span class="v">299</span></p>
 </header>
 
-<main style="flex: 1; min-height: 0; display: grid; grid-template-columns: 457px 470px minmax(0, 1fr); gap: 12px">
+<main class="main">
 
-<div style="display: flex; flex-direction: column; gap: 12px; min-height: 0">
-<section style="flex: none; background: #FDFCF9; border: 2px solid #CBD3DC; border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px">
-<div style="display: flex; align-items: center; gap: 12px"><span style="flex: none; width: 40px; height: 40px; border-radius: 20px; background: #C2410C; color: #FFFFFF; font-family: 'Space Grotesk', Arial, sans-serif; font-weight: 700; display: flex; align-items: center; justify-content: center">1</span><h2 style="margin: 0; font-family: 'Space Grotesk', Arial, sans-serif; font-size: 30px; color: #0F1B2D">The problem</h2></div>
-<p style="margin: 0; font-family: 'Space Grotesk', Arial, sans-serif; font-size: 64px; line-height: 1; font-weight: 700; color: #C2410C">94–98%</p>
-<p style="margin: 0">of burglar-alarm activations are false alarms [1].</p>
-<p style="margin: 0; font-weight: 600; color: #0F1B2D">SENTRIX decides at home and asks the owner first.</p>
-</section>
+<div class="col">
+  <section class="panel">
+    <div class="ph"><span class="n">01</span><h2>The problem</h2></div>
+    <p class="big">94–98%</p>
+    <p>of burglar-alarm activations are false alarms [1].</p>
+    <p class="strong" style="margin-top: 10px">SENTRIX confirms on the device (Fig. 1), then asks the owner.</p>
+  </section>
 
-<section style="flex: 1; min-height: 0; background: #FDFCF9; border: 2px solid #CBD3DC; border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px">
-<div style="display: flex; align-items: center; gap: 12px; margin-bottom: 6px"><span style="flex: none; width: 40px; height: 40px; border-radius: 20px; background: #C2410C; color: #FFFFFF; font-family: 'Space Grotesk', Arial, sans-serif; font-weight: 700; display: flex; align-items: center; justify-content: center">2</span><h2 style="margin: 0; font-family: 'Space Grotesk', Arial, sans-serif; font-size: 30px; color: #0F1B2D">Objectives → outcomes</h2></div>
-<p style="margin: 0; display: flex; gap: 8px; align-items: center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M4 12.5l5 5L20 6.5"></path></svg>Multimodal AI on the device</p>
-<p style="margin: 0; display: flex; gap: 8px; align-items: center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M4 12.5l5 5L20 6.5"></path></svg>One threat index, five levels</p>
-<p style="margin: 0; display: flex; gap: 8px; align-items: center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M4 12.5l5 5L20 6.5"></path></svg>Encrypted, signed evidence</p>
-<p style="margin: 0; display: flex; gap: 8px; align-items: center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M4 12.5l5 5L20 6.5"></path></svg>Pi 5 unit; case designed</p>
-<p style="margin: 0; display: flex; gap: 8px; align-items: center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M4 12.5l5 5L20 6.5"></path></svg>Portal, Desk and owner SOS</p>
-<p style="margin: 0; display: flex; gap: 8px; align-items: center; color: #9A3412"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#C2410C" stroke-width="3" stroke-linecap="round" aria-hidden="true" style="flex: none"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v4.5"></path><path d="M12 16h.01"></path></svg>Open: Pi decides in ~4 s (aim: 2 s)</p>
-<p style="margin: 0; display: flex; gap: 8px; align-items: center; color: #9A3412"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#C2410C" stroke-width="3" stroke-linecap="round" aria-hidden="true" style="flex: none"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v4.5"></path><path d="M12 16h.01"></path></svg>Open: detector false alarms</p>
-<h3 style="margin: 14px 0 2px; font-family: 'Space Grotesk', Arial, sans-serif; font-size: 26px; color: #0F1B2D">What we learned</h3>
-<p style="margin: 0">• Rules beat any single model.</p>
-<p style="margin: 0">• Each room needs calibrating.</p>
-<p style="margin: 0">• Measure alarms, not frames.</p>
-</section>
+  <section class="panel">
+    <div class="ph"><span class="n">02</span><h2>Goals → outcomes</h2></div>
+    <ul class="checks">
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="#2E5A66" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg><span>Multimodal AI on the device</span></li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="#2E5A66" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg><span>One threat index, five levels</span></li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="#2E5A66" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg><span>Encrypted, signed evidence</span></li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="#2E5A66" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg><span>Pi 5 unit in a printed case</span></li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="#2E5A66" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg><span>Portal and Desk live on Render</span></li>
+      <li class="next"><svg viewBox="0 0 24 24" fill="none" stroke="#B3412A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M10.5 8.5l3.5 3.5-3.5 3.5"/></svg><span>Next: Pi decisions, ~4&nbsp;s&nbsp;→ 2&nbsp;s</span></li>
+      <li class="next"><svg viewBox="0 0 24 24" fill="none" stroke="#B3412A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M10.5 8.5l3.5 3.5-3.5 3.5"/></svg><span>Next: train on room footage</span></li>
+    </ul>
+    <div class="learned">
+      <p class="kicker">What we learned</p>
+      <ul>
+        <li>Rules beat any single model.</li>
+        <li>Every room needs calibrating.</li>
+        <li>Measure alarms, not frames.</li>
+      </ul>
+    </div>
+  </section>
 </div>
 
-<section style="min-height: 0; background: #FDFCF9; border: 2px solid #CBD3DC; border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px">
-<div style="display: flex; align-items: center; gap: 12px; margin-bottom: 4px"><span style="flex: none; width: 40px; height: 40px; border-radius: 20px; background: #C2410C; color: #FFFFFF; font-family: 'Space Grotesk', Arial, sans-serif; font-weight: 700; display: flex; align-items: center; justify-content: center">3</span><h2 style="margin: 0; font-family: 'Space Grotesk', Arial, sans-serif; font-size: 30px; color: #0F1B2D">How it works (Fig. 1)</h2></div>
+<div class="col">
+  <section class="panel" style="flex: 1">
+    <div class="ph"><span class="n">03</span><h2>How it works</h2></div>
+    <ol class="flow">
+      <li><span class="kicker">Sense</span>Camera Module 3 and USB microphone on a Pi 5 (Fig. 2)</li>
+      <li><span class="kicker">Recognise</span>YOLO11n&nbsp;[2]&nbsp;· DINOv2&nbsp;[3]&nbsp;· faces&nbsp;[4]&nbsp;· OSNet&nbsp;[5]&nbsp;· PANNs&nbsp;[6]</li>
+      <li><span class="kicker">Confirm</span>2 of 3 checks agree with a person in view; Level 4+ needs two kinds of evidence</li>
+      <li><span class="kicker">Score</span>Threat index 0–1 → five levels
+        <div class="levels"><span class="l1">1 Log</span><span class="l2">2 Notice</span><span class="l3">3 Ask owner</span><span class="l4">4 Dispatch pack</span><span class="l5">5 Critical</span></div></li>
+      <li class="end"><span class="kicker">Ask</span>The owner decides first (Fig. 3); contacts and the SENTRIX Desk only if needed</li>
+    </ol>
+    <p class="cap flowcap"><b>Fig. 1</b> From camera to SOS</p>
+  </section>
+</div>
 
-<div style="border: 2px solid #1D5FD1; background: #F5F8FE; border-radius: 12px; padding: 8px 12px">
-<p style="margin: 0; font-weight: 700; color: #0F1B2D">Sense</p>
-<p style="margin: 0">Camera + mic on a Raspberry Pi 5</p>
-</div>
-<svg width="24" height="16" viewBox="0 0 24 16" aria-hidden="true" style="align-self: center; flex: none"><path d="M12 1v12M6 8l6 6 6-6" fill="none" stroke="#5B6573" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-<div style="border: 2px solid #1D5FD1; background: #F5F8FE; border-radius: 12px; padding: 8px 12px">
-<p style="margin: 0; font-weight: 700; color: #0F1B2D">Recognise: five AI models</p>
-<p style="margin: 0">YOLO11n [2] · DINOv2 [3] · faces [4] · OSNet [5] · PANNs sound [6]</p>
-</div>
-<svg width="24" height="16" viewBox="0 0 24 16" aria-hidden="true" style="align-self: center; flex: none"><path d="M12 1v12M6 8l6 6 6-6" fill="none" stroke="#5B6573" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-<div style="border: 2px solid #1D5FD1; background: #F5F8FE; border-radius: 12px; padding: 8px 12px">
-<p style="margin: 0; font-weight: 700; color: #0F1B2D">Confirm: evidence rules</p>
-<p style="margin: 0">2 of 3 checks · a person in view · two kinds of evidence for Level 4+</p>
-</div>
-<svg width="24" height="16" viewBox="0 0 24 16" aria-hidden="true" style="align-self: center; flex: none"><path d="M12 1v12M6 8l6 6 6-6" fill="none" stroke="#5B6573" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-<div style="border: 2px solid #1D5FD1; background: #F5F8FE; border-radius: 12px; padding: 8px 12px; display: flex; flex-direction: column; gap: 6px">
-<p style="margin: 0; font-weight: 700; color: #0F1B2D">Score: threat index 0–1 → 5 levels</p>
-<div style="display: flex; flex-wrap: wrap; gap: 6px">
-<span style="padding: 1px 10px; border-radius: 8px; background: #E5E9EE; color: #0F1B2D">1 log</span>
-<span style="padding: 1px 10px; border-radius: 8px; background: #DCE8FB; color: #0F1B2D">2 notice</span>
-<span style="padding: 1px 10px; border-radius: 8px; background: #FDE7C8; color: #0F1B2D">3 ask owner</span>
-<span style="padding: 1px 10px; border-radius: 8px; background: #FBCFB4; color: #0F1B2D">4 dispatch pack</span>
-<span style="padding: 1px 10px; border-radius: 8px; background: #B91C1C; color: #FFFFFF">5 critical</span>
-</div>
-</div>
-<svg width="24" height="16" viewBox="0 0 24 16" aria-hidden="true" style="align-self: center; flex: none"><path d="M12 1v12M6 8l6 6 6-6" fill="none" stroke="#5B6573" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-<div style="border: 2px solid #C2410C; background: #FFF8F3; border-radius: 12px; padding: 8px 12px">
-<p style="margin: 0; font-weight: 700; color: #0F1B2D">Ask: the owner decides (Fig. 2)</p>
-<p style="margin: 0">Phone, Portal or device. Contacts and the Desk hear only if needed.</p>
-</div>
-<p style="margin: auto 0 0; color: #4A5565">Fig. 1 Camera to owner-approved SOS</p>
-</section>
+<div class="col">
+  <section class="panel">
+    <div class="ph"><span class="n">04</span><h2>The unit as built</h2></div>
+    <div class="unit">
+      <div>
+        <div class="hero">
+          <div class="render"><img src="../report/figures/renders/1_assembled.png" alt="Render of the SENTRIX case with the camera on its tilting mount and three status LEDs"></div>
+          <span class="mk" style="left: 69px; top: 15px">1</span>
+          <span class="mk" style="left: 186px; top: 38px">2</span>
+          <span class="mk" style="left: 55px; top: 58px">3</span>
+          <span class="mk" style="left: 182px; top: 150px">4</span>
+          <span class="mk" style="left: 102px; top: 147px">5</span>
+          <span class="mk" style="left: 13px; top: 120px">6</span>
+          <div class="phone"><img src="../report/figures/screens_c/portal_alert_phone.png" alt="The owner's phone showing a possible-weapon alert with its answer buttons"></div>
+        </div>
+      </div>
+      <div>
+        <ul class="parts">
+          <li><span class="d">1</span><span>Camera Module 3, tilting mount</span></li>
+          <li><span class="d">2</span><span>Status LEDs: green, amber, red</span></li>
+          <li><span class="d">3</span><span>Raspberry Pi 5 (8 GB), Active Cooler, 128 GB microSD</span></li>
+          <li><span class="d">4</span><span>USB microphone, any port</span></li>
+          <li><span class="d">5</span><span>3D-printed case, rev F</span></li>
+          <li><span class="d">6</span><span>Official 27 W USB-C supply</span></li>
+        </ul>
+      </div>
+      <p class="cap unitcap"><b>Fig. 2</b> The unit (render of the printed case) · <b>Fig. 3</b> Owner's alert</p>
+    </div>
+  </section>
 
-<div style="display: flex; flex-direction: column; gap: 12px; min-height: 0">
-<section style="flex: none; background: #FDFCF9; border: 2px solid #CBD3DC; border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px">
-<div style="display: flex; align-items: center; gap: 12px"><span style="flex: none; width: 40px; height: 40px; border-radius: 20px; background: #C2410C; color: #FFFFFF; font-family: 'Space Grotesk', Arial, sans-serif; font-weight: 700; display: flex; align-items: center; justify-content: center">4</span><h2 style="margin: 0; font-family: 'Space Grotesk', Arial, sans-serif; font-size: 30px; color: #0F1B2D">The product (Fig. 2)</h2></div>
-<div style="display: flex; gap: 12px; align-items: stretch">
-<img src="../report/figures/screens_c/dev_wall_alert.png" alt="Device alert screen: possible weapon in the living room, with the owner's answer buttons" style="flex: none; display: block; width: 404px; height: 207px; box-sizing: border-box; object-fit: cover; object-position: top; border-radius: 8px; border: 2px solid #CBD3DC">
-<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; gap: 4px">
-<img src="../report/figures/renders/1_assembled.png" alt="3D render of the SENTRIX enclosure with its camera pod" style="display: block; width: 100%; height: 104px; object-fit: contain">
-<p style="margin: 0; color: #4A5565">Fig. 2 Alert screen and Pi&nbsp;5&nbsp;case</p>
-</div>
-</div>
-</section>
-
-<section style="flex: 1; min-height: 0; background: #FDFCF9; border: 2px solid #CBD3DC; border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 5px">
-<div style="display: flex; align-items: center; gap: 12px"><span style="flex: none; width: 40px; height: 40px; border-radius: 20px; background: #C2410C; color: #FFFFFF; font-family: 'Space Grotesk', Arial, sans-serif; font-weight: 700; display: flex; align-items: center; justify-content: center">5</span><h2 style="margin: 0; font-family: 'Space Grotesk', Arial, sans-serif; font-size: 30px; color: #0F1B2D">Results (Fig. 3)</h2></div>
-<div style="display: grid; grid-template-columns: 200px minmax(0, 1fr); column-gap: 8px; row-gap: 5px; align-items: center; line-height: 1.1; white-space: nowrap">
-<span>Public models</span><span style="display: flex; align-items: center; gap: 8px"><span style="flex: none; width: 240px; height: 22px; background: #94A3B8; border-radius: 4px"></span>13.96</span>
-<span>Fine-tuned</span><span style="display: flex; align-items: center; gap: 8px"><span style="flex: none; width: 122px; height: 22px; background: #94A3B8; border-radius: 4px"></span>7.12</span>
-<span>Own footage</span><span style="display: flex; align-items: center; gap: 8px"><span style="flex: none; width: 14px; height: 22px; background: #1D5FD1; border-radius: 3px"></span>0.79</span>
-<span style="font-weight: 600">+ evidence rules</span><span style="display: flex; align-items: center; gap: 8px"><span style="flex: none; width: 3px; height: 22px; background: #15803D"></span><span style="font-weight: 700; color: #15803D">0.00</span><span style="color: #4A5565">· same 13/18 episodes</span></span>
-</div>
-<p style="margin: 4px 0 0; color: #4A5565">Fig. 3 False alarms per normal minute, replay of our 10 labelled videos</p>
-<p style="margin: 4px 0 0; font-weight: 600; color: #0F1B2D">Own footage cut false alarms nine-fold over fine-tuning; evidence rules removed the rest.</p>
-<div style="display: grid; grid-template-columns: 102px minmax(0, 1fr); column-gap: 10px; row-gap: 6px; align-items: center; margin-top: 8px">
-<span style="font-family: 'Space Grotesk', Arial, sans-serif; font-size: 30px; line-height: 1; font-weight: 700; color: #15803D; white-space: nowrap">9 → 0</span><span>false Level 3+ alarms, first live session</span>
-<span style="font-family: 'Space Grotesk', Arial, sans-serif; font-size: 30px; line-height: 1; font-weight: 700; color: #15803D; white-space: nowrap">49 → 0</span><span>scene-model false alarms in the demo room's 5.1 h log (thresholds set from it)</span>
-<span style="font-family: 'Space Grotesk', Arial, sans-serif; font-size: 30px; line-height: 1; font-weight: 700; color: #C2410C; white-space: nowrap">11/14</span><span>weapon episodes at Level 3 (replay)</span>
-</div>
-</section>
+  <section class="panel">
+    <div class="ph"><span class="n">05</span><h2>Results</h2></div>
+    <div class="results">
+      <div>
+        <div class="chart" role="img" aria-label="Fig. 4: false alarms per normal minute. Public models 13.96, fine-tuned 7.12, our own footage 0.79, with the evidence rules 0.00.">
+          <span class="lab">Public models</span><span class="row"><span class="bar" style="width: 186px"></span>13.96</span>
+          <span class="lab">Fine-tuned</span><span class="row"><span class="bar" style="width: 95px"></span>7.12</span>
+          <span class="lab">Our own footage</span><span class="row"><span class="bar own" style="width: 11px"></span>0.79</span>
+          <span class="lab strong">+ evidence rules</span><span class="row best"><span class="zero"></span>0.00</span>
+        </div>
+        <p class="cap chartcap"><b>Fig. 4</b> False alarms per normal minute, replaying our labelled recordings</p>
+        <p class="reading">Our own footage cut false alarms nine-fold over fine-tuning (Fig.&nbsp;4); the rules removed the rest, still catching 13&nbsp;of&nbsp;18 episodes.</p>
+      </div>
+      <ul class="stats">
+        <li><span class="num">9 → 0</span>false Level 3+ alarms in the first live session</li>
+        <li><span class="num">49 → 0</span>scene-model false alarms in the demo room's 5.1&nbsp;h log (bars set from&nbsp;it)</li>
+        <li><span class="num">11/14</span>weapon episodes at Level&nbsp;3 on replay</li>
+      </ul>
+    </div>
+  </section>
 </div>
 
 </main>
 
-<footer style="flex: none; color: #4A5565; display: grid; grid-template-columns: 404px minmax(0, 1fr); gap: 14px">
-<p style="margin: 0; color: #2E3847; white-space: nowrap"><span style="font-weight: 700; color: #0F1B2D">Tools:</span> Python · PyTorch · FastAPI ·<br>ONNX Runtime · React · SQLite ·<br>Raspberry Pi 5 · Render · Telegram</p>
-<p style="margin: 0">[1] R. Sampson, False Burglar Alarms, 2nd ed., US DOJ COPS, 2011. [2] G. Jocher, J. Qiu, Ultralytics YOLO11, 2024. [3] M. Oquab et al., DINOv2, TMLR, 2024. [4] J. Deng et al., ArcFace, CVPR, 2019. [5] K. Zhou et al., OSNet, ICCV, 2019. [6] Q. Kong et al., PANNs, IEEE/ACM TASLP, 2020.</p>
+<footer class="foot">
+  <p><b>References</b> [1] R. Sampson, False Burglar Alarms, 2nd ed., US DOJ COPS, 2011. [2] G. Jocher, J. Qiu, Ultralytics YOLO11, 2024. [3] M. Oquab et al., DINOv2, TMLR, 2024. [4] J. Deng et al., ArcFace, CVPR, 2019. [5] K. Zhou et al., OSNet, ICCV, 2019. [6] Q. Kong et al., PANNs, IEEE/ACM TASLP, 2020.</p>
+  <p class="tools"><b>Tools</b> Python&nbsp;· PyTorch&nbsp;· ONNX&nbsp;Runtime&nbsp;· FastAPI&nbsp;· React&nbsp;· SQLite&nbsp;· Render&nbsp;· Telegram</p>
 </footer>
-</div>
 
+</div>
 </body>
 </html>

@@ -10,7 +10,7 @@
 
 SENTRIX is a machine-learning system whose central question---\emph{does this configuration catch real threats in a room it has not seen without raising false alarms?}---can only be answered by controlled experiments. Every important design decision in the project was framed as a hypothesis with an independent variable that we changed, dependent variables that we measured, and a control that stayed fixed: the same labelled videos, the same evaluation harness and the same metric definitions, with the test video (\code{wa02}) never used to choose anything. The hypotheses tested were: (H1) models trained on the team's own footage generalise to held-out videos better than models trained on public corpora or fine-tuned from them; (H2) temporal confirmation and corroboration rules remove false alarms without losing real episodes; (H3) a mobile CNN scene head can replace the DINOv2 classifier on the Raspberry~Pi without dropping below a pre-registered accuracy bar; (H4) a re-identification network separates the same person from different people better than colour histograms; and (H5) smaller clip settings on the Pi trade a measurable amount of detection for speed. Because each comparison has a control configuration, independent and dependent variables, and a hypothesis that could be (and twice was) rejected, the project is an experimental investigation rather than a descriptive or comparative one.
 
-\paragraph{Data and splits.} The experiments use the team's custom dataset of 765 hand-reviewed frames sampled from ten source videos (Section~\ref{sec:data}). In November five more videos (masked-intruder scenes with a handgun, an attack on a resident, an assault and a theft, and an ordinary scene in a second room) brought it to 977 frames from fifteen videos; they joined the training split, and the detector heads and the scene classifier were retrained on them. Splits are by source video, so no video contributes to two splits: seven videos for training, two for validation (\code{gun}, \code{vid04}) and one for testing (\code{wa02}). Splitting by frame would leak near-identical neighbouring frames between training and test and inflate every score, which is exactly the contamination we found in the public corpora.
+\paragraph{Data and splits.} The experiments use the team's custom dataset of 765 hand-reviewed frames sampled from ten source videos (Section~\ref{sec:data}). In November the team recorded five more scenes (masked-intruder scenes with a handgun, an attack on a resident, an assault and a theft, and an ordinary scene in a second room), bringing it to 977 reviewed frames; they joined the training split, and the detector heads and the scene classifier were retrained on them. Splits are by source video, so no video contributes to two splits: seven videos for training, two for validation (\code{gun}, \code{vid04}) and one for testing (\code{wa02}). Splitting by frame would leak near-identical neighbouring frames between training and test and inflate every score, which is exactly the contamination we found in the public corpora.
 
 \paragraph{Model selection without the test video.} Candidate models and hyper-parameters were compared by \emph{leave-one-video-out} (LOVO) cross-validation over the nine training and validation videos: each fold trains on eight videos and predicts the ninth, and the pooled out-of-fold predictions give one macro-F1 and one AUROC per candidate. Temperatures and class thresholds were fitted on these out-of-fold predictions. The winner was then confirmed once on the validation split and reported once on the test video. For the slim scene heads (H3) the protocol, the candidates, the selection rule and the acceptance bar (LOVO macro-F1 $\geq 0.396$, 90\,\% of DINOv2's) were committed to the repository \emph{before} any training run, so the result could not be tuned after the fact.
 
@@ -41,8 +41,8 @@ This section specifies how SENTRIX turns pixels and sound into an alarm and an a
 \hline\rowhead
 \thead{Role} & \thead{Model} & \thead{Output} & \thead{Cost (laptop CPU)}\\ \hline
 Persons + tracks & YOLOv8n (COCO) + ByteTrack & Person boxes with track ids & 25\,ms\\ \hline
-Weapon head & YOLO11n retrained on fifteen videos (v5) & Weapon boxes (stick: experimental) & 23\,ms\\ \hline
-Fire head & YOLO11n retrained on fifteen videos (v5) & Fire boxes & 22\,ms\\ \hline
+Weapon head & YOLO11n retrained on the team's recordings (v5) & Weapon boxes (stick: experimental) & 23\,ms\\ \hline
+Fire head & YOLO11n retrained on the team's recordings (v5) & Fire boxes & 22\,ms\\ \hline
 Scene classifier & DINOv2 ViT-B/14, last 4 blocks + head & p(normal, fire, weapon, assault, robbery), temperature-scaled & 94--106\,ms\\ \hline
 Faces & InsightFace SCRFD + ArcFace & Embeddings matched to the gallery (cosine similarity $\geq 0.55$) & 125\,ms (own thread)\\ \hline
 Bodies & OSNet-AIN x1\_0 (MSMT17), ONNX & 512-d embeddings, with each face check & 10\,ms per crop\\ \hline
@@ -100,7 +100,7 @@ On the Pi the per-frame stack would run below 1\,Hz, so the device analyses a ro
 \begin{tabularx}{\textwidth}{|C{0.9cm}|L{3.6cm}|Y|}
 \hline\rowhead
 \thead{Stage} & \thead{Runs when} & \thead{What it does}\\ \hline
-S0 & Always & Gate: motion energy, audio RMS, PIR/door events; held open 10\,s after activity and during an alarm, full cascade at least every 10\,s.\\ \hline
+S0 & Always & Gate: motion energy and audio RMS; held open 10\,s after activity and during an alarm, full cascade at least every 10\,s.\\ \hline
 S1 & Gate open & Person, weapon and fire heads on 6 keyframes (4 uniform + 2 highest-motion), 320\,px on the Pi.\\ \hline
 S2 & A person or fire candidate & DINOv2 scene classifier on up to 2 new keyframes.\\ \hline
 S3 & Persons present & Face check (at most every 2\,s; a new track at once).\\ \hline
@@ -112,7 +112,7 @@ S6 & Always & Within-clip confirmation, then evidence $\to$ TCI $\to$ level poli
 
 \subsection{The Owner-approved Assistance Flow}
 \label{sec:sos-design}
-A confirmed Level~3 commit of an alarm class (weapon, fire, or a corroborated fight) creates one assistance request per device; later incidents attach to the open request. The request's policy (window, contacts, safety defaults) is frozen when it opens. The owner is prompted at T0 on the Portal, the device screen, Telegram and e-mail (or by modem SMS when no remote prompt is possible), reminded after 2, 5, 10 and 20 minutes (overdue reminders collapse into one), warned 5 minutes before the window lapses, and sent an SMS when the prompt is still unseen after 10 minutes. The answers and their effects:
+A confirmed Level~3 commit of an alarm class (weapon, fire, or a corroborated fight) creates one assistance request per device; later incidents attach to the open request. The request's policy (window, contacts, safety defaults) is frozen when it opens. The owner is prompted at T0 on the Portal, the device screen, Telegram and e-mail, reminded after 2, 5, 10 and 20 minutes (overdue reminders collapse into one) and warned 5 minutes before the window lapses; where an optional 4G modem is fitted, SMS also carries the prompt when no remote prompt is possible or when it is still unseen after 10 minutes. The answers and their effects:
 \begin{itemize}
 \item \textbf{Approve} (owner, member or device administrator, with Police, Fire or Medical): the dispatch package---address, entry notes, household details, the snapshot and a timeline---goes to the confirmed contacts and the Desk.
 \item \textbf{False alarm} needs the SOS PIN; five wrong PINs lock answers for 10 minutes.
@@ -137,7 +137,7 @@ Every outbound message, on the device and the Portal, passes one guard that re-r
 \item \textbf{Detection pipeline} turns camera frames into a committed level: capture and preview (2.1), the perception wrappers (2.2), the evidence rules (2.3), the TCI and level policy (2.4), incidents with the event log (2.5), the encrypted evidence vault (2.6), and the clip engine with its fast lane for the Pi (2.7).
 \item \textbf{Device services} act on a decision: the SOS engine (3.1), the channels with their outbox (3.2) behind the send guard (3.3), the link and tunnel to the Portal (3.4), identity and enrolment (3.5), the training recorder (3.6), and the Local Console API (3.7).
 \item \textbf{Portal and web apps} give the owner, the contacts, the Desk and the company their screens: accounts with two-factor sign-in (4.1), onboarding (4.2), household and consent (4.3), the link hub and proxy (4.4), Desk and administration (4.5), privacy and retention (4.6), and the two React applications (4.7).
-\item \textbf{Hardware} makes the product a physical unit: Pi bring-up (5.1), status LEDs (5.2), sensors and power (5.3), the 4G modem (5.4), the enclosure (5.5), and the installers for the Pi and for Render (5.6, 5.7).
+\item \textbf{Hardware} makes the product a physical unit: Pi bring-up (5.1), status LEDs (5.2), camera and microphone (5.3), power from the official 27\,W supply (5.4), the 3D-printed enclosure (5.5), and the installers for the Pi and for Render (5.6, 5.7).
 \item \textbf{Evaluation and quality} runs across all the others: the side-effect-free harness (6.1), replay metrics (6.2), benchmarks (6.3), the test suite (6.4), reviews and audits (6.5), and the documentation including this report (6.6).
 \end{enumerate}
 Packages 1 and 2 were built first, because the live diagnosis showed the detection path had to work before anything was built on it; packages 3--5 were then built in parallel tracks against one written contract; package 6 ran throughout, so that every change was measured before and after.
@@ -162,7 +162,7 @@ Packages 1 and 2 were built first, because the live diagnosis showed the detecti
 \node[l2, below=1mm of n2] {2.1 Capture, preview\\2.2 Perception\\2.3 Evidence rules\\2.4 TCI, level policy\\2.5 Incidents, event log\\2.6 Evidence vault\\2.7 Clip engine, fast lane};
 \node[l2, below=1mm of n3] {3.1 SOS engine\\3.2 Channels, outbox\\3.3 Send guard\\3.4 Link client, tunnel\\3.5 Identity, enrolment\\3.6 Recorder\\3.7 Local Console API};
 \node[l2, below=1mm of n4] {4.1 Accounts, TOTP\\4.2 Onboarding\\4.3 Household, consent\\4.4 Link hub, proxy\\4.5 Desk, admin\\4.6 Privacy, retention\\4.7 React apps};
-\node[l2, below=1mm of n5] {5.1 Pi 5 bring-up\\5.2 GPIO: status LEDs\\5.3 Sensors, power\\5.4 4G modem\\5.5 Enclosure (CAD)\\5.6 deploy/pi5\\5.7 Render deploy};
+\node[l2, below=1mm of n5] {5.1 Pi 5 bring-up\\5.2 GPIO: status LEDs\\5.3 Camera, microphone\\5.4 Power (27\,W USB-C)\\5.5 Enclosure (printed)\\5.6 deploy/pi5\\5.7 Render deploy};
 \node[l2, below=1mm of n6] {6.1 Harness\\6.2 Replay metrics\\6.3 Benchmarks\\6.4 Test suite, e2e\\6.5 Reviews, audits\\6.6 Docs, report};
 \end{tikzpicture}
 \caption{Work breakdown structure of SENTRIX}
@@ -203,7 +203,7 @@ Signal and video & OpenCV 5.0, Picamera2 (Pi), sounddevice / PortAudio, ffmpeg\\
 Back end & FastAPI 0.141, Uvicorn 0.52, WebSockets, SQLAlchemy 2.0, SQLite (WAL), httpx\\ \hline
 Security & cryptography 50 (AES-256-GCM, HKDF), argon2-cffi 25 (Argon2id), pyotp 2.10 (TOTP), CSP and CSRF middleware\\ \hline
 Front end & React 19, React Router 7, TanStack Query 5, Vite 6, Tailwind CSS 4, react-hook-form with zod, lucide icons\\ \hline
-Hardware & Raspberry~Pi~5 8\,GB, Camera Module 3, gpiozero 2.0 with lgpio, systemd (watchdog), NetworkManager, pyserial (modem)\\ \hline
+Hardware & Raspberry~Pi~5 8\,GB, Camera Module 3, USB microphone, gpiozero 2.0 with lgpio, systemd (watchdog), NetworkManager\\ \hline
 Cloud and messaging & Render (Docker, persistent disk), Telegram Bot API, e-mail HTTP API, Caddy and Postgres compose files for a VM deployment\\ \hline
 Testing & pytest 9.1, Vitest 3, Testing Library, Playwright 1.55 (Microsoft Edge)\\ \hline
 Engineering & Git and GitHub, VS Code, Jupyter notebooks, Matplotlib\\ \hline

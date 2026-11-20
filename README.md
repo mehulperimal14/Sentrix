@@ -100,8 +100,8 @@ D8–D14 in [`CLAUDE.md`](CLAUDE.md) §6 and the state machine in
 |   device-enforced command rules                   |   |                                   |
 | LC (FastAPI) on :8000: device app + JSON API      |   | SQLite (dev) / Postgres (deploy)  |
 | SQLite var/sentrix.db, vault, faces               |   +-----------------------------------+
-| Pi 5: status LEDs, PIR, door, mains sense,        |
-|   node telemetry, watchdog, 4G modem              |
+| Pi 5: status LEDs, node telemetry; optional       |
+|   PIR/door/mains inputs and modem (not fitted)    |
 +--------------------------------------------------+
 ```
 
@@ -467,7 +467,7 @@ or a live Postgres yet.**
 | Detection to SOS request | working on bundled clips | docs/7 §17: PENDING weapon request 8.0–9.8 s after `scene gun`; fire 11.6–11.9 s after `scene fire` |
 | Remote view through the tunnel | working, capped | docs/7 §17: MJPEG 29.9 fps direct, 13.6 fps tunnelled (cap 15) |
 | Telegram, e-mail, modem SMS, Twilio | Telegram live on the demo unit (test mode); the rest code and fake-transport tests only | Telegram bot in polling mode to the two allowlisted team chats; no e-mail account or modem used |
-| Raspberry Pi 5 | clip profile running in the demo room; PIR, door and mains not bench-checked | `training/runs/custom_eval/pi5/REPORT.md` (clip p50 3.9 s at 320 px); bench checks still to do (deploy/pi5/README.md) |
+| Raspberry Pi 5 | clip profile running in the demo room. The unit as built: Pi 5 (8 GB, Active Cooler) on the official 27 W USB-C supply, Camera Module 3 on the tilting mount, a USB microphone, green/amber/red status LEDs, the 3D-printed rev F case; PIR, door and mains inputs are supported in software but not fitted | `training/runs/custom_eval/pi5/REPORT.md` (clip p50 3.9 s at 320 px); bench checks still to do (deploy/pi5/README.md) |
 | Room calibration (D23) | run on the demo unit 2026-11-19 | `training/runs/calibration/pi5_demo_room_2026-11-19/REPORT.md`: same decision as the device on 8,956 of 8,956 clips; weapon 0.78, fire 0.75 in force |
 | 4 s clip engine | replay meets Gate A's detection criterion; too slow on the laptop | `training/runs/custom_eval/clip/`: weapon L3 9/12 with the fast lane, fire 3/3, 0 false onsets; ONNX + fast lane compute p95 2145 ms vs a 1.6 s budget |
 | Training recordings on the dashboard (D20), a USB microphone in any port (D21) | working on the laptop | `tests/test_recorder.py` (real OpenCV and ffmpeg round trips), `tests/test_recording_*.py`; the card driven in a browser against a synthetic camera; the microphone chooser against a fake sound library only. Not yet run on the Pi or with a real microphone |

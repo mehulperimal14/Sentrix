@@ -1,0 +1,15 @@
+<section id="literature" data-n="6" class="stone">
+<p class="eyebrow">04 · Literature survey · 40 papers, eight per member, ten from 2024–2026</p>
+<h2>What we built on</h2>
+<table>
+<tr class="head"><th style="width:17%">Area</th><th style="width:44%">Key work</th><th style="width:39%">What SENTRIX takes from it</th></tr>
+<tr><td style="color:#1B2030">Detection</td><td>YOLO detects in one pass [50]; a handgun alarm fired in 27 of 30 scenes after five successive detections [21]</td><td>YOLO11n heads on our frames, 2-of-3 confirmation, person gate</td></tr>
+<tr><td style="color:#1B2030">Violence</td><td>RWF-2000: 87.25% accuracy [23]; XD-Violence: audio plus video beats video alone [9]</td><td>A fight needs video and time-aligned aggression audio</td></tr>
+<tr><td style="color:#1B2030">Backbones</td><td>DINOv2 features transfer from little data [17]; mobile CNNs are 20–40× cheaper [32, 33]</td><td>DINOv2 scene classifier; slim CNNs tested and rejected</td></tr>
+<tr><td style="color:#1B2030">Audio</td><td>AudioSet: 632 sound classes [62]; PANNs taggers reach 0.439 mAP [64]</td><td>PANNs CNN10 on the CPU, 527 labels mapped to 7 cues</td></tr>
+<tr><td style="color:#1B2030">Faces, re-ID</td><td>ArcFace and SCRFD for faces [36, 37]; OSNet leads on six re-ID datasets [38]</td><td>Faces per track; OSNet body match at a measured bar</td></tr>
+<tr><td style="color:#1B2030">Fusion, alarms</td><td>Alignment is an open fusion problem [7, 8]; 94–98% of alarm calls are false [1]</td><td>Published evidence rules; owner-approved SOS</td></tr>
+</table>
+<p class="src" style="margin-top:16px">[n]: reference numbers of the report (Appendix A); the 40-paper table is the report’s Table 2.1.</p>
+<aside>Each of us surveyed eight papers in our own area, forty in all, ten of them from 2024 to 2026; the full table is in the report, and every reference was checked against its source. The pattern: strong components exist, but they are evaluated per frame on curated datasets, and none of them answers who gets alerted or how a household experiences false alarms.</aside>
+</section>

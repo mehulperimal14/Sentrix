@@ -147,6 +147,21 @@ def build_dataset(args, classes: list[str]) -> tuple[Path, dict]:
         put("train", img, f"orig_{k:05d}{img.suffix}", lines)     # short: no 260-char paths
     stats["train_rehearsal"] = args.rehearsal
 
+    # --extra: reviewed YOLO-format folders (images/ + labels/, class ids already in
+    # ``classes`` order), e.g. a deployment room's own frames; training split only.
+    for extra in args.extra or []:
+        extra = Path(extra)
+        for img in sorted((extra / "images").glob("*")):
+            label = extra / "labels" / (img.stem + ".txt")
+            lines = [ln for ln in label.read_text(encoding="utf-8").splitlines() if ln.strip()] \
+                if label.exists() else []
+            repeat = args.extra_repeat if lines else 1
+            for k in range(repeat):
+                put("train", img, f"x_{extra.name}_{img.stem}" + (f"_rep{k}" if k else "") + img.suffix,
+                    lines)
+            key = "train_extra_positive" if lines else "train_extra_negative"
+            stats[key] = stats.get(key, 0) + 1
+
     data = {"path": str(root), "train": "images/train", "val": "images/val",
             "test": "images/test", "names": {i: c for i, c in enumerate(classes)}}
     cfg = root / "data.yaml"
@@ -220,6 +235,10 @@ def main(argv=None) -> int:
     parser.add_argument("--freeze", type=int, default=None)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--dataset", type=Path, default=None)
+    parser.add_argument("--extra", action="append", default=None,
+                        help="reviewed YOLO-format folder (images/, labels/) added to the training split")
+    parser.add_argument("--extra-repeat", type=int, default=3,
+                        help="copies of each --extra positive")
     parser.add_argument("--tag", required=True)
     parser.add_argument("--out", required=True)
     args = parser.parse_args(argv)

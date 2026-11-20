@@ -1,0 +1,55 @@
+{
+  "b1_screenshots_320px": {
+    "shot5.png": {
+      "v5": 0.06,
+      "v6": 0.373
+    },
+    "shot6.png": {
+      "v5": 0.013,
+      "v6": 0.021
+    }
+  },
+  "b2_val_without_fire": {
+    "v5": {
+      "frames": 78,
+      ">=0.50": 0,
+      ">=0.25": 0,
+      "max": 0.047
+    },
+    "v6": {
+      "frames": 78,
+      ">=0.50": 0,
+      ">=0.25": 0,
+      "max": 0.041
+    }
+  },
+  "b2_test_wa02_reported_once": {
+    "v5": {
+      "frames": 93,
+      ">=0.50": 0,
+      ">=0.25": 0,
+      "max": 0.011
+    },
+    "v6": {
+      "frames": 93,
+      ">=0.50": 0,
+      ">=0.25": 0,
+      "max": 0.025
+    }
+  },
+  "b3_public_fire_mAP50": {
+    "v5": 0.448,
+    "v6": 0.3908
+  },
+  "b4_custom_val_auroc": {
+    "v5": 0.8116,
+    "v6": 0.8116
+  },
+  "pass": {
+    "b1_target": false,
+    "b2_false_alarms": true,
+    "b3_retention": false,
+    "b4_old_flames": true,
+    "all": false
+  }
+}
