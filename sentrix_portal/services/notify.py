@@ -71,6 +71,8 @@ from sentrix_portal.models import (ActionToken, AssistanceRequest, Device, Emerg
 log = logging.getLogger("sentrix_portal.notify")
 
 POLL_SECONDS = 1.0
+#: A failing Telegram poll is logged at most this often (it retries every 1-60 s).
+TELEGRAM_LOG_SECONDS = 300.0
 #: Telegram callbacks name a token by its nonce; these purposes may carry one.
 CALLBACK_PURPOSES = ("action_link", "contact_page")
 #: Answers that use the token up (a second tap says "already answered").
@@ -844,6 +846,9 @@ class NotifyWorker:
         self.pumped = 0
         self.last_error: str | None = None
         self.telegram_state = "off"
+        #: The last ``getUpdates`` failure (None once a poll succeeds).
+        self.telegram_error: str | None = None
+        self._telegram_logged_at = -math.inf
 
     def wake(self) -> None:
         loop, event = self._loop, self._wake
@@ -886,7 +891,18 @@ class NotifyWorker:
             try:
                 updates = await api.get_updates(offset, timeout=25)
                 delay = 1.0
+                if self.telegram_error is not None:
+                    log.info("telegram polling recovered after: %s", self.telegram_error)
+                    self.telegram_error = None
             except telegram.TelegramError as exc:
+                # Failures were retried silently: a Portal that cannot reach
+                # Telegram looked healthy (2026-11-20). Logged at most every
+                # TELEGRAM_LOG_SECONDS, and shown in health().
+                self.telegram_error = str(exc)[:200]
+                now = time.monotonic()
+                if now - self._telegram_logged_at >= TELEGRAM_LOG_SECONDS:
+                    self._telegram_logged_at = now
+                    log.warning("telegram polling failed (retrying): %s", self.telegram_error)
                 if exc.status in (401, 404):
                     self.telegram_state = "stopped: bad TELEGRAM_BOT_TOKEN"
                     log.error("telegram polling stopped: %s", exc)
@@ -928,6 +944,11 @@ class NotifyWorker:
         from sentrix_portal.services import sos
         status = getattr(item, "status", None)
         status = getattr(status, "value", status)
+        if str(status) == FAILED and _retrying_again(item):
+            # The device heard the first failure; a retry failing again adds
+            # nothing but an event to its chain every 2 minutes for a day
+            # (2026-11-20). The give-up and a later success are reported.
+            return
         try:
             with self.app.state.db.session() as db:
                 sos.notification_status(db, request_id=message.request_id,
@@ -976,7 +997,17 @@ class NotifyWorker:
 
     def health(self) -> dict[str, Any]:
         return {"running": any(not t.done() for t in self._tasks), "pumped": self.pumped,
-                "last_error": self.last_error, "telegram": self.telegram_state}
+                "last_error": self.last_error, "telegram": self.telegram_state,
+                "telegram_error": self.telegram_error}
+
+
+def _retrying_again(item: OutboxItem) -> bool:
+    """A FAILED attempt after an earlier failed one, with another retry due."""
+    try:
+        due = float(item.next_attempt_at)
+    except (TypeError, ValueError):
+        return False
+    return int(getattr(item, "attempts", 0) or 0) > 1 and math.isfinite(due)
 
 
 def start(app):

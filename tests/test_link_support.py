@@ -76,7 +76,8 @@ class _End:
 
     async def _send(self, data) -> None:
         if self.closed_code is not None:
-            raise PipeClosed(self.closed_code, "send on a closed pipe")
+            # as websockets does: a send after the close carries its frame
+            raise PipeClosed(self.closed_code, self.pipe.reason or "send on a closed pipe")
         self.sent.append(data)
         await self.peer.inbox.put(data)
 
@@ -99,11 +100,12 @@ class MemoryPipe:
         self.portal = _End(self, "portal")
         self.device.peer, self.portal.peer = self.portal, self.device
         self.code: int | None = None
+        self.reason = ""
 
     def shut(self, code: int, reason: str = "") -> None:
         if self.code is not None:
             return
-        self.code = code
+        self.code, self.reason = code, reason
         for end in (self.device, self.portal):
             end.closed_code = code
             end.inbox.put_nowait(PipeClosed(code, reason))
