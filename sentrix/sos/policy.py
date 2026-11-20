@@ -24,8 +24,12 @@ Duress                          at once (it is a silent "yes")
 Single-source weapon L3         owner only, until gate P8 enables
                                 ``contacts_for_single_source_l3`` (T+5 min)
 Robbery L3 (D26, scene only)    owner only (``SENTRIX_ROBBERY_ALARM=1``;
-                                one modality never reaches L4)
-Device offline (heartbeat)      the cloud's rule (the device is gone)
+                                one modality never reaches L4); a stronger
+                                class joining it takes the request over and
+                                its delay counts from the takeover
+Device offline (heartbeat)      the cloud's rule (the device is gone); for
+                                a robbery only on a Portal that runs with
+                                ``SENTRIX_ROBBERY_ALARM=1``
 ==============================  ==========================================
 """
 

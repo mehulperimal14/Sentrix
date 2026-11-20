@@ -36,6 +36,18 @@ def fast_settings(**link):
     return replace(settings, link=replace(settings.link, heartbeat_seconds=0.3, **link))
 
 
+def robbery_portal(monkeypatch):
+    """The Portal's settings as with SENTRIX_ROBBERY_ALARM=1 (D26): robbery
+    among its own SOS alarm classes."""
+    from dataclasses import replace
+    from sentrix.config import settings
+    from sentrix_portal.services import sos as portal_sos
+    cfg = replace(settings, sos=replace(
+        settings.sos, alarm_classes=tuple(settings.sos.alarm_classes) + ("robbery",)))
+    monkeypatch.setattr(portal_sos, "_cfg", lambda: cfg)
+    return cfg
+
+
 @pytest.fixture
 def portal(portal_app, monkeypatch):
     from sentrix_portal.services import accounts, hub, notify
@@ -616,6 +628,53 @@ class TestCloudAuthority:
         assert not any(ref.startswith("contact:") for ref, _, _ in steps)
         # Stored for the owner's user (no request): erasure and export find it.
         assert (f"user:{rig.seeded.owner_id}", "email", f"offline_l2:{incident}") in steps
+
+    @pytest.mark.parametrize("portal_key", [False, True], ids=["portal-off", "portal-on"])
+    def test_heartbeat_lost_with_an_open_robbery_request(self, rig, monkeypatch, portal_key):
+        """D26: a robbery request the device opened (the scene model alone,
+        owner only) reaches the contacts through the offline rule only on a
+        Portal that itself runs with SENTRIX_ROBBERY_ALARM=1 - the demo's
+        Render Portal does not, the Pi does."""
+        if portal_key:
+            robbery_portal(monkeypatch)
+        connect(rig)
+        request = rig.sos.open(incident_type="robbery")
+        wait_for(lambda: (r := mirror(rig.app, request["id"])) and r.state == "PENDING",
+                 what="PENDING")
+        self._offline(rig)
+        row = mirror(rig.app, request["id"])
+        assert row.authority_side == "cloud" and row.flags["device_offline"]
+        assert bool(row.flags.get("contacts_notified")) is portal_key
+        steps = rig.outbox.steps()
+        assert ("owner", "telegram", "offline") in steps
+        assert any(ref.startswith("contact:") for ref, _, _ in steps) is portal_key
+
+    @pytest.mark.parametrize("portal_key", [False, True], ids=["portal-off", "portal-on"])
+    def test_heartbeat_lost_during_a_robbery_l3_with_no_request(self, rig, monkeypatch,
+                                                                portal_key):
+        """D26: with no request yet, a robbery L3 in the last heartbeat opens a
+        cloud request only on a Portal with the key; else a tamper audit and
+        an owner notice, nobody else."""
+        from sentrix_portal.models import AssistanceRequest, AuditLog
+        if portal_key:
+            robbery_portal(monkeypatch)
+        connect(rig)
+        incident = str(uuid.uuid4())
+        rig.state.update(alarm={"level": 3, "incident_id": incident, "incident_type": "robbery"})
+        wait_for(lambda: (row_hb := device_heartbeat(rig)) and row_hb.get("alarm", {})
+                 .get("level") == 3, what="L3 heartbeat")
+        self._offline(rig)
+        with rig.app.state.db.session() as db:
+            rows = db.query(AssistanceRequest).filter_by(device_id=rig.seeded.device_id).all()
+            assert len(rows) == (1 if portal_key else 0)
+            tamper = [a for a in db.query(AuditLog) if a.event == "device.tamper"]
+            assert tamper and tamper[-1].detail["opens_request"] is portal_key
+            if portal_key:
+                assert rows[0].incident_type == "robbery" and rows[0].flags["contacts_notified"]
+        steps = rig.outbox.steps()
+        assert any(ref.startswith("contact:") for ref, _, _ in steps) is portal_key
+        if not portal_key:
+            assert (f"user:{rig.seeded.owner_id}", "email", f"offline_l2:{incident}") in steps
 
     def test_cloud_timers_remind_warn_and_expire_unanswered(self, rig):
         from sentrix_portal.models import AssistanceRequest, utcnow

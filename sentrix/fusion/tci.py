@@ -181,6 +181,8 @@ def contributions(features: FeatureVector, cls: str | None,
     motion = float(context.get("motion", features.motion) or 0.0)
     if cls in threat.person_gated_classes:
         gate = extras.get("person_recent")
+        if gate is None and cls in getattr(threat, "fail_closed_person_classes", ()):
+            gate = False                # D26: unknown counts as nobody for a theft
         rows.append({"input": "people", "value": persons,
                      "detail": f"{shown} in view ({_GATE_NOUN.get(cls, cls)} needs a person)",
                      "effect": "context" if gate is None else ("gate ok" if gate else "gate failed")})

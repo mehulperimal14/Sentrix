@@ -185,6 +185,15 @@ STEP_CONTACTS_T0 = "contacts_t0"       # first message to confirmed contacts
 STEP_DESK_T0 = "desk_t0"               # first page to the Desk number (modem SMS, offline)
 STEP_RESOLVED = "resolved"             # "resolved by resident" / closed
 STEP_DURESS = "duress"                 # duress banner to contacts and Desk
+#: Another alarm class took over an open robbery request (D26): the owner's
+#: "now a possible FIRE" update, or the help path's page to the Desk and the
+#: contacts.
+RETYPE_STEPS = {"weapon": "retype_weapon", "fire": "retype_fire", "assault": "retype_assault"}
+
+
+def retype_step(incident_type: str) -> str:
+    """``retype_<class>``: the message step of a takeover by ``incident_type``."""
+    return RETYPE_STEPS.get(incident_type, f"retype_{incident_type}")
 
 
 def reminder_step(offset_seconds: float) -> str:
@@ -198,7 +207,7 @@ def owner_prompt_steps(reminder_offsets=()) -> tuple[str, ...]:
     reminders and the lapse warning. Withdrawn once the owner has answered."""
     offsets = set(REMINDER_STEPS) | {int(o) for o in reminder_offsets}
     return (STEP_T0, STEP_LAPSE, *sorted({reminder_step(o) for o in offsets}),
-            *RISE_STEPS.values())
+            *RISE_STEPS.values(), *RETYPE_STEPS.values())
 
 
 def repage_step(n: int) -> str:
@@ -268,4 +277,4 @@ def owner_view(state: str, flags: dict | None = None) -> dict:
 
 __all__ = [name for name in dir() if name.isupper() and not name.startswith("_")] + [
     "next_state", "is_terminal", "reconcile", "owner_view", "duress_hidden", "reminder_step",
-    "repage_step", "owner_prompt_steps"]
+    "repage_step", "owner_prompt_steps", "retype_step"]

@@ -48,6 +48,9 @@ _FORCED_ENV = {
     "SENTRIX_WHATSAPP_LIVE": "0",
     # services
     "SENTRIX_SOS_ENABLED": "0", "SENTRIX_LINK_ENABLED": "0",
+    # D26: decides whether a robbery opens an SOS request (the demo Pi's .env
+    # sets it to 1); tests that need it on build their own configuration
+    "SENTRIX_ROBBERY_ALARM": "0",
     "SENTRIX_CHANNELS_ENABLED": "0", "SENTRIX_MODEM_ENABLED": "0",
     "SENTRIX_GPIO_ENABLED": "0", "SENTRIX_NODE_ENABLED": "0", "PORTAL_WORKERS": "0",
     # provider credentials: empty, so .env cannot supply them

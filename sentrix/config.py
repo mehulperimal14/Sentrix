@@ -289,8 +289,8 @@ class ThreatConfig:
     #: D26: robbery is an alarm class (L3 from one confirmed visual source, a
     #: person needed), not experimental. Set from ``SENTRIX_ROBBERY_ALARM``.
     robbery_alarm: bool = ROBBERY_ALARM
-    #: Capped at L2 (``experimental_cap``); robbery leaves this list when
-    #: ``robbery_alarm`` is on (``__post_init__``).
+    #: Capped at L2 (``experimental_cap``). Robbery is in this list exactly
+    #: when ``robbery_alarm`` is off (``__post_init__`` enforces it both ways).
     experimental_classes: tuple = ("assault", "robbery")
     #: Which sources vote: ``both`` (default), ``scene`` or ``detector``.
     sources: str = os.getenv("SENTRIX_THREAT_SOURCES", "both").strip().lower() or "both"
@@ -336,11 +336,15 @@ class ThreatConfig:
     banter_cap: float = 0.19
 
     def __post_init__(self) -> None:
-        # D26: the switch takes robbery out of the experimental classes, also
-        # for a copy made with ``dataclasses.replace(cfg, robbery_alarm=True)``.
-        if self.robbery_alarm and "robbery" in self.experimental_classes:
-            object.__setattr__(self, "experimental_classes",
-                               tuple(c for c in self.experimental_classes if c != "robbery"))
+        # D26: the switch alone decides whether robbery is experimental, in
+        # both directions and for every copy: ``dataclasses.replace(cfg,
+        # robbery_alarm=False)`` of a config made with the switch on must put
+        # robbery back under the L2 cap, or it would be neither capped nor
+        # person-gated (an L3 from an empty room).
+        classes = tuple(c for c in self.experimental_classes if c != "robbery")
+        if not self.robbery_alarm:
+            classes += ("robbery",)
+        object.__setattr__(self, "experimental_classes", classes)
 
     @property
     def person_gated_classes(self) -> tuple:
@@ -348,6 +352,15 @@ class ThreatConfig:
         ``person_memory_seconds``: a weapon, and a robbery once it can raise L3
         (D26: a theft needs a thief; an empty room never alarms)."""
         return ("weapon", "robbery") if self.robbery_alarm else ("weapon",)
+
+    @property
+    def fail_closed_person_classes(self) -> tuple:
+        """Person-gated classes whose gate stays shut when the person detector
+        is unavailable (``person_recent`` None). The weapon gate opens then,
+        so a weapon alarm is never silenced by a failed person model; a
+        robbery (D26) is the scene model alone, with no recall out of fold, so
+        without a person seen it never counts."""
+        return ("robbery",) if self.robbery_alarm else ()
 
 
 # ──────────────────────────────────────────────────────────────────────────────

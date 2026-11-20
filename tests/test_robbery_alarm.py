@@ -11,6 +11,7 @@ Off by default: nothing changes unless the switch is set.
 from __future__ import annotations
 
 import dataclasses
+import json
 import os
 import subprocess
 import sys
@@ -29,7 +30,8 @@ from sentrix.sos import states as S
 from sentrix.sos.policy import Rules, contacts_delay
 from sentrix.storage import requests
 
-from test_sos_engine import advance, event_names, fire_trigger, the_request, world  # noqa: F401
+from test_sos_engine import (OWNER, advance, event_names, fire_trigger,  # noqa: F401
+                             the_request, world)
 
 ROOT = Path(__file__).resolve().parents[1]
 OFF = settings.threat
@@ -72,6 +74,23 @@ class TestSwitch:
         assert ON.experimental_classes == ("assault",)
         assert ON.person_gated_classes == ("weapon", "robbery")
 
+    def test_switching_a_copy_off_puts_robbery_back_under_the_cap(self):
+        """replace(ON, robbery_alarm=False) must not leave robbery neither
+        capped nor person-gated (an L3 from an empty room)."""
+        off = dataclasses.replace(ON, robbery_alarm=False)
+        assert off.experimental_classes == ("assault", "robbery")
+        assert off.person_gated_classes == ("weapon",)
+        assert off.fail_closed_person_classes == ()
+        ev = run([robbery(0.95), robbery(0.60), robbery(0.95), robbery(0.60)], off,
+                 person=False)["robbery"]
+        assert ev.experimental and level_for(ev.score) == 2
+        assert dataclasses.replace(off, robbery_alarm=True).experimental_classes == ("assault",)
+
+    def test_conftest_forces_the_switch_off(self):
+        """The demo Pi's .env sets SENTRIX_ROBBERY_ALARM=1: the suite must not
+        depend on it (tests/conftest.py)."""
+        assert os.environ["SENTRIX_ROBBERY_ALARM"] == "0"
+
     def test_one_environment_key_sets_both_lists(self):
         """The device reads SENTRIX_ROBBERY_ALARM once (sentrix/config.py)."""
         code = ("from sentrix.config import settings as s; "
@@ -106,6 +125,19 @@ class TestTickEvidence:
         ev = run([robbery(0.99)] * 5, ON, person=False)["robbery"]
         assert not ev.confirmed and ev.score < L2
         assert ev.votes[0].gated == "no person in view"
+
+    def test_on_no_person_detector_never_confirms_a_robbery(self):
+        """The person model failed to load or threw (person_recent None): the
+        weapon gate opens, the robbery gate stays shut (fail closed)."""
+        ev = run([robbery(0.99)] * 5, ON, person=None)["robbery"]
+        assert not ev.confirmed and ev.score < L2
+        assert "person gate off" not in ev.reason
+        assert ev.votes[0].gated == "no person seen: person detector unavailable"
+
+    def test_on_the_weapon_gate_still_opens_without_a_person_detector(self):
+        ev = run([{"scene": {"weapon": (0.9, 0.5)}}] * 3, ON, person=None)["weapon"]
+        assert ev.confirmed and level_for(ev.score) == 3
+        assert "person gate off: person detector unavailable" in ev.reason
 
     def test_off_the_person_gate_is_unchanged(self):
         """Off, robbery keeps its old (ungated) experimental L2."""
@@ -150,6 +182,12 @@ class TestClipEvidence:
                                                     self.obs(0.9, 2.0, gate=False)])
         assert not alone["robbery"].confirmed
         assert alone["robbery"].votes[0].gated == "no person in view"
+
+    def test_on_no_person_detector_never_confirms_in_a_clip(self):
+        ev = ClipConfirmation(2, cfg=ON).update([self.obs(0.9, 1.0, gate=None),
+                                                 self.obs(0.9, 2.0, gate=None)])
+        assert not ev["robbery"].confirmed and ev["robbery"].score < L2
+        assert "person gate off" not in ev["robbery"].reason
 
     def test_off_clip_robbery_stays_in_l2(self):
         ev = ClipConfirmation(2, cfg=OFF).update([self.obs(0.95, 1.0), self.obs(0.95, 2.0)])
@@ -196,6 +234,15 @@ class TestTci:
         assert not evidence["robbery"].confirmed
         result = tci_of(evidence, ON, person_present=True)
         assert level_for(result.raw_tci) <= 2
+
+    def test_contributions_on_show_an_unknown_gate_as_failed(self):
+        ev = run([robbery(0.95)] * 3, ON, person=None)
+        rows = contributions(FeatureVector(extras={"evidence": {c: e.to_dict()
+                                                                for c, e in ev.items()},
+                                                   "person_recent": None}),
+                             "robbery", threat=ON)
+        people = next(r for r in rows if r["input"] == "people")
+        assert people["effect"] == "gate failed"
 
     def test_contributions_off_show_no_robbery_gate(self):
         ev = run([robbery(0.95)] * 3, OFF)
@@ -247,7 +294,74 @@ class TestSosEngine:
         advance(robbery_world, 1801)
         assert "contacts_notified" not in event_names(req["id"])
         recipients = {ref for ref, _, _ in robbery_world.channels.keys(req["id"])}
-        assert "owner" in recipients and "c1" not in recipients
+        assert "owner" in recipients and "contact:c1" not in recipients
+
+    def test_a_fire_takes_over_an_open_robbery_request(self, robbery_world):
+        """A robbery request (owner only) must not swallow a fire: the fire
+        takes it over and its T+2 min safety default reaches the contacts."""
+        fire_trigger(robbery_world, "robbery")
+        req = the_request()
+        fire_trigger(robbery_world, "fire")                    # a new incident
+        assert len(requests.list_requests(5)) == 1
+        req = requests.get_request(req["id"])
+        assert req["incident_type"] == "fire" and len(req["incident_ids"]) == 2
+        assert "FIRE" in req["sos_text_full"] and "THEFT" not in req["sos_text_full"]
+        attached = [e for e in requests.events(req["id"]) if e["event"] == "attached"]
+        assert attached[-1]["detail"]["retyped_from"] == "robbery"
+        owner_steps = {step for ref, _, step in robbery_world.channels.keys(req["id"])
+                       if ref == "owner"}
+        assert "retype_fire" in owner_steps
+        advance(robbery_world, 200)
+        events = requests.events(req["id"])
+        assert [e["detail"]["reason"] for e in events
+                if e["event"] == "contacts_notified"] == ["confirmed_fire"]
+
+    def test_a_fire_in_the_same_incident_takes_over_too(self, robbery_world):
+        incident = fire_trigger(robbery_world, "robbery")
+        req = the_request()
+        fire_trigger(robbery_world, "fire", incident_id=incident)
+        req = requests.get_request(req["id"])
+        assert req["incident_type"] == "fire" and req["incident_ids"] == [incident]
+        advance(robbery_world, 200)
+        assert "contacts_notified" in event_names(req["id"])
+
+    def test_the_fire_delay_counts_from_the_takeover(self, robbery_world):
+        """The owner gets the fire's own two minutes, and a fresh window."""
+        fire_trigger(robbery_world, "robbery")
+        req = the_request()
+        advance(robbery_world, 600)
+        assert "contacts_notified" not in event_names(req["id"])
+        fire_trigger(robbery_world, "fire")
+        taken = requests.get_request(req["id"])
+        assert taken["expires_at"] > req["expires_at"]
+        advance(robbery_world, 100)
+        assert "contacts_notified" not in event_names(req["id"])
+        advance(robbery_world, 30)
+        assert "contacts_notified" in event_names(req["id"])
+
+    def test_on_the_help_path_the_desk_and_contacts_hear_of_the_fire(self, robbery_world):
+        fire_trigger(robbery_world, "robbery")
+        req = the_request()
+        result = robbery_world.engine.respond(req["id"], "approve", actor=OWNER,
+                                              channel="portal", authority="POLICE")
+        assert result["ok"], result
+        fire_trigger(robbery_world, "fire")
+        req = requests.get_request(req["id"])
+        assert req["incident_type"] == "fire"
+        steps = {(ref, step) for ref, _, step in robbery_world.channels.keys(req["id"])}
+        assert ("contact:c1", "retype_fire") in steps and ("desk", "retype_fire") in steps
+        assert ("owner", "retype_fire") not in steps
+
+    def test_a_robbery_never_takes_over_another_class(self):
+        snap = M.Snapshot(id="r1", state=S.PENDING, incident_type="fire")
+        facts = M.TriggerFacts("i2", "robbery", 3, "confirmed", 0.0)
+        assert not M.takes_over(snap, facts, RULES_ON)
+        steps = M.attach_steps(snap, facts, RULES_ON)
+        assert [s.event for s in steps] == ["attached"]
+        assert "incident_type" not in steps[0].fields
+        robbery_snap = dataclasses.replace(snap, incident_type="robbery")
+        assert M.takes_over(robbery_snap, dataclasses.replace(facts, incident_type="fire"),
+                            RULES_ON)
 
     def test_off_a_robbery_trigger_opens_nothing(self, world):
         fire_trigger(world, "robbery")
@@ -299,6 +413,29 @@ class TestCalibration:
         ungated = cr.collect(rows, ["robbery"], cr.Rules())["robbery"]
         assert max(m.confirm for m in ungated.moments) == pytest.approx(0.80)
 
+    def test_the_device_env_file_sets_the_robbery_gate(self, tmp_path):
+        """On the Pi the switch lives in ~/Sentrix/.env and the script arrives
+        on stdin (the D23 usage): it must replay the device's own robbery gate."""
+        from test_calibrate_room import clip
+        (tmp_path / ".env").write_text("SENTRIX_ROBBERY_ALARM=1\n", encoding="utf-8")
+        events = tmp_path / "events"
+        events.mkdir()
+        probs = {"robbery": 0.30, "weapon": 0.20, "fire": 0.10}
+        rows = [clip("q", 10.0, [(1, -2.0, True, probs), (2, -1.0, True, probs)])]
+        (events / "events_20261121_000000_test.jsonl").write_text(
+            "".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+        env = {k: v for k, v in os.environ.items() if k != "SENTRIX_ROBBERY_ALARM"}
+        env.update(PYTHONPATH=str(ROOT), PYTHONIOENCODING="utf-8")
+        report = tmp_path / "report.json"
+        out = subprocess.run(
+            [sys.executable, "-", "--events", str(events), "--json", str(report)],
+            input=(ROOT / "tools" / "calibrate_room.py").read_text(encoding="utf-8"),
+            cwd=tmp_path, env=env, encoding="utf-8", capture_output=True, timeout=300)
+        assert "a person needed for: weapon, robbery" in out.stdout, out.stdout + out.stderr
+        data = json.loads(report.read_text(encoding="utf-8"))
+        assert data["sources"]["person_gate"] == ["weapon", "robbery"]
+        assert [c["class"] for c in data["classes"]] == ["weapon", "fire", "robbery"]
+
     def test_default_classes_follow_the_switch(self, monkeypatch):
         sys.path.insert(0, str(ROOT / "tools"))
         import calibrate_room as cr
@@ -307,4 +444,49 @@ class TestCalibration:
         monkeypatch.setattr(config, "settings",
                             dataclasses.replace(config.settings, threat=ON))
         assert cr.default_classes() == ("weapon", "fire", "robbery")
-        assert cr.Rules.from_settings().person_classes == ("weapon", "robbery")
+        rules = cr.Rules.from_settings()
+        assert rules.person_classes == ("weapon", "robbery")
+        assert rules.fail_closed == ("robbery",)
+
+    def test_a_tick_with_no_person_detector_never_confirms_a_robbery(self):
+        """The tool replays the device's fail-closed robbery gate (person None)."""
+        sys.path.insert(0, str(ROOT / "tools"))
+        import calibrate_room as cr
+        from test_calibrate_room import tick
+        rules = cr.Rules(person_classes=("weapon", "robbery"), fail_closed=("robbery",))
+        rows = [tick("t", 100.0 + i, {"robbery": 0.9, "weapon": 0.9}, person=None)
+                for i in range(3)]
+        logs = cr.collect(rows, ["robbery", "weapon"], rules)
+        assert max(m.confirm for m in logs["robbery"].moments) == 0.0
+        assert max(m.confirm for m in logs["weapon"].moments) == pytest.approx(0.9)
+
+
+# ── the Portal's device-offline rule ──────────────────────────────────────────
+class TestPortalOfflineRule:
+    """D26: a robbery reaches contacts through the Portal's offline rule only
+    where the Portal itself runs with SENTRIX_ROBBERY_ALARM=1 (the Render
+    Portal of the demo does not), with or without a request already open."""
+
+    def test_offline_opens_request_follows_the_portals_own_key(self, monkeypatch):
+        from sentrix_portal.services import sos as portal_sos
+        from test_link_portal import robbery_portal
+        assert not portal_sos.offline_opens_request("robbery", 3)
+        assert portal_sos.offline_opens_request("weapon", 3)
+        robbery_portal(monkeypatch)
+        assert portal_sos.offline_opens_request("robbery", 3)
+        assert not portal_sos.offline_opens_request("robbery", 2)
+
+    def test_offline_alerts_contacts_of_an_open_request(self, monkeypatch):
+        from types import SimpleNamespace
+        from sentrix_portal.services.sos import offline_alerts_contacts
+        from test_link_portal import robbery_portal
+
+        def row(kind, **flags):
+            return SimpleNamespace(incident_type=kind, peak_level=3, flags=flags)
+
+        for kind in ("weapon", "fire", "assault", "intrusion", "duress"):
+            assert offline_alerts_contacts(row(kind), 1), kind
+        assert not offline_alerts_contacts(row("robbery"), 3)
+        assert offline_alerts_contacts(row("robbery", duress=True), 3)
+        robbery_portal(monkeypatch)
+        assert offline_alerts_contacts(row("robbery"), 3)

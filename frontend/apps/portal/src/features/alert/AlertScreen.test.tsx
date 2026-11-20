@@ -53,6 +53,11 @@ describe('AlertScreen', () => {
     expect(screen.getByText(/Possible \(one camera check\)/)).toBeInTheDocument();
   });
 
+  it('calls a robbery request a possible theft (D26)', () => {
+    show({ incidentType: 'robbery', room: 'Hall' });
+    expect(screen.getByRole('heading', { name: 'Possible theft in the Hall' })).toBeInTheDocument();
+  });
+
   it('offers only what the server allows', () => {
     show({ actions: ['checking'] });
     expect(screen.queryByRole('button', { name: /Alert my contacts/ })).toBeNull();
