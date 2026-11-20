@@ -196,7 +196,12 @@ try:
                   "check_input_settings"):
         if hasattr(_sd, _name):
             setattr(_sd, _name, _guarded_audio(_name))
-except (ImportError, OSError):                      # pragma: no cover - no PortAudio
+except Exception:                                   # pragma: no cover - no PortAudio
+    # Not only ImportError/OSError: on a headless Linux runner sounddevice's
+    # import raises PortAudioError ("PulseAudio_Initialize: Can't connect to
+    # server"), which stopped the whole suite on GitHub's runner. Without
+    # PortAudio there is no device to guard, and sentrix.perception.audio runs
+    # without a microphone (it catches any import error the same way).
     pass
 
 
