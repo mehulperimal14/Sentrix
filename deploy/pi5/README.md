@@ -113,8 +113,10 @@ scp -r models/exported pi@<pi>:/tmp/ && ssh pi@<pi> 'sudo cp -r /tmp/exported /o
 ```
 
 A missing export falls back to torch (slow on the Pi). `--ncnn` also writes
-NCNN exports, but needs `ncnn`/`pnnx`, which were never installed, so NCNN is
-untested.
+NCNN exports (needs `ncnn`/`pnnx`). They were measured on the demo Pi on
+2026-11-20. In fp16 they are twice as fast but change the person head's
+decisions on 4-6 % of frames; in fp32 they are no faster than ONNX. Keep
+`SENTRIX_RUNTIME=onnx` (`training/runs/custom_eval/pi5/RUNTIME_2026-11-20.md`).
 
 ### 6. Inputs (siren not connected)
 
@@ -272,6 +274,35 @@ Then run the service with the link on for an hour and read the clip block
 (compute p50/p95, dropped clips) on Device admin → Diagnostics (Pipeline),
 plus temperature and throttling on the Hardware page. Criteria: docs/8 §7.
 
+### 15. Room calibration (D23)
+
+The scene classifier's thresholds belong to the room and the model: a room it
+has never seen can push normal scores over the floors (the demo room raised 18
+false Level 3s that way). After a few quiet hours in the room - nobody showing
+a weapon or a flame - set the room's own thresholds from the device's log:
+
+```bash
+cd /opt/sentrix
+sudo .venv/bin/python tools/calibrate_room.py --since 2026-11-20T09:00     # report only
+sudo .venv/bin/python tools/calibrate_room.py --since 2026-11-20T09:00 --write
+sudo systemctl restart sentrix                                              # the file is read at start-up
+```
+
+Read the report before `--write`:
+- the replay check must give the device's own decision on every clip;
+- the highest moments it lists must not be a staged test (`--exclude
+  START,END` drops one);
+- each class needs at least 2 h of scored time.
+
+`--write` keeps the old file as `scene.json.bak-<time>` and never lowers a
+threshold unless `--allow-lower` is given.
+
+After any new scene model, run the tool again on the new model's quiet hours.
+Until then the doctor warns that the calibration was made for other weights.
+
+To check that a staged replica-gun or flame session still reaches Level 3, run
+`--check var/events/<that session>.jsonl`.
+
 ## Operating notes
 
 * Logs: `journalctl -u sentrix -f`. Runtime data: `/opt/sentrix/var/`
@@ -303,7 +334,11 @@ systemctl --user daemon-reload && systemctl --user enable --now sentrix.service
 ```
 
 Logs: `journalctl --user -u sentrix -f`. Update: `git pull` in `~/Sentrix`, then
-`systemctl --user restart sentrix.service`. The web UI is the committed build
+`systemctl --user restart sentrix.service`. Room calibration (step 15) runs as
+the same user: `cd ~/Sentrix && .venv/bin/python tools/calibrate_room.py
+[--write]`, then restart the user service. The demo unit's thresholds since
+2026-11-19 are weapon 0.78 and fire 0.75, from its own log.
+The web UI is the committed build
 of the device app (`sentrix/web/static/app/`), so an update needs no Node.js
 on the Pi.
 

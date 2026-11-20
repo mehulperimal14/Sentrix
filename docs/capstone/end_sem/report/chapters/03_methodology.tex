@@ -1,0 +1,198 @@
+%==============================================================
+\chapter{METHODOLOGY ADOPTED}
+\label{ch:method}
+%==============================================================
+
+\section{Investigative Techniques}
+\label{sec:investigative}
+
+\textbf{Investigative technique involved: EXPERIMENTAL.}
+
+SENTRIX is a machine-learning system whose central question---\emph{does this configuration catch real threats in a room it has not seen without raising false alarms?}---can only be answered by controlled experiments. Every important design decision in the project was framed as a hypothesis with an independent variable that we changed, dependent variables that we measured, and a control that stayed fixed: the same labelled videos, the same evaluation harness and the same metric definitions, with the test video (\code{wa02}) never used to choose anything. The hypotheses tested were: (H1) models trained on the team's own footage generalise to held-out videos better than models trained on public corpora or fine-tuned from them; (H2) temporal confirmation and corroboration rules remove false alarms without losing real episodes; (H3) a mobile CNN scene head can replace the DINOv2 classifier on the Raspberry~Pi without dropping below a pre-registered accuracy bar; (H4) a re-identification network separates the same person from different people better than colour histograms; and (H5) smaller clip settings on the Pi trade a measurable amount of detection for speed. Because each comparison has a control configuration, independent and dependent variables, and a hypothesis that could be (and twice was) rejected, the project is an experimental investigation rather than a descriptive or comparative one.
+
+\paragraph{Data and splits.} The experiments use the team's custom dataset of 765 hand-reviewed frames sampled from ten source videos (Section~\ref{sec:data}). In November five more videos (masked-intruder scenes with a handgun, a knife, an assault and a theft, and an ordinary scene in a second room) brought it to 977 frames from fifteen videos; they joined the training split, and the detector heads and the scene classifier were retrained on them. Splits are by source video, so no video contributes to two splits: seven videos for training, two for validation (\code{gun}, \code{vid04}) and one for testing (\code{wa02}). Splitting by frame would leak near-identical neighbouring frames between training and test and inflate every score, which is exactly the contamination we found in the public corpora.
+
+\paragraph{Model selection without the test video.} Candidate models and hyper-parameters were compared by \emph{leave-one-video-out} (LOVO) cross-validation over the nine training and validation videos: each fold trains on eight videos and predicts the ninth, and the pooled out-of-fold predictions give one macro-F1 and one AUROC per candidate. Temperatures and class thresholds were fitted on these out-of-fold predictions. The winner was then confirmed once on the validation split and reported once on the test video. For the slim scene heads (H3) the protocol, the candidates, the selection rule and the acceptance bar (LOVO macro-F1 $\geq 0.396$, 90\,\% of DINOv2's) were committed to the repository \emph{before} any training run, so the result could not be tuned after the fact.
+
+\paragraph{Independent variables.} Model family and training recipe (v3 public-corpus models, v3 fine-tuned, v4 custom; DINOv2 vs ResNet-18, MobileNetV3-L, EfficientNet-B0 with and without distillation); evidence rules (single-frame overrides vs $k$-of-$n$ confirmation and corroboration); inference rate (6\,Hz vs 2\,Hz); runtime (PyTorch vs ONNX Runtime); clip settings on the Pi (object stage at 640 or 320\,px, one or two scene frames per clip); body embedding (OSNet vs histogram) and the identity bar.
+
+\paragraph{Dependent variables.} Per-image accuracy and macro-F1; for each video replayed through the product: threat recall and false-positive rate per tick, episodes detected and false alarms per normal minute, and---after the repair---episodes reaching each \emph{committed} level, false onsets per hour with an exact Poisson 95\,\% bound, and onset-to-level latency; frame AUROC per class; preview frame rate, AI decision rate and per-stage latency; clip compute time, dropped clips and decision age on the Pi; pairwise AUROC and acceptance rates for re-identification.
+
+\paragraph{Control of side effects.} All evaluation runs go through the product's own code (\code{Pipeline.process}, the TCI engine and the level policy), never a parallel re-implementation, but inside a harness that disables every side effect---no evidence, snapshots, database rows, messages, siren or SOS---keeps identity neutral (everyone unrecognised) and, unless the experiment is about audio, keeps the microphone closed. Measurement tools refuse to run when any live service is switched on.
+
+\paragraph{Experiments on recorded and live data.} Besides the labelled videos, two kinds of real-world data were used. The event log of the first live session replays exactly, so every rule change was re-decided on it (``what would the new rules have done in that room?''). And the demonstration Pi's own event log over about 12 hours in the demo room, with no threat present, gave the distribution of scene-model scores from which per-room thresholds were set (Section~\ref{sec:results}); a calibration tool later replayed the device's own confirmation rule on that log at every possible threshold, and was itself checked against the decisions the device had logged. Finally, benchmarks measured the live loop on the laptop and the clip engine on the Pi itself with a recorded video as the camera.
+
+\paragraph{Outcome of the method.} H1 was confirmed (validation macro-F1 0.281 $\to$ 0.401 $\to$ 0.768; false alarms 13.96 $\to$ 7.12 $\to$ 0.79 per normal minute). H2 was confirmed on the replay (0.79 $\to$ 0.00 false alarms per normal minute, the same 13 of 18 episodes) and on the live log (9 $\to$ 0 onsets at Level~3 and above). H3 was \emph{rejected}: the best slim head reached 0.229, so DINOv2 stayed. H4 was confirmed (AUROC 0.83 vs 0.73; 0.93 with the re-identification-trained weights shipped later), and it also rejected the 0.50 bar used by the earlier IntrusionSentry prototype, which would have accepted 97\,\% of different people. H5 gave the setting shipped on the Pi (320\,px, two scene frames). Detailed results are in Section~\ref{sec:results}.
+
+%--------------------------------------------------------------
+\section{Proposed Solution}
+\label{sec:proposed}
+
+This section specifies how SENTRIX turns pixels and sound into an alarm and an assistance request. The architecture is in Chapter~\ref{ch:design}, the algorithms in Section~\ref{sec:algorithms}.
+
+\subsection{Perception}
+\tabref{tab:models} lists the models the device runs. Each one only produces \emph{votes}: a value and a threshold per class.
+
+\begin{table}[htbp]
+\caption{Perception models in the shipped configuration}
+\label{tab:models}
+\centering\tablefont
+\begin{tabularx}{\textwidth}{|L{2.4cm}|L{3.6cm}|Y|L{2.4cm}|}
+\hline\rowhead
+\thead{Role} & \thead{Model} & \thead{Output} & \thead{Cost (laptop CPU)}\\ \hline
+Persons + tracks & YOLOv8n (COCO) + ByteTrack & Person boxes with track ids & 25\,ms\\ \hline
+Weapon head & YOLO11n retrained on fifteen videos (v5) & Pistol, knife and long-gun boxes (stick: experimental) & 23\,ms\\ \hline
+Fire head & YOLO11n retrained on fifteen videos (v5) & Fire boxes & 22\,ms\\ \hline
+Scene classifier & DINOv2 ViT-B/14, last 4 blocks + head & p(normal, fire, weapon, assault, robbery), temperature-scaled & 94--106\,ms\\ \hline
+Faces & InsightFace SCRFD + ArcFace & Embeddings matched to the gallery (cosine similarity $\geq 0.55$) & 125\,ms (own thread)\\ \hline
+Bodies & OSNet-AIN x1\_0 (MSMT17), ONNX & 512-d embeddings, with each face check & 10\,ms per crop\\ \hline
+Sound & PANNs CNN10, ONNX & 527 AudioSet scores $\to$ 7 cues per 4\,s window & 40\,ms per window\\ \hline
+Motion, behaviour & Frame differencing, kinematics & Motion energy, loitering, people count & $<$5\,ms\\ \hline
+\end{tabularx}
+\end{table}
+
+\subsection{Evidence and the Threat Confidence Index}
+\label{sec:tci}
+For a vote with value $v$ and threshold $\theta$ the \emph{strength} measures how far the value is above its threshold:
+\begin{equation}
+s(v,\theta)=\min\!\left(\max\!\left(\frac{v-\theta}{1-\theta},\,0\right),\,1\right).
+\label{eq:strength}
+\end{equation}
+A source is \emph{confirmed} for a class when it crossed its threshold on at least $k=2$ of its last $n=3$ fresh evaluations, consecutive evaluations being at most 3\,s apart; a weapon vote also needs a person seen in the last 2\,s. The evidence $e_c$ for class $c$ is then
+\begin{equation}
+e_c=\begin{cases}
+0.19\cdot\min(v/\theta,1) & \text{nothing confirmed (below Level 2)}\\[2pt]
+0.45+0.17\,s_{(1)} & \text{one visual modality confirmed (Level 3 band)}\\[2pt]
+\min\big(0.70+0.25\,s_{(2)},\,0.95\big) & \text{two modalities confirmed (Level 4--5)}\\[2pt]
+\max\big(0.70+0.25\,s_{(2)},\,0.86\big) & \text{three modalities, audio strength} \geq 0.3
+\end{cases}
+\label{eq:evidence}
+\end{equation}
+where $s_{(1)}$ is the strength of the strongest confirmed vote and $s_{(2)}$ the strength of the \emph{second}-strongest confirmed modality (the weaker side of the best pair), so that Level~5 ($e\geq 0.85$) needs the weaker modality about 60\,\% of the way from its threshold to certainty. Audio confirmed alone is capped at Level~2, and an aggression cue may corroborate a visible weapon but never stands alone for it. The Threat Confidence Index is the strongest class evidence,
+\begin{equation}
+\mathrm{TCI}=\max\Big(\max_{c\in\{\text{fire, weapon, assault, robbery}\}} e_c,\; u\Big),
+\label{eq:tci}
+\end{equation}
+where $u=0.30$ (Level~2) when an unrecognised person has been present for 3\,s in armed mode or 10\,s at home, and 0 otherwise. Experimental classes (robbery, stick, smoke, an uncorroborated fight) are capped below Level~3. Because the TCI is a maximum of published formulas over logged votes, every level in the event log can be re-derived by hand. The weights are design choices, not fitted values: a fitted fusion model needs labelled sessions from real homes, which do not exist yet (decision D6).
+
+\paragraph{Fight versus banter.} A fight (assault) reaches Level~3 only when the video classifier's assault vote \emph{and} an aligned aggression cue (shouting, screaming) are both confirmed, with at least two people in view and motion above 0.02. Aligned laughter or very calm talk (calm-talk score $\geq 0.85$) holds it at Level~2, and so does aggression mixed with laughter; television, music or radio make the audio neutral.
+
+\subsection{Level Policy}
+The level policy turns the TCI into the committed level. Bands are $[0.20, 0.40)$ for Level~2, $[0.40, 0.65)$ for Level~3, $[0.65, 0.85)$ for Level~4 and $\geq 0.85$ for Level~5. Levels~2 and~3 commit as soon as their (already confirmed) evidence arrives; Levels~4 and~5 need the band to hold for 0.6\,s \emph{and} for two observations; the level steps down only after 5\,s without support. Each threshold has its own timer, so a rising ramp across several bands is not reset at every band change---the bug that held levels for 20.9\,s in the first live run.
+
+\subsection{Incidents and Evidence}
+An incident opens when the level leaves Level~1 and keeps a frozen \emph{peak snapshot}: the type, reason, TCI, features, identity and trigger votes of one tick, so an incident row never mixes frames. From Level~3 the device stores a snapshot and seals an evidence bundle with AES-256-GCM \cite{nist80038d} (keys derived with HKDF, a fresh 96-bit nonce per file, a SHA-256 digest of nonce and ciphertext in a sidecar) and appends it to an HMAC-signed hash-chained manifest, so any later change to a file or to the order of files is detectable; in clip mode the bundle holds the 4\,s before the trigger at 5\,fps and 8\,s after it. The event log (JSON lines, schema~5) is flushed on every row and records, per tick, every vote, the person gate, the audio alignment and the contribution of each input.
+
+\subsection{Time-aligned Audio}
+The microphone is read continuously at its native rate and resampled to 16\,kHz mono. Every 1\,s the last 4\,s are tagged by PANNs CNN10 \cite{kong2020panns}, whose 527 AudioSet labels are mapped by a published rule to seven cues: aggression, weapon sound, fire sound, laughter, calm talk, background (television, music, radio) and siren. Each result carries its window as monotonic start and end times. A window votes for a frame only if it overlaps the frame within 1.5\,s; otherwise audio is \emph{unavailable}, never ``calm''. A window counts as a new observation only if it does not overlap the last one counted, so one impulse cannot confirm itself across overlapping windows; windows that contain the device's own siren never vote.
+
+\subsection{Identity per Track and Body Re-identification}
+Each face is attached to the person box that contains it, and each ByteTrack id is \emph{authorised}, \emph{unknown} or \emph{unverified}. Recognition runs on its own thread, re-checking at most every 1\,s, at once when more people appear, and every 5\,s while everyone is recognised; it fails closed before the first verdict and when a verdict is older than 6\,s. A match is held on a track for 60\,s unless the face fails twice in a row. With each face check the device also embeds the bodies with OSNet \cite{zhou2019osnet} and keeps the last 20 face-verified looks of each resident for 30 minutes. At home, a track whose face has not been seen counts as that resident when two consecutive checks match the resident's looks at a cosine of at least 0.85 and at least 0.05 ahead of any other resident. A failed face always wins, a resident already authorised on another track in view is never matched by body, and armed mode ignores bodies. Identity never lowers threat evidence: a recognised resident holding a gun is still a weapon alarm.
+
+\subsection{The Clip Engine on the Raspberry Pi}
+\label{sec:clip}
+On the Pi the per-frame stack would run below 1\,Hz, so the device analyses a rolling 4\,s window as one clip every 2\,s (\tabref{tab:clip}). Consecutive clips share 2\,s, and the shared half of the keyframes is reused. A class is confirmed in a clip on two keyframes of one track (fire: one image region). A \emph{fast lane} runs the detector heads at 320\,px on every fourth buffered frame (about 3.5 passes per second) and raises Level~3 at once on two consecutive hits on one track; being one detector source, it never passes Level~3 alone.
+
+\begin{table}[htbp]
+\caption{Stage cascade of one clip}
+\label{tab:clip}
+\centering\tablefont
+\begin{tabularx}{\textwidth}{|C{0.9cm}|L{3.6cm}|Y|}
+\hline\rowhead
+\thead{Stage} & \thead{Runs when} & \thead{What it does}\\ \hline
+S0 & Always & Gate: motion energy, audio RMS, PIR/door events; held open 10\,s after activity and during an alarm, full cascade at least every 10\,s.\\ \hline
+S1 & Gate open & Person, weapon and fire heads on 6 keyframes (4 uniform + 2 highest-motion), 320\,px on the Pi.\\ \hline
+S2 & A person or fire candidate & DINOv2 scene classifier on up to 2 new keyframes.\\ \hline
+S3 & Persons present & Face check (at most every 2\,s; a new track at once).\\ \hline
+S4 & $\geq 2$ persons and motion $\geq 0.10$ & Action model over the two 2\,s halves.\\ \hline
+S5 & Always & Audio: the clip's own 4\,s window (aligned by construction).\\ \hline
+S6 & Always & Within-clip confirmation, then evidence $\to$ TCI $\to$ level policy $\to$ incident.\\ \hline
+\end{tabularx}
+\end{table}
+
+\subsection{The Owner-approved Assistance Flow}
+\label{sec:sos-design}
+A confirmed Level~3 commit of an alarm class (weapon, fire, or a corroborated fight) creates one assistance request per device; later incidents attach to the open request. The request's policy (window, contacts, safety defaults) is frozen when it opens. The owner is prompted at T0 on the Portal, the device screen, Telegram and e-mail (or by modem SMS when no remote prompt is possible), reminded after 2, 5, 10 and 20 minutes (overdue reminders collapse into one), warned 5 minutes before the window lapses, and sent an SMS when the prompt is still unseen after 10 minutes. The answers and their effects:
+\begin{itemize}
+\item \textbf{Approve} (owner, member or device administrator, with Police, Fire or Medical): the dispatch package---address, entry notes, household details, the snapshot and a timeline---goes to the confirmed contacts and the Desk.
+\item \textbf{False alarm} needs the SOS PIN; five wrong PINs lock answers for 10 minutes.
+\item \textbf{I'm checking} pauses reminders for 5 minutes, nothing else.
+\item \textbf{Duress PIN}: the screen shows ``Marked as false alarm'' while the contacts and the Desk are alerted.
+\item \textbf{No answer}: the request becomes EXPIRED (``unanswered''), never ``safe''; ``Request help now'' opens a linked request.
+\end{itemize}
+\textbf{Safety defaults} (on unless the household turns them off) alert the confirmed contacts while the owner is still being asked: at once for a corroborated Level~4/5, after 2 minutes for a confirmed fire, and when the device goes offline during an open Level~3+ alarm. A single-source weapon at Level~3 goes to the owner only. When the device is offline the Portal takes over the request's timers (cloud authority) and merges the device's events on reconnect.
+
+\subsection{Portal, Link and Tunnel}
+The device opens one outbound WebSocket to the Portal, authenticated with its provisioned identity, and keeps an outbox of events that the hub acknowledges; 100 forced disconnects in testing lost no event. The Portal's \code{/d/\{device\_id\}/...} path replays a browser request into the device's own application through this link; live state and video are relayed, video adaptive and capped at 15\,fps and 640\,px. The device enforces a path table per role: device-administration pages, faces and recordings are never served through the tunnel, the siren test and recordings need the owner's fresh step-up, and live video requires the household's consent.
+
+\subsection{The Send Guard}
+Every outbound message, on the device and the Portal, passes one guard that re-reads the configuration on each message: an emergency number (112, 100, 101, 102, 108, \ldots) is always refused; nothing is sent unless \code{SENTRIX\_LIVE\_ALERTS=1} and the channel's own switch are on; in test mode (the default) the recipient must be on the allowlist and the text begins with a test banner. A refused message is recorded as SUPPRESSED, so the whole flow can be exercised without contacting anyone.
+
+%--------------------------------------------------------------
+\section{Work Breakdown Structure}
+\label{sec:wbs}
+\figref{fig:wbs} shows the work breakdown structure and \tabref{tab:owners} the ownership of each subsystem.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[font=\scriptsize,
+  root/.style={draw, fill=sxhead, rounded corners=2pt, font=\scriptsize\bfseries, align=center, minimum width=3.2cm},
+  l1/.style={draw, fill=sxlight, rounded corners=2pt, align=center, text width=2.15cm, minimum height=8mm, font=\scriptsize\bfseries},
+  l2/.style={align=left, text width=2.2cm, font=\tiny},
+  edge/.style={draw, thick}]
+\node[root] (r) at (0,0) {SENTRIX release 1};
+\foreach \i/\t/\x in {1/1. Data and models/-6.4, 2/2. Detection pipeline/-3.85, 3/3. Device services/-1.3, 4/4. Portal and web apps/1.25, 5/5. Hardware/3.8, 6/6. Evaluation and quality/6.35}{
+  \node[l1] (n\i) at (\x,-1.4) {\t};
+  \draw[edge] (r.south) -- ++(0,-0.35) -| (n\i.north);
+}
+\node[l2, below=1mm of n1] {1.1 Custom dataset\\1.2 Box annotation\\1.3 Scene classifier\\1.4 YOLO11n heads\\1.5 Sound model\\1.6 Re-id model\\1.7 Exports (ONNX)};
+\node[l2, below=1mm of n2] {2.1 Capture, preview\\2.2 Perception\\2.3 Evidence rules\\2.4 TCI, level policy\\2.5 Incidents, event log\\2.6 Evidence vault\\2.7 Clip engine, fast lane};
+\node[l2, below=1mm of n3] {3.1 SOS engine\\3.2 Channels, outbox\\3.3 Send guard\\3.4 Link client, tunnel\\3.5 Identity, enrolment\\3.6 Recorder\\3.7 Local Console API};
+\node[l2, below=1mm of n4] {4.1 Accounts, TOTP\\4.2 Onboarding\\4.3 Household, consent\\4.4 Link hub, proxy\\4.5 Desk, admin\\4.6 Privacy, retention\\4.7 React apps};
+\node[l2, below=1mm of n5] {5.1 Pi 5 bring-up\\5.2 GPIO: siren, LEDs\\5.3 Sensors, power\\5.4 4G modem\\5.5 Enclosure (CAD)\\5.6 deploy/pi5\\5.7 Render deploy};
+\node[l2, below=1mm of n6] {6.1 Harness\\6.2 Replay metrics\\6.3 Benchmarks\\6.4 Test suite, e2e\\6.5 Reviews, audits\\6.6 Docs, report};
+\end{tikzpicture}
+\caption{Work breakdown structure of SENTRIX}
+\label{fig:wbs}
+\end{figure}
+
+\begin{table}[htbp]
+\caption{Subsystem ownership}
+\label{tab:owners}
+\centering\tablefont
+\begin{tabularx}{\textwidth}{|L{3.0cm}|C{2.0cm}|Y|}
+\hline\rowhead
+\thead{Member} & \thead{Roll No.} & \thead{Primary responsibilities}\\ \hline
+Kartik Garg & 102303478 & System architecture, vision engines and backend core: the detector path, the confirmation rules and the YOLO heads.\\ \hline
+Akshay Ranveer & 102303453 & Biometric identity, tracking and re-identification: per-track identity, enrolment from the device camera, body matching.\\ \hline
+Prashant Gagneja & 102353011 & Acoustic classification and digital signal processing: the audio path, sound cues and the gunshot and glass-break data track.\\ \hline
+Harshit Mishra & 102319039 & Behavioural intelligence and anomaly classification: the recording protocol for deployment-room data and the fusion rules.\\ \hline
+Mehul Perimal & 102315144 & Evidence cryptography, database and dashboard: incidents and records, the evidence vault, the dashboards, evaluation and gate tooling.\\ \hline
+\multicolumn{2}{|l|}{Whole team} & Portal and SOS flow (eight parallel tracks against one contract), Raspberry~Pi bring-up and deployment, testing and reviews, documentation.\\ \hline
+\end{tabularx}
+\end{table}
+
+%--------------------------------------------------------------
+\section{Tools and Technologies Used}
+\label{sec:tools}
+\tabref{tab:tools} lists the tools with the versions used in the final build (the reasons for each choice are in \tabref{tab:toolsurvey}).
+
+\begin{table}[htbp]
+\caption{Tools and technologies (versions of the final build)}
+\label{tab:tools}
+\centering\tablefont
+\begin{tabularx}{\textwidth}{|L{3.0cm}|Y|}
+\hline\rowhead
+\thead{Area} & \thead{Tools and versions}\\ \hline
+Languages & Python 3.14 (laptop), 3.13 (Pi); TypeScript 5.9; OpenSCAD for the enclosure\\ \hline
+Machine learning & PyTorch 2.13, torchvision 0.28, timm 1.0 (DINOv2), Ultralytics 8.4 (YOLOv8/YOLO11, ByteTrack with \code{lap}), InsightFace 1.0, ONNX Runtime 1.29, scikit-learn, NumPy 2.5, SciPy 1.18; training on CUDA (RTX 4060) in a separate Python 3.11 environment\\ \hline
+Signal and video & OpenCV 5.0, Picamera2 (Pi), sounddevice / PortAudio, ffmpeg\\ \hline
+Back end & FastAPI 0.141, Uvicorn 0.52, WebSockets, SQLAlchemy 2.0, SQLite (WAL), httpx\\ \hline
+Security & cryptography 50 (AES-256-GCM, HKDF), argon2-cffi 25 (Argon2id), pyotp 2.10 (TOTP), CSP and CSRF middleware\\ \hline
+Front end & React 19, React Router 7, TanStack Query 5, Vite 6, Tailwind CSS 4, react-hook-form with zod, lucide icons\\ \hline
+Hardware & Raspberry~Pi~5 8\,GB, Camera Module 3, gpiozero 2.0 with lgpio, systemd (watchdog), NetworkManager, pyserial (modem)\\ \hline
+Cloud and messaging & Render (Docker, persistent disk), Telegram Bot API, e-mail HTTP API, Caddy and Postgres compose files for a VM deployment\\ \hline
+Testing & pytest 9.1, Vitest 3, Testing Library, Playwright 1.55 (Microsoft Edge)\\ \hline
+Engineering & Git and GitHub, VS Code, Jupyter notebooks, Matplotlib\\ \hline
+\end{tabularx}
+\end{table}

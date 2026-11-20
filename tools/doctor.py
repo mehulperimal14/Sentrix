@@ -221,6 +221,11 @@ def check_engines(report: Report) -> None:
             report.add(OK, "scene classifier",
                        f"{scene.weights_name} loaded, thresholds {scene.thresholds} "
                        f"({scene.threshold_source})")
+            if scene.calibration_stale:
+                report.add(WARN, "room calibration",
+                           "var/calibration/scene.json was made for other scene weights; "
+                           "its bars are applied, but run tools/calibrate_room.py on a "
+                           "quiet period with these weights")
         else:
             report.add(FAIL, "scene classifier",
                        "weights present but failed to load — see the log (a delta "
