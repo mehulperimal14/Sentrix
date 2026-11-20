@@ -27,6 +27,12 @@ model:
   (2 of 3), a gap over ``confirm_max_gap_seconds`` resetting the window, a
   weapon crossing counting only when ``person_recent`` was not False.
 
+Robbery is calibrated by default, and gated by a person like a weapon, when
+the running configuration makes it an alarm class (``SENTRIX_ROBBERY_ALARM=1``,
+D26). The tool reads the environment, not the device's ``.env``: over SSH set
+it on the command line (below), or the replay will not gate robbery and will
+disagree with the device's own verdicts.
+
 For each clip (or fresh tick) that gives the **confirming value**: the bar is
 crossed by a confirmation exactly when it is at or under that value. The
 largest confirming value of the quiet log is the highest bar that would still
@@ -69,6 +75,7 @@ Usage::
     python tools/calibrate_room.py --check var/events/events_20261120_*.jsonl
     python tools/calibrate_room.py --write                 # then restart the device
     python tools/calibrate_room.py --json report.json
+    SENTRIX_ROBBERY_ALARM=1 python tools/calibrate_room.py --classes robbery
 
 On the Pi, without copying anything there (the script arrives on stdin)::
 
@@ -94,8 +101,10 @@ ROOT = Path(__file__).resolve().parents[1] if "__file__" in globals() else Path.
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-#: Classes calibrated by default: the alarm classes (D1). Assault and robbery
-#: are experimental (L2 on their own) and can be named with ``--classes``.
+#: Classes calibrated by default: the alarm classes the scene model votes
+#: for (D1; robbery added by :func:`default_classes` with
+#: ``SENTRIX_ROBBERY_ALARM=1``, D26). Assault is experimental unless aligned
+#: audio agrees and can be named with ``--classes``.
 DEFAULT_CLASSES = ("weapon", "fire")
 CONFIRM_MARGIN = 0.10
 SINGLE_MARGIN = 0.01
@@ -117,6 +126,8 @@ class Rules:
     hop_seconds: float = 2.0
     floors: dict = field(default_factory=lambda: {"weapon": 0.50, "fire": 0.45,
                                                   "assault": 0.60, "robbery": 0.60})
+    #: Classes whose crossings count only with a person seen recently.
+    person_classes: tuple = ("weapon",)
 
     @classmethod
     def from_settings(cls) -> "Rules":
@@ -126,7 +137,15 @@ class Rules:
                    float(threat.confirm_max_gap_seconds),
                    float(threat.person_memory_seconds),
                    int(clip.confirm_keyframes), float(clip.hop_seconds),
-                   dict(threat.scene_threshold_floor))
+                   dict(threat.scene_threshold_floor),
+                   tuple(getattr(threat, "person_gated_classes", ("weapon",))))
+
+
+def default_classes() -> tuple[str, ...]:
+    """Weapon and fire, and robbery once it is an alarm class (D26)."""
+    from sentrix.config import settings
+    robbery = bool(getattr(settings.threat, "robbery_alarm", False))
+    return DEFAULT_CLASSES + (("robbery",) if robbery else ())
 
 
 @dataclass
@@ -318,7 +337,7 @@ def collect(rows: Iterable[dict[str, Any]], classes: Iterable[str], rules: Rules
                 log = out[cls]
                 if cls in thresholds:
                     log.saw_bar(ts, thresholds[cls])
-                gated = [p if (cls != "weapon" or person_recent(t)) else 0.0
+                gated = [p if (cls not in rules.person_classes or person_recent(t)) else 0.0
                          for t, p in scored.values()]
                 for seq, (_t, p) in scored.items():
                     if (cls, session, seq) not in seen_keyframes:
@@ -345,7 +364,7 @@ def collect(rows: Iterable[dict[str, Any]], classes: Iterable[str], rules: Rules
             if previous is not None and ts - previous > rules.confirm_max_gap:
                 window.clear()
             last_tick[key] = ts
-            gate_shut = cls == "weapon" and person is False
+            gate_shut = cls in rules.person_classes and person is False
             window.append(0.0 if gate_shut else value)
             if not counted:
                 continue
@@ -587,7 +606,9 @@ def main(argv: list[str] | None = None) -> int:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--events", nargs="+", default=None,
                         help="event logs: files, directories or globs (default var/events)")
-    parser.add_argument("--classes", nargs="+", default=list(DEFAULT_CLASSES))
+    parser.add_argument("--classes", nargs="+", default=None,
+                        help="classes to calibrate (default: weapon fire, and robbery "
+                             "with SENTRIX_ROBBERY_ALARM=1)")
     parser.add_argument("--since", help="local ISO date/time; earlier rows are ignored")
     parser.add_argument("--until", help="local ISO date/time; later rows are ignored")
     parser.add_argument("--exclude", action="append", default=[],
@@ -614,6 +635,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from sentrix.paths import CALIBRATION_DIR, EVENTLOG_DIR
     rules = Rules.from_settings()
+    args.classes = list(args.classes or default_classes())
     files = log_files(args.events or [EVENTLOG_DIR])
     if not files:
         print("no event logs found", file=sys.stderr)
@@ -644,13 +666,15 @@ def main(argv: list[str] | None = None) -> int:
                 bars["in_force"] = rep["in_force"]
             checks.append(check_session(rep["class"], staged[rep["class"]], bars))
 
-    print(f"{len(files)} event log(s), {files[0].name} .. {files[-1].name}")
+    print(f"{len(files)} event log(s), {files[0].name} .. {files[-1].name}; "
+          f"a person needed for: {', '.join(rules.person_classes)}")
     print_report(reports, checks)
     provenance = {"tool": "tools/calibrate_room.py",
                "at": datetime.now().isoformat(timespec="seconds"),
                "logs": len(files), "first": files[0].name, "last": files[-1].name,
                "since": args.since, "until": args.until, "exclude": args.exclude,
                "source": args.source, "weights": current_weights(),
+               "person_gate": list(rules.person_classes),
                "rule": {"confirm_margin": args.confirm_margin,
                         "single_margin": args.single_margin, "cap": args.cap}}
     full = {"sources": provenance, "classes": reports, "checks": checks}

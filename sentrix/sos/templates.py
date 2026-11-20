@@ -74,7 +74,7 @@ BUTTONS = {
 }
 AUTHORITY_LABELS = {"POLICE": "Police", "FIRE": "Fire", "MEDICAL": "Medical"}
 EVENT_NAMES = {"weapon": "WEAPON", "fire": "FIRE", "assault": "FIGHT", "intrusion": "INTRUDER",
-               "duress": "DURESS ALERT"}
+               "robbery": "THEFT", "duress": "DURESS ALERT"}
 LEVEL_NAMES = {1: "SECURE", 2: "SUSPICIOUS", 3: "ELEVATED", 4: "HIGH", 5: "CRITICAL"}
 
 #: Message templates (``channels.base.Message.template``) this module renders.

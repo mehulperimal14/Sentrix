@@ -73,6 +73,7 @@ _REQUEST_KINDS = ("sos.created", "sos.transition", "sos.event")
 FOOTER = "SENTRIX does not contact 112 itself."
 WHAT = {"weapon": "a possible weapon (handgun)", "fire": "visible fire",
         "assault": "a fight (seen and heard)",
+        "robbery": "a possible theft",
         "intrusion": "an unrecognised person in the home",
         "duress": "an alert", "unknown": "an alert"}
 OUTCOME_LABELS = {"help_arrived": "help arrived", "real_threat": "real threat",
@@ -654,7 +655,8 @@ def offline_opens_request(incident_type: str, level: int) -> bool:
     """Whether a lost heartbeat during an open incident (with no request yet)
     opens a cloud request: only what would have opened one on the device - an
     alarm class (weapon, fire, a fight; a fight reaches L3 only corroborated
-    by video and aligned audio) at ``sos.min_level``+. An unrecognised person,
+    by video and aligned audio; robbery only where the Portal itself runs with
+    ``SENTRIX_ROBBERY_ALARM=1``, D26) at ``sos.min_level``+. An unrecognised person,
     an audio-only or an experimental L2 never does (D8 as amended by D15)."""
     sos = _cfg().sos
     return int(level) >= int(sos.min_level) and incident_type in tuple(sos.alarm_classes)

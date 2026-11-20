@@ -185,7 +185,12 @@ def check_config(report: Report) -> None:
     report.add(OK, "escalation caps",
                f"one source <= {threat.single_source_cap} (L3), classifier + detector "
                f"{threat.corroborated_floor}-{threat.corroborated_cap} (L4/L5), "
-               f"experimental <= {threat.experimental_cap} (L2)")
+               f"experimental ({', '.join(threat.experimental_classes) or 'none'}) "
+               f"<= {threat.experimental_cap} (L2)")
+    report.add(OK, "robbery",
+               "alarm class (SENTRIX_ROBBERY_ALARM=1, D26): a confirmed scene robbery with "
+               "a person in view is L3 and an SOS request for the owner"
+               if threat.robbery_alarm else "experimental (L2 at most; SENTRIX_ROBBERY_ALARM=0)")
     report.add(OK if not threat.armed else WARN, "mode",
                "home (presence is logged only)" if not threat.armed
                else "ARMED (unrecognised people raise intrusions)")

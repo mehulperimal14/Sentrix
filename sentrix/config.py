@@ -203,6 +203,15 @@ class SceneConfig:
 # ──────────────────────────────────────────────────────────────────────────────
 # Threat evidence — confirmation and escalation caps (CLAUDE.md M1, D1-D3)
 # ──────────────────────────────────────────────────────────────────────────────
+#: D26 (the owner, 2026-11-21): ``SENTRIX_ROBBERY_ALARM=1`` makes robbery an
+#: alarm class. A robbery the scene classifier confirmed (k of n, with a person
+#: in view) then lands in the L3 band and opens an SOS request for the owner,
+#: instead of stopping at an experimental L2. Off by default. This one switch
+#: sets both lists: ``ThreatConfig.experimental_classes`` (robbery leaves it)
+#: and ``SosConfig.alarm_classes`` (robbery joins it).
+ROBBERY_ALARM: bool = _env_bool("SENTRIX_ROBBERY_ALARM", False)
+
+
 @dataclass(frozen=True)
 class ThreatConfig:
     """How per-class evidence is confirmed and how far each source may escalate.
@@ -222,7 +231,11 @@ class ThreatConfig:
       never SMS or a call. The scene classifier and a detector box together can
       reach L4, and at full strength L5.
     * **Experimental classes never escalate past L2** (assault, robbery — they
-      exist in 1-3 clips and cannot be validated; D1).
+      exist in 1-3 clips and cannot be validated; D1). With
+      ``robbery_alarm`` (``SENTRIX_ROBBERY_ALARM=1``, D26) robbery is an alarm
+      class instead: one confirmed visual source puts it in the L3 band, and,
+      like a weapon, it needs a person seen in the last
+      ``person_memory_seconds``.
     * **Presence is context, not threat** (D2 as amended by D15). A person who
       stays unrecognised for the dwell (``intrusion_dwell_seconds`` armed,
       ``intrusion_home_dwell_seconds`` at home) raises an "unrecognised
@@ -273,6 +286,11 @@ class ThreatConfig:
     corroborated_floor: float = 0.70
     corroborated_cap: float = 0.95
 
+    #: D26: robbery is an alarm class (L3 from one confirmed visual source, a
+    #: person needed), not experimental. Set from ``SENTRIX_ROBBERY_ALARM``.
+    robbery_alarm: bool = ROBBERY_ALARM
+    #: Capped at L2 (``experimental_cap``); robbery leaves this list when
+    #: ``robbery_alarm`` is on (``__post_init__``).
     experimental_classes: tuple = ("assault", "robbery")
     #: Which sources vote: ``both`` (default), ``scene`` or ``detector``.
     sources: str = os.getenv("SENTRIX_THREAT_SOURCES", "both").strip().lower() or "both"
@@ -316,6 +334,20 @@ class ThreatConfig:
     #: Kept for configuration compatibility; banter now holds a fight AT L2
     #: (``experimental_cap``), never below it.
     banter_cap: float = 0.19
+
+    def __post_init__(self) -> None:
+        # D26: the switch takes robbery out of the experimental classes, also
+        # for a copy made with ``dataclasses.replace(cfg, robbery_alarm=True)``.
+        if self.robbery_alarm and "robbery" in self.experimental_classes:
+            object.__setattr__(self, "experimental_classes",
+                               tuple(c for c in self.experimental_classes if c != "robbery"))
+
+    @property
+    def person_gated_classes(self) -> tuple:
+        """Classes whose crossings count only with a person seen in the last
+        ``person_memory_seconds``: a weapon, and a robbery once it can raise L3
+        (D26: a theft needs a thief; an empty room never alarms)."""
+        return ("weapon", "robbery") if self.robbery_alarm else ("weapon",)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -660,8 +692,9 @@ class SosConfig:
 
     A request opens only for the alarm classes (``alarm_classes``: weapon,
     fire, and a fight corroborated by video and aligned audio - the only way a
-    fight reaches L3, D15). An unrecognised person is an L2 in both modes and
-    opens no request (D8 as amended by D15); ``intrusion_requests=True``
+    fight reaches L3, D15; robbery too with ``SENTRIX_ROBBERY_ALARM=1``, D26).
+    An unrecognised person is an L2 in both modes and opens no request (D8
+    as amended by D15); ``intrusion_requests=True``
     (``SENTRIX_SOS_INTRUSION=1``) restores the pre-D15 armed-intrusion request
     after the SIA-style entry delay, should a later level rule produce one. The
     household's window (30/45/60 min) bounds the *outside-help question*; the
@@ -675,7 +708,8 @@ class SosConfig:
 
     enabled: bool = _env_bool("SENTRIX_SOS_ENABLED", False)
     min_level: int = 3
-    alarm_classes: tuple = ("weapon", "fire", "assault")
+    alarm_classes: tuple = ("weapon", "fire", "assault") + (
+        ("robbery",) if ROBBERY_ALARM else ())
     #: Pre-D15 rule: an armed intrusion at L3+ opens a request (after the entry
     #: delay). Off: the pipeline caps unknown people at L2 anyway.
     intrusion_requests: bool = _env_bool("SENTRIX_SOS_INTRUSION", False)

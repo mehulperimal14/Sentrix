@@ -23,6 +23,8 @@ Armed intrusion                 at once (only with ``intrusion_requests``;
 Duress                          at once (it is a silent "yes")
 Single-source weapon L3         owner only, until gate P8 enables
                                 ``contacts_for_single_source_l3`` (T+5 min)
+Robbery L3 (D26, scene only)    owner only (``SENTRIX_ROBBERY_ALARM=1``;
+                                one modality never reaches L4)
 Device offline (heartbeat)      the cloud's rule (the device is gone)
 ==============================  ==========================================
 """
