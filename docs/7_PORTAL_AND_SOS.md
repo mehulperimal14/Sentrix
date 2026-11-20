@@ -753,12 +753,15 @@ Behaviour fixed at integration:
   unclaimed").
 * `websockets` ping interval 20 s, timeout 20 s on both sides; max message
   1 MiB (`MAX_MESSAGE_BYTES`).
-* Reconnect: full jitter, `delay = random(0, min(60, 1 · 2^attempt))`; attempt
+* Reconnect: full jitter, `delay = random(0, min(60, 1 · 2^min(attempt, 32)))`
+  (the cap keeps a days-long outage from overflowing the float); attempt
   resets after 60 s connected. After close code 4001 wait the maximum (60 s).
 * Close codes: 1000 normal, 1001 going away (redeploy), 1011 server error,
   **4001** unauthorised (bad token/bootstrap), **4003** revoked/unpaired (device
   wipes token and profile cache), **4008** protocol version unsupported,
-  **4009** replaced by a newer connection of the same device.
+  **4009** replaced by a newer connection of the same device ("newer" in the
+  order the connections reached the hub: an older connection whose hello is
+  stored last is closed, never registered over the live one).
 
 ### 5.2 Identity and pairing
 

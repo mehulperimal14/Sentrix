@@ -869,6 +869,34 @@ class TestPrune:
         thread.join(timeout=5.0)
         assert not thread.is_alive(), "close() stops the timer"
 
+    def test_a_recording_pruned_while_listing_is_left_out(self, rig, monkeypatch):
+        # The housekeeping thread or a delete removes a recording between the
+        # directory listing and the read of its sidecar: it is gone, not a
+        # recording from 1970 (and on Windows not an OSError from the date).
+        r = rig()
+        names = []
+        for minutes in (0, 1, 2):
+            r.wall.now = WALL + 60 * minutes
+            names.append(r.recorder.start()["name"])
+            r.feed([0.0])
+            r.finish()
+        gone, kept, garbled = names
+        (r.dir / f"{garbled}.json").write_text("not json", encoding="utf-8")
+        read_json = recorder_mod._read_json
+
+        def pruned_meanwhile(path):
+            if path.name == f"{gone}.json":
+                assert r.recorder.delete(gone) is True
+            return read_json(path)
+
+        monkeypatch.setattr(recorder_mod, "_read_json", pruned_meanwhile)
+        by_name = {e["name"]: e for e in r.recorder.list()}
+        assert sorted(by_name) == sorted([kept, garbled])
+        assert by_name[kept]["created_at"] == recorder_mod._iso(WALL + 60)
+        mtime = (r.dir / f"{garbled}.json").stat().st_mtime
+        assert by_name[garbled]["created_at"] == recorder_mod._iso(mtime), \
+            "a sidecar still there but unreadable is dated by its file"
+
     def test_housekeeping_finishes_leftover_parts(self, rig):
         r = rig()
         _leftovers(r.dir)

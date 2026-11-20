@@ -56,8 +56,8 @@ from sentrix.link import protocol
 from sentrix.sos import states as S
 from sentrix_portal.models import (ActionToken, AssistanceRequest, Camera, Consent,
                                    Device, DeviceEvent, EmergencyContact, Household,
-                                   IncidentMirror, RequestEvent, SosSnapshot,
-                                   TelegramLink, User, utcnow)
+                                   IncidentMirror, Notification, RequestEvent,
+                                   SosSnapshot, TelegramLink, User, utcnow)
 
 log = logging.getLogger("sentrix_portal.sos")
 
@@ -1363,10 +1363,41 @@ def _send_owner(db, row: AssistanceRequest, *, step: str, template: str, text: s
                                         buttons=buttons, urgency=urgency))
 
 
+#: Notices that an alert ended; they never count as the alert itself.
+_END_NOTICE_STEPS = frozenset({S.STEP_RESOLVED, S.STEP_LAPSED})
+
+
+def _reached(db, row: AssistanceRequest) -> set[tuple[str, str]]:
+    """(recipient_ref, channel) of the contacts an alert of this request
+    reached: SENT or DELIVERED, or recorded by the send guard in a dry run -
+    never one withdrawn before it went out ("cancelled: ..."), nor one still
+    failing. An end notice ("resolved", "closed", "lapsed") goes only there:
+    a contact who never got the alert must not hear that it is over, and a
+    channel that never delivered it must not retry that notice for a day
+    (2026-11-20: the contact's Telegram alert failed and was withdrawn at the
+    decline, and "resolved by the resident" was retried every 2 minutes)."""
+    from sentrix.alerting.channels.base import DELIVERED, SENT, SUPPRESSED
+    reached: set[tuple[str, str]] = set()
+    rows = (db.query(Notification.recipient_ref, Notification.channel, Notification.status,
+                     Notification.error, Notification.step)
+            .filter(Notification.request_id == row.id).all())
+    for ref, channel, status, error, step in rows:
+        if not str(ref or "").startswith("contact:") or step in _END_NOTICE_STEPS:
+            continue
+        if status in (SENT, DELIVERED) or (
+                status == SUPPRESSED and not str(error or "").startswith("cancelled:")):
+            reached.add((ref, channel))
+    return reached
+
+
 def _send_contacts(db, row: AssistanceRequest, *, step: str, template: str,
-                   text_for, subject: str, with_page: bool = True) -> None:
+                   text_for, subject: str, with_page: bool = True,
+                   only_reached: bool = False) -> None:
     from sentrix.alerting.channels.base import Button, Message, callback_data
+    reached = _reached(db, row) if only_reached else None
     for contact, recipients in _contact_recipients(db, row):
+        if reached is not None:
+            recipients = [r for r in recipients if (r.ref, r.channel) in reached]
         if not recipients:
             continue
         raw = token = None
@@ -1509,7 +1540,8 @@ def _after_event(db, row: AssistanceRequest, ev: dict, origin: str) -> list[tupl
                           f"the home is safe; please review it: {page}. {FOOTER}"))
         if flags.get("contacts_notified"):
             _send_contacts(db, row, step=S.STEP_LAPSED, template="sos.lapsed",
-                           with_page=False, subject=f"SENTRIX {short} lapsed",
+                           with_page=False, only_reached=True,
+                           subject=f"SENTRIX {short} lapsed",
                            text_for=lambda c, p: ((f"SENTRIX: the alert at {owner_name}'s home "
                                                    f"({short}) lapsed unanswered. {FOOTER}"),) * 2)
         _close_tokens(db, row, revoke_contacts=False)
@@ -1522,7 +1554,8 @@ def _after_event(db, row: AssistanceRequest, ev: dict, origin: str) -> list[tupl
     elif event in (S.DECLINE, S.CANCEL):
         if flags.get("contacts_notified"):
             _send_contacts(db, row, step=S.STEP_RESOLVED, template="sos.resolved",
-                           with_page=False, subject=f"SENTRIX {short} resolved",
+                           with_page=False, only_reached=True,
+                           subject=f"SENTRIX {short} resolved",
                            text_for=lambda c, p: ((f"SENTRIX: the alert at {owner_name}'s home "
                                                    f"({short}) was resolved by the resident. "
                                                    f"{FOOTER}"),) * 2)
@@ -1534,7 +1567,8 @@ def _after_event(db, row: AssistanceRequest, ev: dict, origin: str) -> list[tupl
                         subject=f"SENTRIX {short} closed",
                         text=f"SENTRIX {short}: closed by the SENTRIX desk ({label}). {FOOTER}")
         _send_contacts(db, row, step=S.STEP_RESOLVED, template="sos.resolved",
-                       with_page=False, subject=f"SENTRIX {short} closed",
+                       with_page=False, only_reached=True,
+                       subject=f"SENTRIX {short} closed",
                        text_for=lambda c, p: ((f"SENTRIX: the alert at {owner_name}'s home "
                                                f"({short}) was closed ({label}). {FOOTER}"),) * 2)
         _close_tokens(db, row, revoke_contacts=False)

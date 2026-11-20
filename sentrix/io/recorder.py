@@ -723,7 +723,9 @@ class Recorder:
                 try:
                     created_ts = meta_path.stat().st_mtime
                 except OSError:
-                    created_ts = 0.0
+                    # Pruned or deleted since the directory was listed (the
+                    # lock is not taken here: a remux holds it for seconds).
+                    continue
                 created = _iso(created_ts)
             files = {"video": f"{name}.avi" if (directory / f"{name}.avi").is_file() else None,
                      "audio": f"{name}.wav" if (directory / f"{name}.wav").is_file() else None,

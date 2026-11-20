@@ -1,0 +1,183 @@
+{
+  "tag": "scene_room_v5_fp16",
+  "data": "G:\\Capstone\\data",
+  "frames": 977,
+  "groups": {
+    "old_train": 588,
+    "old_val": 84,
+    "old_test": 93,
+    "new": 212
+  },
+  "scene": {
+    "weights": "scene_classifier_room_v5.pt",
+    "thresholds": {
+      "fire": 0.5,
+      "weapon": 0.5,
+      "assault": 0.85,
+      "robbery": 0.6
+    },
+    "temperature": 1.5330589577532527,
+    "custom": {
+      "old_train": {
+        "n": 588,
+        "accuracy": 0.9082,
+        "macro_f1": 0.7789,
+        "per_class": {
+          "assault": {
+            "precision": 1.0,
+            "recall": 0.0233,
+            "f1": 0.0455,
+            "n": 43
+          },
+          "fire": {
+            "precision": 0.9167,
+            "recall": 1.0,
+            "f1": 0.9565,
+            "n": 11
+          },
+          "normal": {
+            "precision": 0.8771,
+            "recall": 0.9946,
+            "f1": 0.9322,
+            "n": 373
+          },
+          "robbery": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "n": 17
+          },
+          "weapon": {
+            "precision": 0.9926,
+            "recall": 0.9306,
+            "f1": 0.9606,
+            "n": 144
+          }
+        },
+        "auroc_one_vs_rest": {
+          "fire": 1.0,
+          "weapon": 0.9993,
+          "assault": 1.0,
+          "robbery": 1.0
+        }
+      },
+      "old_val": {
+        "n": 84,
+        "accuracy": 0.6429,
+        "macro_f1": 0.7434,
+        "per_class": {
+          "fire": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "n": 6
+          },
+          "normal": {
+            "precision": 0.434,
+            "recall": 1.0,
+            "f1": 0.6053,
+            "n": 23
+          },
+          "weapon": {
+            "precision": 1.0,
+            "recall": 0.4545,
+            "f1": 0.625,
+            "n": 55
+          }
+        },
+        "auroc_one_vs_rest": {
+          "fire": 1.0,
+          "weapon": 0.8426,
+          "assault": null,
+          "robbery": null
+        }
+      },
+      "old_test": {
+        "n": 93,
+        "accuracy": 0.7204,
+        "macro_f1": 0.4188,
+        "per_class": {
+          "normal": {
+            "precision": 0.7204,
+            "recall": 1.0,
+            "f1": 0.8375,
+            "n": 67
+          },
+          "weapon": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "n": 26
+          }
+        },
+        "auroc_one_vs_rest": {
+          "fire": null,
+          "weapon": 0.4805,
+          "assault": null,
+          "robbery": null
+        }
+      },
+      "new": {
+        "n": 212,
+        "accuracy": 0.9387,
+        "macro_f1": 0.7332,
+        "per_class": {
+          "assault": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "n": 13
+          },
+          "normal": {
+            "precision": 0.8738,
+            "recall": 1.0,
+            "f1": 0.9326,
+            "n": 90
+          },
+          "robbery": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "n": 62
+          },
+          "weapon": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "n": 47
+          }
+        },
+        "auroc_one_vs_rest": {
+          "fire": null,
+          "weapon": 1.0,
+          "assault": 1.0,
+          "robbery": 1.0
+        }
+      }
+    },
+    "public": {
+      "weapon": {
+        "n_pos": 541,
+        "n_neg": 47,
+        "auroc": 0.7868,
+        "recall_at_threshold": 0.0887,
+        "fpr_at_threshold": 0.0
+      },
+      "fire": {
+        "n_pos": 600,
+        "n_neg": 600,
+        "auroc": 0.841,
+        "recall_at_threshold": 0.0817,
+        "fpr_at_threshold": 0.0
+      },
+      "assault": {
+        "n_pos": 600,
+        "n_neg": 600,
+        "auroc": 0.7517,
+        "recall_at_threshold": 0.0,
+        "fpr_at_threshold": 0.0
+      }
+    }
+  },
+  "seconds": 337.0
+}

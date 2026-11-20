@@ -18,13 +18,18 @@ What a connection goes through (``routes/link_hub.py`` hands the socket over):
    health), an outbox *reset* detected (a factory-reset device numbers its
    events from 1 again: the old dedupe rows are dropped), then **welcome**
    (claimed, profile version, ``resend_from_seq`` = the highest contiguous seq
-   stored, current subscriptions).
+   stored, current subscriptions). The newest connection of a device wins
+   (4009 for the older one), in the order the connections arrived: an older
+   connection whose hello is stored last is stale and never registered.
 3. After the welcome: the token if one is waiting, the profile if the device's
    copy is older, queued commands, ``sos.sync`` for requests the cloud
    advanced while the device was away, and the viewers' subscriptions.
 4. **Events** are stored as ``device_events`` (primary key (device, seq)) in
    the same transaction as their mirror effect, then acknowledged (batched,
-   within 100 ms). A duplicate is re-acked and not re-applied. SOS events go to
+   within 100 ms). A duplicate is re-acked and not re-applied. One device's
+   hello and events are stored one at a time, whichever connection carries
+   them (after a drop the old connection may still be storing an event the
+   new one was asked to resend). SOS events go to
    ``services.sos`` (per-request order, gaps buffered). Every heartbeat is
    answered with ``ack{upto}``, which the device uses as Portal liveness.
 5. **state** and FRAME messages are fanned out to the relays' viewers;
@@ -41,9 +46,11 @@ from __future__ import annotations
 import asyncio
 import base64
 import hmac
+import itertools
 import json
 import logging
 import re
+import threading
 import time
 import uuid
 from collections import deque
@@ -177,6 +184,8 @@ class DeviceSession:
         self.auth = auth
         self.claimed = claimed
         self.household_id = household_id
+        #: Arrival order of the connection (``LinkHub.serve``): the newest wins.
+        self.generation = 0
         self.hello: dict = {}
         self.heartbeat: dict = {}
         self.connected_at = time.monotonic()
@@ -233,6 +242,11 @@ class LinkHub:
         #: is counted from here at the earliest, so the Portal's own downtime
         #: is never read as the device's (docs/7 §17).
         self.started_at = utcnow()
+        self._generations = itertools.count(1)
+        #: Per device: its hello and events are stored under this lock (worker
+        #: threads), and the newest connection whose hello was stored.
+        self._device_locks: dict[str, threading.Lock] = {}
+        self._hello_generation: dict[str, int] = {}
 
     @property
     def db(self):
@@ -266,10 +280,14 @@ class LinkHub:
         session = self.sessions.get(device_id)
         return session is not None and session.full and not session.closed
 
+    def _device_lock(self, device_id: str) -> threading.Lock:
+        return self._device_locks.setdefault(device_id, threading.Lock())
+
     # ── the socket ────────────────────────────────────────────────────────────
     async def serve(self, conn: Any, authorization: str | None) -> None:
         """Run one device connection until it closes."""
         self.loop = asyncio.get_running_loop()
+        generation = next(self._generations)
         found = await asyncio.to_thread(self._authenticate, authorization or "")
         if found is None:
             await conn.close(protocol.CLOSE_UNAUTHORISED, "unauthorised")
@@ -279,6 +297,7 @@ class LinkHub:
             return
         device_id, auth, claimed, household_id = found
         session = DeviceSession(device_id, conn, auth, claimed, household_id)
+        session.generation = generation
         try:
             first = await asyncio.wait_for(conn.receive(), HELLO_TIMEOUT)
             hello = protocol.decode(first) if isinstance(first, str) else None
@@ -300,15 +319,25 @@ class LinkHub:
             await conn.close(protocol.CLOSE_UNAUTHORISED, "hello for another device")
             return
 
-        previous = self.sessions.get(device_id)
-        if previous is not None and not previous.closed:
-            previous.closed = True
-            await previous.conn.close(protocol.CLOSE_REPLACED, "replaced by a newer connection")
-            self._fail_waiters(previous, "replaced")
         session.hello = hello
         welcome = await asyncio.to_thread(self._on_hello, session, hello)
+        # Check and register with no await in between. A device dials again
+        # only after it gave its connection up, so a newer connection that
+        # registered (or stored its hello) while this hello waited for the
+        # database makes this one stale: registering it would displace the
+        # live connection, and its own close would then leave the device
+        # connected but not online.
+        previous = self.sessions.get(device_id)
+        if welcome is None or (previous is not None and previous.generation > generation):
+            await conn.close(protocol.CLOSE_REPLACED, "replaced by a newer connection")
+            return
         self.sessions[device_id] = session
         try:
+            if previous is not None and not previous.closed:
+                previous.closed = True
+                await previous.conn.close(protocol.CLOSE_REPLACED,
+                                          "replaced by a newer connection")
+                self._fail_waiters(previous, "replaced")
             await self._send(session, welcome)
             await self._after_welcome(session)
             await self._receive_loop(session)
@@ -359,7 +388,17 @@ class LinkHub:
                 return device.id, "bootstrap", device.state == "CLAIMED", device.household_id
         return None
 
-    def _on_hello(self, session: DeviceSession, hello: dict) -> dict:
+    def _on_hello(self, session: DeviceSession, hello: dict) -> dict | None:
+        """The welcome, or None when a newer connection of this device stored
+        its hello first: this stale hello must not overwrite it, nor have its
+        older outbox tail read as a factory reset."""
+        with self._device_lock(session.device_id):
+            if session.generation < self._hello_generation.get(session.device_id, 0):
+                return None
+            self._hello_generation[session.device_id] = session.generation
+            return self._store_hello(session, hello)
+
+    def _store_hello(self, session: DeviceSession, hello: dict) -> dict:
         from sentrix_portal import security
         outbox = hello.get("outbox") if isinstance(hello.get("outbox"), dict) else {}
         with self.db.session() as db:
@@ -524,7 +563,15 @@ class LinkHub:
 
     def _reapply(self, device_id: str) -> list[tuple[str, dict]]:
         """Apply again the events that failed (oldest first); the follow-up
-        device commands of those that now apply."""
+        device commands of those that now apply.
+
+        Under the device's lock, as ``_ingest``: otherwise a resend of the
+        same event on a new connection could be applied while this loop is
+        applying it."""
+        with self._device_lock(device_id):
+            return self._reapply_locked(device_id)
+
+    def _reapply_locked(self, device_id: str) -> list[tuple[str, dict]]:
         from sentrix_portal import security
         followups: list[tuple[str, dict]] = []
         pending = self.unapplied.get(device_id) or {}
@@ -618,7 +665,17 @@ class LinkHub:
     def _ingest(self, session: DeviceSession, seq: int, kind: str, payload: dict,
                 at: Any) -> list[tuple[str, dict]]:
         """Store one event and apply its effect in one transaction. Returns
-        device commands to send after the commit (e.g. ``delivered``)."""
+        device commands to send after the commit (e.g. ``delivered``).
+
+        Under the device's lock: after a drop the old connection may still be
+        storing an event the new one was asked to resend, and the second of
+        two concurrent inserts of one (device, seq) failed as if the event
+        could not be applied (a false ``device.event_failed``)."""
+        with self._device_lock(session.device_id):
+            return self._ingest_one(session, seq, kind, payload, at)
+
+    def _ingest_one(self, session: DeviceSession, seq: int, kind: str, payload: dict,
+                    at: Any) -> list[tuple[str, dict]]:
         from sentrix_portal import security
         followups: list[tuple[str, dict]] = []
         try:

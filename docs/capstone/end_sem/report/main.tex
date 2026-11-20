@@ -1,0 +1,158 @@
+%==============================================================
+% SENTRIX - Capstone Project Report, End-Semester Evaluation
+% CPG-299, CSED, Thapar Institute of Engineering and Technology
+%
+% Format: the department's Report Format Guidelines - A4 portrait,
+% margins 1" top/bottom/right and 1.5" left, Times, 16 pt bold chapter
+% names, 14 pt bold headings, 12 pt text, 1.5 line spacing, 10 pt table
+% text and captions, page numbers bottom centre, IEEE references.
+% Look of the headings follows the department's LaTeX template.
+%
+% Build:  tectonic main.tex      (or pdflatex + bibtex + pdflatex x2;
+%         Overleaf: upload this folder, compiler pdfLaTeX)
+%==============================================================
+\documentclass[12pt,a4paper,oneside]{report}
+
+\usepackage[T1]{fontenc}
+\usepackage{newtxtext,newtxmath}
+\usepackage[a4paper,top=1in,bottom=1in,right=1in,left=1.5in,footskip=0.45in]{geometry}
+\usepackage{setspace}
+\usepackage{graphicx}
+\usepackage[table]{xcolor}
+\usepackage{array,tabularx,longtable,multirow,booktabs}
+\usepackage{amsmath}
+\usepackage{enumitem}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{titlesec}
+\usepackage{tocloft}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,shapes.multipart,fit,calc,backgrounds,matrix,shadows}
+\usepackage{pdflscape}
+\usepackage{xurl}
+\usepackage[hidelinks,bookmarksnumbered]{hyperref}
+\urlstyle{same}
+
+\onehalfspacing
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt}
+\setlist{itemsep=1pt,topsep=3pt,parsep=0pt}
+\emergencystretch=2em
+\raggedbottom
+
+\definecolor{sxred}{RGB}{185,28,28}
+\definecolor{sxblue}{RGB}{37,99,235}
+\definecolor{sxgreen}{RGB}{22,163,74}
+\definecolor{sxorange}{RGB}{234,88,12}
+\definecolor{sxgrey}{RGB}{107,114,128}
+\definecolor{sxpurple}{RGB}{124,58,237}
+\definecolor{sxlight}{RGB}{239,246,255}
+\definecolor{sxhead}{RGB}{226,232,240}
+
+% ---- Chapter heading: right-aligned, bold, 16 pt, thick rule (template)
+\titleformat{\chapter}[display]
+  {\normalfont\bfseries\raggedleft}
+  {\fontsize{12}{14}\selectfont\MakeUppercase{\chaptertitlename}\ \thechapter}
+  {2pt}
+  {\fontsize{16}{19}\selectfont\MakeUppercase}
+  [\vspace{4pt}{\titlerule[3pt]}]
+\titlespacing*{\chapter}{0pt}{-10pt}{24pt}
+% Unnumbered chapters (front matter, appendices): same look, no number line
+\titleformat{name=\chapter,numberless}[display]
+  {\normalfont\bfseries\raggedleft}{}{0pt}
+  {\fontsize{16}{19}\selectfont\MakeUppercase}
+  [\vspace{4pt}{\titlerule[3pt]}]
+\titlespacing*{name=\chapter,numberless}{0pt}{-10pt}{24pt}
+% ---- Headings: 14 pt bold (sections), 12 pt bold (subsections)
+\titleformat{\section}{\normalfont\fontsize{14}{17}\bfseries}{\thesection}{0.6em}{}
+\titleformat{\subsection}{\normalfont\fontsize{12}{15}\bfseries}{\thesubsection}{0.6em}{}
+\titleformat{\subsubsection}{\normalfont\fontsize{12}{15}\bfseries\itshape}{\thesubsubsection}{0.6em}{}
+\titlespacing*{\section}{0pt}{14pt}{6pt}
+\titlespacing*{\subsection}{0pt}{12pt}{4pt}
+\titlespacing*{\subsubsection}{0pt}{10pt}{3pt}
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{3}
+
+% ---- Captions: 10 pt, "TABLE 1.1:" above tables, "FIGURE 1.1:" below figures
+\captionsetup{font={footnotesize,stretch=1.0},labelfont=bf,labelsep=colon,justification=centering,skip=4pt}
+\captionsetup[table]{position=top}
+\renewcommand{\figurename}{FIGURE}
+\renewcommand{\tablename}{TABLE}
+
+% ---- Table of contents and lists (dot leaders, template look)
+\renewcommand{\contentsname}{Table of Contents}
+\renewcommand{\listfigurename}{List of Figures}
+\renewcommand{\listtablename}{List of Tables}
+\renewcommand{\cftchapleader}{\cftdotfill{\cftdotsep}}
+\renewcommand{\cftchapfont}{\bfseries}
+\renewcommand{\cftchappagefont}{\bfseries}
+\setlength{\cftbeforechapskip}{4pt}
+\renewcommand{\cftchappresnum}{\MakeUppercase{\chaptername}\ }
+\setlength{\cftchapnumwidth}{6.2em}
+\renewcommand{\cftchapaftersnum}{:}
+\setlength{\cftfignumwidth}{5.6em}
+\setlength{\cfttabnumwidth}{5.6em}
+\renewcommand{\cftfigpresnum}{Figure }
+\renewcommand{\cfttabpresnum}{Table }
+\setlength{\cftfigindent}{0pt}
+\setlength{\cfttabindent}{0pt}
+\renewcommand{\cftfigfont}{\small}
+\renewcommand{\cfttabfont}{\small}
+\renewcommand{\cftfigpagefont}{\small}
+\renewcommand{\cfttabpagefont}{\small}
+\renewcommand{\cftbeforefigskip}{3pt}
+\renewcommand{\cftbeforetabskip}{3pt}
+% Titles of the contents and lists: right-aligned, 16 pt bold, thick rule
+\newcommand{\listtitlefont}{\hfill\fontsize{16}{19}\selectfont\bfseries\MakeUppercase}
+\renewcommand{\cfttoctitlefont}{\listtitlefont}
+\renewcommand{\cftloftitlefont}{\listtitlefont}
+\renewcommand{\cftlottitlefont}{\listtitlefont}
+\setlength{\cftbeforetoctitleskip}{-10pt}
+\setlength{\cftbeforeloftitleskip}{-10pt}
+\setlength{\cftbeforelottitleskip}{-10pt}
+\newcommand{\listrule}{\par\vspace{4pt}\noindent\rule{\textwidth}{3pt}\par\vspace{14pt}}
+
+% ---- Tables: 10 pt content, single spacing inside
+\newcommand{\tablefont}{\footnotesize\setstretch{1.05}}
+\renewcommand{\arraystretch}{1.25}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcolumntype{R}[1]{>{\raggedleft\arraybackslash}p{#1}}
+\newcommand{\thead}[1]{\textbf{#1}}
+\newcommand{\rowhead}{\rowcolor{sxhead}}
+
+% ---- Algorithms
+\floatname{algorithm}{ALGORITHM}
+\algrenewcommand\algorithmicrequire{\textbf{Input:}}
+\algrenewcommand\algorithmicensure{\textbf{Output:}}
+
+% ---- Small helpers
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\rupee}{Rs.\,}
+\newcommand{\figref}[1]{Figure~\ref{#1}}
+\newcommand{\tabref}[1]{Table~\ref{#1}}
+\renewcommand{\algref}[1]{Algorithm~\ref{#1}}
+\newcommand{\eqnref}[1]{Equation~(\ref{#1})}
+
+\hypersetup{pdftitle={SENTRIX - Capstone Project Report (End-Semester Evaluation), CPG-299},
+            pdfauthor={Kartik Garg, Akshay Ranveer, Prashant Gagneja, Harshit Mishra, Mehul Perimal}}
+
+\begin{document}
+
+\input{chapters/00_front}
+
+\pagenumbering{arabic}
+\setcounter{page}{1}
+\input{chapters/01_introduction}
+\input{chapters/02_requirements}
+\input{chapters/03_methodology}
+\input{chapters/04_design}
+\input{chapters/05_implementation}
+\input{chapters/06_conclusions}
+\input{chapters/07_metrics}
+\input{chapters/08_appendices}
+
+\end{document}

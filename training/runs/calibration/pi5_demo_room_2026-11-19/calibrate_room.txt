@@ -1,0 +1,34 @@
+32 event log(s), events_20261023_175605_18082d5f53f2.jsonl .. events_20261119_000006_1b2e4ee7de56.jsonl
+
+== weapon ==
+  scored: 9092 clip/tick observations, 17218 values, 5.08 h
+  per value: median 0.1896, p99 0.5464, p99.9 0.6668, max 0.7602
+  highest confirming value 0.6504, highest single value 0.7602
+  at floor     0.50: 45 onset(s), 92 confirmed observation(s)
+  at proposed  0.78: 0 onset(s), 0 confirmed observation(s)
+  at in_force  0.75: 0 onset(s), 0 confirmed observation(s)
+  PROPOSED 0.78 (set by single max + 0.01); 0 onsets in 5.08 h -> 95 % upper bound 0.59 per hour
+  replay check: same verdict as the device on 8956 of 8956 clips (at the bar it applied)
+    2026-11-18T21:02:30  confirm 0.650  single 0.668  clip 1b2e4ee7de56
+    2026-10-24T04:12:48  confirm 0.637  single 0.642  clip dc2cb4794810
+    2026-10-24T04:13:50  confirm 0.628  single 0.632  clip dc2cb4794810
+    2026-11-18T21:02:20  confirm 0.619  single 0.689  clip 1b2e4ee7de56
+    2026-10-24T04:15:17  confirm 0.618  single 0.618  clip dc2cb4794810
+    2026-10-24T04:13:43  confirm 0.614  single 0.618  clip dc2cb4794810
+
+== fire ==
+  scored: 9092 clip/tick observations, 17218 values, 5.08 h
+  per value: median 0.0792, p99 0.2361, p99.9 0.5685, max 0.7164
+  highest confirming value 0.6498, highest single value 0.7164
+  at floor     0.45: 4 onset(s), 9 confirmed observation(s)
+  at proposed  0.75: 0 onset(s), 0 confirmed observation(s)
+  at in_force  0.70: 0 onset(s), 0 confirmed observation(s)
+  PROPOSED 0.75 (set by confirming max + 0.10); 0 onsets in 5.08 h -> 95 % upper bound 0.59 per hour
+  replay check: same verdict as the device on 8956 of 8956 clips (at the bar it applied)
+    2026-10-28T04:48:59  confirm 0.650  single 0.653  clip ead5bf51243e
+    2026-11-02T00:36:48  confirm 0.627  single 0.716  clip 459e75c2883b
+    2026-10-28T04:48:55  confirm 0.592  single 0.608  clip ead5bf51243e
+    2026-10-27T23:04:14  confirm 0.587  single 0.646  clip 300b30f6eb16
+    2026-11-02T00:36:41  confirm 0.569  single 0.619  clip 459e75c2883b
+    2026-11-02T00:36:34  confirm 0.566  single 0.568  clip 459e75c2883b
+

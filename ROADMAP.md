@@ -915,6 +915,14 @@ fallback) remains for a deployment-specific head if the tagger fails.
   `ThreatConfig.scene_threshold_floor` in `sentrix/config.py`).
 * Per-deployment thresholds go into `var/calibration/scene.json` or
   `SENTRIX_SCENE_THRESHOLDS`, fitted on S3 of that room only.
+* `tools/calibrate_room.py` writes that file from the device's own event log
+  of a quiet period (D23): it replays the device's confirmation rule at every
+  bar and proposes `max(floor, highest confirming value + 0.10, highest single
+  value + 0.01)`; `--check` replays a staged-threat session at the proposed
+  bar. A calibration names the scene weights it was made for, and the engine
+  and `tools/doctor.py` flag it once other weights load: **after every
+  fine-tune, run the device on the new model for a few quiet hours and
+  calibrate the room again.**
 * The old thresholds were tuned for macro-F1 at 41 % threat prevalence. In a
   home, threats are rare: choose thresholds under a false-alarm budget (P8:
   ≤ 1 false prompt per 3 h), not for F1.

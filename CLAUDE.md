@@ -500,7 +500,19 @@ branch's room-calibration work, its D23, stays there).
   on held-out normal frames; old-val AUROC weapon 0.748 -> 0.871, fire
   0.587 -> 0.964; public pistol AP50 0.007 -> 0.699, knife 0.717, fire
   0.000 -> 0.487). Replay: the new gun and knife scenes reach L3, weapon
-  episodes at L3 8/12 -> 11/14, false L3 onsets unchanged (1).
+  episodes at L3 9/14 -> 11/14, fire at L5 2/3 -> 0/3 (L3, L4 unchanged),
+  false L3 onsets unchanged (1).
+  One known false box: the v5 weapon head calls the dark bag the masked thief
+  holds in `mmtheft` a "pistol" (0.67), which lifts that robbery episode to L3
+  (the robbery evidence itself stays at L2). Robbery frames are excluded from
+  detector training; mark weapon-free robbery videos as negatives next time.
+* **v5 room scene classifier** (`models/v5_room/scene_classifier_room_v5.pt`, the v4
+  DINOv2 recipe with the new videos): passed its bars (old-val macro-F1
+  0.700 -> 0.743, no held-out normal frame flagged) but ships **opt-in**
+  (`SENTRIX_SCENE_WEIGHTS`): a room calibration made for v4 does not carry
+  over, so a device switches with a re-calibration in its room, never by a
+  `git pull`. With all three v5 models the 15-video replay has 0 false L3
+  onsets (1 before) and frame macro-F1 0.729 (0.519).
 * **Calibration checks, thresholds unchanged**: sound (PANNs aggression
   catches 12 % of AudioSet screams at 0.30, 22 % at its 1 % false-alarm bar,
   in-sample; no room audio exists), faces (no different-people pair reaches
@@ -510,21 +522,94 @@ branch's room-calibration work, its D23, stays there).
   pnnx in `.venv`; NCNN exports of the three heads (parity within 1e-5;
   slower than ONNX on this x86 laptop, 11-12 vs 9-10 ms a head at 320 px).
 * Not measured: the demo room (no recordings yet), the Pi's CPU cost of the
-  re-ID and the new heads, the scene model retrain (if it passes, it ships
-  with a room re-calibration before the Pi uses it).
+  re-ID and the new heads, the v5 scene model in the room (opt-in; it switches
+  with a room re-calibration).
+
+### Room calibration from the device's own log (2026-11-19, D23)
+
+The demo room's two hand calibrations (weapon 0.75, fire 0.70) were made by
+reading the Pi's log ad hoc; the room's own fine-tune (M6) will change the
+model and make them stale. `tools/calibrate_room.py` does that reading by a
+rule fixed in advance: it replays the device's confirmation rule on the
+logged scene scores of a quiet period at every bar (clip: two keyframes, the
+weapon person gate rebuilt from the logged boxes; tick: 2 of 3) and proposes
+`max(floor, highest confirming value + 0.10, highest single value + 0.01)`.
+Read-only unless `--write` (backup, never lowers a bar without
+`--allow-lower`, at least 2 h scored, names the scene weights); `--check`
+replays a staged-threat session at the proposed bar. The scene engine and
+`tools/doctor.py` flag a calibration made for other weights (still applied).
+Run on the Pi over SSH (script on stdin, nothing written there): the replay
+gave the device's own verdict on **8,956 of 8,956** logged clips; on the data
+of each hand calibration the rule proposes weapon **0.76** (hand 0.75) and
+fire **0.69** (hand 0.70); over the whole log (5.08 h scored) the bars in
+force had **0 onsets** (45 weapon and 4 fire onsets at the floors), with less
+headroom than the rule wants, so it proposes weapon 0.78 and fire 0.75,
+**applied on the Pi on 2026-11-19** on the owner's word (`--write`, old file
+kept as `scene.json.bak-20261119-005246`; SENTRIX restarted at 00:53 IST and
+loaded weapon 0.78, fire 0.75). Still to do in that room: the replica-gun
+and flame tests (`--check`), since a threat the scene model scores between
+the old and new bar no longer reaches L3 from it alone (section 4.3). The out-of-domain guard proposed with it was **not built**:
+measured, it would have removed nothing (D23). `tests/test_calibrate_room.py`
+(17 tests).
+
+### Pi sync: fire pin, runtimes, re-ID cost and the room's detector alarms (2026-11-20)
+
+The Pi is back on the home Wi-Fi (192.168.29.9) on a proper supply (EXT5V
+5.10 V, no throttling). Results: `training/runs/custom_eval/pi5/RUNTIME_2026-11-20.md`.
+
+* **v4 fire head pinned on the Pi** (owner, 2026-11-19): `SENTRIX_FIRE_WEIGHTS`
+  in its `.env`, written as an absolute path until `5ea95f8` reaches it - the
+  relative path of `pi.env` was taken from the current directory, so
+  `tools/doctor.py` and `tools/export_models.py` failed on it (fixed:
+  `sentrix.paths.weights_override`). The journal shows
+  `fire_detector_custom_v4_320.onnx` loaded; the weapon head stays v5 (its
+  Pi export re-checked: score error 1e-6).
+* **The Pi stays on ONNX.** NCNN is about twice as fast there only with
+  ncnn's default fp16 arithmetic, which changes the person head's label set on
+  4-6 % of frames (the weapon person gate); in fp32 it equals ONNX and is no
+  faster. ncnn and its exports were removed from the Pi again.
+* **Body re-ID costs ~50 ms a crop on the Pi** (laptop 10.3), on the
+  recognition thread with each face check.
+* **False weapon L3s from the fast-lane detector** (the scene model's room bars
+  held): v4 head 18-19 Nov, 4 onsets, pistol 0.55-0.82 (one marked false);
+  v5 head 20 Nov, 3 onsets within two minutes of boot, knife 0.57-0.60, all
+  marked false by the owner. The fast lane confirms at 0.55 on 2 of 2 passes
+  and the detectors have no per-room bar (D23 covers the scene model only).
+* That request also showed the offline rule at work against a waking Render
+  Portal: the link failed (503/500) until 19:26, then reconnected about once a
+  minute until ~20:02; the Portal marked the device offline with the request
+  PENDING and queued the contact's Telegram alert, which failed
+  (`ReadTimeout`). Every Telegram send from the Portal timed out until 20:04
+  IST, when the retried "resolved" message was delivered (Telegram's API
+  answered normally from India meanwhile): a fault on Render's side in the
+  first ~40 minutes after the resume. Fixed in the code (`b751493`): the device
+  logs who closed each link session (code, reason, duration) and redials at
+  once after a session the Portal welcomed and kept for 10 s (it waited up to
+  60 s, past the Portal's 45 s offline limit); "resolved", "closed" and
+  "lapsed" go only to contacts an alert of the request reached (the contact
+  got "resolved by the resident" for an alert that never arrived); a failing
+  retry is mirrored to the device once, not every 2 minutes; a failing
+  Telegram poll is logged and shown in the worker's health. Before a demo:
+  resume Render at least an hour ahead and send a test message.
+* `tools/doctor.py` on the Pi: every check passes except the evidence chain -
+  one clip bundle of 11-19 01:13 is 0 bytes (written during the under-voltage
+  drops), flagged correctly and left as it is.
 
 ## 3. Git history
 
-| Branch | Head | Contents |
+| Branch or tag | Head | Contents |
 |---|---|---|
-| `main` | `2867bdf` on GitHub (`origin/main`, pushed 2026-11-19) | the published state: the integrated product (device + Portal + SOS + Pi I/O + clip engine), the 2026-10-28 sweep and 2026-11-01 clean-up, the new React frontend (D22, M12), body re-ID and the v5 room heads (D24), docs and ROADMAP.md (previous heads `594d91b`, `eb82ff5`) |
-| `sentrix/frontend-v2` | `2867bdf` (= `origin/main`) | the new frontend (M12): `frontend/`, Portal `/api/v2`, the device API additions, the switch-over of both apps, merged with `main` (`de01c1f`) |
-| `sentrix/baseline-v3` | `d8629eb` | staged rewrite committed (`9e0037a`) + evaluation harness (`05a04fe`) + doc fixes |
-| `sentrix/finetuned-v3` | `66accb9` | baseline + scene integration + training tooling + fine-tuned v3 models |
-| `sentrix/custom-v4` | `3772acf` | baseline + scene integration + training tooling + new DINOv2/YOLO11n models |
-| `sentrix/e2e-repair` | `eb82ff5` | custom-v4 + M1–M5 + fresh-clone setup + docs/8 (Pi plan); the state before M10 |
-| `sentrix/portal` | `594d91b` (= `main`) + M11 (`30074ab`, `6f15ae3`, `fd1bc88`, `1a85f28`, `565c23f`) + M11b review fixes (`ba0bf17`, `819619a` and this hash note; `git log -1 sentrix/portal`); **not pushed** | main + Portal/SOS foundation + the eight tracks + integration, demo tools, e2e tests, live smoke fixes, review fixes, clean-up (M10), multimodal fusion and the talk-down speaker (M11; commits below) |
-| `wip/hw`, `wip/clip`, `wip/ch`, `wip/sos`, `wip/web`, `wip/acct`, `wip/link`, `wip/model` | `4418de3`, `cc53443`, `f19e056`, `0b703b6`, `c340f29`, `e9d251c`, `24b897e`, `3bfb441` | the track branches, all merged into `sentrix/portal`; local only, not pushed |
+| `main` (GitHub, protected since 2026-11-20) | the merge of the integration pull request (2026-11-20; `git log -1 origin/main`) | everything: the integrated product, the new React frontend (D22, M12), body re-ID (D24), room calibration (D23), the v5 room models, the end-semester report and poster, the team workflow (`.github/CODEOWNERS`, `.github/workflows/checks.yml`, `CONTRIBUTING.md`). Changes only through reviewed pull requests; every merge redeploys the Render Portal |
+| `sentrix/portal` (local; the shared checkout `G:\Sentrix`) | working branch | fully merged into `main` on 2026-11-20 (it had carried M11, the 10-28 sweep, D23 and the report); new work goes up as a pull request after `git fetch` and a merge of `origin/main`. The GitHub branch of that name (`48142c0`, 2026-10-15) was deleted: `main` contains it |
+| `deploy/main-2026-11-18` (local; worktree `deploy-main`) | `fa8de16` | the models session's branch (D24, v5 models, Pi runtime notes, delivery fixes); fully merged into `main` |
+| tags `sentrix/baseline-v3`, `sentrix/finetuned-v3`, `sentrix/custom-v4`, `sentrix/e2e-repair` | `d8629eb`, `66accb9`, `3772acf`, `eb82ff5` | the configurations docs/6 compares and the state before M10, kept as tags (branches until 2026-11-20). Only `sentrix/finetuned-v3` holds anything `main` lacks: the fine-tuned v3 models (`models/v4_finetuned/`) the evaluation did not choose |
+
+Removed on 2026-11-20, all contained in `main`: the track branches `wip/hw`,
+`wip/clip`, `wip/ch`, `wip/sos`, `wip/web`, `wip/acct`, `wip/link`,
+`wip/model`, the workflow branches `worktree-wf_59ce1511-338-*`,
+`sentrix/frontend-v2` (M12) and the three `claude/*` fix branches of
+2026-10-28 (their commits reached `main` as `fc5faeb`, `95b9688`, `d290c1c`,
+with `ceca12f` putting `LinkHub._reapply` under the device lock).
 
 Published to `github.com/mehulperimal14/Sentrix` on 2026-10-10. Before publishing,
 history was rewritten once: private runtime data that earlier commits had
@@ -557,6 +642,12 @@ then `565c23f` (THIRD_PARTY.md rows) and the M11b review fixes:
 ```
 819619a docs(m11b): review fixes - decisions, offline rule, results
 ba0bf17 fix(m11): review findings - offline SOS, sound-model threads, banter, overlapping audio
+```
+Later on the same branch (newest first; `git log sentrix/portal` for the rest):
+```
+7426091 feat(reid): ship OSNet-AIN trained on MSMT17, chosen over IntrusionSentry's ImageNet weights (D22)
+3e1e296 docs(reid): D22 - IntrusionSentry's OSNet in SENTRIX, measurements, runbook and roadmap
+9eb50a1 feat(reid): OSNet x1_0 from IntrusionSentry - body embeddings and body identity at home (D22)
 ```
 
 Commits on `sentrix/portal` up to `main` (first parent, newest first; each
@@ -665,9 +756,14 @@ validated** (2 videos / 1 event). Only two rooms are represented.
 | Pi 5 live in the demo room (clip mode, 320 px, ONNX; 2026-10-23/24, ~10 h; no simulated alerts) | 8077 clips: scene p(weapon) per scored keyframe median 0.19, p99 0.53, p99.9 0.65, max 0.742; at the 0.50 floor **16 clips confirmed = the 16 weapon L3s** (scene alone; the weapon detector never confirmed; 5 of their SOS requests declined as false alarms on the Pi); at >= 0.60 none. Per-deployment threshold set to weapon 0.75 on the Pi (`var/calibration/scene.json`). Not yet measured: a replica gun in that room | the Pi's own event log (`var/events/`, private), read-only analysis 2026-10-24 |
 | Pi 5 demo room, fire (2026-10-23 and 10-27: 16,927 clips, 12.1 h; 5,435 scored by the scene model, 5.7 h, no flame in view) | scene p(fire) per keyframe median 0.073, p99 0.212, p99.9 0.494, max 0.646; the confirming second keyframe never above 0.587; confirmed clips at 0.45 / 0.50 / 0.55 / >= 0.60: 4 / 1 / 1 / 0 (the 2 false fire L3s); the fire detector drew no fire box. Per-deployment threshold **fire 0.70** (owner approved 2026-10-28) next to weapon 0.75 | the Pi's event log and database (read-only analysis 2026-10-28) |
 | Body re-id, three OSNet checkpoints on the custom videos (ByteTrack tracks, same track >= 2 s apart vs two people in one frame; `wa02` refused) | nine videos: pairwise AUROC ImageNet x1_0 0.831 / MSMT17 x1_0 0.917 / **MSMT17 OSNet-AIN 0.931** (chosen); identity rule (20 looks, two checks) at each one's bar (<= 0.05 % different): 37.3 / 39.0 / 42.3 % same-person. 14 videos (with the new ones): AIN pairwise 0.935, global-id bar 0.66 (1 % different), identity bar **0.87** (30.1 % same, 0.020 % different) | `training/runs/reid/osnet_weights_compare/`, `osnet_ain_14videos/` |
-| v5 room detector heads vs v4 (held-out: old val = gun + vid04; `wa02` reported only) | weapon: false alarms at 0.25 on normal frames 0.0 / 0.015 (= v4), old-val AUROC 0.748 -> **0.871**, recall@0.25 0.13 -> 0.22, public test pistol AP50 0.007 -> **0.699**, knife **0.717**, `wa02` AUROC 0.47 -> 0.90; fire: old-val AUROC 0.587 -> **0.964**, false alarms 0 / 0, public fire AP50 0.000 -> **0.487** (vid04's flame still under 0.25). Replay of 15 videos: weapon at L3 8/12 -> 11/14, the new gun/knife scenes L2 -> L3, 1 false L3 onset before and after | `training/runs/eval/detectors_2026-11-19/`, `fire_candidate_2026-11-19/`, `custom_eval/baseline_2026-11-19/`, `v5det_2026-11-19/` |
+| v5 room detector heads vs v4 (held-out: old val = gun + vid04; `wa02` reported only) | weapon: false alarms at 0.25 on normal frames 0.0 / 0.015 (= v4), old-val AUROC 0.748 -> **0.871**, recall@0.25 0.13 -> 0.22, public test pistol AP50 0.007 -> **0.699**, knife **0.717**, `wa02` AUROC 0.47 -> 0.90; fire: old-val AUROC 0.587 -> **0.964**, false alarms 0 / 0, public fire AP50 0.000 -> **0.487** (vid04's flame still under 0.25). Replay of 15 videos: weapon at L3 9/14 -> 11/14 (fire at L5 2/3 -> 0/3, L3 and L4 unchanged), the new gun/knife scenes L2 -> L3, 1 false L3 onset before and after | `training/runs/eval/detectors_2026-11-19/`, `fire_candidate_2026-11-19/`, `custom_eval/baseline_2026-11-19/`, `v5det_2026-11-19/` |
+| Pi configuration replay (clip mode, ONNX 320 px, fast lane, v4 scene; 14 train + val videos) | v4 heads / v5 heads: false L3 onsets 0 / 0; weapon at L3 9/11 / 9/11, L4 5 / 4, L5 4 / 3; fire at L3 3/3 / 3/3, **L4 2 / 0, L5 1 / 0**; val frame macro-F1 0.405 / 0.509; held-out val episodes identical. At 320 px the v5 heads add no L3 catches and lose fire corroboration on the training fire videos v4 had memorised; the Pi runs v5 heads since main `2867bdf`; **the owner chose to keep v4 fire on the Pi** (2026-11-19: `SENTRIX_FIRE_WEIGHTS` in `deploy/pi5/pi.env`, applied on the Pi 2026-11-20), the weapon head stays v5 | `training/runs/custom_eval/pi_clip_v4heads_2026-11-19/`, `pi_clip_v5heads_2026-11-19/` |
+| Pi 5 runtimes (heads at 320 px, 4 threads; `pi_runtime_parity.py`) | p50 ONNX / NCNN fp16 (ncnn's default on the A76) / NCNN fp32: person 38.6 / 18.0 / 39.5 ms, weapon v5 34.0 / 16.3 / 34.0, fire v4 33.9 / 16.1 / 34.0. Against ONNX on 102 frames: fp16 person top-score error 0.054, label set differs on 4 / 6 / 2 frames at 0.25 / 0.35 / 0.5 (weapon 1 / 0 / 0, fire 0); fp32 identical. **ONNX stays** | `training/runs/custom_eval/pi5/RUNTIME_2026-11-20.md` |
+| Body re-ID on the Pi (OSNet-AIN MSMT17, onnxruntime 2 threads, 121 crops of vid07) | **49.6 ms a crop** (p95 51.6) at batch 1, 52.8 ms at batch 4; laptop 10.3 ms | same |
+| v5 room scene classifier vs v4 (as the product runs it, floors applied) | LOVO over 14 videos: tuned macro-F1 0.433 (mmgun 1.00, mmknife 0.54; assault and robbery 0). Held out: old-val macro-F1 0.700 -> **0.743**, weapon recall 0.36 -> 0.45 (AUROC 0.786 -> 0.843), 0 of 90 held-out normal frames flagged (= v4); public stills: same ranking, weapon recall at the bar 0.34 -> 0.09, false alarms 2.1 % -> 0 % | `training/runs/custom/scene_cv/dino_b_last4_v5/`, `eval/scene_room_v5_fp16/` |
 | Sound, faces (no room data; in-sample or proxy) | PANNs on AudioSet clips (in-sample): siren AUROC 0.98 (91 % at 0.30), aggression 0.97 (12 % at 0.30; 22 % at the 1 % bar 0.21), fire sound 0.54. Faces (14 videos, same track vs two people in a frame): no different-people pair at the 0.55 bar for buffalo_l @640 (max 0.36) or buffalo_s @320 (max 0.27); faces found on 53 % / 31 % of person boxes | `training/runs/eval_audio/`, `eval_faces/2026-11-18/` |
 | Pi 5 clip engine (ONNX, fast lane, `buffalo_s`; `gun.mov` as a 30 fps camera) | clip compute p50 **8.0 s** at 640 px objects (74 % of clips dropped, decisions 9.3 s old) → **3.9 s at 320 px** (48 %, 4.3 s), 2.2 s at 320 px + 1 scene frame (10 %, 3.2 s); budget 1.6 s. Clip replay of the 9 train + val videos (`wa02` not replayed, partly in-sample): 640 / 320 / 320 + 1 scene frame → L3 weapon 9/9, 9/9, 8/9; fire 3/3, 3/3, 2/3; L4 weapon 6/8, 5/8, 3/8; 0 false onsets at L3+. The Pi profile uses 320 px (`SENTRIX_CLIP_IMGSZ=320`) | `training/runs/custom_eval/pi5/REPORT.md` (knobs `4503b0d`) |
+| Room calibration from the Pi's own log (`tools/calibrate_room.py`, read-only over SSH; clip mode, v4 scene weights; 2026-10-23 → 11-19, 9,092 scene-scored clips = 5.08 h) | replay = the device's own verdict on **8,956 / 8,956** clips (weapon and fire). Rule `max(floor, confirming max + 0.10, single max + 0.01)` on each hand calibration's data: weapon 0.76 (hand 0.75; p99 0.531, max 0.742), fire 0.69 (hand 0.70; confirming max 0.587, single max 0.646). Whole log: weapon per value median 0.190 / p99 0.546 / max 0.760, confirming max 0.650; fire 0.079 / 0.236 / 0.716, confirming max 0.650; onsets at the floors 0.50 / 0.45: 45 / 4; at the bars in force 0.75 / 0.70: **0 / 0** (95 % bound 0.59 per hour); proposed 0.78 / 0.75, **applied on the Pi 2026-11-19** (owner) | `training/runs/calibration/pi5_demo_room_2026-11-19/REPORT.md` |
 
 ---
 
@@ -751,6 +847,7 @@ video/session is never used for tuning.
 | D20 | **Training recordings from the dashboard** (2026-10-28; the "record normal session" mode of M6). The **device admin on the LAN only** starts and stops a recording (optional label) on the dashboard's *Record video* card and lists, downloads and deletes them (`/api/recordings*`, `/media/recording/*`, `require_lc("device_admin")`, 10 starts/min, a stop never limited); **never through the Portal**: the path table refuses those paths to every tunnelled role (`LC_ONLY_PREFIXES`, `lc_only`), a recording is far over the tunnel's 16 MiB response cap, and continuous video stays on the device (D12). *Amended 2026-10-28: the owner can also start a recording through the Portal with a fresh step-up (path-table class `record`, the siren test's rule) and stop it without one (`record_stop`: a step-up lasts 5 min, a recording up to 10, and stopping the filming is never blocked) and see the status and list (`record_status`, no step-up); downloads and deletes stay on the LAN.* *Since D22 the Portal app has no recording control (the path-table rows stay); recordings are made on the device app's `/admin/recordings`.* A recording is the camera's **raw frames** (no HUD) at the camera's resolution (Pi: 1280x720 at 15 fps; wider frames scaled to 1280) as **MJPEG AVI at a constant frame rate** (the camera's own rate; frame n is at t0 + n/fps: a missed slot repeats the last frame, a second frame in one slot is dropped, both counted), plus, while a microphone is connected, its **16 kHz mono PCM** track (sample 0 under frame 0, gaps zero-filled) **muxed with ffmpeg** (a separate `.wav` without it), and a JSON sidecar (who, when, frames repeated and dropped, audio gaps, camera, profile, device). **Caps** (`SENTRIX_RECORD_*`): 10 min each; 2 GB free kept for the alarm's evidence and logs (no start below it, a stop at it); 20 GB for all recordings (no new start above it); deleted after 14 days; the video also stops at 1.9 GB (OpenCV's AVI writer is unreadable past 2 GiB), when the camera is gone for 5 s and at shutdown; a crash's or a failed save's `.part` files are finished (at once, before the next take, hourly or at the next start; a save that wrote its sidecar keeps its figures); the mux runs only when its copy leaves the 2 GB floor intact; old recordings are pruned hourly with or without a dashboard open; the rate is a whole number (the AVI header stores it rounded). A red **REC mm:ss** badge on the live preview for everyone watching (LC and Portal viewers alike), never in the file. **Downloads never land on the Pi**: a browser on the device itself (its desktop dashboard on 127.0.0.1, or the Pi opening its own address) is refused (409, `SENTRIX_RECORD_DOWNLOAD_ON_DEVICE=auto` on a Raspberry Pi) and the card names the address to open on a laptop, so gigabytes of video never fill the 128 GB SD card the evidence shares; `/api/health` says only whether a recording runs, never its name (the label would reach the Portal in `hello.health`). **Consent** of everyone filmed (ROADMAP §15.1). **Purpose**: deployment-room training data (M6). Audited in the device log only: `recording_started`, `_stopped`, `_downloaded`, `_deleted`, `_pruned`, `_recovered`. | The models fail in the demo room because none of their footage came from it (section 5); footage from the deployed camera, mount and microphone is the fix, and a button on the dashboard is the cheapest way for the team to collect it. |
 | D21 | **A USB microphone in any port, at any time** (2026-10-28; replaces the default-input retry loop of `019854c`). The engine opens the best input there is now: `SENTRIX_MIC_DEVICE` (an index or a name substring) > a USB input (one plugged in while SENTRIX runs first) > another input plugged in while it runs > the system default; display audio (HDMI, vc4), monitors and loopbacks never, unless asked for; headsets (Bluetooth hands-free included) and virtual microphones only as a last resort, when no other input exists (a cheap USB adapter may call itself a headset, and on the Pi it is the only microphone). On Linux `PA_ALSA_PLUGHW=1`, so PortAudio opens the USB card through ALSA's `plughw` (PipeWire is not in the path) at the card's own rate first (plughw at 16 kHz would convert with ALSA's unfiltered `linear` converter: the demo Pi has no speexrate); elsewhere 16 kHz if the device takes it, else 48, 32 kHz or its own rate (44.1 kHz), resampled to 16 kHz with a filter whose state carries across blocks (multi-channel input downmixed), so listeners (clip buffer, recorder) always get 16 kHz mono. PortAudio's device list is rebuilt **only when the OS's own list changes** (`/proc/asound/cards`, the Windows wave-in count, read without opening anything), a few times after a change, and every `SENTRIX_MIC_RESCAN_SECONDS` (60) while no microphone is open: the old re-initialise every 5 s closed every stream and muted the log (sounddevice sends stderr to /dev/null while PortAudio initialises). A better input appearing (laptop mic → USB) is switched to. A microphone counts as **connected from its first block**, not from the open, and `mic_available` is the engine's own "delivering" (`mic_delivering`, written by the live loop; the same as `/api/health` `audio`), with `mic_classifying` saying whether a window was labelled (`state.mic_state`), so the dashboard neither says "Microphone: listening" with nothing plugged in nor "off" while a recording captures the room with the sound model off; `/api/health` and `/api/node` carry `microphone` (`AudioEngine.status()`: device, host API, native rate, channels, blocks, last error). With `SENTRIX_AUDIO_MODEL=off` the microphone still captures (for recordings) and nothing is classified. | The demo unit's microphone (a Scalebee USB microphone, arriving 2026-11-03) goes into whichever port is free, possibly after start-up; the old loop opened the default input only, at 16 kHz only, and called a stream "connected" before any sound arrived. |
 | D22 | **A new frontend replaces both server-rendered UIs** (2026-10-28, owner's request; branch `sentrix/frontend-v2`, contract `docs/9_FRONTEND.md`). Two React 19 + TypeScript single-page apps built with Vite and Tailwind 4 from `frontend/` (npm workspaces): the **Portal app** (owner and member app with Home, Activity, People, Settings, Live and the alert screen; 5-step setup; contact token pages; Desk; Admin; sign-in and activation) and the **device app** (wall view and alert takeover on the device screen; device admin on the LAN). Design: the SENTRIX Experience Plan and the platform prototype. The Jinja templates and page JS of `sentrix_portal` and `sentrix/web` are removed; the Python apps serve JSON APIs (Portal `/api/v2`, device `/api/...`) that call the same services, plus the built app (`static/app/`, committed so Render and the Pi need no Node). Owners see the device only through Portal screens fed by the tunnel's JSON (`/d/{id}/api/...`, `/video`, `/ws/threat`); the old engineering dashboard becomes device-admin Diagnostics, LAN only. **No data changes**: no table, column, file or retention meaning changes; new storage is additive. Old links keep working (`/activate/{code}`, `/claim`, `/consent/{token}`, `/c/{token}`, `/a/{token}`, `/sos/{id}`, `/dashboard`, `/setup/wifi`). Nothing is pushed before the Python suite, the frontend unit tests, the Playwright end-to-end run against a demo world and a manual local run pass. *Done and deployed 2026-11-18/19 (M12).* | The team needs a proper product UI for the evaluations; the Experience Plan's audit scored the old pages 3 to 6 out of 10. |
+| D23 | **Room calibration from the device's own event log** (2026-11-19; the M1 per-deployment thresholds, made routine). `tools/calibrate_room.py` reads the live rows of a period the team asserts was quiet and replays the device's own confirmation rule on the logged scene scores at every bar - clip mode: `confirm_keyframes` (2) distinct keyframes, cached ones included, a weapon keyframe only with a person seen in the last 2 s (rebuilt from the logged person boxes, carried across clips); tick mode: 2 of the last 3 fresh evaluations, a 3 s gap resetting - and proposes **max(floor, highest confirming value + 0.10, highest single value + 0.01)**, rounded up to 0.01, capped at 0.95 (a warning above 0.90: the model cannot tell the room's normal from a threat; record the room and fine-tune). It checks itself against the device's logged verdicts. Read-only by default; `--write` merges into `var/calibration/scene.json` after a timestamped backup, never lowers a bar without `--allow-lower`, skips a class with under 2 h scored, and records the scene weights (checkpoint name + size); the scene engine applies a file made for other weights but flags it (`calibration_stale`, the threshold source, a `tools/doctor.py` WARN). `--check LOG` replays a staged-threat session at the proposed bar; `--since/--until/--exclude` drop non-quiet periods. **Not built: an out-of-domain guard** for scene votes (familiarity to the training frames): on the five videos of 2026-11-18 (four new scenes in the old bedroom, one ordinary scene in a second room) the v4 scene model raised no false weapon or fire on their 90 normal frames (29 of them from the second room) and found 1 of 47 weapon frames (`training/runs/eval/baseline_2026-11-18`), so muting it where it is unfamiliar removes nothing there, and in the demo room the calibrated bars had 0 onsets in 5.08 h; it would also need a re-exported ONNX on the Pi. | The demo room's two bars were set by reading the Pi's log by hand; re-calibrating after the room's fine-tune (M6), or after the device moves, must not depend on someone repeating that. The rule reproduces both hand bars within 0.01. |
 | D24 | **Body re-identification from IntrusionSentry** (2026-11-18/19; amends M4's "a new track never inherits it"). IntrusionSentry's OSNet family, shipped as **OSNet-AIN x1_0 trained on MSMT17** (`sentrix/perception/osnet.py`, `models/reid/`, own onnxruntime session, denormals flushed; `SENTRIX_REID_MODEL=auto|histogram|off`, `SENTRIX_REID_THREADS`), chosen over IntrusionSentry's ImageNet weights by a rule fixed before the comparison; embedded with each face check, never per tick. At **home** (`SENTRIX_REID_IDENTITY=1`, default) a track whose face has not been seen is authorised as a resident when its body matches that resident's face-verified looks (last 20, 30 min) at >= **0.87** on **2 checks in a row**, >= 0.05 ahead of any other resident; shown as `name (body)`, `via: "appearance"`. Never in armed mode, against a face that was seen and failed, for a resident authorised by face on another track in view, or with colour-histogram bodies. Global ids at 0.66. The bars belong to these weights. | A resident who turns away or re-enters became "unverified" and, after 10 s at home, an L2 "unrecognised person" (D2); the body bridges that while a stranger was accepted in 0.020 % of measured cases. Identity never relaxes threat evidence (M1), so a wrong body match can at most hide an L2 at home. |
 
 ### Milestones
@@ -882,12 +979,16 @@ v1, tunnel + auth bridge, SOS state machine, channels, roles, endpoints).
 - [x] Owner face gallery in the Portal app (2026-11-19, owner's request; local, not yet pushed): People → *Faces SENTRIX recognises* lists the device's faces, uploads photos or takes one from the SENTRIX camera's live preview, removes with a step-up; members see it read-only. The device's `GET /api/authorized` moved from the LC-only list to the path table's `faces` row (consents `remote_view` + `face_recognition`, never the Desk) and checks `gallery_view` itself. Body re-ID still needs no photo (D24). Tried on the laptop demo world: preview and capture through the tunnel, the device's refusal reason shown.
 - [ ] Not done: the Portal app has no recording or siren-test controls (the device's path table still allows both for the owner with a step-up); the Portal's CSP still carries an unused per-request script nonce.
 
-### Owners (from the README team table)
+### Owners (from the README team table; roles set by the owner on 2026-11-20)
 
-Kartik — detector path, confirmation, unified YOLO (M1, M7) · Akshay — identity,
-tracks, enrollment (M4) · Mehul — records, dashboard, eval/gate tooling (M3, M5,
-M9) · Harshit — recording protocol, fusion (M6, M8) · Prashant — audio to
-log-only, gunshot/glass-break data track (non-gating).
+Kartik (@kg3478) and Akshay (@ranveerakshay2) — UI/UX, frontend, product
+roadmap and docs (Kartik leads the Portal app, docs and ROADMAP.md; Akshay the
+device app and UI kit) · Harshit (@Hmishra230) — backend · Prashant
+(@praxshant) — AI/ML and model training · Mehul (@mehulperimal14) — IoT and
+hardware, repository maintainer. `.github/CODEOWNERS` maps the folders;
+`CONTRIBUTING.md` holds the workflow (issue → branch → pull request → checks →
+review → squash merge). Changes Claude prepares go up from Mehul's account as
+pull requests and are reviewed by the area's owner like any other.
 
 ### Open questions for the team
 

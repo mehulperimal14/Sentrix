@@ -1,0 +1,53 @@
+# Who reviews what. GitHub asks these people to review any pull request that
+# changes the matching files; one approval from a listed owner is enough.
+# Each area has two owners, so the owner who opens a pull request still has
+# someone who can approve it. The LAST line that matches a file wins.
+# Roles: README.md "Team"; workflow: CONTRIBUTING.md.
+
+# Anything not listed below: the maintainer and the backend owner
+*                                           @mehulperimal14 @Hmishra230
+
+# Backend: Harshit Mishra (second owner: Mehul Perimal)
+/sentrix/                                   @Hmishra230 @mehulperimal14
+/sentrix_portal/                            @Hmishra230 @mehulperimal14
+/tests/                                     @Hmishra230 @mehulperimal14
+/deploy/portal/                             @Hmishra230 @mehulperimal14
+/deploy/cloud/                              @Hmishra230 @mehulperimal14
+/render.yaml                                @Hmishra230 @mehulperimal14
+/railway.json                               @Hmishra230 @mehulperimal14
+/requirements.txt                           @Hmishra230 @mehulperimal14
+/pyproject.toml                             @Hmishra230 @mehulperimal14
+/.github/                                   @Hmishra230 @mehulperimal14
+
+# AI/ML and model training: Prashant Gagneja (second owner: Harshit Mishra)
+/sentrix/perception/                        @praxshant @Hmishra230
+/sentrix/fusion/                            @praxshant @Hmishra230
+/sentrix/evaluation/                        @praxshant @Hmishra230
+/sentrix/runtime/                           @praxshant @Hmishra230
+/models/                                    @praxshant @Hmishra230
+/training/                                  @praxshant @Hmishra230
+/notebooks/                                 @praxshant @Hmishra230
+
+# IoT and hardware: Mehul Perimal (second owner: Prashant Gagneja)
+/sentrix/io/                                @mehulperimal14 @praxshant
+/deploy/pi5/                                @mehulperimal14 @praxshant
+/hardware/                                  @mehulperimal14 @praxshant
+/requirements-pi.txt                        @mehulperimal14 @praxshant
+/run.sh                                     @mehulperimal14 @praxshant
+
+# UI/UX, frontend, product roadmap and docs: Kartik Garg and Akshay Ranveer
+/frontend/                                  @kg3478 @ranveerakshay2
+/sentrix/web/static/                        @kg3478 @ranveerakshay2
+/sentrix_portal/static/                     @kg3478 @ranveerakshay2
+/docs/                                      @kg3478 @ranveerakshay2
+/README.md                                  @kg3478 @ranveerakshay2
+/ROADMAP.md                                 @kg3478 @ranveerakshay2
+/CONTRIBUTING.md                            @kg3478 @ranveerakshay2
+/docs/3_HARDWARE_SPECIFICATION_AND_BOM.md   @mehulperimal14 @kg3478 @ranveerakshay2
+/docs/8_RASPBERRY_PI5_INTEGRATION.md        @mehulperimal14 @kg3478 @ranveerakshay2
+/docs/2_MODEL_BENCHMARKS_AND_KPIS.md        @praxshant @kg3478 @ranveerakshay2
+/docs/6_CUSTOM_DATASET_EVALUATION.md        @praxshant @kg3478 @ranveerakshay2
+/docs/7_PORTAL_AND_SOS.md                   @Hmishra230 @kg3478 @ranveerakshay2
+
+# Project memory: the maintainer
+/CLAUDE.md                                  @mehulperimal14 @Hmishra230

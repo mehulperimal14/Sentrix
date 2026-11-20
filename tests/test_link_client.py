@@ -506,6 +506,30 @@ class TestSession:
         wait_for(lambda: len(rig.network.pipes) > count, timeout=10, what="redial")
         assert rig.network.pipes[count - 1].code == protocol.CLOSE_GOING_AWAY,             "the device left the silent connection itself"
 
+    def test_a_session_the_portal_ends_is_logged_with_its_code_and_reason(self, rig):
+        """The demo Pi's link dropped every minute or so on 2026-11-20 and its
+        log said only "link connected" each time."""
+        import logging
+        records = []
+        handler = logging.Handler()
+        handler.emit = records.append
+        logger = logging.getLogger("sentrix.link.client")
+        logger.addHandler(handler)
+        try:
+            start_claimed(rig)
+            records.clear()                        # the claim's "token issued" reconnect
+            session = rig.network.hub.sessions[rig.seeded.device_id]
+
+            async def heartbeat_lost():
+                await session.conn.close(protocol.CLOSE_GOING_AWAY, "heartbeat lost")
+            run_on(rig.service._loop, heartbeat_lost())
+            wait_for(lambda: any("link closed after" in r.getMessage() for r in records),
+                     what="the close in the log")
+        finally:
+            logger.removeHandler(handler)
+        line = next(r.getMessage() for r in records if "link closed after" in r.getMessage())
+        assert f"code {protocol.CLOSE_GOING_AWAY} (heartbeat lost)" in line, line
+
     def test_reconnect_now_and_api_link(self, rig, monkeypatch):
         from fastapi.testclient import TestClient
         from sentrix import services
@@ -666,6 +690,69 @@ class TestPieces:
         assert service._force_bootstrap is True
         assert asyncio.run(after(protocol.CLOSE_UNSUPPORTED)) == 60.0
         assert asyncio.run(after(1006)) is None, "the normal full jitter"
+
+    def test_a_long_outage_never_overflows_the_backoff(self, tmp_path):
+        """The jitter ceiling doubled without a bound: after 1024 failed dials
+        (~8.5 h of a Portal down at the 1-60 s default) ``2 ** attempt``
+        overflowed a float and ended the dial loop for good."""
+        from types import SimpleNamespace
+        from test_link_support import link_cfg, write_identity
+        write_identity(tmp_path)
+        dials, delays = [], []
+
+        async def refused(url, headers):
+            dials.append(url)
+            raise ConnectionRefusedError("portal down")
+        service = link_client.LinkService(
+            SimpleNamespace(settings=None, state=None, extras={}, registry=None,
+                            get_pipeline=lambda: None),
+            connector=refused, identity_dir=tmp_path,
+            cfg=link_cfg(reconnect_min_seconds=1.0, reconnect_max_seconds=60.0))
+
+        async def offline_wait(seconds):
+            delays.append(seconds)
+            if len(delays) >= 1100:
+                service._stop.set()
+
+        async def go():
+            service._stop, service._kick = asyncio.Event(), asyncio.Event()
+            service._offline_wait = offline_wait
+            await asyncio.wait_for(service._dial_forever(), 120)
+        asyncio.run(go())
+        assert len(dials) == 1100 and all(0.0 <= d <= 60.0 for d in delays)
+
+    def test_close_info_names_who_ended_the_session(self):
+        from websockets.exceptions import ConnectionClosedError
+        from websockets.frames import Close
+        portal = ConnectionClosedError(Close(1001, "heartbeat lost"),
+                                       Close(1001, "heartbeat lost"), True)
+        assert link_client._close_info(portal) == (1001, "heartbeat lost", "portal")
+        keepalive = ConnectionClosedError(None, Close(1011, "keepalive ping timeout"))
+        assert link_client._close_info(keepalive) == (1011, "keepalive ping timeout", "device"), \
+            "the device's own close used to be reported as no code at all"
+        crossed = ConnectionClosedError(Close(1000, ""), Close(1011, "keepalive ping timeout"),
+                                        False)
+        assert link_client._close_info(crossed)[2] == "device", "ours went first"
+        assert link_client._close_info(ConnectionClosedError(None, None)) == (None, "", "network")
+        assert (link_client.describe_close(1011, "keepalive ping timeout", "device")
+                == "closed by this device, code 1011 (keepalive ping timeout)")
+        assert (link_client.describe_close(None, "", "network")
+                == "connection lost (no close frame)")
+
+    def test_a_welcomed_session_of_ten_seconds_restarts_the_back_off(self):
+        """It took 60 s connected: after the Portal's wake-up had pushed the
+        back-off to 60 s, a drop within the first minute kept the device away
+        past the Portal's 45 s heartbeat limit, and the Portal paged the
+        contacts for an open alarm (2026-11-20)."""
+        from types import SimpleNamespace
+        welcomed, not_yet = asyncio.Event(), asyncio.Event()
+        welcomed.set()
+        assert link_client.STABLE_SESSION_SECONDS < 45.0
+        assert link_client.stable_session(SimpleNamespace(welcomed=welcomed), 10.0)
+        assert not link_client.stable_session(SimpleNamespace(welcomed=welcomed), 9.9)
+        assert not link_client.stable_session(SimpleNamespace(welcomed=not_yet), 59.0), \
+            "a Portal that accepts and drops before the welcome still backs off"
+        assert not link_client.stable_session(None, 60.0)
 
     def test_build_service_is_off_by_default_and_preflight(self, tmp_path, monkeypatch):
         from types import SimpleNamespace

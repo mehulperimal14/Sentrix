@@ -7,8 +7,10 @@ not running). The service runs on the LC's event loop and:
 * dials ``wss://<portal>/device/v1/link`` (``ws://`` for an http:// dev
   Portal) with ``Authorization: Bearer <device token>``, or ``Bootstrap
   <device_id>:<secret>`` before the claim; reconnects with full-jitter
-  exponential back-off (1 s .. 60 s, reset after 60 s connected; the maximum
-  after a 4001); on 4003 it wipes the token and the profile cache;
+  exponential back-off (1 s .. 60 s, reset after a session the Portal welcomed
+  and kept for 10 s; the maximum after a 4001); on 4003 it wipes the token and
+  the profile cache; every session's end is logged with who closed it, the
+  close code and reason and how long it lasted;
 * says ``hello`` (identity, outbox summary, the redacted ``/api/health``
   fields) and sends a ``heartbeat`` every 10 s; a Portal silent for 30 s is
   treated as lost (the Portal acks every heartbeat);
@@ -184,12 +186,16 @@ def firmware() -> str:
 
 # ── transport ─────────────────────────────────────────────────────────────────
 class LinkClosed(Exception):
-    """The connection ended; ``code`` is the WebSocket close code (or None)."""
+    """The connection ended; ``code`` is the WebSocket close code (or None),
+    ``by`` who ended it: ``portal``, ``device`` or ``network`` (no close frame
+    either way), None when unknown."""
 
-    def __init__(self, code: int | None = None, reason: str = "") -> None:
+    def __init__(self, code: int | None = None, reason: str = "",
+                 by: str | None = None) -> None:
         super().__init__(f"link closed ({code}) {reason}".strip())
         self.code = code
         self.reason = reason
+        self.by = by
 
 
 class WebsocketsConnection:
@@ -209,14 +215,15 @@ class WebsocketsConnection:
         try:
             await self._ws.send(data)
         except ConnectionClosed as exc:
-            raise LinkClosed(_close_code(exc), "send failed") from exc
+            code, reason, by = _close_info(exc)
+            raise LinkClosed(code, reason or "send failed", by) from exc
 
     async def receive(self) -> str | bytes:
         from websockets.exceptions import ConnectionClosed
         try:
             return await self._ws.recv()
         except ConnectionClosed as exc:
-            raise LinkClosed(_close_code(exc)) from exc
+            raise LinkClosed(*_close_info(exc)) from exc
 
     async def close(self, code: int = 1000, reason: str = "") -> None:
         try:
@@ -225,9 +232,25 @@ class WebsocketsConnection:
             pass
 
 
-def _close_code(exc: Any) -> int | None:
-    rcvd = getattr(exc, "rcvd", None)
-    return getattr(rcvd, "code", None)
+def _close_info(exc: Any) -> tuple[int | None, str, str]:
+    """``(code, reason, by)`` of a ``websockets`` ``ConnectionClosed``: the
+    Portal's close frame when it came first, else this device's own (e.g.
+    1011 "keepalive ping timeout", which ``websockets`` logs only at DEBUG),
+    else ``network`` (the TCP connection ended without one)."""
+    rcvd, sent = getattr(exc, "rcvd", None), getattr(exc, "sent", None)
+    if rcvd is not None and (sent is None or getattr(exc, "rcvd_then_sent", True)):
+        return getattr(rcvd, "code", None), getattr(rcvd, "reason", "") or "", "portal"
+    if sent is not None:
+        return getattr(sent, "code", None), getattr(sent, "reason", "") or "", "device"
+    return None, "", "network"
+
+
+def describe_close(code: int | None, reason: str, by: str | None) -> str:
+    """One line for the log: who ended a session, its code and reason."""
+    who = {"portal": "closed by the Portal", "device": "closed by this device",
+           "network": "connection lost (no close frame)"}.get(by or "", "ended")
+    text = who + (f", code {code}" if code is not None else "")
+    return text + (f" ({reason})" if reason else "")
 
 
 async def websockets_connect(url: str, headers: dict[str, str]) -> WebsocketsConnection:
@@ -360,6 +383,8 @@ class _Session:
         self.send_lock = asyncio.Lock()
         self.wake = asyncio.Event()
         self.close_code: int | None = None
+        self.close_reason = ""
+        self.closed_by: str | None = None
         self.reconnect_now = False
         self.tasks: set[asyncio.Task] = set()
 
@@ -679,8 +704,8 @@ class LinkService:
             except asyncio.CancelledError:
                 raise
             except LinkClosed as exc:
-                if session is not None and session.close_code is None:
-                    session.close_code = exc.code
+                if session is not None:
+                    _note_close(session, exc)
             except Exception as exc:
                 log.info("link: cannot reach the Portal: %s", exc)
             finally:
@@ -691,12 +716,22 @@ class LinkService:
             if self._stop.is_set():
                 break
             self.reconnects += 1
-            if connected_at is not None and time.monotonic() - connected_at >= 60.0:
-                attempt = 0
+            if connected_at is not None:
+                lasted = time.monotonic() - connected_at
+                if session is not None:
+                    log.info("link closed after %.0f s: %s", lasted,
+                             describe_close(session.close_code, session.close_reason,
+                                            session.closed_by))
+                if stable_session(session, lasted):
+                    attempt = 0
             delay = await self._after_close(code, auth, session)
             if delay is None:
+                # The exponent is capped: 2 ** 1024 overflows a float, which
+                # ended this loop for good after 1024 failed dials (~8.5 h of
+                # a Portal down at the 1-60 s default).
                 delay = self._random(0.0, min(self.cfg.reconnect_max_seconds,
-                                              self.cfg.reconnect_min_seconds * (2 ** attempt)))
+                                              self.cfg.reconnect_min_seconds
+                                              * (2 ** min(attempt, 32))))
                 attempt += 1
             self._set_state("offline", next_attempt_s=round(delay, 2), last_close_code=code)
             await self._offline_wait(delay)
@@ -769,9 +804,9 @@ class LinkService:
             done, _ = await asyncio.wait(workers, return_when=asyncio.FIRST_COMPLETED)
             for task in done:
                 exc = task.exception() if not task.cancelled() else None
-                if isinstance(exc, LinkClosed) and session.close_code is None:
-                    session.close_code = exc.code
-                elif exc is not None and not isinstance(exc, LinkClosed):
+                if isinstance(exc, LinkClosed):
+                    _note_close(session, exc)
+                elif exc is not None:
                     log.error("link session task failed: %s", exc, exc_info=exc)
         finally:
             for task in list(session.tasks):
@@ -836,7 +871,7 @@ class LinkService:
                 if exc.code == "unsupported":
                     session.close_code = protocol.CLOSE_UNSUPPORTED
                     await session.conn.close(protocol.CLOSE_UNSUPPORTED, str(exc))
-                    raise LinkClosed(protocol.CLOSE_UNSUPPORTED, str(exc))
+                    raise LinkClosed(protocol.CLOSE_UNSUPPORTED, str(exc), "device")
                 await self._protocol_error(session, exc.code, str(exc), None)
                 continue
             await self._dispatch(session, message)
@@ -849,7 +884,7 @@ class LinkService:
         if len(session.errors) >= 3:
             session.close_code = CLOSE_POLICY
             await session.conn.close(CLOSE_POLICY, "too many protocol errors")
-            raise LinkClosed(CLOSE_POLICY, "too many protocol errors")
+            raise LinkClosed(CLOSE_POLICY, "too many protocol errors", "device")
 
     async def _dispatch(self, session: _Session, message: dict[str, Any]) -> None:
         kind = message["type"]
@@ -1114,7 +1149,7 @@ class LinkService:
         session.reconnect_now = True
         session.close_code = protocol.CLOSE_NORMAL
         await session.conn.close(protocol.CLOSE_NORMAL, "token issued")
-        raise LinkClosed(protocol.CLOSE_NORMAL, "token issued")
+        raise LinkClosed(protocol.CLOSE_NORMAL, "token issued", "device")
 
     async def _on_sos_sync(self, session: _Session, message: dict) -> None:
         from sentrix.sos import current_service
@@ -1277,10 +1312,35 @@ class LinkService:
                 log.warning("link: Portal silent for %.0f s, reconnecting", limit)
                 session.close_code = protocol.CLOSE_GOING_AWAY
                 await session.conn.close(protocol.CLOSE_GOING_AWAY, "portal silent")
-                raise LinkClosed(protocol.CLOSE_GOING_AWAY, "portal silent")
+                raise LinkClosed(protocol.CLOSE_GOING_AWAY, "portal silent", "device")
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+#: A session the Portal welcomed and kept this long shows the Portal works, so
+#: the next dial starts the back-off again (at most ``reconnect_min_seconds``),
+#: well inside the Portal's 45 s heartbeat limit. It used to take 60 s
+#: connected: after the Portal's own wake-up (HTTP 503 for 4 minutes) had
+#: pushed the back-off to 60 s, a session dropped within a minute kept the
+#: device away so long that the Portal called it offline during an open alarm
+#: and paged the contacts (2026-11-20).
+STABLE_SESSION_SECONDS = 10.0
+
+
+def stable_session(session: Any, lasted: float) -> bool:
+    """True when ``session`` was welcomed and lasted STABLE_SESSION_SECONDS."""
+    welcomed = getattr(session, "welcomed", None)
+    return (welcomed is not None and welcomed.is_set()
+            and lasted >= STABLE_SESSION_SECONDS)
+
+
+def _note_close(session: Any, exc: LinkClosed) -> None:
+    """Keep the first account of how a session ended."""
+    if session.close_code is None:
+        session.close_code = exc.code
+    if session.closed_by is None:
+        session.closed_by, session.close_reason = exc.by, exc.reason or ""
+
+
 def _safe(fn: Callable[[], Any], default: Any) -> Any:
     try:
         return fn()

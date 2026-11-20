@@ -235,15 +235,22 @@ def export_scene(directory: Path, frames, threads: int) -> dict:
         probs_torch = engine.score_frames([frame])
         probs_onnx = softmax(got, engine.temperature)
         prob_err = max(prob_err, float(np.abs(probs_torch - probs_onnx).max()))
-    return {"role": "scene", "source": str(weights.relative_to(ROOT)),
+    return {"role": "scene", "source": _shown(weights),
             "source_sha256": sha256(weights), "imgsz": size, "format": "onnx",
-            "file": str(target.relative_to(ROOT)), "bytes": target.stat().st_size,
+            "file": _shown(target), "bytes": target.stat().st_size,
             "export_seconds": round(seconds, 1),
             "parity": {"frames": len(frames), "logit_max_abs": round(logit_err, 6),
                        "prob_max_abs_end_to_end": round(prob_err, 6),
                        "parity_ok": prob_err <= PROB_TOLERANCE,
                        "note": "end to end: torchvision transform + torch vs Pillow "
                                "preprocessing + onnxruntime"}}
+
+
+def _shown(path: Path) -> str:
+    """A manifest path: repository-relative when it is inside it (``--out``
+    may point anywhere)."""
+    path = Path(path).resolve()
+    return str(path.relative_to(ROOT)) if path.is_relative_to(ROOT) else str(path)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -297,9 +304,9 @@ def main(argv: list[str] | None = None) -> int:
                 size_bytes = (sum(p.stat().st_size for p in target.rglob("*") if p.is_file())
                               if target.is_dir() else target.stat().st_size)
                 manifest["exports"][target.name] = {
-                    "role": role, "source": str(weights.relative_to(ROOT)),
+                    "role": role, "source": _shown(weights),
                     "source_sha256": sha256(weights), "imgsz": size, "format": fmt,
-                    "file": str(target.relative_to(ROOT)), "bytes": size_bytes,
+                    "file": _shown(target), "bytes": size_bytes,
                     "seconds": round(time.time() - started, 1), "parity": parity}
                 print(f"  {target.name:44} raw score err {parity['raw_score_max_abs']:.2e}  "
                       f"box err {parity['raw_box_max_abs_px']:.3f} px  decoded "

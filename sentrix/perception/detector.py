@@ -40,7 +40,7 @@ from typing import Any
 import numpy as np
 
 from sentrix.config import settings
-from sentrix.paths import model_path
+from sentrix.paths import model_path, weights_override
 from sentrix.utils.logging import get_logger, telemetry, timed
 
 log = get_logger("detector")
@@ -145,7 +145,7 @@ def _resolve(candidates: tuple[str, ...]):
     import os
     override = os.getenv(_OVERRIDES.get(candidates, ""), "").strip()
     if override:
-        path = Path(override)
+        path = weights_override(override)
         return path if path.exists() else None
     for name in candidates:
         path = model_path(*name.split("/"))
