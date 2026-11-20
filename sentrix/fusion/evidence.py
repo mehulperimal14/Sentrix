@@ -14,8 +14,11 @@ only place threat evidence is formed. Before any source may count:
    seconds keeps the rule honest at 0.5 Hz, where a 0.5 s window held a
    single frame.
 2. **Gates from context.** A weapon needs a person seen in the last
-   ``person_memory_seconds``. A fight needs ``fight_min_persons`` people in
-   view (when the person count is known).
+   ``person_memory_seconds`` - and so does a robbery once it is an alarm
+   class (``SENTRIX_ROBBERY_ALARM=1``, D26). With the person detector
+   unavailable the weapon gate opens (a weapon alarm is never silenced) and
+   the robbery gate stays shut (the scene model alone). A fight needs
+   ``fight_min_persons`` people in view (when the person count is known).
 
 How the modalities combine (D15)
 --------------------------------
@@ -26,7 +29,7 @@ pixels are not independent, D3); the sound model is ``audio`` - and audio
 votes exist only when the audio window describes this frame (time-aligned,
 ``perception/audio.py``), otherwise audio is *unavailable*, never "calm".
 
-For the alarm classes (weapon, fire):
+For the alarm classes (weapon, fire; robbery with ``SENTRIX_ROBBERY_ALARM=1``):
 
 * nothing confirmed: under the L2 band (``unconfirmed_ceiling``) - shown,
   never acted on;
@@ -48,7 +51,10 @@ Aligned laughter or very calm talk (``audio_benign``) with no aggression is
 banter: the fight stays at L2 - logged and shown, labelled banter, never lower.
 Aggression and banter in the same audio are conflicting: L2. TV, music or
 radio in the window make the audio neutral (no audio vote at all,
-``perception/audio.audio_votes``). Robbery stays experimental (L2).
+``perception/audio.audio_votes``). Robbery stays experimental (L2) unless
+``SENTRIX_ROBBERY_ALARM=1`` (D26): then it is scored as an alarm class. Only
+the scene classifier votes for it (no detector head, no audio cue), so a
+confirmed robbery is one visual modality: the L3 band, never L4/L5.
 
 An audio window is a new observation only if it does not overlap the last
 one counted (the pipeline's ``fresh`` flag): with 4 s windows every 1 s, one
@@ -92,6 +98,9 @@ CLASS_ORDER: tuple[str, ...] = ("fire", "weapon", "assault", "robbery")
 CLASSIFIER_SOURCES = frozenset({"scene", "violence"})
 DETECTOR_SOURCES = frozenset({"detector", "fastlane"})
 AUDIO_SOURCES = frozenset({"audio", "audio_aggression", "audio_benign"})
+#: Classes no detector head knows: in ``detector`` mode the classifiers keep
+#: voting for them, or nothing could.
+CLASSIFIER_ONLY_CLASSES = frozenset({"assault", "robbery"})
 #: Sources that argue *against* a class (banter lowers a fight). They confirm
 #: on their newest fresh observation: lowering an experimental class needs
 #: less evidence than raising one.
@@ -319,6 +328,24 @@ class EvidenceAccumulator:
     def __init__(self, cfg=None) -> None:
         self.cfg = cfg or settings.threat
         self._windows: dict[tuple[str, str], ConfirmationWindow] = {}
+        #: Classes that need a person seen recently (weapon; robbery, D26).
+        self.person_classes = frozenset(getattr(self.cfg, "person_gated_classes",
+                                                ("weapon",)))
+        #: Of those, the ones whose gate stays shut when the person detector
+        #: is unavailable (robbery, D26); the weapon's opens (never silenced).
+        self.fail_closed = self.person_classes & frozenset(
+            getattr(self.cfg, "fail_closed_person_classes", ()))
+
+    def no_person(self, cls: str, person_recent: bool | None) -> str | None:
+        """Why a crossing of ``cls`` does not count for want of a person
+        (None: it counts)."""
+        if cls not in self.person_classes:
+            return None
+        if person_recent is False:
+            return "no person in view"
+        if person_recent is None and cls in self.fail_closed:
+            return "no person seen: person detector unavailable"
+        return None
 
     def _window(self, cls: str, source: str) -> ConfirmationWindow:
         key = (cls, source)
@@ -339,8 +366,9 @@ class EvidenceAccumulator:
             return source in CLASSIFIER_SOURCES
         if mode == "detector":
             # The detector has no assault/robbery head; the classifiers keep
-            # voting for those (experimental, capped at L2 anyway).
-            return source in DETECTOR_SOURCES or cls in self.cfg.experimental_classes
+            # voting for those (and for any experimental class).
+            return (source in DETECTOR_SOURCES or cls in CLASSIFIER_ONLY_CLASSES
+                    or cls in self.cfg.experimental_classes)
         return True
 
     def update(self, now: float, sources: dict[str, dict[str, tuple]],
@@ -350,8 +378,9 @@ class EvidenceAccumulator:
 
         ``person_recent`` is None when the person detector is unavailable: the
         weapon gate is then skipped (and says so) rather than silencing every
-        weapon alarm. ``context`` carries what is not a vote but conditions
-        one: ``persons`` (people in view recently, None if unknown) and
+        weapon alarm; a robbery's stays shut (``fail_closed``, D26: the scene
+        model alone, never an alarm with nobody seen). ``context`` carries
+        what is not a vote but conditions one: ``persons`` (people in view recently, None if unknown) and
         ``motion`` (0..1, None if unknown) for the fight rule.
         """
         result: dict[str, ClassEvidence] = {}
@@ -364,7 +393,8 @@ class EvidenceAccumulator:
                 if vote is not None:
                     votes.append(vote)
             result[cls] = self._score(cls, votes, context)
-            if cls == "weapon" and person_recent is None and votes:
+            if (cls in self.person_classes and cls not in self.fail_closed
+                    and person_recent is None and votes):
                 result[cls].reason += " [person gate off: person detector unavailable]"
         return result
 
@@ -379,10 +409,11 @@ class EvidenceAccumulator:
                         gated=what, fresh=fresh, valid=False)
         window = self._window(cls, source)
         gated = None
+        no_person = self.no_person(cls, person_recent)
         if fresh:
             crossing = value >= threshold
-            if crossing and cls == "weapon" and person_recent is False:
-                crossing, gated = False, "no person in view"
+            if crossing and no_person:
+                crossing, gated = False, no_person
             hits, seen, confirmed = window.push(now, crossing)
         else:
             hits, seen, confirmed = window.peek(now)
@@ -390,8 +421,8 @@ class EvidenceAccumulator:
                 return None             # nothing recent enough to carry
         if source in AGAINST_SOURCES:
             confirmed = window.latest()
-        if confirmed and cls == "weapon" and person_recent is False:
-            confirmed, gated = False, "no person in view"
+        if confirmed and no_person:
+            confirmed, gated = False, no_person
         return Vote(source, value, threshold, hits, seen, confirmed, gated, fresh)
 
     # ── scoring ───────────────────────────────────────────────────────────────
@@ -511,7 +542,8 @@ class EvidenceAccumulator:
         self._windows.clear()
 
 
-__all__ = ["AUDIO", "AUDIO_SOURCES", "CLASS_ORDER", "ClassEvidence", "ConfirmationWindow",
+__all__ = ["AUDIO", "AUDIO_SOURCES", "CLASS_ORDER", "CLASSIFIER_ONLY_CLASSES",
+           "ClassEvidence", "ConfirmationWindow",
            "EvidenceAccumulator", "MODALITY_NAMES", "VIDEO_CLASSIFIER", "VIDEO_DETECTOR",
            "Vote", "combine", "confirmed_modalities", "corroborated_score", "modality_of",
            "three_modality_ok",
@@ -528,8 +560,9 @@ class ClipObservation:
     ``group`` says what the value belongs to: a person track
     (``("track", 7)``) or an image region (``("region", 2)``) for a detector
     box, None for a frame-level classifier (the scene model, the violence
-    window). ``person_recent`` is the weapon gate at that keyframe (None: the
-    person detector is unavailable, so the gate cannot apply).
+    window). ``person_recent`` is the person gate at that keyframe (None: the
+    person detector is unavailable, so the weapon gate cannot apply; a
+    robbery's stays shut, D26).
     """
 
     source: str
@@ -576,8 +609,9 @@ class ClipConfirmation:
     ``confirm_keyframes`` distinct keyframes **of one group**: one person
     track for a weapon box, one image region for a fire box, the frame for a
     classifier. Two pistols glimpsed on two different people, or two flames in
-    two corners, do not confirm each other. The weapon gate applies per
-    keyframe (a crossing counts only with a person seen recently).
+    two corners, do not confirm each other. The weapon gate (and, D26, the
+    robbery gate) applies per keyframe (a crossing counts only with a person
+    seen recently).
 
     The result is the same ``{class: ClassEvidence}`` an
     :class:`EvidenceAccumulator` produces, scored by the same rules - one
@@ -611,8 +645,9 @@ class ClipConfirmation:
                 if c != cls or not self._scorer._allowed(source, cls):
                     continue
                 votes.append(self.vote(cls, source, items))
-                gate_off = gate_off or (cls == "weapon" and all(
-                    o.person_recent is None for o in items))
+                gate_off = gate_off or (cls in self._scorer.person_classes
+                                        and cls not in self._scorer.fail_closed
+                                        and all(o.person_recent is None for o in items))
             result[cls] = self._scorer._score(cls, votes, context)
             if gate_off:
                 result[cls].reason += " [person gate off: person detector unavailable]"
@@ -635,8 +670,9 @@ class ClipConfirmation:
         for obs in valid:
             if obs.value < obs.threshold:
                 continue
-            if cls == "weapon" and obs.person_recent is False:
-                gated = "no person in view"
+            no_person = self._scorer.no_person(cls, obs.person_recent)
+            if no_person:
+                gated = no_person
                 continue
             slots = crossings.setdefault(obs.group, {})
             if obs.at not in slots or obs.value > slots[obs.at].value:

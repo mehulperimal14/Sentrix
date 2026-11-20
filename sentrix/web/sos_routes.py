@@ -50,7 +50,11 @@ from sentrix.web import auth
 router = APIRouter()
 
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9-]{1,64}$")
-_PREVIEW_TYPES = ("weapon", "fire", "assault", "intrusion", "duress")
+#: The alarm classes (robbery among them with SENTRIX_ROBBERY_ALARM=1, D26)
+#: plus intrusion and duress: what a request can be about.
+_PREVIEW_TYPES = tuple(dict.fromkeys(("weapon", "fire", "assault")
+                                     + tuple(settings.sos.alarm_classes)
+                                     + ("intrusion", "duress")))
 
 
 def _principal(request: Request) -> auth.LcPrincipal:

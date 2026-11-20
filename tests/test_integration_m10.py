@@ -23,8 +23,8 @@ class TestVarIsolation:
         real_var = (paths.ROOT_DIR / "var").resolve()
         assert paths.VAR_DIR.resolve() != real_var
         assert real_var not in paths.DB_PATH.resolve().parents
-        assert str(paths.DB_PATH) in str(database.engine.url).replace("/", "\\") \
-            or paths.DB_PATH.as_posix() in str(database.engine.url)
+        # url.database, not str(url): SQLAlchemy 2.1 percent-encodes the path in str()
+        assert Path(database.engine.url.database).resolve() == paths.DB_PATH.resolve()
         for directory in (paths.EVIDENCE_DIR, paths.EVENTLOG_DIR, paths.SNAPSHOT_DIR,
                           paths.FACES_DIR, paths.CALIBRATION_DIR):
             assert real_var not in directory.resolve().parents

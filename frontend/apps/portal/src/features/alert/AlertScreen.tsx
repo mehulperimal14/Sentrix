@@ -18,7 +18,7 @@ import { useState } from 'react';
 import type { AnswerAction, Authority, CallInfo, HelpRequest } from '../../lib/models';
 
 const HELP = ['APPROVED', 'DISPATCHED', 'ACKNOWLEDGED'];
-const NOUN: Record<string, string> = { weapon: 'weapon', fire: 'fire', assault: 'fight', intrusion: 'intruder', duress: 'emergency' };
+const NOUN: Record<string, string> = { weapon: 'weapon', fire: 'fire', assault: 'fight', robbery: 'theft', intrusion: 'intruder', duress: 'emergency' };
 
 export function headline(r: Pick<HelpRequest, 'incidentType' | 'evidence' | 'room'>): string {
   const noun = NOUN[r.incidentType] ?? 'threat';

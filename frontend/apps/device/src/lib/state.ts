@@ -45,7 +45,7 @@ export interface LiveState {
   [key: string]: any;
 }
 
-const NOUN: Record<string, string> = { weapon: 'weapon', fire: 'fire', assault: 'fight', intrusion: 'intruder' };
+const NOUN: Record<string, string> = { weapon: 'weapon', fire: 'fire', assault: 'fight', robbery: 'theft', intrusion: 'intruder' };
 
 /** "Possible fire in the Living room" / "Fire confirmed in the Living room". */
 export function alertHeadline(type: string | null | undefined, evidence: string | null | undefined, room?: string | null): string {

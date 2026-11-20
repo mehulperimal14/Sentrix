@@ -25,7 +25,14 @@ model:
   person boxes);
 * **tick mode**: ``confirm_k`` of the last ``confirm_n`` fresh evaluations
   (2 of 3), a gap over ``confirm_max_gap_seconds`` resetting the window, a
-  weapon crossing counting only when ``person_recent`` was not False.
+  weapon crossing counting only when ``person_recent`` was not False (a
+  robbery crossing only when it was True).
+
+Robbery is calibrated by default, and gated by a person like a weapon, when
+the running configuration makes it an alarm class (``SENTRIX_ROBBERY_ALARM=1``,
+D26). Like the device (``sentrix/app.py``), the tool reads ``.env`` in the
+SENTRIX directory (the current directory when the script arrives on stdin)
+before the configuration; a variable set on the command line wins.
 
 For each clip (or fresh tick) that gives the **confirming value**: the bar is
 crossed by a confirmation exactly when it is at or under that value. The
@@ -69,6 +76,7 @@ Usage::
     python tools/calibrate_room.py --check var/events/events_20261120_*.jsonl
     python tools/calibrate_room.py --write                 # then restart the device
     python tools/calibrate_room.py --json report.json
+    python tools/calibrate_room.py --classes robbery       # a person-gated robbery bar
 
 On the Pi, without copying anything there (the script arrives on stdin)::
 
@@ -90,12 +98,18 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
-ROOT = Path(__file__).resolve().parents[1] if "__file__" in globals() else Path.cwd()
+#: The SENTRIX directory: two levels above this file, or the current directory
+#: when the script arrives on stdin (``python -`` names it "<stdin>").
+_SCRIPT = str(globals().get("__file__") or "")
+ROOT = (Path(_SCRIPT).resolve().parents[1] if _SCRIPT and not _SCRIPT.startswith("<")
+        else Path.cwd())
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-#: Classes calibrated by default: the alarm classes (D1). Assault and robbery
-#: are experimental (L2 on their own) and can be named with ``--classes``.
+#: Classes calibrated by default: the alarm classes the scene model votes
+#: for (D1; robbery added by :func:`default_classes` with
+#: ``SENTRIX_ROBBERY_ALARM=1``, D26). Assault is experimental unless aligned
+#: audio agrees and can be named with ``--classes``.
 DEFAULT_CLASSES = ("weapon", "fire")
 CONFIRM_MARGIN = 0.10
 SINGLE_MARGIN = 0.01
@@ -117,6 +131,11 @@ class Rules:
     hop_seconds: float = 2.0
     floors: dict = field(default_factory=lambda: {"weapon": 0.50, "fire": 0.45,
                                                   "assault": 0.60, "robbery": 0.60})
+    #: Classes whose crossings count only with a person seen recently.
+    person_classes: tuple = ("weapon",)
+    #: Of those, the ones that do not count when the person detector was
+    #: unavailable (a tick's ``person_recent`` None; robbery, D26).
+    fail_closed: tuple = ()
 
     @classmethod
     def from_settings(cls) -> "Rules":
@@ -126,7 +145,26 @@ class Rules:
                    float(threat.confirm_max_gap_seconds),
                    float(threat.person_memory_seconds),
                    int(clip.confirm_keyframes), float(clip.hop_seconds),
-                   dict(threat.scene_threshold_floor))
+                   dict(threat.scene_threshold_floor),
+                   tuple(getattr(threat, "person_gated_classes", ("weapon",))),
+                   tuple(getattr(threat, "fail_closed_person_classes", ())))
+
+
+def load_device_env(root: Path | None = None) -> None:
+    """The device's ``.env`` (``SENTRIX_ROBBERY_ALARM``, ``SENTRIX_SCENE_*``),
+    read as ``sentrix/app.py`` reads it, before ``sentrix.config`` is
+    imported: on the Pi the switch lives there (``install_pi.sh`` merges
+    ``pi.env`` into it), and a replay without it would not gate robbery the
+    way the device does. A variable already set in the environment wins."""
+    from dotenv import load_dotenv
+    load_dotenv((root or ROOT) / ".env")
+
+
+def default_classes() -> tuple[str, ...]:
+    """Weapon and fire, and robbery once it is an alarm class (D26)."""
+    from sentrix.config import settings
+    robbery = bool(getattr(settings.threat, "robbery_alarm", False))
+    return DEFAULT_CLASSES + (("robbery",) if robbery else ())
 
 
 @dataclass
@@ -318,7 +356,7 @@ def collect(rows: Iterable[dict[str, Any]], classes: Iterable[str], rules: Rules
                 log = out[cls]
                 if cls in thresholds:
                     log.saw_bar(ts, thresholds[cls])
-                gated = [p if (cls != "weapon" or person_recent(t)) else 0.0
+                gated = [p if (cls not in rules.person_classes or person_recent(t)) else 0.0
                          for t, p in scored.values()]
                 for seq, (_t, p) in scored.items():
                     if (cls, session, seq) not in seen_keyframes:
@@ -345,7 +383,8 @@ def collect(rows: Iterable[dict[str, Any]], classes: Iterable[str], rules: Rules
             if previous is not None and ts - previous > rules.confirm_max_gap:
                 window.clear()
             last_tick[key] = ts
-            gate_shut = cls == "weapon" and person is False
+            gate_shut = cls in rules.person_classes and (
+                person is False or (person is None and cls in rules.fail_closed))
             window.append(0.0 if gate_shut else value)
             if not counted:
                 continue
@@ -587,7 +626,9 @@ def main(argv: list[str] | None = None) -> int:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--events", nargs="+", default=None,
                         help="event logs: files, directories or globs (default var/events)")
-    parser.add_argument("--classes", nargs="+", default=list(DEFAULT_CLASSES))
+    parser.add_argument("--classes", nargs="+", default=None,
+                        help="classes to calibrate (default: weapon fire, and robbery "
+                             "with SENTRIX_ROBBERY_ALARM=1 in .env or the environment)")
     parser.add_argument("--since", help="local ISO date/time; earlier rows are ignored")
     parser.add_argument("--until", help="local ISO date/time; later rows are ignored")
     parser.add_argument("--exclude", action="append", default=[],
@@ -612,8 +653,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="calibration file (default var/calibration/scene.json)")
     args = parser.parse_args(argv)
 
+    load_device_env()
     from sentrix.paths import CALIBRATION_DIR, EVENTLOG_DIR
     rules = Rules.from_settings()
+    args.classes = list(args.classes or default_classes())
     files = log_files(args.events or [EVENTLOG_DIR])
     if not files:
         print("no event logs found", file=sys.stderr)
@@ -644,13 +687,15 @@ def main(argv: list[str] | None = None) -> int:
                 bars["in_force"] = rep["in_force"]
             checks.append(check_session(rep["class"], staged[rep["class"]], bars))
 
-    print(f"{len(files)} event log(s), {files[0].name} .. {files[-1].name}")
+    print(f"{len(files)} event log(s), {files[0].name} .. {files[-1].name}; "
+          f"a person needed for: {', '.join(rules.person_classes)}")
     print_report(reports, checks)
     provenance = {"tool": "tools/calibrate_room.py",
                "at": datetime.now().isoformat(timespec="seconds"),
                "logs": len(files), "first": files[0].name, "last": files[-1].name,
                "since": args.since, "until": args.until, "exclude": args.exclude,
                "source": args.source, "weights": current_weights(),
+               "person_gate": list(rules.person_classes),
                "rule": {"confirm_margin": args.confirm_margin,
                         "single_margin": args.single_margin, "cap": args.cap}}
     full = {"sources": provenance, "classes": reports, "checks": checks}

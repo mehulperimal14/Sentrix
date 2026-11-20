@@ -121,14 +121,15 @@ a model score and the alarm:
 | Rule | Default |
 |---|---|
 | Confirmation | a source must cross its threshold on 2 of its last 3 fresh evaluations |
-| Person gate | weapon votes count only with a person seen in the last 2 s |
+| Person gate | weapon votes (and robbery votes with `SENTRIX_ROBBERY_ALARM=1`) count only with a person seen in the last 2 s |
 | Thresholds | the checkpoint's, raised to at least weapon 0.50 / fire 0.45; a per-room calibration may replace them (`tools/calibrate_room.py` writes it from the device's own log, D23) |
 | Modalities | video detector (YOLO heads), video classifier (scene / violence model: one modality), audio (only when its 4 s window overlaps the frame within 1.5 s; otherwise *unavailable*, never "calm") |
 | One visual modality confirmed | L3 (snapshot and evidence; SOS prompt) |
 | Two modalities confirmed for one class (detector + scene, or video + aligned audio, e.g. a pistol box and a gunshot) | L4; L5 when the weaker is well above threshold, or when all three agree |
 | Audio alone (gunshot, smoke alarm) | at most L2; a scream alone is never a weapon |
 | Fight (assault) | L2 (experimental) unless the video fight **and** aligned aggression audio (shouting, screaming) agree with 2+ people and motion: then L3. Aligned laughter or very calm talk (banter) keeps it at L2 - shown, never hidden; TV, music or radio make the audio neutral. Unvalidated until room recordings exist |
-| Robbery, stick, smoke | experimental: logged and shown, never above L2 |
+| Robbery | experimental (never above L2) unless `SENTRIX_ROBBERY_ALARM=1` (D26; on for the demo unit): then a robbery the scene model confirms with a person in view is L3 and an SOS request for the owner; one model, so never L4/L5 |
+| Stick, smoke | experimental: logged and shown, never above L2 |
 | Unknown person, PIR, door | presence context: an unrecognised person (3 s armed, 10 s at home), or armed-mode sensor activity with nobody recognised, is an **L2 only** in both modes |
 
 Every tick records what each input did for the leading class (video detector,
@@ -139,7 +140,7 @@ the dashboard's Threat Analysis card (decision D15).
 |---|---|
 | 1 SECURE | log |
 | 2 SUSPICIOUS | incident opened (log and dashboard only) |
-| 3 ELEVATED | + snapshot, AES-256-GCM evidence bundle, SOS request for weapon, fire and a corroborated fight |
+| 3 ELEVATED | + snapshot, AES-256-GCM evidence bundle, SOS request for weapon, fire, a corroborated fight and, with `SENTRIX_ROBBERY_ALARM=1`, a confirmed robbery |
 | 4 HIGH | + dispatch package; legacy SMS only when no SOS request owns the incident |
 | 5 CRITICAL | + legacy voice call only when no SOS request owns the incident |
 
@@ -482,7 +483,12 @@ Limits that matter for any claim:
   (`training/runs/custom_eval/m5/`). Gates G2 (episodes within 2 s) and G4
   (onset → L3 p95 ≤ 2 s) fail. Deployment-room recordings (M6) come first.
 * **Assault and robbery cannot be validated** (2 videos / 1 event). They stay
-  experimental, capped at L2.
+  experimental, capped at L2, unless `SENTRIX_ROBBERY_ALARM=1` (D26, the demo
+  unit's masked-theft scene) makes a confirmed robbery an L3: out of fold the
+  scene model found none of the robbery frames, and in the replay the v4 scene
+  model the demo unit runs kept the staged masked theft at L2 even with the
+  switch on (only the opt-in v5 model, trained on that video, raised it), so
+  that L3 rests on the demo room's own test.
 * **No fitted fusion model.** The TCI is a published rule over confirmed
   evidence until real session logs exist (M8).
 * **Darkness and faces closer than 1 m** are out of scope for an RGB webcam.

@@ -60,8 +60,9 @@ ALLOWED_ACTORS: dict[str, frozenset] = {
 }
 STEP_UP_COMMANDS = frozenset({"token.rotate", "unpair"})
 TEST_MODE_COMMANDS = frozenset({"demo.close_incident", "demo.trigger"})
-#: The service refuses "intrusion" unless SENTRIX_SOS_INTRUSION=1 (D15).
-DEMO_TRIGGER_TYPES = ("weapon", "fire", "assault", "intrusion")
+#: The service refuses "intrusion" unless SENTRIX_SOS_INTRUSION=1 (D15), and
+#: "robbery" unless SENTRIX_ROBBERY_ALARM=1 (D26).
+DEMO_TRIGGER_TYPES = ("weapon", "fire", "assault", "robbery", "intrusion")
 #: The SMS text the device sends on the cloud's behalf (4 GSM segments).
 SMS_MAX_CHARS = 612
 #: Default answer channel by actor type (``sentrix.sos.states.CHANNELS``).

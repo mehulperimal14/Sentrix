@@ -27,7 +27,8 @@ What it replaced, and why (CLAUDE.md §5, D2, D6)
   ``intrusion_home_dwell_seconds`` at home), or - armed only - a PIR trigger
   or door change with nobody recognised in view, raises an "unrecognised
   person" at ``intrusion_level``: the **L2 band in both modes** (D15). Levels
-  3-5 need a real threat (weapon, fire, a corroborated fight); L2 is log and
+  3-5 need a real threat (weapon, fire, a corroborated fight, and a confirmed
+  robbery with ``SENTRIX_ROBBERY_ALARM=1``, D26); L2 is log and
   dashboard only (D4), so no snapshot and no SOS request (D8 as amended).
 
 Every result carries ``contributions``: for the leading class, what each
@@ -38,7 +39,8 @@ Threat Analysis and the event log show how the level was reached.
 Callers that build a :class:`FeatureVector` by hand (tests, notebooks) without an
 ``extras["evidence"]`` block are treated as already speaking the TCI scale:
 ``weapon`` and ``fire`` are taken as class evidence directly, and a ``fighting``
-or ``robbery`` behaviour label contributes experimental evidence capped at L2.
+or ``robbery`` behaviour label contributes experimental evidence capped at L2
+(robbery: one source in the L3 band with ``SENTRIX_ROBBERY_ALARM=1``, D26).
 """
 
 from __future__ import annotations
@@ -62,11 +64,21 @@ _BEHAVIOUR_CLASS = {"fighting": "assault", "robbery": "robbery"}
 _DEFAULT_REASONS = {
     "weapon": "Possible weapon",
     "fire": "Possible fire",
-    "assault": "Possible assault (experimental)",
-    "robbery": "Possible theft (experimental)",
+    "assault": "Possible assault",
+    "robbery": "Possible theft",
     "intrusion": "Unrecognised person",
     "normal": "Routine activity",
 }
+#: What a person gate reads as on the Threat Analysis card.
+_GATE_NOUN = {"weapon": "a weapon", "robbery": "a theft"}
+
+
+def default_reason(cls: str, threat=None) -> str:
+    """The class's plain headline; "(experimental)" while the class is
+    capped at L2 (robbery is not once ``SENTRIX_ROBBERY_ALARM=1``, D26)."""
+    threat = threat or settings.threat
+    text = _DEFAULT_REASONS.get(cls, cls)
+    return f"{text} (experimental)" if cls in threat.experimental_classes else text
 
 
 @dataclass
@@ -98,17 +110,21 @@ class TCIResult:
         }
 
 
-def class_scores(features: FeatureVector) -> tuple[dict[str, float], dict[str, str]]:
+def class_scores(features: FeatureVector,
+                 threat=None) -> tuple[dict[str, float], dict[str, str]]:
     """Per-class TCI-scale scores and reasons for one feature vector."""
     evidence = (features.extras or {}).get("evidence")
     if evidence:
         return ({c: float(e["score"]) for c, e in evidence.items()},
                 {c: str(e.get("reason", "")) for c, e in evidence.items()})
-    threat = settings.threat
+    threat = threat or settings.threat
     scores = {"weapon": features.weapon, "fire": features.fire}
     cls = _BEHAVIOUR_CLASS.get(features.behaviour_label)
     if cls:
-        scores[cls] = min(features.behaviour, threat.experimental_cap)
+        # An alarm class from one source stays in the L3 band (D3, D26).
+        cap = (threat.experimental_cap if cls in threat.experimental_classes
+               else threat.single_source_cap)
+        scores[cls] = min(features.behaviour, cap)
     return scores, {}
 
 
@@ -122,7 +138,7 @@ def _vote_effect(vote: dict) -> str:
 
 
 def contributions(features: FeatureVector, cls: str | None,
-                  intrusion: dict | None = None) -> list[dict]:
+                  intrusion: dict | None = None, threat=None) -> list[dict]:
     """Per-input contributions for the leading class ``cls`` (D15).
 
     One row per input: ``{"input", "value", "detail", "effect"}`` with effect
@@ -154,7 +170,7 @@ def contributions(features: FeatureVector, cls: str | None,
             detail = f"aligned, neutral: {audio['neutral']}"
         rows.append({"input": "audio", "value": None, "detail": detail,
                      "effect": "unavailable" if status != "aligned" else "context"})
-    threat = settings.threat
+    threat = threat or settings.threat
     context = extras.get("fusion_context") or {}
     # The decision used fusion_context's people count; None there means the
     # person detector could not say (the gate did not apply) - show that, not
@@ -163,10 +179,12 @@ def contributions(features: FeatureVector, cls: str | None,
                else features.person_count)
     shown = "unknown" if persons is None else persons
     motion = float(context.get("motion", features.motion) or 0.0)
-    if cls == "weapon":
+    if cls in threat.person_gated_classes:
         gate = extras.get("person_recent")
+        if gate is None and cls in getattr(threat, "fail_closed_person_classes", ()):
+            gate = False                # D26: unknown counts as nobody for a theft
         rows.append({"input": "people", "value": persons,
-                     "detail": f"{shown} in view (a weapon needs a person)",
+                     "detail": f"{shown} in view ({_GATE_NOUN.get(cls, cls)} needs a person)",
                      "effect": "context" if gate is None else ("gate ok" if gate else "gate failed")})
         rows.append({"input": "motion", "value": round(motion, 3), "detail": "context",
                      "effect": "context"})
@@ -271,13 +289,13 @@ class TCIEngine:
     def compute(self, features: FeatureVector, now: float | None = None) -> TCIResult:
         """Score one frame. Never raises."""
         now = time.monotonic() if now is None else now
-        scores, reasons = class_scores(features)
+        scores, reasons = class_scores(features, self.threat)
         cls, raw = strongest(scores)
         typing_bar = settings.policy.thresholds[0]
 
         if cls is not None and raw >= typing_bar:
             incident, source = cls, "evidence"
-            reason = reasons.get(cls) or _DEFAULT_REASONS[cls]
+            reason = reasons.get(cls) or default_reason(cls, self.threat)
         else:
             incident, source, reason = "normal", "none", _DEFAULT_REASONS["normal"]
 
@@ -308,10 +326,10 @@ class TCIEngine:
             contributions=contributions(
                 features, cls if incident not in ("normal", "intrusion") else (
                     cls if cls is not None and incident == "normal" else None),
-                intrusion if incident == "intrusion" else None))
+                intrusion if incident == "intrusion" else None, self.threat))
         telemetry.record("tci", "score", {"tci": result.tci, "raw": result.raw_tci,
                                           "source": source, "incident": incident})
         return result
 
 
-__all__ = ["TCIEngine", "TCIResult", "class_scores", "contributions"]
+__all__ = ["TCIEngine", "TCIResult", "class_scores", "contributions", "default_reason"]

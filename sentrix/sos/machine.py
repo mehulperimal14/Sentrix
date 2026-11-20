@@ -128,6 +128,9 @@ class Snapshot:
     failed_offline: bool = False
     #: An owner message of this request was delivered (SENT/DELIVERED) or seen.
     owner_reached: bool = False
+    #: When another alarm class last took the request over from a robbery
+    #: (D26): its safety-default delay counts from here, not from the opening.
+    retyped_at: float | None = None
 
     @property
     def duress(self) -> bool:
@@ -153,7 +156,7 @@ class Snapshot:
                      events: Iterable[Mapping[str, Any]] = ()) -> "Snapshot":
         done: set[str] = set()
         reminder_upto = 0.0
-        prompted = checking = help_since = None
+        prompted = checking = help_since = retyped = None
         attempts, failed_offline, owner_reached = 0, False, False
         for event in sorted(events, key=lambda e: (epoch(e.get("at")) or 0.0,
                                                    e.get("origin") or "", e.get("seq") or 0)):
@@ -184,6 +187,8 @@ class Snapshot:
                 help_since = at                 # the reconnect merge approved it
             elif name == S.DELIVERY_FAILED:
                 failed_offline = not detail.get("online", True)
+            elif name == S.ATTACHED and detail.get("retyped_from"):
+                retyped = at
             elif name == S.SEEN:
                 owner_reached = True
             elif name == S.NOTIFICATION:
@@ -214,7 +219,7 @@ class Snapshot:
             help_since=(help_since if help_since is not None
                         else epoch(request.get("responded_at"))),
             help_attempt=attempts, failed_offline=failed_offline,
-            owner_reached=owner_reached or seen is not None)
+            owner_reached=owner_reached or seen is not None, retyped_at=retyped)
 
 
 @dataclass(frozen=True)
@@ -318,8 +323,9 @@ def _finalise(snap: Snapshot, steps: Sequence[Step]) -> tuple:
 # ── eligibility ───────────────────────────────────────────────────────────────
 def wants(incident_type: str, level: int, rules: Rules,
           evidence_state: str | None = None) -> bool:
-    """The pipeline hook's O(1) question. Only the alarm classes are claimed,
-    and a fight only when corroborated (video and aligned audio, D15): an
+    """The pipeline hook's O(1) question. Only the alarm classes are claimed
+    (robbery among them with ``SENTRIX_ROBBERY_ALARM=1``, D26), and a fight
+    only when corroborated (video and aligned audio, D15): an
     unclaimed incident keeps the legacy L4 SMS / dispatch / L5 call paths,
     which ``Pipeline._act`` skips once "sos" is claimed. An armed intrusion
     arrives as a level change and is held for the entry delay, so a weapon
@@ -399,16 +405,57 @@ def _recent_decline(facts: TriggerFacts, history: Sequence[Snapshot],
     return None
 
 
+def takes_over(snap: Snapshot, facts: TriggerFacts, rules: Rules) -> bool:
+    """D26: a robbery request is the scene model alone and owner only. A
+    weapon, fire or fight joining it is a stronger alarm: it takes the
+    request over (its type, wording, authority and safety defaults), or the
+    robbery would hold the device's one open request and swallow it - a fire
+    would never reach the contacts at T+2 min."""
+    return (snap.incident_type == "robbery" and facts.incident_type != "robbery"
+            and facts.incident_type in rules.alarm_classes
+            and snap.state not in S.TERMINAL_STATES)
+
+
+def takeover_step(snap: Snapshot, facts: TriggerFacts, rules: Rules,
+                  fields: Mapping[str, Any] | None = None) -> Step:
+    """The ATTACHED event of a takeover: the request becomes ``facts``' class
+    (SOS texts re-rendered), the owner is told while it still prompts - with
+    the window restarted, as a level rise does - and on the help path the
+    Desk and the contacts get the new text."""
+    new = facts.incident_type
+    step_name = S.retype_step(new)
+    out: dict[str, Any] = {**dict(fields or {}), "incident_type": new}
+    if facts.evidence_state in CONFIRMED_STATES:
+        out["evidence_state"] = facts.evidence_state
+    notices: tuple = ()
+    if snap.prompting:
+        out["expires_at"] = max(snap.expires_at or 0.0, facts.at + snap.window)
+        notices = (Notice("owner", step_name, T_REMINDER, urgency="HIGH", sms=True),)
+    elif snap.help_open:
+        template = T_DURESS if snap.duress else T_SMS
+        notices = (Notice("desk", step_name, template, urgency="HIGH"),
+                   Notice("contacts", step_name, template, urgency="HIGH"))
+    return Step(S.ATTACHED, detail={"incident_id": facts.incident_id,
+                                    "incident_type": new, "level": facts.level,
+                                    "retyped_from": snap.incident_type, "step": step_name},
+                fields=out, notices=notices, rerender=True)
+
+
 def attach_steps(snap: Snapshot, facts: TriggerFacts, rules: Rules) -> tuple:
     """Another incident joins the open request (rollover included); a higher
-    level is a level rise."""
+    level is a level rise; a stronger alarm class takes a robbery request
+    over (:func:`takes_over`)."""
     steps: list[Step] = []
-    if facts.incident_id and facts.incident_id not in snap.incident_ids:
+    joins = bool(facts.incident_id and facts.incident_id not in snap.incident_ids)
+    ids = {"incident_ids": list(snap.incident_ids) + [facts.incident_id]} if joins else {}
+    if takes_over(snap, facts, rules):
+        steps.append(takeover_step(snap, facts, rules, ids))
+    elif joins:
         steps.append(Step(S.ATTACHED, detail={"incident_id": facts.incident_id,
                                               "incident_type": facts.incident_type,
                                               "level": facts.level},
-                          fields={"incident_ids": list(snap.incident_ids) + [facts.incident_id]}))
-    if steps and snap.state == S.FAILED:
+                          fields=ids))
+    if joins and snap.state == S.FAILED:
         # Help for this request was not delivered: a new alarm joining it must
         # reach the owner again, not be absorbed silently.
         steps[-1] = replace(steps[-1], notices=steps[-1].notices + (
@@ -723,6 +770,12 @@ def expire_step(snap: Snapshot, reach: Reach, reason: str = "window") -> Step:
     return Step(S.EXPIRE, detail={"reason": reason}, package="expired", notices=tuple(notices))
 
 
+def _contacts_from(snap: Snapshot) -> float:
+    """When the safety-default delay starts: the opening, or the takeover of
+    a robbery request by a stronger class (D26)."""
+    return snap.retyped_at if snap.retyped_at is not None else snap.created_at
+
+
 def _owed_contacts(snap: Snapshot, rules: Rules) -> tuple:
     """(rule, owed, step): the safety-default contacts alert of a prompting
     request, and whether it is still owed."""
@@ -758,7 +811,7 @@ def due(snap: Snapshot, now: float, rules: Rules, reach: Reach) -> tuple:
         rule, owed, contacts = _owed_contacts(snap, rules)
         if snap.expires_at is not None and now >= snap.expires_at:
             return expiry_steps(snap, rules, reach)
-        if owed and now >= snap.created_at + rule[0]:
+        if owed and now >= _contacts_from(snap) + rule[0]:
             steps.append(contacts)
         steps.extend(_owner_timeline(snap, now, rules, reach))
     elif snap.state == S.APPROVED and snap.help_since is not None:
@@ -856,7 +909,7 @@ def next_due(snap: Snapshot, now: float, rules: Rules) -> float | None:
         rule = contacts_delay(snap.policy, incident_type=snap.incident_type,
                               peak_level=snap.peak_level, rules=rules)
         if rule is not None and not snap.flags.get("contacts_notified"):
-            times.append(snap.created_at + rule[0])
+            times.append(_contacts_from(snap) + rule[0])
         if snap.prompted_at is not None:
             times += [snap.prompted_at + o for o in _reminder_offsets(snap, rules)
                       if o > snap.reminder_upto]
@@ -878,6 +931,7 @@ def next_due(snap: Snapshot, now: float, rules: Rules) -> float | None:
 
 __all__ = ["Snapshot", "TriggerFacts", "Notice", "Step", "Outcome", "LinkedRequest",
            "TriggerDecision", "epoch", "wants", "classify", "on_trigger", "attach_steps",
+           "takes_over", "takeover_step",
            "prompt", "level_rise", "may_respond", "needs_pin", "approve_step", "respond",
            "help_notices",
            "cloud_event", "reconcile", "due", "next_due", "repage_at", "expire_step",

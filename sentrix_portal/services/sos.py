@@ -73,6 +73,7 @@ _REQUEST_KINDS = ("sos.created", "sos.transition", "sos.event")
 FOOTER = "SENTRIX does not contact 112 itself."
 WHAT = {"weapon": "a possible weapon (handgun)", "fire": "visible fire",
         "assault": "a fight (seen and heard)",
+        "robbery": "a possible theft",
         "intrusion": "an unrecognised person in the home",
         "duress": "an alert", "unknown": "an alert"}
 OUTCOME_LABELS = {"help_arrived": "help arrived", "real_threat": "real threat",
@@ -654,7 +655,8 @@ def offline_opens_request(incident_type: str, level: int) -> bool:
     """Whether a lost heartbeat during an open incident (with no request yet)
     opens a cloud request: only what would have opened one on the device - an
     alarm class (weapon, fire, a fight; a fight reaches L3 only corroborated
-    by video and aligned audio) at ``sos.min_level``+. An unrecognised person,
+    by video and aligned audio; robbery only where the Portal itself runs with
+    ``SENTRIX_ROBBERY_ALARM=1``, D26) at ``sos.min_level``+. An unrecognised person,
     an audio-only or an experimental L2 never does (D8 as amended by D15)."""
     sos = _cfg().sos
     return int(level) >= int(sos.min_level) and incident_type in tuple(sos.alarm_classes)
@@ -663,7 +665,9 @@ def offline_opens_request(incident_type: str, level: int) -> bool:
 def on_device_offline(db, device: Device, now: datetime | None = None) -> AssistanceRequest | None:
     """The heartbeat was lost for 45 s. An open request becomes the cloud's
     (flag ``device_offline``; confirmed contacts at once under safety
-    defaults). With no request but an open incident in the last heartbeat:
+    defaults, for the classes :func:`offline_alerts_contacts` names: not a
+    robbery on a Portal without ``SENTRIX_ROBBERY_ALARM=1``, D26). With no
+    request but an open incident in the last heartbeat:
     an alarm class at L3+ opens one in the cloud (the tamper signal); any other
     L2+ incident (an unrecognised person, audio only, experimental) is a
     ``device.tamper`` audit and an owner notice only - no request, no contacts."""
@@ -700,10 +704,26 @@ def on_device_offline(db, device: Device, now: datetime | None = None) -> Assist
         _cloud_event(db, row, S.DEVICE_OFFLINE, flags={"device_offline": True},
                      detail={"last_seen_at": _iso(device.last_seen_at)})
     policy = row.policy or {}
-    if policy.get("safety_defaults", True) and not (row.flags or {}).get("contacts_notified"):
+    if (policy.get("safety_defaults", True) and offline_alerts_contacts(row, level)
+            and not (row.flags or {}).get("contacts_notified")):
         _cloud_event(db, row, S.CONTACTS_NOTIFIED, flags={"contacts_notified": True},
                      detail={"why": "device_offline"})
     return row
+
+
+def offline_alerts_contacts(row: AssistanceRequest, level: int) -> bool:
+    """Whether the device-offline rule alerts the confirmed contacts of an
+    open request: what would have opened a cloud request
+    (:func:`offline_opens_request`, at the request's peak level), and a
+    duress or armed-intrusion request (their contacts are told at once
+    anyway). A robbery the device opened (D26: the scene model alone, owner
+    only) reaches the contacts only on a Portal that itself runs with
+    ``SENTRIX_ROBBERY_ALARM=1``, the same rule as a robbery with no request
+    yet; weapon, fire and a fight are unchanged."""
+    if (row.flags or {}).get("duress") or row.incident_type in ("duress", "intrusion"):
+        return True
+    peak = max(int(level or 0), int(row.peak_level or 3))
+    return offline_opens_request(row.incident_type or "unknown", peak)
 
 
 def _notify_owner_offline(db, device: Device, incident_type: str, level: int,

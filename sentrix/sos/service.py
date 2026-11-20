@@ -381,6 +381,7 @@ class SosEngine:
         """The snapshot after one applied step (row fields re-read; the chain
         facts of the step are folded in by the caller's next full read)."""
         return replace(snap, state=request["state"], version=int(request["version"]),
+                       incident_type=str(request.get("incident_type") or snap.incident_type),
                        flags=dict(request.get("flags") or {}),
                        peak_level=int(request.get("peak_level") or snap.peak_level),
                        urgency=request.get("urgency") or snap.urgency,

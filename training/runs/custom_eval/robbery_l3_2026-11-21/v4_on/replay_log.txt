@@ -1,0 +1,137 @@
+03:55:46 INFO    sentrix.notifier         Twilio disabled (SENTRIX_TWILIO_ENABLED is off) — alerts log to console
+03:55:46 WARNING sentrix.evidence         EVIDENCE_AES_KEY not set — using an ephemeral key. Evidence written this session becomes permanently unreadable when the process exits.
+03:55:46 INFO    sentrix.engine           initialising SENTRIX pipeline
+03:55:46 INFO    sentrix.detector         person detector loaded: yolov8n.pt
+03:55:46 INFO    sentrix.detector         weapon detector loaded: weapon_detector_room_v5.pt
+03:55:46 INFO    sentrix.detector         fire/smoke detector loaded: fire_detector_room_v5.pt
+03:55:48 INFO    sentrix.scene            loading the scene model's public base weights (timm:vit_base_patch14_dinov2.lvd142m); the first run downloads ~330 MB, which takes a few minutes
+03:55:50 INFO    sentrix.scene            scene classifier loaded: scene_classifier_custom_v4.pt (timm:vit_base_patch14_dinov2.lvd142m, 224px, T=1.48, thr={'fire': 0.75, 'weapon': 0.78, 'assault': 0.85, 'robbery': 0.6})
+03:55:55 INFO    sentrix.identity         identity backend: insightface buffalo_s (SCRFD-500M + MobileFaceNet, 512-d; modules detection+recognition, det 320, ORT 4 threads, no spinning)
+03:55:55 INFO    sentrix.identity         identity gallery: 0 enrolled face(s) [backend=insightface]
+03:55:55 INFO    sentrix.osnet            re-id model loaded: osnet_ain_x1_0 from osnet_ain_x1_0_msmt17.pth (onnx)
+03:55:55 INFO    sentrix.reid             re-id backend: osnet_ain_x1_0 (osnet_ain_x1_0_msmt17.pth), 2-thread session
+03:55:55 INFO    sentrix.tci              TCI = strongest confirmed class evidence (transparent); no fitted output calibrator yet (CLAUDE.md M8)
+03:55:55 INFO    sentrix.engine           pipeline ready — detector=True scene=scene_classifier_custom_v4.pt identity=insightface audio=False fusion=evidence
+03:55:55 INFO    sentrix.fastlane         fast lane ready: {'person': 'torch', 'weapon': 'torch', 'fire': 'torch'} at 320 px, every 4 frames, 2 hits
+03:55:55 INFO    sentrix.sound            sound tagger loaded: PANNs CNN10 (527 AudioSet classes, onnx)
+03:55:57 INFO    sentrix.events           event log: C:\Users\PC\AppData\Local\Temp\claude\324a87da11b408e0\03a07f5d-2599-44c3-b7d9-bc380698ab1f\scratchpad\robbery\var_v4_on\events\events_20261121_035555_484e343821dd.jsonl
+03:56:05 INFO    sentrix.policy           level 1 -> 4 (tci=0.807)
+03:56:05 INFO    sentrix.incidents        incident cce075b5 opened (level 4, weapon)
+03:56:18 INFO    sentrix.policy           level 1 -> 3 (tci=0.577)
+03:56:21 INFO    sentrix.policy           level 3 -> 4 (tci=0.761)
+03:56:32 INFO    sentrix.policy           level 1 -> 3 (tci=0.533)
+03:56:36 INFO    sentrix.policy           level 3 -> 2 (tci=0.300)
+03:56:43 INFO    sentrix.policy           level 1 -> 3 (tci=0.587)
+03:56:48 INFO    sentrix.policy           level 3 -> 2 (tci=0.300)
+03:56:50 INFO    sentrix.policy           level 2 -> 4 (tci=0.776)
+03:57:02 INFO    sentrix.policy           level 1 -> 2 (tci=0.300)
+03:57:53 INFO    sentrix.policy           level 2 -> 3 (tci=0.501)
+03:57:55 INFO    sentrix.policy           level 3 -> 4 (tci=0.770)
+03:58:07 INFO    sentrix.policy           level 4 -> 3 (tci=0.300)
+03:58:09 INFO    sentrix.policy           level 3 -> 2 (tci=0.300)
+03:58:12 INFO    sentrix.policy           level 2 -> 3 (tci=0.560)
+03:58:14 INFO    sentrix.policy           level 3 -> 4 (tci=0.759)
+03:58:19 INFO    sentrix.policy           level 4 -> 3 (tci=0.300)
+03:58:37 INFO    sentrix.policy           level 1 -> 3 (tci=0.496)
+03:58:43 INFO    sentrix.policy           level 3 -> 1 (tci=0.175)
+03:58:52 INFO    sentrix.policy           level 1 -> 2 (tci=0.300)
+03:59:23 INFO    sentrix.policy           level 1 -> 2 (tci=0.300)
+03:59:28 INFO    sentrix.policy           level 2 -> 1 (tci=0.002)
+03:59:47 INFO    sentrix.policy           level 1 -> 2 (tci=0.300)
+04:00:26 INFO    sentrix.policy           level 1 -> 2 (tci=0.300)
+04:00:41 INFO    sentrix.policy           level 1 -> 2 (tci=0.300)
+04:00:51 INFO    sentrix.policy           level 1 -> 2 (tci=0.300)
+04:00:51 INFO    sentrix.policy           level 2 -> 3 (tci=0.487)
+04:00:55 INFO    sentrix.policy           level 3 -> 2 (tci=0.300)
+04:01:06 INFO    sentrix.policy           level 1 -> 2 (tci=0.300)
+04:01:19 INFO    sentrix.policy           level 1 -> 2 (tci=0.300)
+04:01:32 INFO    sentrix.policy           level 1 -> 3 (tci=0.620)
+04:01:35 INFO    sentrix.engine           shutting down pipeline
+04:01:35 INFO    sentrix.engine           pipeline stopped
+robbery_alarm True experimental ('assault',) person_gated ('weapon', 'robbery') sos alarm_classes ('weapon', 'fire', 'assault', 'robbery')
+Applied providers: ['CPUExecutionProvider'], with options: {'CPUExecutionProvider': {}}
+model ignore: C:\Users\PC/.insightface\models\buffalo_s\1k3d68.onnx landmark_3d_68
+Applied providers: ['CPUExecutionProvider'], with options: {'CPUExecutionProvider': {}}
+model ignore: C:\Users\PC/.insightface\models\buffalo_s\2d106det.onnx landmark_2d_106
+Applied providers: ['CPUExecutionProvider'], with options: {'CPUExecutionProvider': {}}
+find model: C:\Users\PC/.insightface\models\buffalo_s\det_500m.onnx detection [1, 3, '?', '?'] 127.5 128.0
+Applied providers: ['CPUExecutionProvider'], with options: {'CPUExecutionProvider': {}}
+model ignore: C:\Users\PC/.insightface\models\buffalo_s\genderage.onnx genderage
+Applied providers: ['CPUExecutionProvider'], with options: {'CPUExecutionProvider': {}}
+find model: C:\Users\PC/.insightface\models\buffalo_s\w600k_mbf.onnx recognition ['None', 3, 112, 112] 127.5 127.5
+set det-size: (320, 320)
+  vid02  [train]  120 ticks    48 threat  peak L4  (16s)
+  vid03  [train]  103 ticks    42 threat  peak L4  (16s)
+  vid05  [train]   82 ticks     8 threat  peak L3  (10s)
+  vid06  [train]  118 ticks    34 threat  peak L4  (15s)
+  vid07  [train]  615 ticks   116 threat  peak L4  (88s)
+  wa01   [train]  289 ticks    12 threat  peak L3  (44s)
+  wa03   [train]  175 ticks     0 threat  peak L2  (25s)
+  mmtheft [train]  322 ticks     0 threat  peak L2  (47s)
+  mmassault [train]  118 ticks     0 threat  peak L2  (16s)
+  mmgun  [train]   75 ticks     0 threat  peak L2  (10s)
+  mmknife [train]  118 ticks    11 threat  peak L3  (14s)
+  nvroom2 [train]  115 ticks     0 threat  peak L2  (15s)
+  vid04  [val  ]  112 ticks     0 threat  peak L2  (14s)
+  gun    [val  ]   86 ticks    25 threat  peak L3  (11s)
+
+all (replayed ticks): n=2241  acc=0.679  macroF1=0.305  balAcc=0.297
+  threat detection  P=0.639 R=0.226 F1=0.334 FPR=0.070
+  normal   P=0.687 R=0.930 F1=0.791 support=1449 predicted=1961
+  fire     P=0.545 R=0.169 F1=0.258 support=71   predicted=22
+  weapon   P=0.628 R=0.387 F1=0.479 support=419  predicted=258
+  assault  P=0.000 R=0.000 F1=0.000 support=85   predicted=0
+  robbery  P=0.000 R=0.000 F1=0.000 support=217  predicted=0
+  episodes: 12/19 detected (recall 0.632); false alarms 9 over 4.03 normal min; L>=3 on threat 0.30 / normal 0.11
+    fire     2/3 episodes, median latency 2.85s
+    weapon   10/11 episodes, median latency 1.33s
+    assault  0/3 episodes, median latency n/a
+    robbery  0/2 episodes, median latency n/a
+  committed levels over 4.1 normal min:
+    L2+ false onsets   4 (58.74/h, 95% <= 150.39/h); normal time at level 0.470; caught weapon 10/11, assault 0/3, fire 2/3, robbery 0/2
+    L3+ false onsets   0 (0.00/h, 95% <= 54.17/h); normal time at level 0.089; caught weapon 10/11, assault 0/3, fire 2/3, robbery 0/2
+    L4+ false onsets   0 (0.00/h, 95% <= 54.17/h); normal time at level 0.050; caught weapon 5/11, assault 0/3, fire 1/3, robbery 0/2
+    L5+ false onsets   0 (0.00/h, 95% <= 54.17/h); normal time at level 0.000; caught weapon 0/11, assault 0/3, fire 0/3, robbery 0/2
+
+val (replayed ticks): n=155  acc=0.458  macroF1=0.287  balAcc=0.350
+  threat detection  P=0.571 R=0.138 F1=0.222 FPR=0.132
+  normal   P=0.440 R=0.868 F1=0.584 support=68   predicted=134
+  fire     P=0.000 R=0.000 F1=0.000 support=21   predicted=0
+  weapon   P=0.571 R=0.182 F1=0.276 support=66   predicted=21
+  episodes: 1/2 detected (recall 0.500); false alarms 1 over 0.19 normal min; L>=3 on threat 0.14 / normal 0.13
+    fire     0/1 episodes, median latency n/a
+    weapon   1/1 episodes, median latency 8.99s
+  committed levels over 0.3 normal min:
+    L2+ false onsets   0 (0.00/h, 95% <= 873.85/h); normal time at level 0.352; caught fire 0/1, weapon 1/1
+    L3+ false onsets   0 (0.00/h, 95% <= 873.85/h); normal time at level 0.099; caught fire 0/1, weapon 1/1
+    L4+ false onsets   0 (0.00/h, 95% <= 873.85/h); normal time at level 0.000; caught fire 0/1, weapon 0/1
+    L5+ false onsets   0 (0.00/h, 95% <= 873.85/h); normal time at level 0.000; caught fire 0/1, weapon 0/1
+
+train (replayed ticks): n=2086  acc=0.696  macroF1=0.329  balAcc=0.320
+  threat detection  P=0.645 R=0.237 F1=0.346 FPR=0.067
+  normal   P=0.706 R=0.933 F1=0.804 support=1381 predicted=1827
+  fire     P=0.545 R=0.240 F1=0.333 support=50   predicted=22
+  weapon   P=0.633 R=0.425 F1=0.508 support=353  predicted=237
+  assault  P=0.000 R=0.000 F1=0.000 support=85   predicted=0
+  robbery  P=0.000 R=0.000 F1=0.000 support=217  predicted=0
+  episodes: 11/17 detected (recall 0.647); false alarms 8 over 3.84 normal min; L>=3 on threat 0.32 / normal 0.11
+    fire     2/2 episodes, median latency 2.85s
+    weapon   9/10 episodes, median latency 1.18s
+    assault  0/3 episodes, median latency n/a
+    robbery  0/2 episodes, median latency n/a
+  committed levels over 3.8 normal min:
+    L2+ false onsets   4 (62.62/h, 95% <= 160.33/h); normal time at level 0.478; caught weapon 9/10, assault 0/3, fire 2/2, robbery 0/2
+    L3+ false onsets   0 (0.00/h, 95% <= 57.75/h); normal time at level 0.088; caught weapon 9/10, assault 0/3, fire 2/2, robbery 0/2
+    L4+ false onsets   0 (0.00/h, 95% <= 57.75/h); normal time at level 0.054; caught weapon 5/10, assault 0/3, fire 1/2, robbery 0/2
+    L5+ false onsets   0 (0.00/h, 95% <= 57.75/h); normal time at level 0.000; caught weapon 0/10, assault 0/3, fire 0/2, robbery 0/2
+
+pipeline latency: mean 853.6 ms, p95 1222.7 ms (349s total)
+clip engine: 196 clips, gate open 0.99, 5.9 keyframes/clip, compute p50 982.4 ms / p95 1275.1 ms; fast-lane decisions 52
+    S0_gate      p50     0.4 ms  p95     0.5 ms  ran  196  calls 0
+    S1_objects   p50   598.4 ms  p95   933.0 ms  ran  195  calls 744
+    S2_scene     p50   343.9 ms  p95   398.9 ms  ran  179  calls 344
+    S3_identity  p50     0.1 ms  p95     0.1 ms  ran  178  calls 178
+    S5_audio     p50    65.4 ms  p95   128.9 ms  ran  196  calls 392
+    S6_fusion    p50     1.4 ms  p95     1.9 ms  ran  196  calls 196
+written: G:\Sentrix\training\runs\custom_eval\robbery_l3_2026-11-21\v4_on\replay_vid02-vid03-vid05-vid06-vid07-wa01-wa03-mmtheft-mmassault-mmgun-mmknife-nvroom2-vid04-gun_fastlane.json  (commit 4e210e8)
+exit 0

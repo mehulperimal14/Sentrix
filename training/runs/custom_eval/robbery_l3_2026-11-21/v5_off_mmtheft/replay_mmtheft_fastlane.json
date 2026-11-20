@@ -1,0 +1,380 @@
+{
+  "commit": "4e210e8",
+  "branch": "feat/robbery-l3",
+  "videos": [
+    "mmtheft"
+  ],
+  "mode": "clip",
+  "inference_hz": 6.0,
+  "tolerance_s": 0.25,
+  "grace_s": 1.0,
+  "models": {
+    "person": "yolov8n.pt",
+    "weapon": "weapon_detector_room_v5.pt",
+    "fire": "fire_detector_room_v5.pt",
+    "violence": null,
+    "scene": "scene_classifier_room_v5.pt",
+    "fusion": "evidence"
+  },
+  "splits": {
+    "all": {
+      "frames": {
+        "n": 298,
+        "accuracy": 0.953,
+        "macro_f1": 0.9439,
+        "balanced_accuracy": 0.9312,
+        "classes_scored": [
+          "normal",
+          "robbery"
+        ],
+        "per_class": {
+          "normal": {
+            "precision": 0.9762,
+            "recall": 0.8723,
+            "f1": 0.9213,
+            "support": 94,
+            "predicted": 84
+          },
+          "fire": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0,
+            "predicted": 0
+          },
+          "weapon": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0,
+            "predicted": 0
+          },
+          "assault": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0,
+            "predicted": 0
+          },
+          "robbery": {
+            "precision": 0.9439,
+            "recall": 0.9902,
+            "f1": 0.9665,
+            "support": 204,
+            "predicted": 214
+          }
+        },
+        "confusion": {
+          "labels": [
+            "normal",
+            "fire",
+            "weapon",
+            "assault",
+            "robbery"
+          ],
+          "matrix": [
+            [
+              82,
+              0,
+              0,
+              0,
+              12
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              2,
+              0,
+              0,
+              0,
+              202
+            ]
+          ]
+        },
+        "threat_detection": {
+          "tp": 202,
+          "fp": 12,
+          "fn": 2,
+          "tn": 82,
+          "precision": 0.9439,
+          "recall": 0.9902,
+          "f1": 0.9665,
+          "false_positive_rate": 0.1277
+        }
+      },
+      "events": {
+        "episodes": 1,
+        "detected": 1,
+        "episode_recall": 1.0,
+        "episode_recall_any_threat": 1.0,
+        "by_label": {
+          "robbery": {
+            "episodes": 1,
+            "detected": 1,
+            "recall": 1.0,
+            "median_latency": 0.322
+          }
+        },
+        "false_alarms": 1,
+        "normal_minutes": 0.262,
+        "false_alarms_per_normal_minute": 3.8221,
+        "episode_detail": [
+          {
+            "video": "mmtheft",
+            "label": "robbery",
+            "start": 17.678,
+            "end": 51.365,
+            "duration": 33.687,
+            "detected": true,
+            "detected_any_threat": true,
+            "latency": 0.322
+          }
+        ],
+        "false_alarm_detail": [
+          {
+            "video": "mmtheft",
+            "start": 52.5,
+            "end": 53.5,
+            "predicted": [
+              "robbery"
+            ]
+          }
+        ]
+      },
+      "levels": {
+        "threat_ticks_at_L3plus": 0.0,
+        "normal_ticks_at_L3plus": 0.0
+      },
+      "committed": {
+        "L2": {
+          "onsets": 1,
+          "false_onsets": 0,
+          "false_onsets_per_hour": 0.0,
+          "false_onsets_per_hour_ci95": [
+            0.0,
+            736.3033
+          ],
+          "normal_time_at_level": 0.0648,
+          "episodes": {
+            "robbery": {
+              "episodes": 1,
+              "caught": 1,
+              "recall": 1.0,
+              "recall_ci95": [
+                0.025,
+                1.0
+              ],
+              "median_latency": 0.322,
+              "p95_latency": 0.322,
+              "within_2s": 1
+            }
+          }
+        },
+        "L3": {
+          "onsets": 0,
+          "false_onsets": 0,
+          "false_onsets_per_hour": 0.0,
+          "false_onsets_per_hour_ci95": [
+            0.0,
+            736.3033
+          ],
+          "normal_time_at_level": 0.0,
+          "episodes": {
+            "robbery": {
+              "episodes": 1,
+              "caught": 0,
+              "recall": 0.0,
+              "recall_ci95": [
+                0.0,
+                0.975
+              ],
+              "median_latency": null,
+              "p95_latency": null,
+              "within_2s": 0
+            }
+          }
+        },
+        "L4": {
+          "onsets": 0,
+          "false_onsets": 0,
+          "false_onsets_per_hour": 0.0,
+          "false_onsets_per_hour_ci95": [
+            0.0,
+            736.3033
+          ],
+          "normal_time_at_level": 0.0,
+          "episodes": {
+            "robbery": {
+              "episodes": 1,
+              "caught": 0,
+              "recall": 0.0,
+              "recall_ci95": [
+                0.0,
+                0.975
+              ],
+              "median_latency": null,
+              "p95_latency": null,
+              "within_2s": 0
+            }
+          }
+        },
+        "L5": {
+          "onsets": 0,
+          "false_onsets": 0,
+          "false_onsets_per_hour": 0.0,
+          "false_onsets_per_hour_ci95": [
+            0.0,
+            736.3033
+          ],
+          "normal_time_at_level": 0.0,
+          "episodes": {
+            "robbery": {
+              "episodes": 1,
+              "caught": 0,
+              "recall": 0.0,
+              "recall_ci95": [
+                0.0,
+                0.975
+              ],
+              "median_latency": null,
+              "p95_latency": null,
+              "within_2s": 0
+            }
+          }
+        },
+        "normal_hours": 0.005
+      }
+    }
+  },
+  "audio": {
+    "mode": "auto",
+    "per_video": {
+      "mmtheft": {
+        "seconds": 53.62,
+        "model": "panns_cnn10"
+      }
+    },
+    "align_tolerance_s": 1.5,
+    "cue_thresholds": {
+      "aggression": 0.3,
+      "weapon_sound": 0.3,
+      "fire_sound": 0.3,
+      "benign_social": 0.4,
+      "calm_talk": 0.85,
+      "background": 0.4,
+      "siren": 0.3
+    },
+    "audio_votes": true
+  },
+  "identity": {
+    "unknown_alert_home": true,
+    "note": "the harness scores everyone as an unrecognised person"
+  },
+  "clip": {
+    "clips": 26,
+    "gate_open_fraction": 1.0,
+    "keyframes_per_clip": 5.96,
+    "compute_ms": {
+      "p50": 378.3,
+      "p95": 469.5,
+      "mean": 391.3
+    },
+    "stages": {
+      "S0_gate": {
+        "p50_ms": 0.2,
+        "p95_ms": 0.2,
+        "ran": 26,
+        "calls": 0
+      },
+      "S1_objects": {
+        "p50_ms": 243.1,
+        "p95_ms": 325.6,
+        "ran": 26,
+        "calls": 99
+      },
+      "S5_audio": {
+        "p50_ms": 0.2,
+        "p95_ms": 30.2,
+        "ran": 26,
+        "calls": 52
+      },
+      "S6_fusion": {
+        "p50_ms": 1.2,
+        "p95_ms": 1.8,
+        "ran": 26,
+        "calls": 26
+      },
+      "S2_scene": {
+        "p50_ms": 131.2,
+        "p95_ms": 169.0,
+        "ran": 24,
+        "calls": 46
+      },
+      "S3_identity": {
+        "p50_ms": 0.0,
+        "p95_ms": 0.0,
+        "ran": 23,
+        "calls": 23
+      }
+    },
+    "fast_lane_decisions": 0,
+    "fast_lane": {
+      "calls": 202,
+      "raises": 0,
+      "every_n": 4,
+      "imgsz": 320,
+      "ms_p50": 29.3,
+      "ms_p95": 33.1,
+      "backends": {
+        "person": "torch",
+        "weapon": "torch",
+        "fire": "torch"
+      }
+    },
+    "note": "replay is synchronous: compute is per clip on this machine; decisions are stamped at the clip end (compute not added)"
+  },
+  "threads": {
+    "threads": 4,
+    "torch": 4,
+    "opencv": 4
+  },
+  "clip_config": {
+    "window_seconds": 4.0,
+    "hop_seconds": 2.0,
+    "keyframes": 6,
+    "uniform_keyframes": 4,
+    "motion_keyframes": 2,
+    "confirm_keyframes": 2,
+    "min_escalate_observations": 1,
+    "fast_lane_imgsz": 320,
+    "fast_lane_every_n": 4,
+    "fast_lane_hits": 2,
+    "runtime": "torch",
+    "imgsz": 320,
+    "scene_keyframes": 2,
+    "fast_lane": true
+  },
+  "latency_ms": {
+    "mean": 377.2,
+    "p95": 469.3
+  }
+}

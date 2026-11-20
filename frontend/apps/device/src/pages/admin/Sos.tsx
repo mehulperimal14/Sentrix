@@ -86,6 +86,7 @@ export default function Sos() {
                     <option value="weapon">Weapon</option>
                     <option value="fire">Fire</option>
                     <option value="assault">Fight</option>
+                    <option value="robbery">Theft</option>
                   </Select>
                   <Button variant="alarm" busy={demo.isPending && demo.variables === 'trigger'} onClick={() => demo.mutate('trigger')} sub="Not a detection: disclose it to the audience">
                     Scripted trigger (SIMULATED DETECTION)

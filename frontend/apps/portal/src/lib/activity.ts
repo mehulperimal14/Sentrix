@@ -25,7 +25,7 @@ const TITLES: Record<string, string> = {
   weapon: 'Possible weapon',
   fire: 'Possible fire',
   assault: 'A possible fight',
-  robbery: 'Possible robbery',
+  robbery: 'Possible theft',
   intrusion: 'Someone we don’t recognise',
   duress: 'Emergency',
   normal: 'Something unusual',

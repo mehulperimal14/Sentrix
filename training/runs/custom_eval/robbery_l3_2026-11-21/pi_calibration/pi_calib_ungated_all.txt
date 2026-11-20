@@ -1,0 +1,16 @@
+49 event log(s), events_20261023_175605_18082d5f53f2.jsonl .. events_20261121_015920_c352552ca01f.jsonl; a person needed for: weapon
+
+== robbery ==
+  scored: 11023 clip/tick observations, 20901 values, 6.16 h
+  per value: median 0.0735, p99 0.1607, p99.9 0.2583, max 0.3018
+  highest confirming value 0.2753, highest single value 0.3018
+  at floor     0.60: 0 onset(s), 0 confirmed observation(s)
+  at proposed  0.60: 0 onset(s), 0 confirmed observation(s)
+  at in_force  0.60: 0 onset(s), 0 confirmed observation(s)
+  PROPOSED 0.60 (set by floor); 0 onsets in 6.16 h -> 95 % upper bound 0.487 per hour
+  replay check: same verdict as the device on 10887 of 10887 clips (at the bar it applied)
+    2026-11-20T19:25:34  confirm 0.275  single 0.281  clip 6a527796b56a
+    2026-11-20T19:25:40  confirm 0.274  single 0.281  clip 6a527796b56a
+    2026-11-20T19:25:51  confirm 0.272  single 0.278  clip 6a527796b56a
+    2026-11-20T19:25:29  confirm 0.264  single 0.278  clip 6a527796b56a
+    2026-11-20T19:25:46  confirm 0.261  single 0.270  clip 6a527796b56a
