@@ -1,383 +1,375 @@
 1
-00:00:17,670 --> 00:00:21,865
+00:00:21,410 --> 00:00:25,605
 Home alarms raise far more false alarms than real ones:
 
 2
-00:00:21,865 --> 00:00:25,221
+00:00:25,605 --> 00:00:28,961
 police studies put them at 94 to 98 percent.
 
 3
-00:00:25,601 --> 00:00:28,465
+00:00:29,341 --> 00:00:32,205
 And cloud cameras send private video out of the home.
 
 4
-00:00:29,960 --> 00:00:31,308
+00:00:33,700 --> 00:00:35,048
 SENTRIX is our answer.
 
 5
-00:00:31,688 --> 00:00:33,570
+00:00:35,428 --> 00:00:37,310
 One small unit watches a room,
 
 6
-00:00:33,570 --> 00:00:38,525
+00:00:37,310 --> 00:00:42,265
 and decides on the device itself whether there is a handgun or a visible flame.
 
 7
-00:00:38,905 --> 00:00:43,008
+00:00:42,645 --> 00:00:46,748
 It asks the owner before anyone else is alerted, and its video,
 
 8
-00:00:43,008 --> 00:00:45,483
+00:00:46,748 --> 00:00:49,223
 faces and evidence stay on the device.
 
 9
-00:00:47,480 --> 00:00:56,490
+00:00:51,220 --> 00:01:00,230
 Kartik led vision and the backend: turning detector scores into alarms we can trust, and the architecture of the whole system.
 
 10
-00:00:56,870 --> 00:01:07,470
+00:01:00,610 --> 00:01:11,210
 Akshay led identity: recognising residents per tracked person, body re-identification, and setting the match bars from error rates we measured.
 
 11
-00:01:07,850 --> 00:01:16,280
+00:01:11,590 --> 00:01:20,020
 Prashant led audio: capturing sound, tagging it with an AudioSet model, and aligning every sound window with the video.
 
 12
-00:01:16,660 --> 00:01:25,490
+00:01:20,400 --> 00:01:29,230
 Harshit led behaviour and fusion: the data-collection protocol, and the transparent rules that combine every input into one alarm level.
 
 13
-00:01:25,870 --> 00:01:38,930
+00:01:29,610 --> 00:01:42,670
 Mehul led records, interfaces and evaluation: tamper-evident evidence storage, the alarm screens, and judging the product by the alarm level a user actually sees.
 
 14
-00:01:40,930 --> 00:01:45,954
+00:01:44,670 --> 00:01:49,694
 This video follows the six parts of the guideline: the components, the connections,
 
 15
-00:01:45,954 --> 00:01:50,009
+00:01:49,694 --> 00:01:53,749
 the inputs, how to start, stop and troubleshoot it, a complete run,
 
 16
-00:01:50,009 --> 00:01:51,341
+00:01:53,749 --> 00:01:55,081
 and the final results.
 
 17
-00:01:52,840 --> 00:01:54,397
+00:01:56,580 --> 00:01:58,137
 SENTRIX has two programs.
 
 18
-00:01:54,777 --> 00:01:59,772
+00:01:58,517 --> 00:02:03,512
 The device runs on a Raspberry Pi 5: it owns the camera, runs every model,
 
 19
-00:01:59,772 --> 00:02:01,594
+00:02:03,512 --> 00:02:05,334
 and serves its own screens.
 
 20
-00:02:01,974 --> 00:02:07,086
+00:02:05,714 --> 00:02:10,826
 The Portal runs in the cloud: it holds accounts, contacts and a responder desk,
 
 21
-00:02:07,086 --> 00:02:11,422
+00:02:10,826 --> 00:02:15,162
 and reaches the device only through the device's own outbound link.
 
 22
-00:02:12,920 --> 00:02:17,566
+00:02:16,660 --> 00:02:21,306
 Inside the device, perception models produce votes: a YOLO person,
 
 23
-00:02:17,566 --> 00:02:23,128
+00:02:21,306 --> 00:02:26,868
 weapon and fire detector, a DINOv2 scene classifier trained on our own footage,
 
 24
-00:02:23,128 --> 00:02:27,352
+00:02:26,868 --> 00:02:31,092
 face recognition, body re-identification and a sound tagger.
 
 25
-00:02:27,732 --> 00:02:29,936
+00:02:31,472 --> 00:02:33,676
 Evidence rules confirm the votes,
 
 26
-00:02:29,936 --> 00:02:34,945
+00:02:33,676 --> 00:02:38,685
 the threat confidence index and the level policy commit one of five levels,
 
 27
-00:02:34,945 --> 00:02:37,216
+00:02:38,685 --> 00:02:40,956
 and the SOS engine asks the owner.
 
 28
-00:02:37,596 --> 00:02:41,814
+00:02:41,336 --> 00:02:45,554
 Every message passes one send guard, and test mode is on by default.
 
 29
-00:02:43,310 --> 00:02:49,036
-Our demo unit is a Raspberry Pi 5 with 8 GB of memory and an active cooler,
+00:02:47,050 --> 00:02:52,932
+Our unit is a Raspberry Pi 5 with 8 GB of memory and an active cooler,
 
 30
-00:02:49,036 --> 00:02:54,303
-a Camera Module 3 on a tilting mount, and an optional USB microphone.
+00:02:52,932 --> 00:02:56,714
+powered by the official 27-watt USB-C supply.
 
 31
-00:02:54,683 --> 00:02:59,772
-The full design adds three status LEDs, a PIR motion sensor,
+00:02:57,094 --> 00:03:02,498
+A Camera Module 3 sits on a tilting mount, a USB microphone listens,
 
 32
-00:02:59,772 --> 00:03:05,540
-a door switch and a mains sensor, a 12-volt supply with a small UPS,
+00:03:02,498 --> 00:03:07,663
+and three status LEDs show its state, all in our 3D-printed case.
 
 33
-00:03:05,540 --> 00:03:07,576
-and a 3D-printable case.
-
-34
-00:03:09,080 --> 00:03:13,078
+00:03:09,160 --> 00:03:13,158
 The camera connects to the Pi's camera port with a ribbon cable,
 
-35
-00:03:13,078 --> 00:03:17,638
+34
+00:03:13,158 --> 00:03:17,718
 and the microphone goes into any USB port, even while SENTRIX is running.
 
-36
-00:03:18,018 --> 00:03:26,780
+35
+00:03:18,098 --> 00:03:26,860
 The green, amber and red LEDs are on GPIO 5, 12 and 13, through 330-ohm resistors.
 
+36
+00:03:27,240 --> 00:03:31,370
+The official 27-watt USB-C supply powers the Pi.
+
 37
-00:03:27,160 --> 00:03:33,176
-The PIR, door and mains inputs are on GPIO 23, 24 and 16.
-
-38
-00:03:33,556 --> 00:03:36,905
-A fused converter powers the Pi at 5.2 volts.
-
-39
-00:03:37,285 --> 00:03:41,391
+00:03:31,750 --> 00:03:35,856
 The README and the Pi guide in our repository list every pin.
 
-40
-00:03:42,890 --> 00:03:47,005
-SENTRIX needs a camera picture; sound and sensor events are optional.
+38
+00:03:37,360 --> 00:03:42,279
+SENTRIX needs a camera picture; sound from the USB microphone is optional.
 
-41
-00:03:47,385 --> 00:03:51,944
+39
+00:03:42,659 --> 00:03:47,218
 To set it up, the owner activates an account with a one-time code,
 
-42
-00:03:51,944 --> 00:03:56,435
+40
+00:03:47,218 --> 00:03:51,709
 and enters the home's address, the household, emergency contacts,
 
-43
-00:03:56,435 --> 00:03:59,958
+41
+00:03:51,709 --> 00:03:55,232
 who confirm by consent, and a PIN and a duress PIN.
 
-44
-00:04:00,338 --> 00:04:03,890
+42
+00:03:55,612 --> 00:03:59,164
 Residents' faces are enrolled from the device's own camera,
 
-45
-00:04:03,890 --> 00:04:07,382
+43
+00:03:59,164 --> 00:04:02,656
 so the people who live there are not treated as strangers.
 
-46
-00:04:08,880 --> 00:04:10,680
-To start SENTRIX on a laptop,
-
-47
-00:04:10,680 --> 00:04:14,589
-one script starts the device and one command starts the Portal.
-
-48
-00:04:14,969 --> 00:04:18,784
+44
+00:04:04,160 --> 00:04:07,975
 On the Pi, SENTRIX is a service that starts by itself at boot,
 
-49
-00:04:18,784 --> 00:04:21,245
+45
+00:04:07,975 --> 00:04:10,436
 and the status command shows it running.
 
-50
-00:04:22,750 --> 00:04:25,308
+46
+00:04:10,816 --> 00:04:15,525
+The Portal is hosted on Render and always on, so there is nothing to start:
+
+47
+00:04:15,525 --> 00:04:17,974
+the owner simply opens it in a browser.
+
+48
+00:04:19,470 --> 00:04:22,028
 The same service commands stop or restart it.
 
-51
-00:04:25,688 --> 00:04:29,401
+49
+00:04:22,408 --> 00:04:26,121
 The event log records every level change and every incident,
 
-52
-00:04:29,401 --> 00:04:32,619
+50
+00:04:26,121 --> 00:04:29,339
 and the doctor tool checks the models, the settings,
 
-53
-00:04:32,619 --> 00:04:36,704
+51
+00:04:29,339 --> 00:04:33,424
 the send guard and the evidence chain, without opening the camera.
 
-54
-00:04:38,200 --> 00:04:40,002
+52
+00:04:34,920 --> 00:04:36,722
 Most problems have a short fix.
 
-55
-00:04:40,382 --> 00:04:42,541
+53
+00:04:37,102 --> 00:04:39,261
 No picture: reseat the camera ribbon.
 
-56
-00:04:42,921 --> 00:04:48,418
+54
+00:04:39,641 --> 00:04:45,138
 No sound: plug the microphone into any USB port; it is picked up automatically.
 
-57
-00:04:48,798 --> 00:04:53,108
+55
+00:04:45,518 --> 00:04:49,828
 Device shown offline: check the Wi-Fi; the link reconnects on its own.
 
-58
-00:04:53,488 --> 00:04:55,529
+56
+00:04:50,208 --> 00:04:52,249
 And if a room gives false alarms,
 
-59
-00:04:55,529 --> 00:05:00,168
+57
+00:04:52,249 --> 00:04:56,888
 the calibration tool sets that room's thresholds from the device's own log.
 
-60
-00:05:01,670 --> 00:05:05,557
+58
+00:04:58,390 --> 00:05:02,277
 Now a complete run, in test mode, so nothing can be sent anywhere.
 
-61
-00:05:05,937 --> 00:05:11,009
+59
+00:05:02,657 --> 00:05:07,729
 A held-out clip with a replica handgun, staged by our team, plays as the camera.
 
-62
-00:05:12,510 --> 00:05:17,366
+60
+00:05:09,230 --> 00:05:14,086
 The scene model and the weapon detector both confirm the handgun, with a person in view.
 
-63
-00:05:17,746 --> 00:05:21,466
+61
+00:05:14,466 --> 00:05:18,186
 Level 3 is committed, and the device screen switches to the alert.
 
-64
-00:05:27,010 --> 00:05:31,891
+62
+00:05:23,730 --> 00:05:28,611
 On the owner's phone a red bar appears, and the alert puts the three answers first.
 
-65
-00:05:32,271 --> 00:05:34,615
+63
+00:05:28,991 --> 00:05:31,335
 The owner chooses Police and asks for help.
 
-66
-00:05:44,010 --> 00:05:47,050
+64
+00:05:40,730 --> 00:05:43,770
 The SENTRIX Desk, our simulated monitoring centre,
 
-67
-00:05:47,050 --> 00:05:51,305
+65
+00:05:43,770 --> 00:05:48,025
 receives the request with the address, the household and the snapshot,
 
-68
-00:05:51,305 --> 00:05:52,521
+66
+00:05:48,025 --> 00:05:49,241
 and acknowledges it.
 
-69
-00:05:54,020 --> 00:05:57,010
+67
+00:05:50,740 --> 00:05:53,730
 The owner's phone now shows that the Desk is handling it.
 
-70
-00:05:59,020 --> 00:06:01,564
+68
+00:05:55,740 --> 00:05:58,284
 The Desk closes the request with an outcome,
 
-71
-00:06:01,564 --> 00:06:04,629
+69
+00:05:58,284 --> 00:06:01,349
 and that outcome becomes a label for future training.
 
-72
-00:06:07,020 --> 00:06:08,295
+70
+00:06:03,740 --> 00:06:05,015
 On the home network,
 
-73
-00:06:08,295 --> 00:06:12,631
+71
+00:06:05,015 --> 00:06:09,351
 the diagnostics page shows each model's score against its threshold,
 
-74
-00:06:12,631 --> 00:06:14,671
+72
+00:06:09,351 --> 00:06:11,391
 and how every input contributed.
 
-75
-00:06:18,520 --> 00:06:22,925
+73
+00:06:15,240 --> 00:06:19,645
 And the owner can watch the live picture from anywhere, relayed through the Portal.
 
-76
-00:06:25,520 --> 00:06:30,448
+74
+00:06:22,240 --> 00:06:27,168
 On the Raspberry Pi in our demo room, the same flow runs on four-second clips.
 
-77
-00:06:30,828 --> 00:06:35,632
-Its weapon and fire detectors are the versions retrained on fifteen of our videos,
+75
+00:06:27,548 --> 00:06:31,1000
+Its weapon and fire detectors are retrained on our own labelled recordings,
 
-78
-00:06:35,632 --> 00:06:38,679
+76
+00:06:31,1000 --> 00:06:35,086
 and its thresholds were set from the room's own log.
 
-79
-00:06:40,180 --> 00:06:40,991
+77
+00:06:36,590 --> 00:06:37,401
 Our results.
 
-80
-00:06:41,371 --> 00:06:48,241
+78
+00:06:37,781 --> 00:06:44,651
 Training on our own footage raised validation macro-F1 from 0.28 to 0.77,
 
-81
-00:06:48,241 --> 00:06:54,546
+79
+00:06:44,651 --> 00:06:50,956
 and cut false alarms from about fourteen to 0.79 per normal minute.
 
-82
-00:06:54,926 --> 00:06:57,538
+80
+00:06:51,336 --> 00:06:53,948
 The evidence rules then removed the rest,
 
-83
-00:06:57,538 --> 00:07:02,444
+81
+00:06:53,948 --> 00:06:58,854
 and re-deciding our first live session took Level 3 alarms from nine to none.
 
-84
-00:07:03,940 --> 00:07:06,949
-Retrained on fifteen videos,
+82
+00:07:00,350 --> 00:07:03,747
+Retrained on our own recordings,
 
-85
-00:07:06,949 --> 00:07:13,934
+83
+00:07:03,747 --> 00:07:10,646
 the detectors' held-out AUROC rose from 0.75 to 0.87 for weapons,
 
-86
-00:07:13,934 --> 00:07:20,060
+84
+00:07:10,646 --> 00:07:16,697
 and from 0.59 to 0.96 for fire, with no new false alarms.
 
-87
-00:07:20,440 --> 00:07:25,552
+85
+00:07:17,077 --> 00:07:22,189
 Eleven of fourteen weapon episodes and every flame reach Level 3 on replay.
 
-88
-00:07:25,932 --> 00:07:27,051
+86
+00:07:22,569 --> 00:07:23,688
 In the demo room,
 
-89
-00:07:27,051 --> 00:07:32,647
+87
+00:07:23,688 --> 00:07:29,285
 calibration took scene-model false alarms in a five-hour log from forty-nine to zero.
 
-90
-00:07:33,027 --> 00:07:37,325
+88
+00:07:29,665 --> 00:07:33,962
 And the Pi analyses a four-second clip in 3.9 seconds.
 
-91
-00:07:38,820 --> 00:07:43,873
+89
+00:07:35,460 --> 00:07:40,513
 We also report the limits: too little normal footage to claim a false-alarm rate,
 
-92
-00:07:43,873 --> 00:07:47,179
+90
+00:07:40,513 --> 00:07:43,819
 a Pi that is still slower than its two-second target,
 
-93
-00:07:47,179 --> 00:07:50,735
+91
+00:07:43,819 --> 00:07:47,375
 and detectors that still need their own room calibration.
 
-94
-00:07:51,115 --> 00:07:53,786
+92
+00:07:47,755 --> 00:07:50,426
 Recording in the deployment room is our next step.
 
-95
-00:07:55,290 --> 00:07:58,504
+93
+00:07:51,930 --> 00:07:55,144
 SENTRIX decides at home, and it asks the owner first.
 
-96
-00:07:58,884 --> 00:07:59,972
+94
+00:07:55,524 --> 00:07:56,612
 Thank you for watching.

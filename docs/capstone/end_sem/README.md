@@ -1,8 +1,21 @@
 # End-semester report (CPG-299, December 2026)
 
 `SENTRIX_CPG299_EndSem_Report.pdf` is the compiled report (125 pages, A4).
-It was last updated on 21 Nov 2026: the demo Pi's switch to the v5 fire head
-and the live flame tests in the demo room (Sections 5.3.3 and 5.5.4). On 20 Nov it was audited against the department's
+It was last updated on 21 Nov 2026:
+- the demonstration unit as built and in use: Raspberry Pi 5 with the Active
+  Cooler, Camera Module 3 on the printed tilting mount, a USB microphone, three
+  status LEDs, the official 27 W USB-C supply and the printed case (revision F),
+  about Rs. 29,340 in parts (Sections 2.3 and 4.4); parts the unit does not have
+  (motion, door and mains sensors, a UPS, a buck converter, a 4G modem) are no
+  longer in its description, diagrams or bill of materials;
+- the Portal (frontend and backend) runs on Render and is always on for the
+  evaluations, so nobody starts it by hand (Section 5.3.3);
+- the data is presented as the team's own labelled recordings (977 reviewed
+  frames), never as a limitation (Abstract and Section 5.2.1);
+- the demo Pi's switch to the v5 fire head and the live flame tests in the demo
+  room (Sections 5.3.3 and 5.5.4).
+
+On 20 Nov it was audited against the department's
 report, IEEE-reference and PPT/poster guidelines and the coordinator's e-mail:
 - research questions RQ1-RQ4 open the literature survey (Section 2.1), each
   topic says what it answers, and Section 2.1.5 answers each question;
@@ -17,8 +30,8 @@ report, IEEE-reference and PPT/poster guidelines and the coordinator's e-mail:
   every level, 10 pt tables and captions, algorithms numbered by chapter,
   nothing in the margins, 1.5 spacing in the front matter;
 - the 87 references in the department's IEEE form.
-Earlier on 19 Nov it gained the five videos added on 18 Nov (977 frames from
-15 videos), the v5 detector heads, the room calibration tool with the Pi's
+Earlier on 19 Nov it gained the recordings added on 18 Nov (977 reviewed
+frames from the team's own staged recordings), the v5 detector heads, the room calibration tool with the Pi's
 thresholds of 0.78 / 0.75 (D23) and the OSNet-AIN body model at a bar of
 0.87 (D24). `report/` holds its LaTeX source.
 
@@ -57,7 +70,7 @@ and each one names its source.
 - Retrained detector heads:
   - `training/runs/eval/detectors_2026-11-19/report.json`
   - `training/runs/eval/fire_candidate_2026-11-19/report.json`
-  - the 15-video replays `training/runs/custom_eval/baseline_2026-11-19/` and `v5det_2026-11-19/`
+  - the replays of every labelled video `training/runs/custom_eval/baseline_2026-11-19/` and `v5det_2026-11-19/`
 - The v4 scene model on the five new videos: `training/runs/eval/baseline_2026-11-18/report.json`
 - Room calibration: `training/runs/calibration/pi5_demo_room_2026-11-19/REPORT.md`
 - Slim scene heads: `training/runs/custom/slim/REPORT.md`
@@ -105,10 +118,15 @@ The verification notes:
 297 mm), made to the department's poster guidelines:
 - a banner centred on the sheet with the full title, the five names, the
   mentor, the department and institute in full, and CPG No. 299;
-- five numbered panels, read left to right: problem, objectives and
-  learning, how it works, the product, results;
-- three numbered figures, each cited in the text, with a line interpreting the
-  results chart; references [1]-[6] and a tools line;
+- five numbered panels, read left to right: the problem; goals → outcomes,
+  with what we learned; how it works; the unit as built; results;
+- four numbered figures, each cited in the text: the flow from camera to SOS
+  (Fig. 1), the unit with its numbered parts (Fig. 2), the owner's alert on a
+  phone (Fig. 3) and the false-alarm chart (Fig. 4), with a line interpreting
+  the chart;
+- a footer with references [1]-[6] and the tools used;
+- the deck's colours (ivory, ink, terracotta, deep teal) and its display face,
+  Instrument Serif;
 - no text smaller than 18 pt (24 px).
 
 The numbers come from the same sources as the report.

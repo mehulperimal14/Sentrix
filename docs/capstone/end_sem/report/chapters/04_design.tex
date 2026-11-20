@@ -16,7 +16,7 @@
 \section{System Architecture}
 \label{sec:arch}
 
-\figref{fig:arch} shows the architecture of the complete product. The device is one Python process (on the Pi, a systemd user service that restarts it on failure) that owns the camera, the pipeline, the Local Console, the SOS engine, the channels and the link. The pipeline is split into threads so that slow inference never blocks the video: a \emph{capture} thread reads every frame at the camera rate into a newest-frame slot; an \emph{inference} thread takes the newest frame (tick mode, at most 6\,Hz) or the newest 4\,s clip (clip mode, every 2\,s); face recognition runs on its own \emph{identity} thread; the \emph{audio} engine reads the microphone continuously; and the \emph{preview} composites every captured frame with the latest overlay, encoding it once for all viewers. Decisions flow from perception through evidence, TCI and level policy to incidents and side effects, and an idempotent trigger hands alarm-class incidents to the SOS engine. The device opens only outbound connections; the Portal reaches it through the link.
+\figref{fig:arch} shows the architecture of the complete product. The device is one Python process (on the Pi, a systemd user service that starts it at boot and restarts it on failure) that owns the camera, the pipeline, the Local Console, the SOS engine, the channels and the link. The pipeline is split into threads so that slow inference never blocks the video: a \emph{capture} thread reads every frame at the camera rate into a newest-frame slot; an \emph{inference} thread takes the newest frame (tick mode, at most 6\,Hz) or the newest 4\,s clip (clip mode, every 2\,s); face recognition runs on its own \emph{identity} thread; the \emph{audio} engine reads the microphone continuously; and the \emph{preview} composites every captured frame with the latest overlay, encoding it once for all viewers. Decisions flow from perception through evidence, TCI and level policy to incidents and side effects, and an idempotent trigger hands alarm-class incidents to the SOS engine. The device opens only outbound connections; the Portal reaches it through the link.
 
 \begin{figure}[htbp]
 \centering
@@ -25,7 +25,6 @@
 % inputs
 \node[dblk, text width=1.75cm] (cam) at (0,0) {Camera\\(Pi CSI, USB,\\RTSP, file)};
 \node[dblk, text width=1.75cm, below=5mm of cam] (mic) {USB\\microphone};
-\node[dblk, text width=1.75cm, below=5mm of mic] (gpioin) {PIR, door,\\mains sense};
 % device column 1
 \node[blk, text width=2.3cm, right=6mm of cam] (cap) {Capture thread\\newest-frame slot};
 \node[blk, text width=2.3cm, below=of cap] (inf) {Inference: tick\\(6\,Hz) or 4\,s clip};
@@ -42,7 +41,7 @@
 \node[blk, text width=2.15cm, below=of hw] (ch) {Channels + outbox\\behind send guard};
 \node[blk, text width=2.15cm, below=of ch] (link) {Link client:\\outbox, tunnel,\\video relay};
 \begin{scope}[on background layer]
-\node[grp, fill=sxhead!35, fit=(cap)(ev)(lc)(link), label={[font=\scriptsize\bfseries]above:Device (Raspberry Pi 5): python -m sentrix}] (dev) {};
+\node[grp, fill=sxhead!35, fit=(cap)(ev)(lc)(link), label={[font=\scriptsize\bfseries]above:Device (Raspberry Pi 5): systemd service, starts at boot}] (dev) {};
 \end{scope}
 % portal
 \node[blk, text width=2.15cm, below=12mm of link] (hub) {Link hub + tunnel\\proxy /d/\{device\}/};
@@ -52,11 +51,10 @@
 \node[blk, text width=2.3cm, left=3mm of notify] (spa) {Portal React app,\\JSON API v2};
 \node[blk, text width=2.3cm, left=3mm of spa] (db) {SQLite (1\,GB disk),\\audit hash chain};
 \begin{scope}[on background layer]
-\node[grp, fill=sxlight!60, fit=(hub)(csos)(acct)(notify)(db)(spa), label={[font=\scriptsize\bfseries]below:Portal (Render, Docker): python -m sentrix\_portal}] (por) {};
+\node[grp, fill=sxlight!60, fit=(hub)(csos)(acct)(notify)(db)(spa), label={[font=\scriptsize\bfseries]below:Portal (hosted on Render, Docker; always on)}] (por) {};
 \end{scope}
 \draw[arr] (cam) -- (cap);
 \draw[arr] (mic.east) -- ++(2mm,0) |- (perc.west);
-\draw[arr] (gpioin.east) -- ++(4mm,0) |- (ev.west);
 \draw[arr] (cap) -- (inf);
 \draw[arr] (inf) -- (perc);
 \draw[arr] (perc) -- (ev);
@@ -362,7 +360,7 @@ On the help path, APPROVED becomes DISPATCHED when a channel delivers the packag
 
 \paragraph{Level~0.} The context diagram treats SENTRIX as one process and shows what crosses its boundary:
 \begin{itemize}
-\item video, audio and sensor events come in from the room;
+\item video and audio come in from the room;
 \item alerts, the live view and incidents go to the owner, and answers, PINs and settings come back;
 \item contacts and the Desk receive the dispatch package and return acknowledgements and resolutions;
 \item administrators provide provisioning data and faces;
@@ -386,12 +384,12 @@ No flow leaves the face gallery (D1) or the evidence vault (D3) for the Portal: 
 \begin{tikzpicture}[ext/.style={draw, fill=sxhead, font=\scriptsize, align=center, minimum width=2.2cm, minimum height=7mm},
   proc/.style={draw, circle, fill=sxlight, font=\scriptsize\bfseries, align=center, minimum size=2.2cm}, fl/.style={-{Stealth[length=1.6mm]}, thick}, lab/.style={font=\tiny, align=center}]
 \node[proc] (p) at (0,0) {0\\SENTRIX};
-\node[ext] (room) at (-5,1.3) {Room\\(camera, mic, sensors)};
+\node[ext] (room) at (-5,1.3) {Room\\(camera, microphone)};
 \node[ext] (owner) at (5,1.3) {Owner / member};
 \node[ext] (cont) at (5,-1.3) {Contacts, Desk};
 \node[ext] (adm) at (-5,-1.3) {Company admin,\\device admin};
 \node[ext] (msg) at (0,-2.7) {Telegram, e-mail, SMS};
-\draw[fl] (room) -- node[above, lab, sloped]{video, audio, events} (p);
+\draw[fl] (room) -- node[above, lab, sloped]{video, audio} (p);
 \draw[fl] (p.north east) to[bend left=10] node[above, lab, sloped]{alerts, live view, incidents} (owner.west);
 \draw[fl] (owner.south west) to[bend left=10] node[below, lab, sloped, pos=0.3]{answers, PINs, settings} ([yshift=2mm]p.east);
 \draw[fl] (p.south east) -- node[below, lab, sloped]{dispatch package} (cont.west);
@@ -473,32 +471,34 @@ Both user interfaces are React single-page applications built from one design sy
 %--------------------------------------------------------------
 \section{Hardware Design}
 \label{sec:hwdesign}
-\figref{fig:hwblock} shows the wiring and power design of the Raspberry~Pi~5 unit; the pin assignment is in \tabref{tab:hwif}. Everything inside the box is 12\,V or below: a 12\,V adapter feeds a router mini UPS, and a fused buck converter supplies the Pi with 5.2\,V over USB-C. The three status LEDs are driven from GPIO 5, 12 and 13 through 330\,$\Omega$ resistors. Mains presence is sensed on the 12\,V adapter's output, before the UPS, through a PC817 optocoupler.
+\figref{fig:hwblock} shows the demonstration unit as it is built and running; its interfaces are in \tabref{tab:hwif}. The official Raspberry~Pi 27\,W USB-C supply (5.1\,V, 5\,A) powers the Pi~5 directly, and the Active Cooler cools it under the continuous inference load. Camera Module 3 sits on the case's tilting mount and connects to the Pi's CAM port with a CSI ribbon cable; the USB microphone goes into any USB port, before or after start-up. The three status LEDs---green, amber and red---are driven from GPIO 5, 12 and 13 (header pins 29, 32 and 33), each through a 330\,$\Omega$ resistor, and show the link, faults and the alarm level. The unit reaches the Portal over the home Wi-Fi through an outbound link only.
 
 \begin{figure}[htbp]
 \centering
-\resizebox{\textwidth}{!}{%
-\begin{tikzpicture}[node distance=4mm, b/.style={draw, rounded corners=2pt, fill=white, font=\scriptsize, align=center, inner sep=2.5pt},
-  pw/.style={-{Stealth[length=1.6mm]}, very thick, sxred}, sg/.style={-{Stealth[length=1.6mm]}, thick, sxblue}]
-\node[b, fill=sxhead, minimum width=2.6cm, minimum height=2.6cm, text width=2.4cm] (pi) at (0,0) {\textbf{Raspberry Pi 5}\\8\,GB, Active Cooler,\\RTC cell, 128\,GB\\High Endurance SD};
-\node[b] (cam) at (-4.0,1.6) {Camera Module 3\\(CSI, 22-pin cable)};
-\node[b] (mic) at (-4.0,0.3) {USB microphone};
-\node[b] (modem) at (-4.0,-1.0) {4G modem\\(USB, EC200U)};
-\node[b] (sens) at (-4.0,-2.3) {PIR (GPIO23),\\door (GPIO24)};
-\node[b] (leds) at (4.0,1.6) {LEDs G/A/R\\(GPIO5/12/13, 330\,$\Omega$)};
-\node[b] (opto) at (4.0,-1.4) {PC817 mains sense (GPIO16),\\taps the adapter output};
-\node[b] (buck) at (0,-3.0) {Buck 12\,V$\rightarrow$5.2\,V 6\,A\\+ fuse F1 (3\,A)};
-\node[b] (ups) at (4.0,-3.0) {Router mini UPS\\12\,V 3\,A};
-\node[b] (ad) at (7.2,-3.0) {12\,V adapter\\$\geq$4\,A (BIS)};
-\draw[sg] (cam) -- (pi); \draw[sg] (mic) -- (pi); \draw[sg, <->] (modem) -- (pi); \draw[sg] (sens) -- (pi);
-\draw[sg] (pi) -- (leds); \draw[sg] (opto) -- (pi);
-\draw[pw] (ad) -- (ups); \draw[pw] (ups) -- (buck); \draw[pw] (buck) -- node[left, font=\tiny]{USB-C 5\,A} (pi);
+\resizebox{0.92\textwidth}{!}{%
+\begin{tikzpicture}[b/.style={draw, rounded corners=2pt, fill=white, font=\scriptsize, align=center, inner sep=3pt},
+  pw/.style={-{Stealth[length=1.8mm]}, very thick, sxred}, sg/.style={-{Stealth[length=1.6mm]}, thick, sxblue},
+  lab/.style={font=\tiny, align=center, fill=white, inner sep=1pt}]
+\node[b, fill=sxhead, text width=3.3cm, minimum height=2.5cm] (pi) at (0,0) {\textbf{Raspberry Pi 5}\\[2pt]8\,GB RAM\\Active Cooler\\128\,GB High Endurance\\microSD};
+\node[b, fill=sxlight, text width=2.6cm] (cam) at (-5.0,0.95) {\textbf{Camera Module 3}\\standard lens, on the\\tilting mount};
+\node[b, fill=sxlight, text width=2.6cm] (mic) at (-5.0,-0.95) {\textbf{USB microphone}\\(any USB port)};
+\node[b, fill=sxlight, text width=2.9cm] (leds) at (4.7,0) {\textbf{Status LEDs}\\green / amber / red\\GPIO 5 / 12 / 13\\(pins 29 / 32 / 33)\\330\,$\Omega$ each};
+\node[b, text width=3.8cm] (psu) at (0,-3.1) {\textbf{Official Raspberry~Pi}\\\textbf{27\,W USB-C supply}\\5.1\,V, 5\,A};
+\node[b, text width=2.9cm] (net) at (4.7,-3.1) {Home Wi-Fi $\rightarrow$\\Portal on Render};
+\draw[sg] (cam.east) -- node[lab, above, sloped]{CSI ribbon, CAM} (pi.west |- cam.east);
+\draw[sg] (mic.east) -- node[lab, above]{USB} (pi.west |- mic.east);
+\draw[sg] (pi.east) -- node[lab, above]{GPIO} (leds.west);
+\draw[pw] (psu) -- node[lab, right]{USB-C} (pi);
+\draw[sg, <->, dashed] ([yshift=-9mm]pi.east) -- ++(6mm,0) |- node[lab, pos=0.3, right]{outbound link} (net.west);
+\begin{scope}[on background layer]
+\node[draw, dashed, rounded corners=5pt, fill=sxlight!35, fit=(cam)(mic)(pi)(leds), inner sep=7pt, label={[font=\scriptsize\itshape]above:3D-printed case, revision F}] {};
+\end{scope}
 \end{tikzpicture}}
-\caption{Hardware block diagram of the Raspberry~Pi~5 unit (red: power, blue: signals)}
+\caption{Hardware block diagram of the Raspberry~Pi~5 demonstration unit as built (red: power, blue: signals)}
 \label{fig:hwblock}
 \end{figure}
 
-The enclosure (\figref{fig:enclosure}) is a parametric OpenSCAD design (revision F) built from Raspberry~Pi Ltd's mechanical drawings: a base with the Pi screwed to standoffs on its own mounting holes, a lid with hexagonal grilles over the Active Cooler and three sleeves for the 5\,mm status LEDs, the USB and Ethernet ports at the camera end, USB-C and HDMI on the side, wall keyholes and table feet, and a camera pod on a fork bracket that tilts from 0 to 90$^\circ$ in 15$^\circ$ clicks on one M3 bolt. The camera is mounted connector-down, its upright orientation. A build script exports STL and 3MF files and runs 26 interference checks, all of which pass.
+The enclosure (\figref{fig:enclosure}) is a parametric OpenSCAD design (revision F), printed and in use on the demonstration unit, built from Raspberry~Pi Ltd's mechanical drawings: a base with the Pi screwed to standoffs on its own mounting holes, a lid with hexagonal grilles over the Active Cooler and three sleeves for the 5\,mm status LEDs, the USB and Ethernet ports at the camera end, USB-C and HDMI on the side, wall keyholes and table feet, and a camera pod on a fork bracket that tilts from 0 to 90$^\circ$ in 15$^\circ$ clicks on one M3 bolt. The camera is mounted connector-down, its upright orientation. A build script exports STL and 3MF files and runs 26 interference checks, all of which pass.
 
 \begin{figure}[htbp]
 \centering

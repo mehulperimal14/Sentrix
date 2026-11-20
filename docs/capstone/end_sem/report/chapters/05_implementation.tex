@@ -17,9 +17,9 @@
 \thead{Machine} & \thead{Configuration} & \thead{Used for}\\ \hline
 Development laptop & Intel Core i7-14650HX (24 threads), Windows 11, Python 3.14 virtual environment with CPU PyTorch & Evaluation, benchmarks (with 4 threads to mimic the Pi), tests, demo world\\ \hline
 Training environment & Same laptop, NVIDIA RTX 4060 (8\,GB), separate Python 3.11 environment with CUDA PyTorch, Ultralytics, timm & Training the scene classifier, YOLO heads and slim heads\\ \hline
-Raspberry~Pi~5 unit & 8\,GB, Raspberry~Pi~OS Trixie, Camera Module 3, Active Cooler; SENTRIX as a systemd user service in clip mode (ONNX, 320\,px object stage, fast lane, \code{buffalo\_s} faces) & Deployment in the demo room, on-device benchmarks, room calibration\\ \hline
-Portal & Render web service (0.5 CPU, 512\,MB, Singapore) with a 1\,GB persistent disk, built from \code{deploy/portal/Dockerfile} & Accounts, owner prompts, Desk, tunnel for the demonstration\\ \hline
-Test-mode demo world & \code{tools/demo\_reset.py} and \code{tools/demo\_run.py}: Portal and device on the laptop, a demo-reel camera playing recorded clips, every live switch forced off & End-to-end and browser tests, screenshots, rehearsals\\ \hline
+Raspberry~Pi~5 unit & 8\,GB, Raspberry~Pi~OS Trixie, Camera Module 3, USB microphone, three status LEDs, Active Cooler, 3D-printed case, official 27\,W supply; SENTRIX as a systemd user service that starts at boot, in clip mode (ONNX, 320\,px object stage, fast lane, \code{buffalo\_s} faces) & Deployment in the demo room, on-device benchmarks, room calibration\\ \hline
+Portal & Render web service (0.5 CPU, 512\,MB, Singapore) with a 1\,GB persistent disk, built from \code{deploy/portal/Dockerfile}; hosted and always on for the evaluations & Accounts, owner prompts, Desk, tunnel for the demonstration\\ \hline
+Test-mode demo world (developers only) & \code{tools/demo\_reset.py} and \code{tools/demo\_run.py}: a local copy of the Portal and the device on the laptop, a demo-reel camera playing recorded clips, every live switch forced off & End-to-end and browser tests, screenshots, rehearsals\\ \hline
 \end{tabularx}
 \end{table}
 
@@ -55,7 +55,7 @@ Robbery & 17 & 0 & 0 & 17\\ \hline
 \end{tabular}
 \end{table}
 
-\paragraph{Five videos added in November.} On 18 November 2026 the team added five videos: four masked-intruder scenes in the bedroom (a handgun pointed at a seated person, an attack on a resident lying on the bed, a beating with a metal flask, and a theft from the wardrobes) and one ordinary scene in a second room (\tabref{tab:dataset-new}). They were extracted with the original sampling rules and reviewed segment by segment, and they joined the training split; no video was held out. Grounding DINO proposed 27 boxes for them; 13 were kept after visual checks and 14 rejected (a phone, a monitor). The dataset now holds 977 frames from fifteen videos and 180 checked boxes.
+\paragraph{Five videos added in November.} On 18 November 2026 the team added five videos: four masked-intruder scenes in the bedroom (a handgun pointed at a seated person, an attack on a resident lying on the bed, a beating with a metal flask, and a theft from the wardrobes) and one ordinary scene in a second room (\tabref{tab:dataset-new}). They were extracted with the original sampling rules and reviewed segment by segment, and they joined the training split; no video was held out. Grounding DINO proposed 27 boxes for them; 13 were kept after visual checks and 14 rejected (a phone, a monitor). The dataset now holds 977 reviewed frames and 180 checked boxes.
 
 \begin{table}[htbp]
 \caption{The five videos added on 18 November 2026 (all in the training split)}
@@ -81,7 +81,7 @@ Second room: three people, ordinary activity & 29 (normal)\\ \hline
 \centering
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[node distance=4mm, s/.style={draw, rounded corners=2pt, fill=sxlight, font=\scriptsize, align=center, text width=2.2cm, minimum height=10mm}, a/.style={-{Stealth[length=1.6mm]}, thick}]
-\node[s] (v) {15 source videos\\(3 rooms)};
+\node[s] (v) {The team's own\\staged recordings};
 \node[s, right=of v] (f) {Frame sampling\\3--8\,fps};
 \node[s, right=of f] (h) {Perceptual-hash\\de-duplication};
 \node[s, right=of h] (r) {Human review:\\977 labelled frames};
@@ -152,7 +152,7 @@ so 3.7 minutes of normal footage can only show a rate below about 60 per hour. R
 
 \textbf{Detection.} The device then monitors continuously. On a laptop each tick analyses the newest frame at up to 6\,Hz; on the Pi a 4\,s clip is analysed every 2\,s while the fast lane checks every fourth frame. The models produce votes; the evidence rules confirm them and decide which modalities agree; the TCI and the level policy commit a level; an incident opens with a frozen peak snapshot. At Level~3 the device stores a snapshot, seals an encrypted evidence bundle (with the 4\,s before the trigger in clip mode) and, for an alarm class, triggers one assistance request. Everything is written to the event log as it happens, and the device screen, the LEDs and every connected viewer update within the same tick.
 
-\textbf{Owner decision.} The request is mirrored to the Portal over the link. The owner is asked on the Portal (a red bar on every page and a full alert screen), on the device screen (a full-screen takeover with a PIN pad) and by Telegram and e-mail; SMS from the 4G modem is used when the device is offline or the prompt is unseen after 10 minutes. The owner approves (choosing Police, Fire or Medical), marks a false alarm with the SOS PIN, or taps ``I'm checking''. If the owner does not answer, reminders follow at 2, 5, 10 and 20 minutes and a warning 5 minutes before the window closes; at the end the request expires as ``unanswered''. Meanwhile the safety defaults may already have alerted the contacts.
+\textbf{Owner decision.} The request is mirrored to the Portal over the link. The owner is asked on the Portal (a red bar on every page and a full alert screen), on the device screen (a full-screen takeover with a PIN pad) and by Telegram and e-mail (where an optional 4G modem is fitted, also by SMS when the device is offline or the prompt is unseen after 10 minutes). The owner approves (choosing Police, Fire or Medical), marks a false alarm with the SOS PIN, or taps ``I'm checking''. If the owner does not answer, reminders follow at 2, 5, 10 and 20 minutes and a warning 5 minutes before the window closes; at the end the request expires as ``unanswered''. Meanwhile the safety defaults may already have alerted the contacts.
 
 \textbf{Response.} On approval the dispatch package---address, entry notes, household, the snapshot, the detection's timeline---goes to the confirmed contacts and to the SENTRIX Desk. The Desk operator acknowledges the request (the owner's screen changes to ``The SENTRIX Desk is handling it''), can record that 112 was called, and closes the request with an outcome (for example ``help arrived'' or ``false alarm confirmed''), which sets the incident's verdict. Verdicts and the logged votes are the labels from which a future fitted fusion model can be trained.
 
@@ -221,20 +221,20 @@ This is the rule that fixed the first live run, where a single dwell restarted a
 
 \paragraph{Clip engine.} \algref{alg:clip} is the Raspberry~Pi strategy. The cascade spends compute only when there is something to look at: in a still, empty room only the gate runs, but a full cascade is forced at least every 10\,s so that a flame in an empty room is never missed.
 \begin{itemize}
-\item \textbf{Lines 2--3, the gate (S0).} The cascade runs only when something moves, makes a sound or triggers a sensor, while an alarm is active, or when 10\,s have passed since the last full run; otherwise the clip ends at once.
+\item \textbf{Lines 2--3, the gate (S0).} The cascade runs only when something moves or makes a sound, while an alarm is active, or when 10\,s have passed since the last full run; otherwise the clip ends at once.
 \item \textbf{Lines 5--6, detection (S1).} Six keyframes are chosen: four spread evenly and the two with the most motion. Results are reused for keyframes this clip shares with the previous one, since consecutive clips overlap by 2\,s. The three detector heads run on the new keyframes at 320\,px.
 \item \textbf{Lines 7--12, the expensive stages (S2--S4)} run only when they can matter: DINOv2 only when a person or a fire candidate was found, the face check only with people present and at most every 2\,s, and the action model only for two or more moving people.
 \item \textbf{Lines 13--14 (S5--S6).} The clip's own 4\,s of sound is classified; it is aligned with the clip by construction. A class is then confirmed within the clip---on two keyframes of one track, or one image region for fire---and the votes go to Algorithms~\ref{alg:evidence} and~\ref{alg:policy}.
 \item \textbf{Lines 16--21, the fast lane,} runs between clips on every fourth buffered frame. Two consecutive hits on the same track raise Level~3 at once (line~18), without waiting up to 4\,s for the next clip. Being a single detector source, it can never go above Level~3.
 \end{itemize}
 
-\begin{algorithm}[htbp]
+\begin{algorithm}[!ht]
 \caption{Clip engine cascade (every 2\,s) and fast lane (every 4th frame)}
 \label{alg:clip}
 \small
 \begin{algorithmic}[1]
 \Procedure{AnalyseClip}{ring buffer of the last 4\,s}
-  \State $g \gets$ motion energy $>0.015$ \textbf{or} audio RMS above floor \textbf{or} PIR/door event \textbf{or} alarm active \textbf{or} 10\,s since last full cascade
+  \State $g \gets$ motion energy $>0.015$ \textbf{or} audio RMS above floor \textbf{or} alarm active \textbf{or} 10\,s since last full cascade
   \If{\textbf{not} $g$} \Return no-change result \EndIf
   \State $K \gets$ 4 uniform + 2 highest-motion keyframes; reuse results for keyframes shared with the previous clip
   \State run person, weapon, fire heads (320\,px) on new keyframes \Comment{S1}
@@ -313,15 +313,15 @@ An accepted match is shown as ``name (body)'', so the owner can see that the bod
 \centering
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[node distance=4mm, nd/.style={draw, thick, fill=sxhead!60, align=left, font=\scriptsize, inner sep=4pt}, art/.style={draw, fill=white, font=\tiny, align=left, text width=3.1cm, inner sep=2pt}, a/.style={-{Stealth[length=1.6mm]}, thick}]
-\node[art] (a1) at (0,0) {\textbf{sentrix.service} (systemd user unit, restart on failure)};
+\node[art] (a1) at (0,0) {\textbf{sentrix.service} (systemd user unit: starts at boot, restarts on failure)};
 \node[art, below=1.5mm of a1] (a2) {Python venv (system site packages: Picamera2, lgpio) + \texttt{pi.env} profile: clip mode, ONNX, 320\,px, fast lane};
 \node[art, below=1.5mm of a2] (a3) {models/ (DINOv2 delta, YOLO11n, OSNet, PANNs) and var/ (SQLite, events, evidence, faces)};
 \node[art, below=1.5mm of a3] (a4) {Local Console on :8000, firewalled to the home subnet (ufw)};
 \node[draw, thick, fit=(a1)(a4), inner sep=5pt, label={[font=\scriptsize\bfseries, align=center]above:$\ll$device$\gg$ Raspberry Pi 5 (demo room)}] (pi) {};
-\node[art] (b1) at (8.0,0) {\textbf{Docker container}: \texttt{python -m sentrix\_portal} (non-root after start-up), health check /healthz};
+\node[art] (b1) at (8.0,0) {\textbf{Docker container}: the Portal's frontend and backend (non-root after start-up), always on, health check /healthz};
 \node[art, below=1.5mm of b1] (b2) {/data disk (1\,GB): SQLite, keys, files};
 \node[art, below=1.5mm of b2] (b3) {Link hub /device/v1/link, tunnel /d/\{device\}/, workers (hub watcher, cloud SOS timers, notifications, retention)};
-\node[draw, thick, fit=(b1)(b3), inner sep=5pt, label={[font=\scriptsize\bfseries]above:$\ll$cloud$\gg$ Render web service (Singapore)}] (rd) {};
+\node[draw, thick, fit=(b1)(b3), inner sep=5pt, label={[font=\scriptsize\bfseries, align=center]above:$\ll$cloud$\gg$ Render web service (Singapore)\\sentrix-portal.onrender.com, always on}] (rd) {};
 \node[nd] (wifi) at (4.0,-4.6) {Home Wi-Fi router\\(phone hotspot as fallback)};
 \node[nd] (tg) at (8.0,-4.6) {Telegram Bot API\\(polling)};
 \node[nd] (ph) at (11.6,-2.0) {Phones and browsers:\\owner, contact, Desk,\\admin};
@@ -337,11 +337,11 @@ An accepted match is shown as ``name (body)'', so the owner can see that the bod
 \label{fig:deployment}
 \end{figure}
 
-\paragraph{Device.} On the Pi, \code{deploy/pi5/install\_pi.sh} installs the system packages (Picamera2, lgpio, ffmpeg), creates the virtual environment with system site packages, removes the conflicting full OpenCV build, merges the \code{pi.env} profile into \code{.env}, installs the systemd unit with its watchdog and journald drop-ins, configures NetworkManager failover profiles and the \code{ufw} firewall. The demo unit runs SENTRIX as a systemd \emph{user} service with lingering enabled, so it starts at boot and the dashboard opens at desktop login. The device is provisioned (\code{SX5-000001}), linked to the Portal (\code{SENTRIX\_LINK\_ENABLED=1}, the Portal URL and the identity in \code{var/link/}) and claimed by the owner's account. Per-room thresholds live in \code{var/calibration/scene.json} (weapon 0.78, fire 0.75 for the demo room, set by the calibration tool). The Pi runs the v5 weapon and fire heads.
+\paragraph{Device.} On the Pi, \code{deploy/pi5/install\_pi.sh} installs the system packages (Picamera2, lgpio, ffmpeg), creates the virtual environment with system site packages, removes the conflicting full OpenCV build, merges the \code{pi.env} profile into \code{.env}, installs the systemd unit with its watchdog and journald drop-ins, and configures NetworkManager and the \code{ufw} firewall. The demo unit runs SENTRIX as a systemd \emph{user} service with lingering enabled, so it starts at boot and the dashboard opens at desktop login: nobody starts it by hand, and plugging in the 27\,W supply is enough. The device is provisioned (\code{SX5-000001}), linked to the Portal (\code{SENTRIX\_LINK\_ENABLED=1}, the Portal URL and the identity in \code{var/link/}) and claimed by the owner's account. Per-room thresholds live in \code{var/calibration/scene.json} (weapon 0.78, fire 0.75 for the demo room, set by the calibration tool). The Pi runs the v5 weapon and fire heads.
 
-\paragraph{Portal.} The Portal is deployed from a Render Blueprint (\code{render.yaml}): one web service in Singapore built from \code{deploy/portal/Dockerfile}, a 1\,GB disk on \code{/data}, keys generated by Render and secrets typed in by the team. The container starts as root only to hand the volume to an unprivileged user and then drops root for good. The first company administrator is created from \code{PORTAL\_BOOTSTRAP\_ADMIN}. The service is suspended between evaluation sessions to save cost. For a long-term deployment, \code{deploy/portal/} also contains a Docker Compose stack with Postgres on an internal network, Caddy for HTTPS, and backup and restore scripts.
+\paragraph{Portal.} The Portal, frontend and backend, is a hosted service: it runs on Render, always on for the evaluations, at \mbox{\url{https://sentrix-portal.onrender.com}}, and nobody starts it by hand. It is deployed from a Render Blueprint (\code{render.yaml}): one web service in Singapore built from \code{deploy/portal/Dockerfile}, a 1\,GB disk on \code{/data}, keys generated by Render and secrets typed in by the team; every merge to the repository's main branch redeploys it. The container starts as root only to hand the volume to an unprivileged user and then drops root for good. The first company administrator is created from \code{PORTAL\_BOOTSTRAP\_ADMIN}. Running the Portal on a laptop is a developer option only (the test-mode demo world of \tabref{tab:setup}). For a long-term deployment, \code{deploy/portal/} also contains a Docker Compose stack with Postgres on an internal network, Caddy for HTTPS, and backup and restore scripts.
 
-\paragraph{Alerts.} A Telegram bot (created with BotFather, polling mode) carries the owner's question and the contacts' alerts; in test mode only the team's two allowlisted chats can receive them. E-mail through an HTTPS API and SMS through the 4G modem use the same router, outbox and guard.
+\paragraph{Alerts.} A Telegram bot (created with BotFather, polling mode) carries the owner's question and the contacts' alerts; in test mode only the team's two allowlisted chats can receive them. E-mail through an HTTPS API uses the same router, outbox and guard, as would SMS through an optional 4G modem (supported by the software, not fitted on the demo unit).
 
 \subsection{System Screenshots}
 \label{sec:screens}
@@ -357,14 +357,14 @@ The screenshots below were captured from the product running in its test-mode de
 \label{fig:scr-wall}
 \end{figure}
 
-\figref{fig:scr-diag} is the Diagnostics page for the device administrator on the home network. It shows what the models see and why the device decided as it did: the overlays on the live picture, each model's score, the scene probabilities against their thresholds, the fusion result with the contribution of every input, and the history of level changes. The false alarms in the demo room were diagnosed on this page.
-
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.92\textwidth]{figures/screens_c/dev_diagnostics.png}
 \caption{Device administration, Diagnostics: live picture with overlays, model scores, scene probabilities with thresholds, the fusion result with the contribution of each input, and the level changes}
 \label{fig:scr-diag}
 \end{figure}
+
+\figref{fig:scr-diag} is the Diagnostics page for the device administrator on the home network. It shows what the models see and why the device decided as it did: the overlays on the live picture, each model's score, the scene probabilities against their thresholds, the fusion result with the contribution of every input, and the history of level changes. The false alarms in the demo room were diagnosed on this page.
 
 \figref{fig:scr-devadmin} shows two more administration pages. Activity (left) lists the incidents with their picture, the encrypted evidence and the verdict buttons (``Real'' or ``False alarm''); the verdicts become labels for training. Help requests (right) shows the open assistance request and, word for word, the message the contacts and the Desk would receive.
 
@@ -657,8 +657,8 @@ Frame AUROC of the scene model, weapon / fire & 0.93 / 0.999 & -- & --\\ \hline
 
 These numbers are encouraging but not a validation: seven of the ten videos were used in training, and 3.7 minutes of normal footage can only bound the false-alarm rate at 60 per hour, far above what a home needs. Two release gates measured on this data fail: G2 (handgun episodes confirmed within 2\,s: 8 of 12) and G4 (onset to Level~3 at the 95th percentile: 4.0\,s against 2\,s).
 
-\subsection{Models retrained on fifteen videos}
-The weapon and fire heads were retrained from the v4 heads on all 977 frames (fifteen videos, 180 boxes) with 2000 public images mixed back in, so that the public classes are not forgotten. Each head had to pass bars fixed before training:
+\subsection{Models retrained on the new recordings}
+The weapon and fire heads were retrained from the v4 heads on all 977 reviewed frames (180 boxes) with 2000 public images mixed back in, so that the public classes are not forgotten. Each head had to pass bars fixed before training:
 \begin{itemize}
 \item no rise in false alarms on the held-out normal frames of the validation and test videos;
 \item validation weapon AUROC not lower by more than 0.02 (fire: not lower);
@@ -666,7 +666,7 @@ The weapon and fire heads were retrained from the v4 heads on all 977 frames (fi
 \end{itemize}
 Both passed (\tabref{tab:v5heads}). On the held-out validation videos the weapon head's frame AUROC rose from 0.748 to 0.871 and the fire head's from 0.587 to 0.964, with no new false alarms. On the public test sets, which the v4 heads had forgotten, pistol AP50 went from 0.007 to 0.699.
 
-In the replay of all fifteen videos, 11 of 14 weapon episodes reach Level~3 instead of 9: the new weapon scenes now raise an assistance request. The false Level~3 onset count is unchanged at 1 in 4.9 minutes of normal footage. Two results did not improve:
+In the replay of the whole labelled set, 11 of 14 weapon episodes reach Level~3 instead of 9: the new weapon scenes now raise an assistance request. The false Level~3 onset count is unchanged at 1 in 4.9 minutes of normal footage. Two results did not improve:
 \begin{itemize}
 \item the two flames that reached Level~5 now stop at Level~4;
 \item the small aerosol flame of \code{vid04} still scores below the fire head's vote.
@@ -686,10 +686,10 @@ The owner pinned the v4 fire head on 19 November (applied on the Pi on 20 Novemb
 \item both fire heads bring 3 of 3 fires to Level~3 and raise no false Level~3;
 \item the v5 fire head loses the corroboration that took two fires to Level~4 and one to Level~5 with v4, on training videos the v4 head had memorised.
 \end{itemize}
-In the demo room the v4 head drew no fire box on burning paper (19 November) or a lighter flame (21 November), and the scene model stayed under the room's fire threshold of 0.75 (paper: at most 0.61; lighter: 0.40--0.56), so neither raised a fire Level~3. Outside the videos it was trained on, the v4 head finds almost no flame (public fire AP50 0.000, held-out validation AUROC 0.587; \tabref{tab:v5heads}), so on 21 November the owner switched the Pi to the v5 fire head. Two live flame tests in that room the same night (02:51 and 02:55; the second an aerosol flame plume filling about half of the picture close to the camera) showed that the v5 head does not recognise the room's flames either. It drew no box on any keyframe; on two screenshots of the plume it scored 0.01--0.08 against its 0.50 floor, as the Pi's 320\,px ONNX file and as the original weights at 640\,px alike, so the export is not at fault. Its only flames from our own footage are 17 frames of small, pale aerosol jets from two videos in another room. The scene model reached 0.71, under the 0.75 threshold, so no fire Level~3 was raised. Fire cannot yet be shown live in the demo room: flame recordings from that room and a fine-tuned fire head come first.
+In the demo room the v4 head drew no fire box on burning paper (19 November) or a lighter flame (21 November), and the scene model stayed under the room's fire threshold of 0.75 (paper: at most 0.61; lighter: 0.40--0.56), so neither raised a fire Level~3. Outside the videos it was trained on, the v4 head finds almost no flame (public fire AP50 0.000, held-out validation AUROC 0.587; \tabref{tab:v5heads}), so on 21 November the owner switched the Pi to the v5 fire head. Two live flame tests in that room the same night (02:51 and 02:55; the second an aerosol flame plume filling about half of the picture close to the camera) showed that the v5 head does not recognise the room's flames either. It drew no box on any keyframe; on two screenshots of the plume it scored 0.01--0.08 against its 0.50 floor, as the Pi's 320\,px ONNX file and as the original weights at 640\,px alike, so the export is not at fault. The flames in its training footage from our recordings are 17 frames of small, pale aerosol jets filmed in another room. The scene model reached 0.71, under the 0.75 threshold, so no fire Level~3 was raised. Fire cannot yet be shown live in the demo room: flame recordings from that room and a fine-tuned fire head come first.
 
 \begin{table}[htbp]
-\caption{v4 and v5 detector heads (held-out validation: gun, vid04; replay: all fifteen videos, tick mode at 6\,Hz with their soundtracks, partly in-sample)}
+\caption{v4 and v5 detector heads (held-out validation: gun, vid04; replay: the whole labelled set, tick mode at 6\,Hz with the soundtracks, partly in-sample)}
 \label{tab:v5heads}
 \centering\tablefont
 \begin{tabularx}{\textwidth}{|Y|C{3.0cm}|C{3.0cm}|}
@@ -809,7 +809,7 @@ Replay agrees with the device's own decision & \multicolumn{2}{c|}{8,956 of 8,95
 \end{figure}
 
 \subsection{Comparison with related work}
-\tabref{tab:sota} compares SENTRIX's components and system-level behaviour with published work. Component scores are not directly comparable---the published numbers come from large public benchmarks and SENTRIX's from two rooms---so the table is read for what each approach measures and where SENTRIX differs.
+\tabref{tab:sota} compares SENTRIX's components and system-level behaviour with published work. Component scores are not directly comparable---the published numbers come from large public benchmarks and SENTRIX's from the team's own recordings---so the table is read for what each approach measures and where SENTRIX differs.
 
 \begin{table}[htbp]
 \caption{Comparison with related state-of-the-art work}
@@ -818,7 +818,7 @@ Replay agrees with the device's own decision & \multicolumn{2}{c|}{8,956 of 8,95
 \begin{tabularx}{\textwidth}{|L{2.4cm}|Y|Y|}
 \hline\rowhead
 \thead{Aspect} & \thead{Published work} & \thead{SENTRIX}\\ \hline
-Handgun alarm & Faster R-CNN alarm after five successive detections fired correctly in 27 of 30 test scenes \cite{olmos2018handgun} & YOLO11n + DINOv2 with 2-of-3 confirmation and a person gate: 9 of 12 episodes at Level~3, 0 false onsets in 3.7 normal minutes (11 of 14 on fifteen videos with the v5 heads); room thresholds calibrated from the device's own logs\\ \hline
+Handgun alarm & Faster R-CNN alarm after five successive detections fired correctly in 27 of 30 test scenes \cite{olmos2018handgun} & YOLO11n + DINOv2 with 2-of-3 confirmation and a person gate: 9 of 12 episodes at Level~3, 0 false onsets in 3.7 normal minutes (11 of 14 with the retrained v5 heads); room thresholds calibrated from the device's own logs\\ \hline
 Violence & Flow-gated 3D-CNN: 87.25\,\% test accuracy on RWF-2000 \cite{cheng2021rwf}; audio-visual fusion improves XD-Violence \cite{wu2020xdviolence} & ResNet-18 on RWF-2000: 0.832 macro-F1 on a contaminated split; in the product a fight needs video \emph{and} aligned aggression audio, with a banter rule\\ \hline
 Audio tagging & PANNs: best model 0.439 mAP on AudioSet \cite{kong2020panns} & PANNs CNN10 at 40\,ms per 4\,s window on a CPU, 527 labels mapped to 7 cues, votes only when time-aligned\\ \hline
 Re-identification & OSNet: state of the art on six re-ID datasets with re-ID training \cite{zhou2019osnet} & OSNet-AIN trained on MSMT17 tied to an access decision: AUROC 0.97, 0.020\,\% false accepts at the shipped bar (fourteen videos)\\ \hline
@@ -832,7 +832,7 @@ Industry practice & Cloud face recognition in doorbells (2025) \cite{perez2025ri
 \end{tabularx}
 \end{table}
 
-\paragraph{The alarm rule compared with published practice.} Component scores from public benchmarks cannot be compared with two rooms, but alarm rules can be compared on the same data. \figref{fig:baseline} takes the scores logged in the replay of the ten labelled videos and applies two published rules and SENTRIX's own, with the same thresholds for every rule (\code{tools/baseline\_alarm\_rules.py}):
+\paragraph{The alarm rule compared with published practice.} Component scores from public benchmarks cannot be compared with the team's own recordings, but alarm rules can be compared on the same data. \figref{fig:baseline} takes the scores logged in the replay of the ten labelled videos and applies two published rules and SENTRIX's own, with the same thresholds for every rule (\code{tools/baseline\_alarm\_rules.py}):
 \begin{itemize}
 \item \textbf{Single frame:} a detection is an alarm, the common practice in detection papers and in the pre-repair SENTRIX;
 \item \textbf{Five successive detections:} the activation rule of Olmos \emph{et al.} \cite{olmos2018handgun}, applied to each source;
@@ -874,10 +874,10 @@ All three catch the same 9 of 12 handgun and 3 of 3 flame episodes. The single-f
 \begin{tabularx}{\textwidth}{|L{2.4cm}|Y|L{1.6cm}|}
 \hline\rowhead
 \thead{Objective} & \thead{What was built and the evidence} & \thead{Status}\\ \hline
-O1 Multimodal AI pipeline & Handgun and fire detection (YOLO11n), scene and fight classification (DINOv2), faces (InsightFace), bodies (OSNet-AIN), sound (PANNs CNN10), in tick and clip pipelines; handgun 9/12 and flame 3/3 at Level~3 on replay (weapon 11/14 on fifteen videos); 29.7\,fps preview and 5.6\,Hz AI on a laptop; 3.9\,s per clip on the Pi & Achieved; Pi latency target open\\ \hline
+O1 Multimodal AI pipeline & Handgun and fire detection (YOLO11n), scene and fight classification (DINOv2), faces (InsightFace), bodies (OSNet-AIN), sound (PANNs CNN10), in tick and clip pipelines; handgun 9/12 and flame 3/3 at Level~3 on replay (weapon 11/14 with the retrained v5 heads); 29.7\,fps preview and 5.6\,Hz AI on a laptop; 3.9\,s per clip on the Pi & Achieved; Pi latency target open\\ \hline
 O2 Fusion into a TCI & The learned XGBoost fusion of the mid-semester version was retired: it had been fitted to synthetic labels with the meaning of identity inverted and ranked threats worse than its own inputs. It was replaced by transparent, time-aligned evidence rules that produce the same 0--1 TCI and five levels, with every decision re-derivable from the log; live false onsets at Level~3+ fell from 9 to 0 & Achieved with a changed method\\ \hline
 O3 Tamper-evident evidence & AES-256-GCM bundles with HKDF keys, SHA-256 digests and an HMAC-signed hash-chained manifest; pre-roll clips in clip mode; a verifier checks every digest and the signed chain & Achieved\\ \hline
-O4 Physical edge unit & Raspberry~Pi~5 unit with Camera Module 3, USB microphone, PIR, door and mains inputs and status LEDs; bill of materials about Rs.\,40,100 including tools; parametric enclosure; running in the demo room as a systemd service. The ESP32 and DHT22 design of the proposal was replaced by the Pi~5 for camera and audio quality & Achieved (budget revised)\\ \hline
-O5 Command console and alerting & React device screen and administration pages, React Portal with onboarding, live view through the tunnel, owner-approved SOS over Portal, device screen, Telegram, e-mail and SMS, the SENTRIX Desk and the admin console; 22 of 23 browser tests pass & Achieved; one UI defect open\\ \hline
+O4 Physical edge unit & Raspberry~Pi~5 unit with Camera Module 3, a USB microphone and three status LEDs, powered by the official 27\,W USB-C supply, in its 3D-printed case (revision F); parts about Rs.\,29,340; running in the demo room as a systemd service that starts at boot. The ESP32 and DHT22 design of the proposal was replaced by the Pi~5 for camera and audio quality; the telemetry is the Pi's own board telemetry (CPU temperature, throttle flags, supply voltage), and no external sensors are fitted & Achieved (budget revised)\\ \hline
+O5 Command console and alerting & React device screen and administration pages, React Portal with onboarding, live view through the tunnel, owner-approved SOS over Portal, device screen, Telegram and e-mail, the SENTRIX Desk and the admin console; 22 of 23 browser tests pass & Achieved; one UI defect open\\ \hline
 \end{tabularx}
 \end{table}

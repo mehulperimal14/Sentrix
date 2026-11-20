@@ -1,0 +1,14 @@
+<section id="tools" data-n="9" class="stone">
+<p class="eyebrow">06 · Techniques and tools</p>
+<h2>Open-source tools, chosen by measurement</h2>
+<div class="grid3">
+<div class="card rise" style="--i:0"><h3>Perception</h3><p class="txt">PyTorch, Ultralytics YOLO11n + ByteTrack, DINOv2 (timm), InsightFace, OSNet, PANNs CNN10, ONNX Runtime</p></div>
+<div class="card rise" style="--i:1"><h3>Decision and data</h3><p class="txt">Evidence rules, TCI, level policy, 4-second clip engine; SQLite (WAL), AES-256-GCM, HKDF, SHA-256 chains</p></div>
+<div class="card rise" style="--i:2"><h3>Back end</h3><p class="txt">Python, FastAPI, WebSockets, SQLAlchemy; Argon2id, TOTP, CSP and CSRF; outbound link and tunnel</p></div>
+<div class="card rise" style="--i:3"><h3>Front end</h3><p class="txt">React 19, TypeScript, Vite, Tailwind CSS 4, TanStack Query; two apps: device screen and Portal</p></div>
+<div class="card rise" style="--i:4"><h3>Hardware</h3><p class="txt">Raspberry Pi 5 (8 GB), Camera Module 3, USB microphone, official 27&#160;W USB-C supply; Picamera2, gpiozero LEDs, systemd watchdog; OpenSCAD case, 3D-printed</p></div>
+<div class="card rise" style="--i:5"><h3>Cloud and quality</h3><p class="txt">Render (Docker, always on), Telegram Bot API, e-mail; pytest, Vitest, Playwright, replay and benchmarks</p></div>
+</div>
+<p class="src" style="margin-top:28px">Choices were measured: slim CNNs lost to DINOv2 (0.229 vs 0.440 macro-F1), ONNX beat PyTorch on the Pi, and re-ID-trained OSNet-AIN beat colour histograms (AUROC 0.93 vs 0.73).</p>
+<aside>Everything is open source. Where we had a choice we measured it: the scene backbone, the runtime on the Pi and the body embedder were each picked by an experiment, not by preference. The Portal runs as a Docker service on Render and is always on, so nobody starts it by hand; the Pi starts SENTRIX as a service at boot.</aside>
+</section>

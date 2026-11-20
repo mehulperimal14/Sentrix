@@ -1,0 +1,20 @@
+<section id="results-models" data-n="13" class="stone">
+<p class="eyebrow">09 · Results</p>
+<h2>Our own footage beat public datasets; rules removed the rest</h2>
+<div class="row" style="gap:64px; align-items:flex-start">
+<div class="col" style="width:1000px; gap:20px">
+<p class="src" style="margin-bottom:4px">False alarms per minute of normal footage, on replay of our labelled recordings</p>
+<div class="barrow rise" style="--i:0"><p class="barlabel">v3 public models</p><div class="bar" style="width:480px"></div><p class="barval">13.96</p></div>
+<div class="barrow rise" style="--i:1"><p class="barlabel">v3 fine-tuned</p><div class="bar" style="width:245px"></div><p class="barval">7.12</p></div>
+<div class="barrow rise" style="--i:2"><p class="barlabel">v4 custom (DINOv2)</p><div class="bar second" style="width:28px"></div><p class="barval">0.79</p></div>
+<div class="barrow rise" style="--i:3"><p class="barlabel">v4 + evidence rules</p><div class="bar accent" style="width:6px"></div><p class="barval">0.00 · same 13 of 18 episodes</p></div>
+</div>
+<div class="stat grow rise" style="--i:4"><p class="num">0.281 → 0.768</p><p class="txt">Validation macro-F1 (accuracy averaged over the classes): v3 public models&#160;→ custom DINOv2 scene classifier</p></div>
+</div>
+<div class="grid2" style="margin-top:40px">
+<div class="card rise" style="--i:5"><h3>Retrained on our own recordings</h3><p class="txt">Detectors: held-out AUROC (1.0 = threat always scored above normal) weapon 0.75&#160;→&#160;0.87, fire 0.59&#160;→&#160;0.96. Scene v5: macro-F1 0.70&#160;→&#160;0.74, opt-in. No new false alarms.</p></div>
+<div class="card rise" style="--i:6"><h3>Tested and rejected</h3><p class="txt">MobileNetV3 and EfficientNet heads for the Pi: 0.229 and 0.211 against DINOv2’s 0.440 (bar fixed in advance: 0.396)</p></div>
+</div>
+<p class="src" style="margin-top:20px">Models chosen by leave-one-video-out cross-validation; the test video was never used for training or tuning.</p>
+<aside>Three model generations on our labelled footage. The custom DINOv2 classifier nearly doubled the fine-tuned model’s macro-F1, from 0.401 to 0.768, and cut its false alarms nine-fold; the evidence rules then removed the rest without losing a detected episode. In November we recorded new scenes and retrained: held-out AUROC rose to 0.87 for weapons and 0.96 for fire, with no false alarms added. We switched the Pi to the new fire head on 21 November, but in that night’s live tests it did not yet recognise the demo room’s flames, so flame recordings from that room come next. Slim CNNs for the Pi failed a bar fixed in advance, so DINOv2 stayed.</aside>
+</section>

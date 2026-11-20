@@ -302,7 +302,16 @@ neater. `python hardware/enclosure/build.py --check` exports STL + 3MF +
 renders and runs the interference checks (all clear for rev E, and all 26 clear
 for rev F, which only drops the buzzer cup and its sound holes, D19).
 Rev A (the team's earlier zip, `SENTRIX_enclosure.zip`, untracked) gave the
-LED-window idea. Not printed yet: print the fit coupon first.
+LED-window idea. **Printed and in use** on the demo unit (owner, 2026-11-21).
+
+**The demo unit as built** (owner, 2026-11-21): Raspberry Pi 5 (8 GB, Active
+Cooler, 128 GB microSD) on the official Raspberry Pi 27 W USB-C supply; Camera
+Module 3 on the printed tilting mount; a USB microphone; green, amber and red
+status LEDs on GPIO 5 / 12 / 13; the printed rev F case. **Not fitted**: PIR,
+door switch, mains sense, the router mini UPS, the 12 V adapter, fuse and buck
+converter, and the 4G modem (the software still supports the inputs and the
+modem; docs/8 keeps the full design). The submission documents describe only
+the unit as built, and never present the data as "only 15 videos".
 
 ### No buzzer, no talk-down speaker (2026-10-27, D19)
 
@@ -594,7 +603,11 @@ The Pi is back on the home Wi-Fi (192.168.29.9) on a proper supply (EXT5V
   sizes and distances, plus no-flame footage) with the Record button, fine-tune
   the fire head on this laptop, re-export the 320 px ONNX and test again (#20);
   fallback for the panel: a recorded flame clip through the demo reel, shown as
-  a replay.
+  a replay. Tried the same night (04:00): a v6 fire head fine-tuned from v5 on
+  33 flame and 65 no-flame frames cut from a phone video of the Live view
+  (`train_detector.py --extra`) failed its bars set in advance (plume
+  screenshots 0.37 / 0.02 against 0.50; public fire mAP50 0.448 -> 0.391);
+  not shipped (`training/runs/custom/detector/room_fire_v6/RESULT.md`).
 * **The Pi stays on ONNX.** NCNN is about twice as fast there only with
   ncnn's default fp16 arithmetic, which changes the person head's label set on
   4-6 % of frames (the weapon person gate); in fp32 it equals ONNX and is no
