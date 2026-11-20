@@ -245,3 +245,28 @@ def test_an_event_that_failed_to_apply_is_applied_on_the_next_heartbeat(portal, 
     with app.state.db.session() as db:
         assert db.get(AssistanceRequest, rid) is not None, "applied on the heartbeat"
     assert not hub.unapplied.get(seeded.device_id)
+
+
+def test_reapplying_waits_for_an_event_being_stored(portal, monkeypatch):
+    """The heartbeat's re-apply runs under the device's lock, as ``_ingest``
+    does: without it a resend of the same event on a new connection could be
+    applied while the re-apply loop is applying it."""
+    import threading
+    from sentrix_portal.services.hub import hub_for
+    app, seeded, _ = portal
+    hub = hub_for(app)
+    applied = []
+    monkeypatch.setattr(hub, "_apply", lambda *args, **kwargs: applied.append(1) or [])
+    hub.unapplied[seeded.device_id] = {7: ["sos.event", {}, None, 0]}
+    lock = hub._device_lock(seeded.device_id)
+    lock.acquire()
+    worker = threading.Thread(target=hub._reapply, args=(seeded.device_id,), daemon=True)
+    try:
+        worker.start()
+        worker.join(0.3)
+        assert worker.is_alive() and not applied, "it must wait while an event is being stored"
+    finally:
+        lock.release()
+    worker.join(5)
+    assert not worker.is_alive() and applied == [1]
+    assert not hub.unapplied.get(seeded.device_id)

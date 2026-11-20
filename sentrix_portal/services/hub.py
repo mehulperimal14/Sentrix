@@ -563,7 +563,15 @@ class LinkHub:
 
     def _reapply(self, device_id: str) -> list[tuple[str, dict]]:
         """Apply again the events that failed (oldest first); the follow-up
-        device commands of those that now apply."""
+        device commands of those that now apply.
+
+        Under the device's lock, as ``_ingest``: otherwise a resend of the
+        same event on a new connection could be applied while this loop is
+        applying it."""
+        with self._device_lock(device_id):
+            return self._reapply_locked(device_id)
+
+    def _reapply_locked(self, device_id: str) -> list[tuple[str, dict]]:
         from sentrix_portal import security
         followups: list[tuple[str, dict]] = []
         pending = self.unapplied.get(device_id) or {}
