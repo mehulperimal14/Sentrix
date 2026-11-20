@@ -197,11 +197,10 @@ try:
         if hasattr(_sd, _name):
             setattr(_sd, _name, _guarded_audio(_name))
 except Exception:                                   # pragma: no cover - no PortAudio
-    # Not only ImportError/OSError: on a headless Linux runner sounddevice's
-    # import raises PortAudioError ("PulseAudio_Initialize: Can't connect to
-    # server"), which stopped the whole suite on GitHub's runner. Without
-    # PortAudio there is no device to guard, and sentrix.perception.audio runs
-    # without a microphone (it catches any import error the same way).
+    # No PortAudio library, or one that cannot initialise (sounddevice raises
+    # PortAudioError on import when PulseAudio has no server, as on a CI
+    # machine): no microphone can open, so there is nothing to block. The
+    # app's own import in sentrix/perception/audio.py falls back the same way.
     pass
 
 
