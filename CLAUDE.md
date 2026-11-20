@@ -966,12 +966,16 @@ v1, tunnel + auth bridge, SOS state machine, channels, roles, endpoints).
 - [x] Owner face gallery in the Portal app (2026-11-19, owner's request; local, not yet pushed): People → *Faces SENTRIX recognises* lists the device's faces, uploads photos or takes one from the SENTRIX camera's live preview, removes with a step-up; members see it read-only. The device's `GET /api/authorized` moved from the LC-only list to the path table's `faces` row (consents `remote_view` + `face_recognition`, never the Desk) and checks `gallery_view` itself. Body re-ID still needs no photo (D24). Tried on the laptop demo world: preview and capture through the tunnel, the device's refusal reason shown.
 - [ ] Not done: the Portal app has no recording or siren-test controls (the device's path table still allows both for the owner with a step-up); the Portal's CSP still carries an unused per-request script nonce.
 
-### Owners (from the README team table)
+### Owners (from the README team table; roles set by the owner on 2026-11-20)
 
-Kartik — detector path, confirmation, unified YOLO (M1, M7) · Akshay — identity,
-tracks, enrollment (M4) · Mehul — records, dashboard, eval/gate tooling (M3, M5,
-M9) · Harshit — recording protocol, fusion (M6, M8) · Prashant — audio to
-log-only, gunshot/glass-break data track (non-gating).
+Kartik (@kg3478) and Akshay (@ranveerakshay2) — UI/UX, frontend, product
+roadmap and docs (Kartik leads the Portal app, docs and ROADMAP.md; Akshay the
+device app and UI kit) · Harshit (@Hmishra230) — backend · Prashant
+(@praxshant) — AI/ML and model training · Mehul (@mehulperimal14) — IoT and
+hardware, repository maintainer. `.github/CODEOWNERS` maps the folders;
+`CONTRIBUTING.md` holds the workflow (issue → branch → pull request → checks →
+review → squash merge). Changes Claude prepares go up from Mehul's account as
+pull requests and are reviewed by the area's owner like any other.
 
 ### Open questions for the team
 

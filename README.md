@@ -507,13 +507,17 @@ Limits that matter for any claim:
 
 ## Team
 
-| Member | Roll No. | Subsystem |
-|---|---|---|
-| Kartik Garg | 102303478 | System architecture, vision engines, backend core |
-| Akshay Ranveer | 102303453 | Biometric identity, re-identification, tracking |
-| Prashant Gagneja | 102353011 | Acoustic classification, digital signal processing |
-| Harshit Mishra | 102319039 | Behavioural intelligence, anomaly classification |
-| Mehul Perimal | 102315144 | Evidence cryptography, database, dashboard |
+| Member | Roll No. | GitHub | Owns |
+|---|---|---|---|
+| Kartik Garg | 102303478 | [@kg3478](https://github.com/kg3478) | UI/UX, frontend, product roadmap and documentation (leads the Portal app, the docs and `ROADMAP.md`) |
+| Akshay Ranveer | 102303453 | [@ranveerakshay2](https://github.com/ranveerakshay2) | UI/UX, frontend, product roadmap and documentation (leads the device app and the shared UI kit) |
+| Harshit Mishra | 102319039 | [@Hmishra230](https://github.com/Hmishra230) | Backend: pipeline, SOS, link, alerting, storage, evidence, the Portal's services, tests and CI |
+| Mehul Perimal | 102315144 | [@mehulperimal14](https://github.com/mehulperimal14) | IoT and hardware: the Raspberry Pi, its I/O and deployment, the enclosure; repository maintainer |
+| Prashant Gagneja | 102353011 | [@praxshant](https://github.com/praxshant) | AI/ML and model training: perception, fusion, evaluation, models, datasets |
+
+`.github/CODEOWNERS` lists the folders each person reviews, and
+[`CONTRIBUTING.md`](CONTRIBUTING.md) the workflow: issue, branch, pull request,
+checks, code review, merge.
 
 **Mentor:** Dr. Ashutosh Mishra, Associate Professor, CSED, TIET Patiala
 
