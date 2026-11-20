@@ -474,8 +474,25 @@ def check_recordings(report: Report, directory: Path | None = None, *, cfg=None,
         report.add(OK, "free space", f"{_size(free)} (a recording keeps {_size(floor)} free)")
 
 
+def _usb_capture_cards(asound: Path) -> list[str]:
+    """USB sound cards with a capture device, as the kernel lists them
+    (``/proc/asound``; nothing is opened): "card 2 (USB-Audio - USB PnP Sound
+    Device)"."""
+    import re
+    try:
+        cards = (asound / "cards").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    found = []
+    for match in re.finditer(r"^\s*(\d+) \[[^\]]*\]: (.+)$", cards, re.M):
+        card = asound / f"card{match.group(1)}"
+        if (card / "usbid").exists() and any(card.glob("pcm*c")):
+            found.append(f"card {match.group(1)} ({match.group(2).strip()})")
+    return found
+
+
 def check_microphone(report: Report, sd=None, *, wanted: str | None = None,
-                     enabled: bool | None = None) -> None:
+                     enabled: bool | None = None, asound: Path | None = None) -> None:
     """The microphone the device would open (D21), from the inputs PortAudio
     lists, ranked the way the audio engine ranks them. Never opened: only
     ``query_devices`` and the host API's default are read, never
@@ -511,6 +528,18 @@ def check_microphone(report: Report, sd=None, *, wanted: str | None = None,
     candidates = audio.rank_inputs(devices, hostapi=hostapi, wanted=wanted,
                                    default_input=default_input if default_input >= 0 else None)
     if not candidates:
+        # PortAudio leaves out an ALSA card another process holds open, so on
+        # the Pi the running service's own microphone looked absent
+        # (2026-11-20). The kernel still lists it.
+        if asound is None and sys.platform.startswith("linux"):
+            asound = Path("/proc/asound")
+        held = _usb_capture_cards(asound) if asound is not None else []
+        if held:
+            report.add(OK, "microphone",
+                       f"USB microphone on {', '.join(held)}; PortAudio cannot list it "
+                       "while it is open (the SENTRIX service holds it: its log says "
+                       "\"microphone connected\")")
+            return
         report.add(WARN, "microphone", "no input device: plug a USB microphone into any "
                                        "port; SENTRIX picks it up while running")
         return

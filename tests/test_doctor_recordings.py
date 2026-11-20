@@ -169,6 +169,29 @@ class TestMicrophone:
         status, _, detail = _row(report, "microphone")
         assert status == doctor.WARN and "any port" in detail
 
+    def test_a_microphone_the_service_holds_is_found_in_the_kernel_list(self, tmp_path):
+        """PortAudio could not list the Pi's USB microphone while SENTRIX
+        captured from it, and the doctor said "no input device" (2026-11-20)."""
+        (tmp_path / "cards").write_text(
+            " 0 [vc4hdmi0       ]: vc4-hdmi - vc4-hdmi-0\n"
+            "                      vc4-hdmi-0\n"
+            " 2 [Device         ]: USB-Audio - USB PnP Sound Device\n"
+            "                      C-Media Electronics Inc. USB PnP Sound Device at usb\n")
+        (tmp_path / "card0" / "pcm0p").mkdir(parents=True)          # HDMI: playback only
+        (tmp_path / "card2" / "pcm0c").mkdir(parents=True)
+        (tmp_path / "card2" / "usbid").write_text("08bb:2902\n")
+        hdmi_only = FakeSoundDevice([_device("HDMI 0 (vc4-hdmi-0)", 2)], default_input=-1)
+        report = doctor.Report()
+        doctor.check_microphone(report, hdmi_only, wanted="", enabled=True, asound=tmp_path)
+        status, _, detail = _row(report, "microphone")
+        assert status == doctor.OK and "card 2 (USB-Audio - USB PnP Sound Device)" in detail
+        assert report.warnings == 0
+
+        (tmp_path / "card2" / "pcm0c").rmdir()                       # a USB speaker only
+        report = doctor.Report()
+        doctor.check_microphone(report, hdmi_only, wanted="", enabled=True, asound=tmp_path)
+        assert _row(report, "microphone")[0] == doctor.WARN
+
     def test_mic_device_by_index_and_unmatched(self):
         report = doctor.Report()
         doctor.check_microphone(report, FakeSoundDevice(LAPTOP_AND_USB), wanted="0",
