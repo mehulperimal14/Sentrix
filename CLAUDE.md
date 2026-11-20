@@ -577,10 +577,20 @@ The Pi is back on the home Wi-Fi (192.168.29.9) on a proper supply (EXT5V
   and the detectors have no per-room bar (D23 covers the scene model only).
 * That request also showed the offline rule at work against a waking Render
   Portal: the link failed (503/500) until 19:26, then reconnected about once a
-  minute; the Portal marked the device offline with the request PENDING and
-  queued the contact's Telegram alert, which failed (`ReadTimeout`); the
-  contact's "resolved" message fails every 2 minutes since. Telegram from
-  Render is not delivering.
+  minute until ~20:02; the Portal marked the device offline with the request
+  PENDING and queued the contact's Telegram alert, which failed
+  (`ReadTimeout`). Every Telegram send from the Portal timed out until 20:04
+  IST, when the retried "resolved" message was delivered (Telegram's API
+  answered normally from India meanwhile): a fault on Render's side in the
+  first ~40 minutes after the resume. Fixed in the code (`b751493`): the device
+  logs who closed each link session (code, reason, duration) and redials at
+  once after a session the Portal welcomed and kept for 10 s (it waited up to
+  60 s, past the Portal's 45 s offline limit); "resolved", "closed" and
+  "lapsed" go only to contacts an alert of the request reached (the contact
+  got "resolved by the resident" for an alert that never arrived); a failing
+  retry is mirrored to the device once, not every 2 minutes; a failing
+  Telegram poll is logged and shown in the worker's health. Before a demo:
+  resume Render at least an hour ahead and send a test message.
 * `tools/doctor.py` on the Pi: every check passes except the evidence chain -
   one clip bundle of 11-19 01:13 is 0 bytes (written during the under-voltage
   drops), flagged correctly and left as it is.
