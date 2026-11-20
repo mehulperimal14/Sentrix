@@ -55,21 +55,21 @@ Robbery & 17 & 0 & 0 & 17\\ \hline
 \end{tabular}
 \end{table}
 
-\paragraph{Five videos added in November.} On 18 November 2026 the team added five videos: four masked-intruder scenes in the bedroom (a handgun pointed at a seated person, a knife attack, a beating with a metal flask, and a theft from the wardrobes) and one ordinary scene in a second room (\tabref{tab:dataset-new}). They were extracted with the original sampling rules and reviewed segment by segment, and they joined the training split; no video was held out. Grounding DINO proposed 27 boxes for them; 13 were kept after visual checks (7 pistol, 6 knife) and 14 rejected (a phone, a monitor). The dataset now holds 977 frames from fifteen videos and 180 checked boxes.
+\paragraph{Five videos added in November.} On 18 November 2026 the team added five videos: four masked-intruder scenes in the bedroom (a handgun pointed at a seated person, an attack on a resident lying on the bed, a beating with a metal flask, and a theft from the wardrobes) and one ordinary scene in a second room (\tabref{tab:dataset-new}). They were extracted with the original sampling rules and reviewed segment by segment, and they joined the training split; no video was held out. Grounding DINO proposed 27 boxes for them; 13 were kept after visual checks and 14 rejected (a phone, a monitor). The dataset now holds 977 frames from fifteen videos and 180 checked boxes.
 
 \begin{table}[htbp]
 \caption{The five videos added on 18 November 2026 (all in the training split)}
 \label{tab:dataset-new}
 \centering\tablefont
-\begin{tabularx}{\textwidth}{|l|Y|c|}
+\begin{tabularx}{\textwidth}{|Y|c|}
 \hline\rowhead
-\thead{Video} & \thead{Content} & \thead{Frames kept}\\ \hline
-mmtheft & Masked intruder searches the shoe rack and wardrobes and leaves with items & 99 (robbery 62)\\ \hline
-mmassault & Masked intruder strikes a person on the bed with a metal flask & 26 (assault 13)\\ \hline
-mmgun & Handgun pointed at a seated person; a phone snatched at gunpoint & 23 (weapon 19)\\ \hline
-mmknife & Knife attack on a person lying on the bed & 35 (weapon 28)\\ \hline
-nvroom2 & Second room: three people, ordinary activity & 29 (normal)\\ \hline
-\textbf{Total} & normal 90, weapon 47, assault 13, robbery 62 & \textbf{212}\\ \hline
+\thead{Scene} & \thead{Frames kept}\\ \hline
+Masked intruder searches the shoe rack and wardrobes and leaves with items & 99 (robbery 62)\\ \hline
+Masked intruder strikes a person on the bed with a metal flask & 26 (assault 13)\\ \hline
+Masked intruder points a handgun at a seated person and snatches a phone & 23 (weapon 19)\\ \hline
+Masked intruder attacks a person lying on the bed & 35 (weapon 28)\\ \hline
+Second room: three people, ordinary activity & 29 (normal)\\ \hline
+\textbf{Total:} normal 90, weapon 47, assault 13, robbery 62 & \textbf{212}\\ \hline
 \end{tabularx}
 \end{table}
 
@@ -308,7 +308,7 @@ so 3.7 minutes of normal footage can only show a rate below about 60 per hour. R
 \label{fig:deployment}
 \end{figure}
 
-\paragraph{Device.} On the Pi, \code{deploy/pi5/install\_pi.sh} installs the system packages (Picamera2, lgpio, ffmpeg), creates the virtual environment with system site packages, removes the conflicting full OpenCV build, merges the \code{pi.env} profile into \code{.env}, installs the systemd unit with its watchdog and journald drop-ins, sets \code{gpio=17=op,dl} in \code{config.txt} so the siren pin is low from power-on, configures NetworkManager failover profiles and the \code{ufw} firewall. The demo unit runs SENTRIX as a systemd \emph{user} service with lingering enabled, so it starts at boot and the dashboard opens at desktop login. The device is provisioned (\code{SX5-000001}), linked to the Portal (\code{SENTRIX\_LINK\_ENABLED=1}, the Portal URL and the identity in \code{var/link/}) and claimed by the owner's account. Per-room thresholds live in \code{var/calibration/scene.json} (weapon 0.75, fire 0.70 for the demo room).
+\paragraph{Device.} On the Pi, \code{deploy/pi5/install\_pi.sh} installs the system packages (Picamera2, lgpio, ffmpeg), creates the virtual environment with system site packages, removes the conflicting full OpenCV build, merges the \code{pi.env} profile into \code{.env}, installs the systemd unit with its watchdog and journald drop-ins, configures NetworkManager failover profiles and the \code{ufw} firewall. The demo unit runs SENTRIX as a systemd \emph{user} service with lingering enabled, so it starts at boot and the dashboard opens at desktop login. The device is provisioned (\code{SX5-000001}), linked to the Portal (\code{SENTRIX\_LINK\_ENABLED=1}, the Portal URL and the identity in \code{var/link/}) and claimed by the owner's account. Per-room thresholds live in \code{var/calibration/scene.json} (weapon 0.78, fire 0.75 for the demo room, set by the calibration tool).
 
 \paragraph{Portal.} The Portal is deployed from a Render Blueprint (\code{render.yaml}): one web service in Singapore built from \code{deploy/portal/Dockerfile}, a 1\,GB disk on \code{/data}, keys generated by Render and secrets typed in by the team. The container starts as root only to hand the volume to an unprivileged user and then drops root for good. The first company administrator is created from \code{PORTAL\_BOOTSTRAP\_ADMIN}. The service is suspended between evaluation sessions to save cost. For a long-term deployment, \code{deploy/portal/} also contains a Docker Compose stack with Postgres on an internal network, Caddy for HTTPS, and backup and restore scripts.
 
@@ -343,9 +343,8 @@ The screenshots below were captured from the product running in its test-mode de
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.36\textwidth]{figures/screens_c/dev_recordings.png}\hfill
-\includegraphics[width=0.62\textwidth]{figures/screens_c/dev_hardware.png}
-\caption{Device administration: Record video for training data (left) and Hardware with services, LEDs, siren and sensors (right)}
+\includegraphics[width=0.5\textwidth]{figures/screens_c/dev_recordings.png}
+\caption{Device administration: Record video for training data}
 \label{fig:scr-devhw}
 \end{figure}
 
@@ -465,7 +464,7 @@ Testing is layered (\figref{fig:tests}):
 \tablefont TC-21 & \tablefont Link (test\_integration\_m10) & \tablefont 100 forced disconnects & \tablefont 0 events lost after reconnect & \tablefont Pass\\ \hline
 \tablefont TC-22 & \tablefont Path table (test\_link\_policy) & \tablefont Tunnelled request for a LAN-only page or an unknown write & \tablefont Refused & \tablefont Pass\\ \hline
 \tablefont TC-23 & \tablefont Isolation (test\_acct\_isolation) & \tablefont Owner A requests household B's data & \tablefont 403/404, nothing leaked & \tablefont Pass\\ \hline
-\tablefont TC-24 & \tablefont Siren (test\_hw\_siren) & \tablefont Activation of 120\,s & \tablefont Released after at most 90\,s & \tablefont Pass\\ \hline
+\tablefont TC-24 & \tablefont Status LEDs (test\_hw\_gpio) & \tablefont Live level and link changes & \tablefont The LEDs follow the live state & \tablefont Pass\\ \hline
 \tablefont TC-25 & \tablefont Recorder (test\_recorder) & \tablefont Crash by \code{os.\_exit} while recording & \tablefont Partial files recovered at next start & \tablefont Pass\\ \hline
 \tablefont TC-26 & \tablefont Product flow (test\_e2e\_product) & \tablefont Provision $\to$ activate $\to$ onboard $\to$ claim $\to$ L3 $\to$ approve $\to$ Desk & \tablefont Request CLOSED, verdict TRUE & \tablefont Pass\\ \hline
 \tablefont TC-27 & \tablefont Browser: alert journey (sos.spec) & \tablefont Scripted weapon; owner answers; Desk acknowledges and closes & \tablefont Every screen updates; no \code{tel:112} link in test mode & \tablefont Pass\\ \hline
@@ -524,7 +523,7 @@ Leave-one-video-out macro-F1 of the scene model & -- & 0.210 & \textbf{0.440}\\ 
 \end{figure}
 
 \subsection{Detection per committed level}
-\figref{fig:levels} and \tabref{tab:levels-res} show what reaches each level when the ten videos are replayed through the final pipeline with their own soundtracks. Three quarters of the handgun episodes and all flame episodes reach Level~3 (assistance request); half the handgun episodes and two of three flames are corroborated to Level~4; two handgun episodes and two flames reach Level~5 (siren). No normal footage produced an onset at Level~3 or above. The staged fights (vid05) do not reach Level~3: their soundtrack sounds like calm talk (benign 0.91, aggression below 0.01), so the fight rule correctly withholds the corroboration it needs.
+\figref{fig:levels} and \tabref{tab:levels-res} show what reaches each level when the ten videos are replayed through the final pipeline with their own soundtracks. Three quarters of the handgun episodes and all flame episodes reach Level~3 (assistance request); half the handgun episodes and two of three flames are corroborated to Level~4; two handgun episodes and two flames reach Level~5. No normal footage produced an onset at Level~3 or above. The staged fights (vid05) do not reach Level~3: their soundtrack sounds like calm talk (benign 0.91, aggression below 0.01), so the fight rule correctly withholds the corroboration it needs.
 
 \begin{figure}[htbp]
 \centering
@@ -552,15 +551,15 @@ Frame AUROC of the scene model, weapon / fire & 0.93 / 0.999 & -- & --\\ \hline
 These numbers are encouraging but not a validation: seven of the ten videos were used in training, and 3.7 minutes of normal footage can only bound the false-alarm rate at 60 per hour, far above what a home needs. Two release gates measured on this data fail: G2 (handgun episodes confirmed within 2\,s: 8 of 12) and G4 (onset to Level~3 at the 95th percentile: 4.0\,s against 2\,s).
 
 \subsection{Models retrained on fifteen videos}
-The weapon and fire heads were retrained from the v4 heads on all 977 frames (fifteen videos, 180 boxes) with 2000 public images mixed back in, so that the public classes are not forgotten. The weapon head gained knife and long-gun classes. Each head had to pass bars fixed before training:
+The weapon and fire heads were retrained from the v4 heads on all 977 frames (fifteen videos, 180 boxes) with 2000 public images mixed back in, so that the public classes are not forgotten. Each head had to pass bars fixed before training:
 \begin{itemize}
 \item no rise in false alarms on the held-out normal frames of the validation and test videos;
 \item validation weapon AUROC not lower by more than 0.02 (fire: not lower);
 \item public pistol (fire) AP50 not lower.
 \end{itemize}
-Both passed (\tabref{tab:v5heads}). On the held-out validation videos the weapon head's frame AUROC rose from 0.748 to 0.871 and the fire head's from 0.587 to 0.964, with no new false alarms. On the public test sets, which the v4 heads had forgotten, pistol AP50 went from 0.007 to 0.699, and the new knife class reached 0.717.
+Both passed (\tabref{tab:v5heads}). On the held-out validation videos the weapon head's frame AUROC rose from 0.748 to 0.871 and the fire head's from 0.587 to 0.964, with no new false alarms. On the public test sets, which the v4 heads had forgotten, pistol AP50 went from 0.007 to 0.699.
 
-In the replay of all fifteen videos, 11 of 14 weapon episodes reach Level~3 instead of 9: the new handgun and knife scenes now raise an assistance request. The false Level~3 onset count is unchanged at 1 in 4.9 minutes of normal footage. Two results did not improve:
+In the replay of all fifteen videos, 11 of 14 weapon episodes reach Level~3 instead of 9: the new weapon scenes now raise an assistance request. The false Level~3 onset count is unchanged at 1 in 4.9 minutes of normal footage. Two results did not improve:
 \begin{itemize}
 \item the two flames that reached Level~5 now stop at Level~4;
 \item the small aerosol flame of \code{vid04} still scores below the fire head's vote.
@@ -569,7 +568,7 @@ The five new videos are in the training split, so their replay is in-sample.
 
 \paragraph{The scene classifier (v5).} The v4 scene classifier had never seen the five new videos, and it recognised them poorly: accuracy 0.43, macro-F1 0.16 and 1 of 47 weapon frames, though it raised no false weapon or fire alarm on their 90 normal frames. It was retrained with the same recipe (DINOv2, last four blocks):
 \begin{itemize}
-\item \textbf{Cross-validation:} leave-one-video-out over the fourteen training and validation videos (884 frames) gives a tuned macro-F1 of 0.433. Held out, the new handgun video scores an accuracy of 1.00 and the knife video 0.54; the assault and theft videos stay low (0.31, 0.36).
+\item \textbf{Cross-validation:} leave-one-video-out over the fourteen training and validation videos (884 frames) gives a tuned macro-F1 of 0.433. Held out, the new handgun video scores an accuracy of 1.00 and the attack on the bed 0.54; the assault and theft videos stay low (0.31, 0.36).
 \item \textbf{Validation, as the product runs it (floors applied):} macro-F1 0.700 $\to$ 0.743; weapon recall 0.36 $\to$ 0.45; weapon AUROC 0.786 $\to$ 0.843.
 \item \textbf{False alarms:} no held-out normal frame flagged, the same as v4 (0 of 90).
 \end{itemize}
@@ -590,7 +589,7 @@ The Pi runs the v5 weapon head but keeps the v4 fire head (the owner's choice, 1
 \thead{Measure} & \thead{v4 heads} & \thead{v5 heads}\\ \hline
 Validation frame AUROC, weapon / fire & 0.748 / 0.587 & \textbf{0.871 / 0.964}\\ \hline
 False alarms on held-out normal frames at 0.25 (validation / test), weapon & 0.000 / 0.015 & 0.000 / 0.015\\ \hline
-Public test AP50: pistol / knife / fire & 0.007 / -- / 0.000 & \textbf{0.699 / 0.717 / 0.487}\\ \hline
+Public test AP50: pistol / fire & 0.007 / 0.000 & \textbf{0.699 / 0.487}\\ \hline
 Weapon episodes at Level 3 / 4 / 5 & 9/14, 6/14, 2/14 & \textbf{11/14}, 6/14, 2/14\\ \hline
 Flame episodes at Level 3 / 4 / 5 & 3/3, 2/3, 2/3 & 3/3, 2/3, 0/3\\ \hline
 False onsets at Level 3 (4.9 normal minutes) & 1 & 1\\ \hline
@@ -671,7 +670,7 @@ The cost is the same as before, one step higher: a replica gun or flame scored b
 
 The calibration covers the scene model only, and the room still produces false alarms from the detectors. From 18 to 20 November every Level~3 in the demo room came from the fast lane's weapon detector alone:
 \begin{itemize}
-\item seven onsets in all: the v4 head saw a ``pistol'' (0.55--0.83) four times, and the v5 head a ``knife'' (0.57--0.60) three times;
+\item seven onsets in all: four from the v4 head (a ``pistol'' at 0.55--0.83) and three weapon-detector false alarms from the v5 head at 0.57--0.60;
 \item the owner marked four of them false; the other three were not reviewed;
 \item the scene model, at its room thresholds, raised none.
 \end{itemize}
@@ -745,10 +744,10 @@ Industry practice & Cloud face recognition in doorbells (2025) \cite{perez2025ri
 \begin{tabularx}{\textwidth}{|L{2.4cm}|Y|L{1.6cm}|}
 \hline\rowhead
 \thead{Objective} & \thead{What was built and the evidence} & \thead{Status}\\ \hline
-O1 Multimodal AI pipeline & Weapon (handgun, knife, long gun) and fire detection (YOLO11n), scene and fight classification (DINOv2), faces (InsightFace), bodies (OSNet-AIN), sound (PANNs CNN10), in tick and clip pipelines; handgun 9/12 and flame 3/3 at Level~3 on replay (weapon 11/14 on fifteen videos); 29.7\,fps preview and 5.6\,Hz AI on a laptop; 3.9\,s per clip on the Pi & Achieved; Pi latency target open\\ \hline
+O1 Multimodal AI pipeline & Handgun and fire detection (YOLO11n), scene and fight classification (DINOv2), faces (InsightFace), bodies (OSNet-AIN), sound (PANNs CNN10), in tick and clip pipelines; handgun 9/12 and flame 3/3 at Level~3 on replay (weapon 11/14 on fifteen videos); 29.7\,fps preview and 5.6\,Hz AI on a laptop; 3.9\,s per clip on the Pi & Achieved; Pi latency target open\\ \hline
 O2 Fusion into a TCI & The learned XGBoost fusion of the mid-semester version was retired: it had been fitted to synthetic labels with the meaning of identity inverted and ranked threats worse than its own inputs. It was replaced by transparent, time-aligned evidence rules that produce the same 0--1 TCI and five levels, with every decision re-derivable from the log; live false onsets at Level~3+ fell from 9 to 0 & Achieved with a changed method\\ \hline
 O3 Tamper-evident evidence & AES-256-GCM bundles with HKDF keys, SHA-256 digests and an HMAC-signed hash-chained manifest; pre-roll clips in clip mode; a verifier checks every digest and the signed chain & Achieved\\ \hline
-O4 Physical edge unit & Raspberry~Pi~5 unit with Camera Module 3, USB microphone, PIR, door and mains inputs, LEDs and a siren relay; bill of materials about Rs.\,40,500 including tools; parametric enclosure; running in the demo room as a systemd service. The ESP32 and DHT22 design of the proposal was replaced by the Pi~5 for camera and audio quality & Achieved (budget revised)\\ \hline
+O4 Physical edge unit & Raspberry~Pi~5 unit with Camera Module 3, USB microphone, PIR, door and mains inputs and status LEDs; bill of materials about Rs.\,40,200 including tools; parametric enclosure; running in the demo room as a systemd service. The ESP32 and DHT22 design of the proposal was replaced by the Pi~5 for camera and audio quality & Achieved (budget revised)\\ \hline
 O5 Command console and alerting & React device screen and administration pages, React Portal with onboarding, live view through the tunnel, owner-approved SOS over Portal, device screen, Telegram, e-mail and SMS, the SENTRIX Desk and the admin console; 22 of 23 browser tests pass & Achieved; one UI defect open\\ \hline
 \end{tabularx}
 \end{table}

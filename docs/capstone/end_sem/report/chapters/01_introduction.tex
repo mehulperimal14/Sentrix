@@ -8,12 +8,12 @@
 
 Physical security in Indian homes still rests on two kinds of devices: a burglar alarm that sounds when a door or motion sensor trips, and a camera that records for someone to watch later. Neither understands what it sees. Alarm sensors fire on pets, wind and family members, and police studies of alarm response found that 94--98\,\% of burglar-alarm activations are false \cite{sampson2011false}. Cameras record everything but recognise nothing; when they do analyse video, they usually send it to a company's cloud, which takes private footage out of the home and stops working whenever the Internet does. At the same time the threats a family most fears in its own house---an armed intruder, a fire, a violent fight---are exactly the events where minutes matter and where the people inside may not be able to make a call.
 
-\textbf{SENTRIX} is an edge-first home threat-detection product built to close that gap. A small unit on the wall (a Raspberry~Pi~5 with a camera, an optional USB microphone, status LEDs and a siren relay) watches one room. It runs every model on the device, decides whether a \emph{handgun}, a \emph{visible flame} or a \emph{corroborated fight} is present, and expresses its belief as a \textbf{Threat Confidence Index (TCI)} between 0 and 1 that maps to five alarm levels (\tabref{tab:levels}). When a threat is confirmed at Level~3, the device does not call anyone on its own: it opens an \emph{assistance request} and asks the owner, on the web Portal, on the device's own screen and by Telegram, whether help is needed. The owner's contacts and the SENTRIX Desk (a responder console) are alerted when the owner approves, or automatically when a safety default applies. Faces, evidence and continuous video never leave the house.
+\textbf{SENTRIX} is an edge-first home threat-detection product built to close that gap. A small unit on the wall (a Raspberry~Pi~5 with a camera, an optional USB microphone and status LEDs) watches one room. It runs every model on the device, decides whether a \emph{handgun}, a \emph{visible flame} or a \emph{corroborated fight} is present, and expresses its belief as a \textbf{Threat Confidence Index (TCI)} between 0 and 1 that maps to five alarm levels (\tabref{tab:levels}). When a threat is confirmed at Level~3, the device does not call anyone on its own: it opens an \emph{assistance request} and asks the owner, on the web Portal, on the device's own screen and by Telegram, whether help is needed. The owner's contacts and the SENTRIX Desk (a responder console) are alerted when the owner approves, or automatically when a safety default applies. Faces, evidence and continuous video never leave the house.
 
 The product is made of two programs that share one code base (\figref{fig:overview}):
 
 \begin{itemize}
-\item \textbf{The device} (\code{python -m sentrix}) runs at home on a Raspberry~Pi~5 or a laptop. It reads the camera (and the microphone), runs the perception models, turns their outputs into confirmed per-class evidence, the TCI and a committed alarm level, keeps incidents, an event log and AES-256-GCM encrypted evidence, and serves the \textbf{Local Console (LC)}: the device screen and the device administrator's pages on the home network. It also runs the SOS engine, the alert channels and the outbound link to the Portal, and drives the Pi's LEDs and siren relay.
+\item \textbf{The device} (\code{python -m sentrix}) runs at home on a Raspberry~Pi~5 or a laptop. It reads the camera (and the microphone), runs the perception models, turns their outputs into confirmed per-class evidence, the TCI and a committed alarm level, keeps incidents, an event log and AES-256-GCM encrypted evidence, and serves the \textbf{Local Console (LC)}: the device screen and the device administrator's pages on the home network. It also runs the SOS engine, the alert channels and the outbound link to the Portal, and drives the Pi's status LEDs.
 \item \textbf{The Portal} (\code{python -m sentrix\_portal}) runs in the cloud (Render, Singapore region, for the demonstration). It holds customer accounts with activation codes, a seven-step onboarding wizard, the household and its emergency contacts (each confirmed by a consent link), the assistance requests, the \textbf{SENTRIX Desk} and the company administration console. Through a tunnel the owner sees the device's own pages from any browser, so the home console and the remote one can never drift apart.
 \end{itemize}
 
@@ -29,7 +29,7 @@ The product is made of two programs that share one code base (\figref{fig:overvi
 \node[box, fill=sxlight, below=4mm of mic] (sens) {PIR, door contact,\\mains sense};
 \node[box, right=8mm of mic, minimum height=24mm, text width=3.1cm, fill=sxhead] (dev) {\textbf{SENTRIX device}\\Raspberry Pi 5\\[2pt] perception $\rightarrow$ evidence\\$\rightarrow$ TCI $\rightarrow$ level\\$\rightarrow$ incident, evidence\\$\rightarrow$ SOS request};
 \node[box, right=8mm of dev, yshift=9mm, text width=2.5cm] (lc) {Local Console\\(device screen, LAN)};
-\node[box, right=8mm of dev, yshift=-1mm, text width=2.5cm] (out) {LEDs, siren relay};
+\node[box, right=8mm of dev, yshift=-1mm, text width=2.5cm] (out) {Status LEDs};
 \node[box, right=8mm of dev, yshift=-11mm, text width=2.5cm] (vault) {Encrypted evidence,\\event log, faces};
 \node[box, below=14mm of dev, text width=3.1cm, fill=sxhead] (portal) {\textbf{SENTRIX Portal}\\(cloud: Render)\\accounts, household,\\requests, Desk, tunnel};
 \node[box, left=10mm of portal, text width=2.2cm] (owner) {Owner\\(Portal, Telegram)};
@@ -61,9 +61,9 @@ The product is made of two programs that share one code base (\figref{fig:overvi
 \thead{Level} & \thead{TCI band} & \thead{Name} & \thead{Side effects in the product}\\ \hline
 1 & $<0.20$ & Secure & Logged only.\\ \hline
 2 & 0.20--0.40 & Suspicious & Incident opened; log and dashboard only. The most an unrecognised person ever reaches, and the most any experimental class (robbery, stick, smoke, an unconfirmed fight) reaches.\\ \hline
-3 & 0.40--0.65 & Elevated & Snapshot and an AES-256-GCM evidence bundle; for a weapon, a fire or a corroborated fight an assistance request (SOS) asks the owner. No siren.\\ \hline
-4 & 0.65--0.85 & High & Dispatch package prepared with the evidence; needs two independent modalities.\\ \hline
-5 & $\geq 0.85$ & Critical & Siren relay (5\,s, at most once a minute); needs two strongly confirmed modalities or all three.\\ \hline
+3 & 0.40--0.65 & Elevated & Snapshot and an AES-256-GCM evidence bundle; for a weapon, a fire or a corroborated fight an assistance request (SOS) asks the owner.\\ \hline
+4 & 0.65--0.85 & High & Dispatch package prepared with the evidence; a legacy SMS only when no assistance request owns the incident; needs two independent modalities.\\ \hline
+5 & $\geq 0.85$ & Critical & The most urgent level; a legacy voice call only when no assistance request owns the incident; needs two strongly confirmed modalities or all three.\\ \hline
 \end{tabularx}
 \end{table}
 
@@ -120,7 +120,7 @@ SENTRIX solves the problem with five design choices, each detailed in Chapters~\
 \begin{enumerate}
 \item \textbf{All inference at the edge.} Every model runs on the device; the Portal never sees continuous video. The Raspberry~Pi~5 uses a 4\,s clip engine and ONNX models to fit its four CPU cores.
 \item \textbf{Confirmed, multimodal evidence instead of single-frame scores.} $k$-of-$n$ confirmation, a person gate, per-room thresholds set from the device's own log, and the rule that Level~4 and above need two independent modalities.
-\item \textbf{Models trained on the team's own footage.} A DINOv2 scene classifier trained on 765 reviewed frames from ten videos, selected by leave-one-video-out cross-validation without touching the test video; YOLO11n weapon (handgun, knife, long gun) and fire heads retrained on 977 frames from fifteen videos, and a retrained scene classifier that a device switches to after a room calibration; a body re-identification model so a resident who turns away is not mistaken for a stranger.
+\item \textbf{Models trained on the team's own footage.} A DINOv2 scene classifier trained on 765 reviewed frames from ten videos, selected by leave-one-video-out cross-validation without touching the test video; YOLO11n weapon and fire heads retrained on 977 frames from fifteen videos, and a retrained scene classifier that a device switches to after a room calibration; a body re-identification model so a resident who turns away is not mistaken for a stranger.
 \item \textbf{An owner-approved SOS flow with safety defaults.} The owner decides; corroborated threats, fire and a device that goes offline during an alarm still reach the contacts; silence is never read as safety.
 \item \textbf{Measured, not assumed.} A side-effect-free evaluation harness, committed-level metrics with confidence bounds, and more than 2,200 automated tests run under rules that forbid any test from sending a real alert.
 \end{enumerate}
@@ -164,9 +164,9 @@ The first two gaps proved the most important in practice. A system whose compone
 \label{sec:scope}
 The problem is defined as: \emph{given a live camera stream (and optionally an aligned audio stream and binary sensors) from one indoor room, decide in near real time and on the device whether one of the alarm classes is present, commit a level with the corresponding side effects, and run the owner-approved assistance flow, while keeping false alarms in an ordinary home near zero and keeping personal data on the premises.}
 
-\textbf{In scope:} detection of a replica handgun and a visible flame (alarm classes); fights confirmed by video and aligned aggression audio; robbery, stick and smoke as experimental (logged, Level~2 at most); per-track face identity and body re-identification; the five-level policy with snapshots, encrypted evidence, dispatch packages and the siren relay; the assistance request flow with Portal, device screen, Telegram, e-mail and modem SMS channels behind a send guard; the Portal with onboarding, household, contacts, Desk, administration, privacy export and erasure; the Raspberry~Pi~5 unit with LEDs, siren relay, PIR, door and mains inputs and a 3D-printable enclosure; deployment-room recording for training data.
+\textbf{In scope:} detection of a replica handgun and a visible flame (alarm classes); fights confirmed by video and aligned aggression audio; robbery, stick and smoke as experimental (logged, Level~2 at most); per-track face identity and body re-identification; the five-level policy with snapshots, encrypted evidence and dispatch packages; the assistance request flow with Portal, device screen, Telegram, e-mail and modem SMS channels behind a send guard; the Portal with onboarding, household, contacts, Desk, administration, privacy export and erasure; the Raspberry~Pi~5 unit with status LEDs, PIR, door and mains inputs and a 3D-printable enclosure; deployment-room recording for training data.
 
-\textbf{Out of scope:} night operation (needs an infrared camera and infrared training data); knives (no training footage yet); faces closer than 1\,m or in darkness; contacting emergency services (112) directly---SENTRIX never dials an emergency number; outdoor and multi-camera perimeter tracking; any fitted (learned) fusion model until real session logs exist.
+\textbf{Out of scope:} night operation (needs an infrared camera and infrared training data); faces closer than 1\,m or in darkness; contacting emergency services (112) directly---SENTRIX never dials an emergency number; outdoor and multi-camera perimeter tracking; any fitted (learned) fusion model until real session logs exist.
 
 \section{Assumptions and Constraints}
 \label{sec:assumptions}
@@ -182,7 +182,7 @@ The problem is defined as: \emph{given a live camera stream (and optionally an a
 2 & The owner has a smartphone with a browser (and optionally Telegram) and can answer within the chosen window (30, 45 or 60 minutes); the safety defaults cover the owner who cannot.\\ \hline
 3 & Residents are enrolled by face (from the device's own camera) and consent to recognition; guests are ``unknown'' and therefore at most Level~2.\\ \hline
 4 & Emergency contacts confirm their consent through a link before they receive anything.\\ \hline
-5 & The home has Wi-Fi; the unit keeps detecting, recording evidence and sounding the siren without it, and a 4G modem can carry SMS when the Internet is down.\\ \hline
+5 & The home has Wi-Fi; the unit keeps detecting and recording evidence without it, and a 4G modem can carry SMS when the Internet is down.\\ \hline
 6 & Replicas (not real weapons) and controlled flames are used for every test and recording, with the consent of everyone filmed.\\ \hline
 7 & The demonstration runs in test mode: messages reach only the team's allowlisted phones and carry a test banner.\\ \hline
 \end{tabularx}
@@ -198,7 +198,7 @@ The problem is defined as: \emph{given a live camera stream (and optionally an a
 1 & \textbf{Compute:} four Cortex-A76 cores and no accelerator on the Pi~5; DINOv2 ViT-B/14 alone takes about 1.2\,s per frame there, so the full per-frame stack would run below 1\,Hz.\\ \hline
 2 & \textbf{Data:} 466\,s of labelled footage from three rooms (977 frames, 15 videos; the first ten videos give 341\,s and 765 frames); assault and robbery appear in only three and two episodes and cannot be validated.\\ \hline
 3 & \textbf{Hardware interfaces:} the Pi~5 has no analogue audio input and no hardware H.264 encoder; OpenCV cannot open its CSI camera (Picamera2 is required); RPi.GPIO does not work on the Pi~5 (gpiozero with lgpio is used); GPIO pins are 3.3\,V.\\ \hline
-4 & \textbf{Budget:} a student project; free or low-cost hosting (Render Starter instance, about \$7 per month) and an \rupee40{,}500 device bill of materials including tools.\\ \hline
+4 & \textbf{Budget:} a student project; free or low-cost hosting (Render Starter instance, about \$7 per month) and an \rupee40{,}200 device bill of materials including tools.\\ \hline
 5 & \textbf{Safety and law:} no test, evaluation, replay or demo may send a real alert; no automatic call to 112; personal data handled under consent.\\ \hline
 6 & \textbf{Time:} one semester for the product after the mid-semester review, with evaluations on 30 November and 5 December 2026.\\ \hline
 \end{tabularx}
@@ -238,7 +238,7 @@ The following objectives were approved by the mentor and the evaluation panel at
 \item \textbf{Multimodal AI pipeline.} Develop and train a real-time deep-learning pipeline that detects weapons and fire, classifies violent altercations and identifies acoustic threats.
 \item \textbf{Fusion into a Threat Confidence Index.} Formulate a fusion model that combines the modality outputs into a continuous TCI from 0 to 1 mapped to five escalation levels.
 \item \textbf{Tamper-evident evidence.} Engineer an evidence module that encrypts captures with AES-256-GCM and records SHA-256 digests.
-\item \textbf{Physical edge unit.} Build an edge hardware unit within a student budget with camera and microphone input, sensor telemetry and a GPIO-driven siren relay.
+\item \textbf{Physical edge unit.} Build an edge hardware unit within a student budget with camera and microphone input, sensor telemetry and GPIO-driven status LEDs.
 \item \textbf{Command console and alerting.} Build a web dashboard with live video, the threat gauge, the incident log and an emergency dispatch workflow.
 \end{enumerate}
 Section~\ref{sec:validation} validates each objective against what was built and measured, including the places where the approach changed after the mid-semester review (for example, the learned fusion model of O2 was replaced by transparent evidence rules because it was fitted to synthetic labels).
@@ -261,7 +261,7 @@ The project followed an iterative, measurement-driven engineering cycle (detaile
 \item \textbf{Device software} (\code{sentrix/}): perception (detector, scene, identity, re-identification, audio, motion, behaviour), evidence and fusion rules, level policy, tick and clip pipelines, incidents, event log, evidence vault, SOS engine, channels, link client, hardware I/O, recorder, Local Console API.
 \item \textbf{Portal} (\code{sentrix\_portal/}): accounts, activation, two-factor sign-in, onboarding, household and contacts, SOS pages, Desk, administration, privacy, link hub and tunnel.
 \item \textbf{Two React applications} (\code{frontend/}): the device screen with its alert takeover and PIN pad, and the Portal app for owners, contacts, the Desk and administrators.
-\item \textbf{Trained models} (\code{models/}): DINOv2 ViT-B/14 five-class scene classifier (57\,MB delta checkpoint; v4, and v5 retrained on fifteen videos, opt-in), YOLO11n weapon (handgun, knife, long gun) and fire heads retrained on fifteen videos (v5), OSNet-AIN x1\_0 body embedder trained on MSMT17 (ONNX), PANNs CNN10 sound tagger (ONNX), plus the rejected slim heads for reference.
+\item \textbf{Trained models} (\code{models/}): DINOv2 ViT-B/14 five-class scene classifier (57\,MB delta checkpoint; v4, and v5 retrained on fifteen videos, opt-in), YOLO11n weapon and fire heads retrained on fifteen videos (v5), OSNet-AIN x1\_0 body embedder trained on MSMT17 (ONNX), PANNs CNN10 sound tagger (ONNX), plus the rejected slim heads for reference.
 \item \textbf{Custom dataset} (\code{training/datasets/sentrix\_custom/}): 977 reviewed frames, fifteen source videos, label timelines and boxes.
 \item \textbf{Evaluation and tooling:} the side-effect-free harness, video replay, committed-level metrics, gate report, live and clip benchmarks, model export, per-model evaluation (vision, sound, faces), re-id evaluation, room calibration from the device's own log, the doctor (pre-flight) tool and demo tools.
 \item \textbf{Hardware:} the Raspberry~Pi~5 unit design (pin table, power design, bill of materials), the \code{deploy/pi5} installer and systemd units, and the parametric enclosure (OpenSCAD, STL and 3MF exports, interference checks).

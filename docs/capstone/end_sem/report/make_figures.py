@@ -108,7 +108,7 @@ def live_session():
 # weapon L3 9/12, L4 6/12, L5 2/12; fire 3/3, 2/3, 2/3.
 def levels():
     fig, ax = plt.subplots(figsize=(5.6, 2.4))
-    lv = ["Level 3\n(snapshot, evidence, SOS)", "Level 4\n(dispatch package)", "Level 5\n(siren)"]
+    lv = ["Level 3\n(snapshot, evidence, SOS)", "Level 4\n(dispatch package)", "Level 5\n(critical)"]
     weapon = [9, 6, 2]
     fire = [3, 2, 2]
     x = range(3)

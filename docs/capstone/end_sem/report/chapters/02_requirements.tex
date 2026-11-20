@@ -42,7 +42,7 @@ The gaps are summarised in \tabref{tab:gaps}. In more detail:
 \begin{enumerate}
 \item \textbf{The metric is not the alarm (RG-1).} Handgun, fire and violence papers report frame-level accuracy, mAP or AUROC \cite{olmos2018handgun, muhammad2018fire, cheng2021rwf}. A home system is judged by what its owner experiences: how many real episodes reach an alarm, how fast, and how many false alarms per hour of ordinary life. A detector with 0.93 frame AUROC can still raise an alarm every few minutes if one frame is enough. A 2025 review of 101 weapon-detection papers reaches the same conclusion: high reported precision, little real-world validation \cite{murugan2025weaponreview}.
 \item \textbf{Test sets share the training distribution (RG-2).} Public corpora split clips from the same sources into train and test; our audit found that 52.7\,\% of the RWF-2000 validation rows we used shared source videos with training, and 12--20\,\% of the weapon and fire validation images were near-duplicates of training images. Scores on such splits overstate performance in a new room.
-\item \textbf{Fusion assumes aligned, clean inputs (RG-3).} Audio-visual work fuses features of edited clips \cite{wu2020xdviolence}; a live system must decide whether a sound window even describes the frame being judged, and must not hear a television or the device's own siren as the room.
+\item \textbf{Fusion assumes aligned, clean inputs (RG-3).} Audio-visual work fuses features of edited clips \cite{wu2020xdviolence}; a live system must decide whether a sound window even describes the frame being judged, and must not hear a television as the room.
 \item \textbf{No owner in the loop (RG-4).} Alarm guidance stresses verification before dispatch \cite{sampson2011false}, but published systems stop at detection.
 \item \textbf{Heavy models on small boards (RG-5).} Transformer backbones dominate accuracy tables \cite{oquab2024dinov2, simeoni2025dinov3}, and recent edge studies time one detector at a time \cite{alqahtani2024edge, fierrosilva2026yolo26weapon}; few papers measure the full multimodal stack on a single-board computer.
 \item \textbf{Identity from faces alone (RG-6).} A resident who turns away becomes ``unknown''; body re-identification \cite{zhou2019osnet} is rarely tied to an access decision with a measured false-accept rate.
@@ -84,7 +84,7 @@ The lesson that shaped the rest of the project is that the problem was not one m
 \begin{tabularx}{\textwidth}{|L{2.6cm}|L{3.3cm}|Y|}
 \hline\rowhead
 \thead{Need} & \thead{Chosen} & \thead{Alternatives and reason for the choice}\\ \hline
-Object detection & YOLOv8n (person) + YOLO11n weapon (handgun, knife, long gun) and fire heads, ByteTrack & Faster R-CNN is too slow for a Pi; YOLO11n has fewer parameters at similar accuracy; ByteTrack adds track ids at almost no cost. RT-DETR, YOLOv10, YOLOv12 and YOLO26 (2024--2026) were reviewed; NMS-free YOLO26 is the candidate for the single detector of M7 \cite{zhao2024rtdetr, wang2024yolov10, tian2025yolov12, jocher2026yolo26}.\\ \hline
+Object detection & YOLOv8n (person) + YOLO11n weapon and fire heads, ByteTrack & Faster R-CNN is too slow for a Pi; YOLO11n has fewer parameters at similar accuracy; ByteTrack adds track ids at almost no cost. RT-DETR, YOLOv10, YOLOv12 and YOLO26 (2024--2026) were reviewed; NMS-free YOLO26 is the candidate for the single detector of M7 \cite{zhao2024rtdetr, wang2024yolov10, tian2025yolov12, jocher2026yolo26}.\\ \hline
 Scene classifier & DINOv2 ViT-B/14, last 4 blocks fine-tuned & ResNet-18 (LOVO macro-F1 0.210), MobileNetV3-L (0.229) and EfficientNet-B0 (0.211) all failed the 0.396 bar; DINOv2 reached 0.440. DINOv3 (2025) is the next backbone to test \cite{simeoni2025dinov3}.\\ \hline
 Faces & InsightFace \code{buffalo\_l} (laptop) / \code{buffalo\_s} (Pi): SCRFD + ArcFace & dlib and \code{face\_recognition} are slower and weaker on small faces.\\ \hline
 Body re-identification & OSNet-AIN x1\_0 trained on MSMT17, ONNX & On the same pairs: colour histograms (AUROC 0.73), the ImageNet weights of the earlier prototype (0.83) and OSNet x1\_0 on MSMT17 (0.92) against 0.93; torchreid does not install on Python 3.14, so the network was re-implemented with the same parameter names.\\ \hline
@@ -119,7 +119,7 @@ SENTRIX detects a handgun, a visible flame and a corroborated fight in one room,
 \subsection{Overall Description}
 \label{sec:overall}
 \subsubsection{Product Perspective}
-SENTRIX is a new, self-contained product with two cooperating programs (\figref{fig:overview}). The device is autonomous: detection, evidence, the siren and the creation of an assistance request work without the Internet. The Portal adds remote access, the household's contact list, the Desk and administration. The device opens only outbound connections; it does not trust the Portal and enforces its own rules (consents for video and media, SMS only to numbers in the current profile, rate-limited siren tests, no command that disables the siren or the evidence).
+SENTRIX is a new, self-contained product with two cooperating programs (\figref{fig:overview}). The device is autonomous: detection, evidence and the creation of an assistance request work without the Internet. The Portal adds remote access, the household's contact list, the Desk and administration. The device opens only outbound connections; it does not trust the Portal and enforces its own rules (consents for video and media, SMS only to numbers in the current profile, no command that disables the evidence).
 
 \paragraph{User classes.} \emph{Owner} (full household control, answers alerts, needs a step-up password for sensitive actions), \emph{household member} (sees and answers alerts), \emph{emergency contact} (no account; token pages only after consenting), \emph{Desk operator} (TOTP sign-in; acknowledges and closes requests), \emph{company administrator} (TOTP; customers, devices, staff, audit), \emph{device administrator} (installer on the home network; diagnostics, faces, recordings, hardware).
 
@@ -141,14 +141,14 @@ SENTRIX is a new, self-contained product with two cooperating programs (\figref{
 \tablefont FR-2 & \tablefont Detect persons (with track ids), handguns and fire in each analysed frame or clip. & \tablefont High\\ \hline
 \tablefont FR-3 & \tablefont Classify each scene into normal, fire, weapon, assault, robbery with calibrated probabilities. & \tablefont High\\ \hline
 \tablefont FR-4 & \tablefont Recognise enrolled residents per tracked person; carry a face-verified resident to their own track by body appearance at home. & \tablefont High\\ \hline
-\tablefont FR-5 & \tablefont Tag audio windows into aggression, weapon sound, fire sound, laughter, calm talk, background and siren cues, each with a time window. & \tablefont Medium\\ \hline
+\tablefont FR-5 & \tablefont Tag audio windows into aggression, weapon sound, fire sound, laughter, calm talk, background and alarm-sound cues (e.g. a smoke alarm, or an ambulance or police vehicle passing outside), each with a time window. & \tablefont Medium\\ \hline
 \tablefont FR-6 & \tablefont Confirm evidence ($k$-of-$n$), apply the person gate and modality rules, and compute the TCI with per-input contributions. & \tablefont High\\ \hline
 \tablefont FR-7 & \tablefont Commit an alarm level with dwell timers and step it down after 5\,s without support. & \tablefont High\\ \hline
 \tablefont FR-8 & \tablefont Open, update and close incidents from one peak tick; seal an encrypted evidence bundle and a snapshot from Level~3. & \tablefont High\\ \hline
 \tablefont FR-9 & \tablefont Open one assistance request per device for a confirmed Level~3 alarm class; prompt the owner on Portal, device screen, Telegram and e-mail; SMS when offline. & \tablefont High\\ \hline
 \tablefont FR-10 & \tablefont Accept approve, false alarm (PIN), I'm checking, duress PIN, I'm safe and Request help now; apply reminders, lapse warning, expiry and safety defaults. & \tablefont High\\ \hline
 \tablefont FR-11 & \tablefont Let the Desk acknowledge and resolve requests with an outcome that sets the incident verdict. & \tablefont High\\ \hline
-\tablefont FR-12 & \tablefont Drive the siren relay at Level~5 for 5\,s, at most once per minute, never longer than 90\,s; show level and faults on three LEDs. & \tablefont High\\ \hline
+\tablefont FR-12 & \tablefont Show the alarm level, the Portal link and faults on three status LEDs. & \tablefont High\\ \hline
 \tablefont FR-13 & \tablefont Provision devices, create customers with activation codes, run the seven-step onboarding, confirm contacts by consent link, and claim a device. & \tablefont High\\ \hline
 \tablefont FR-14 & \tablefont Show the device's own pages and live video to the owner through the Portal tunnel, within the household's consents. & \tablefont High\\ \hline
 \tablefont FR-15 & \tablefont Record training video (raw frames and microphone) on request of the device administrator, or the owner with a step-up; downloads on the home network only. & \tablefont Medium\\ \hline
@@ -179,7 +179,6 @@ Device: Raspberry~Pi~OS (Debian Trixie) on a Raspberry~Pi~5 8\,GB, Python 3.13 w
 \thead{Device} & \thead{Interface} & \thead{Requirement}\\ \hline
 Camera Module 3 & CSI (22-pin) & Picamera2: 1280$\times$720 main stream for preview and evidence, 640-wide frames for analysis, 15 fps in clip mode.\\ \hline
 USB microphone & USB audio & Any USB port, plugged before or after start; opened at its native rate and resampled to 16\,kHz mono.\\ \hline
-Siren relay & GPIO17 (pin 11) & Active-high through an NPN driver with a base pull-down; held low from power-on.\\ \hline
 Status LEDs & GPIO5/12/13 & Green, amber, red, 330\,$\Omega$ each; patterns for link, faults and level.\\ \hline
 PIR / door / mains & GPIO23/24/16 & Debounced inputs with pull-ups; mains sensed through a PC817 optocoupler.\\ \hline
 4G modem & USB & AT commands over serial (PDU SMS); NetworkManager failover for data.\\ \hline
@@ -208,7 +207,6 @@ PIR / door / mains & GPIO23/24/16 & Debounced inputs with pull-ups; mains sensed
 
 \subsubsection{Safety Requirements}
 \begin{itemize}
-\item The siren pin is held low from power-on, driven low after any exit of the service, released by a timer, and never on for more than 90\,s in one period; siren tests are refused while the arming key is off.
 \item Test mode is the default; no test, evaluation, replay or demonstration may send a real alert; SENTRIX never dials an emergency number.
 \item An unanswered request is ``unanswered'', never ``safe''; a failed delivery is shown as ``NOT DELIVERED - call for help yourself''.
 \item Experimental classes and an unrecognised person never pass Level~2.
@@ -243,11 +241,10 @@ Camera Module 3 (Wide, 102$^\circ$; Standard Rs.\,3,245) & Robocraze & 4,379\\ \
 Pi~5 camera cable, 22-pin Standard--Mini & thingbits & 117\\ \hline
 RTC cell ML-2020 (rechargeable) & -- & $\approx$ 500\\ \hline
 USB microphone (Scalebee) & Robocraze & 289\\ \hline
-Relay module, 2N2222/BC547 transistors, 1N4007 diodes & Robocraze & $\approx$ 150\\ \hline
 PIR HC-SR505 & Robocraze / thingbits & 73\\ \hline
 MC-38 door reed switch & Robocraze & 52\\ \hline
 Breadboard, jumpers, LEDs, resistors & -- & $\approx$ 350\\ \hline
-\multicolumn{2}{|r|}{\textbf{Subtotal, bench kit}} & \textbf{$\approx$ 31,250}\\ \hline
+\multicolumn{2}{|r|}{\textbf{Subtotal, bench kit}} & \textbf{$\approx$ 31,100}\\ \hline
 \end{tabularx}
 \end{table}
 
@@ -258,9 +255,9 @@ Breadboard, jumpers, LEDs, resistors & -- & $\approx$ 350\\ \hline
 \begin{tabularx}{\textwidth}{|Y|R{3.2cm}|}
 \hline\rowhead
 \thead{Item} & \multicolumn{1}{c|}{\thead{Cost (Rs.)}}\\ \hline
-Integration kit (Order 2): BIS-marked 12\,V adapter (566), router mini UPS 12\,V 3\,A (2,399), 12\,V$\to$5.2\,V 6\,A converter (119), 12\,V siren SQR117 (194), arming switch, fuses and PC817 ($\approx$130), 4G modem Quectel EC200U-CN (2,236), SIM ($\approx$300), IP65 box, fan, glands and mount ($\approx$900--1,500) & $\approx$ 7,300\\ \hline
+Integration kit (Order 2): BIS-marked 12\,V adapter (566), router mini UPS 12\,V 3\,A (2,399), 12\,V$\to$5.2\,V 6\,A converter (119), fuses and PC817 ($\approx$130), 4G modem Quectel EC200U-CN (2,236), SIM ($\approx$300), IP65 box, fan, glands and mount ($\approx$900--1,500) & $\approx$ 7,100\\ \hline
 Tools (multimeter, soldering kit, micro-HDMI cable, panel meter, etc.) & $\approx$ 2,000\\ \hline
-\textbf{Device total (one time)} & \textbf{$\approx$ 40,500}\\ \hline
+\textbf{Device total (one time)} & \textbf{$\approx$ 40,200}\\ \hline
 3D-printed enclosure (PLA, own printer or campus lab) & material only\\ \hline
 Portal hosting on Render: Starter instance + 1\,GB disk & \$7.25 per month ($\approx$ Rs.\,600)\\ \hline
 SIM for the modem & $\approx$ 200 per month\\ \hline
@@ -289,11 +286,10 @@ Risks were assessed with a Failure Mode and Effects Analysis: severity (S) and l
 \tablefont R-2 & \tablefont A test or demo sends a real alert & \tablefont 5 & \tablefont 2 & \tablefont 10 & \tablefont Test mode by default, send guard re-reading switches on every message, allowlist, test banner, test harness forcing all switches off and blocking non-loopback sockets.\\ \hline
 \tablefont R-3 & \tablefont A real threat missed (low recall) & \tablefont 5 & \tablefont 3 & \tablefont 15 & \tablefont Two visual sources (detector and scene model), fast lane, evidence logged for review; limits stated honestly; more data planned.\\ \hline
 \tablefont R-4 & \tablefont Pi too slow for the models & \tablefont 3 & \tablefont 4 & \tablefont 12 & \tablefont Clip engine, ONNX, 320\,px object stage, fast lane; Hailo AI HAT+ or the laptop as hub as fallbacks (planned).\\ \hline
-\tablefont R-5 & \tablefont Internet or Wi-Fi outage during an alarm & \tablefont 4 & \tablefont 3 & \tablefont 12 & \tablefont Detection, evidence, siren and the request work offline; outbox replays on reconnect; modem SMS; the Portal alerts contacts if the device goes offline during an alarm.\\ \hline
-\tablefont R-6 & \tablefont Siren stuck on or sounding at boot & \tablefont 4 & \tablefont 1 & \tablefont 4 & \tablefont Pin held low by \code{config.txt}, unit forces it low after any exit, timer release, 90\,s cap, physical arming key; bench test with an LED first.\\ \hline
-\tablefont R-7 & \tablefont Owner cannot answer (asleep, coerced) & \tablefont 5 & \tablefont 2 & \tablefont 10 & \tablefont Safety defaults, duress PIN, ``unanswered is never safe'', reminders and SMS after 10 minutes unseen.\\ \hline
-\tablefont R-8 & \tablefont Leak of faces or video & \tablefont 5 & \tablefont 1 & \tablefont 5 & \tablefont Data stay on the device; tunnel views follow consents; encrypted evidence; outbound-only link; erasure and retention.\\ \hline
-\tablefont R-9 & \tablefont Account takeover on the Portal & \tablefont 4 & \tablefont 2 & \tablefont 8 & \tablefont Argon2id, step-up for sensitive actions, TOTP for staff, activation back-off, CSRF and CSP, audit chain.\\ \hline
-\tablefont R-10 & \tablefont Power cut or SD card full & \tablefont 3 & \tablefont 2 & \tablefont 6 & \tablefont UPS-backed 12\,V bus, mains-loss alert, systemd watchdog, recording caps that keep 2\,GB free for evidence, log rotation and retention.\\ \hline
-\tablefont R-11 & \tablefont A resident shown as a stranger (or the reverse) & \tablefont 2 & \tablefont 3 & \tablefont 6 & \tablefont Per-track identity, body re-identification at a bar that accepted 0.04\,\% of different people; identity never lowers threat evidence.\\ \hline
+\tablefont R-5 & \tablefont Internet or Wi-Fi outage during an alarm & \tablefont 4 & \tablefont 3 & \tablefont 12 & \tablefont Detection, evidence and the request work offline; outbox replays on reconnect; modem SMS; the Portal alerts contacts if the device goes offline during an alarm.\\ \hline
+\tablefont R-6 & \tablefont Owner cannot answer (asleep, coerced) & \tablefont 5 & \tablefont 2 & \tablefont 10 & \tablefont Safety defaults, duress PIN, ``unanswered is never safe'', reminders and SMS after 10 minutes unseen.\\ \hline
+\tablefont R-7 & \tablefont Leak of faces or video & \tablefont 5 & \tablefont 1 & \tablefont 5 & \tablefont Data stay on the device; tunnel views follow consents; encrypted evidence; outbound-only link; erasure and retention.\\ \hline
+\tablefont R-8 & \tablefont Account takeover on the Portal & \tablefont 4 & \tablefont 2 & \tablefont 8 & \tablefont Argon2id, step-up for sensitive actions, TOTP for staff, activation back-off, CSRF and CSP, audit chain.\\ \hline
+\tablefont R-9 & \tablefont Power cut or SD card full & \tablefont 3 & \tablefont 2 & \tablefont 6 & \tablefont UPS-backed 12\,V bus, mains-loss alert, systemd watchdog, recording caps that keep 2\,GB free for evidence, log rotation and retention.\\ \hline
+\tablefont R-10 & \tablefont A resident shown as a stranger (or the reverse) & \tablefont 2 & \tablefont 3 & \tablefont 6 & \tablefont Per-track identity, body re-identification at a bar that accepted 0.04\,\% of different people; identity never lowers threat evidence.\\ \hline
 \end{longtable}

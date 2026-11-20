@@ -38,7 +38,7 @@
 \node[blk, text width=2.3cm, below=of inc] (sos) {SOS engine, sweeper,\\PINs, policy};
 % device column 3
 \node[blk, text width=2.15cm, right=3mm of prev] (lc) {Local Console\\(FastAPI + React)};
-\node[blk, text width=2.15cm, below=of lc] (hw) {GPIO: siren relay,\\LEDs; node watchdog};
+\node[blk, text width=2.15cm, below=of lc] (hw) {GPIO: status\\LEDs; node watchdog};
 \node[blk, text width=2.15cm, below=of hw] (ch) {Channels + outbox\\behind send guard};
 \node[blk, text width=2.15cm, below=of ch] (link) {Link client:\\outbox, tunnel,\\video relay};
 \begin{scope}[on background layer]
@@ -82,7 +82,7 @@
 \begin{tikzpicture}[node distance=3mm,
   pkg/.style={draw, fill=sxlight, align=left, font=\tiny, text width=2.55cm, inner sep=2pt, rounded corners=1pt},
   title/.style={font=\scriptsize\bfseries}]
-\node[pkg] (io) at (0,0) {\textbf{io}\\cameras, demo reel, Picamera2, siren, GPIO, node, recorder, Wi-Fi};
+\node[pkg] (io) at (0,0) {\textbf{io}\\cameras, demo reel, Picamera2, GPIO, node, recorder, Wi-Fi};
 \node[pkg, right=of io] (perc) {\textbf{perception}\\detector, scene, identity, OSNet re-id, audio + sound tagger, motion};
 \node[pkg, right=of perc] (fus) {\textbf{fusion}\\evidence, TCI, level policy, calibration};
 \node[pkg, right=of fus] (runtime) {\textbf{runtime}\\torch / ONNX / NCNN backends};
@@ -121,7 +121,7 @@
 \newcommand{\stick}[2]{\node[act] (#1) at #2 {\tikz{\draw (0,0.32) circle (0.09); \draw (0,0.23)--(0,0.04) (-0.13,0.16)--(0.13,0.16) (0,0.04)--(-0.1,-0.1) (0,0.04)--(0.1,-0.1);}};}
 % use cases (two columns)
 \foreach \n/\t/\x/\y in {u1/{Activate account and onboard}/3.4/6.2, u2/{Watch live view and level}/3.4/5.4, u3/{Answer an alert (approve, PIN, checking)}/3.4/4.6, u4/{Manage contacts and settings}/3.4/3.8, u5/{Export or erase data}/3.4/3.0, u6/{Confirm consent, see alert page}/3.4/2.2, u7/{Acknowledge and close request}/3.4/1.4,
-  u8/{Raise alarm and seal evidence}/7.0/6.2, u9/{Prompt owner, alert contacts}/7.0/5.4, u10/{Sound siren, show LEDs}/7.0/4.6, u11/{Enrol faces}/7.0/3.8, u12/{Record training video}/7.0/3.0, u13/{Provision device, create customer}/7.0/2.2, u14/{Review audit log}/7.0/1.4}
+  u8/{Raise alarm and seal evidence}/7.0/6.2, u9/{Prompt owner, alert contacts}/7.0/5.4, u10/{Show status LEDs}/7.0/4.6, u11/{Enrol faces}/7.0/3.8, u12/{Record training video}/7.0/3.0, u13/{Provision device, create customer}/7.0/2.2, u14/{Review audit log}/7.0/1.4}
   {\node[uc] (\n) at (\x,\y) {\t};}
 \node[draw, thick, rounded corners=3pt, fit=(u1)(u8)(u7)(u14), inner sep=5pt, label={[font=\scriptsize\bfseries]above:SENTRIX}] (sys) {};
 \stick{owner}{(0,5.6)} \node[act, below=-1mm of owner] {Owner /\\member};
@@ -279,7 +279,7 @@ The assistance request is the most safety-critical object in the product; its st
 \node[act, below=of a5] (a6) {TCI = max(class evidence, unknown-person L2)};
 \node[act, below=of a6] (a7) {Level policy: commit L2/L3 now; L4/L5 after 0.6\,s and 2 observations};
 \node[dec, below=of a7] (d2) {level\\$\geq 3$?};
-\node[act, below=5mm of d2] (a8) {Snapshot, evidence bundle; SOS trigger for alarm classes; L5: siren};
+\node[act, below=5mm of d2] (a8) {Snapshot, evidence bundle; SOS trigger for alarm classes; L4+: dispatch package};
 \node[act, right=14mm of d2, text width=3.0cm] (a8b) {Update incident, event log, dashboard};
 \node[circle, draw, inner sep=2.2pt, below=of a8] (e) {}; \fill (e) circle (1.3pt);
 \foreach \x/\y in {s/a1,a1/a2,a2/a3,a3/a4,a4/d1,a5/a6,a6/a7,a7/d2,a8/e} \draw[tr] (\x) -- (\y);
@@ -389,7 +389,7 @@ Both user interfaces are React single-page applications built from one design sy
 %--------------------------------------------------------------
 \section{Hardware Design}
 \label{sec:hwdesign}
-\figref{fig:hwblock} shows the wiring and power design of the Raspberry~Pi~5 unit; the pin assignment is in \tabref{tab:hwif}. The siren runs from a fused, UPS-backed 12\,V bus through the relay's normally-open contact and a physical arming key, never from the Pi; everything inside the box is 12\,V or below. The relay is driven through an NPN transistor with a 4.7\,k$\Omega$ base pull-down so it stays off whenever the pin floats, and a 1N4007 diode across the coil absorbs the turn-off spike. Mains presence is sensed on the 12\,V adapter's output, before the UPS, through a PC817 optocoupler.
+\figref{fig:hwblock} shows the wiring and power design of the Raspberry~Pi~5 unit; the pin assignment is in \tabref{tab:hwif}. Everything inside the box is 12\,V or below: a 12\,V adapter feeds a router mini UPS, and a fused buck converter supplies the Pi with 5.2\,V over USB-C. The three status LEDs are driven from GPIO 5, 12 and 13 through 330\,$\Omega$ resistors. Mains presence is sensed on the 12\,V adapter's output, before the UPS, through a PC817 optocoupler.
 
 \begin{figure}[htbp]
 \centering
@@ -402,17 +402,13 @@ Both user interfaces are React single-page applications built from one design sy
 \node[b] (modem) at (-4.0,-1.0) {4G modem\\(USB, EC200U)};
 \node[b] (sens) at (-4.0,-2.3) {PIR (GPIO23),\\door (GPIO24)};
 \node[b] (leds) at (4.0,1.6) {LEDs G/A/R\\(GPIO5/12/13, 330\,$\Omega$)};
-\node[b] (drv) at (4.0,0.2) {NPN driver + relay\\(GPIO17, 1N4007)};
-\node[b] (siren) at (7.2,0.2) {12\,V siren\\(SQR117)};
-\node[b] (key) at (7.2,-1.3) {Arming key\\+ fuse F2 (1\,A)};
 \node[b] (opto) at (4.0,-1.4) {PC817 mains sense (GPIO16),\\taps the adapter output};
 \node[b] (buck) at (0,-3.0) {Buck 12\,V$\rightarrow$5.2\,V 6\,A\\+ fuse F1 (3\,A)};
 \node[b] (ups) at (4.0,-3.0) {Router mini UPS\\12\,V 3\,A};
 \node[b] (ad) at (7.2,-3.0) {12\,V adapter\\$\geq$4\,A (BIS)};
 \draw[sg] (cam) -- (pi); \draw[sg] (mic) -- (pi); \draw[sg, <->] (modem) -- (pi); \draw[sg] (sens) -- (pi);
-\draw[sg] (pi) -- (leds); \draw[sg] (pi) -- (drv); \draw[sg] (opto) -- (pi);
+\draw[sg] (pi) -- (leds); \draw[sg] (opto) -- (pi);
 \draw[pw] (ad) -- (ups); \draw[pw] (ups) -- (buck); \draw[pw] (buck) -- node[left, font=\tiny]{USB-C 5\,A} (pi);
-\draw[pw] (ups.north east) -- (key.south west); \draw[pw] (key) -- (siren); \draw[sg] (drv) -- node[above, font=\tiny]{NO contact} (siren);
 \end{tikzpicture}}
 \caption{Hardware block diagram of the Raspberry~Pi~5 unit (red: power, blue: signals)}
 \label{fig:hwblock}
