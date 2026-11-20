@@ -597,16 +597,19 @@ The Pi is back on the home Wi-Fi (192.168.29.9) on a proper supply (EXT5V
 
 ## 3. Git history
 
-| Branch | Head | Contents |
+| Branch or tag | Head | Contents |
 |---|---|---|
-| `main` | `2867bdf` on GitHub (`origin/main`, pushed 2026-11-19) | the published state: the integrated product (device + Portal + SOS + Pi I/O + clip engine), the 2026-10-28 sweep and 2026-11-01 clean-up, the new React frontend (D22, M12), body re-ID and the v5 room heads (D24), docs and ROADMAP.md (previous heads `594d91b`, `eb82ff5`) |
-| `sentrix/frontend-v2` | `2867bdf` (= `origin/main`) | the new frontend (M12): `frontend/`, Portal `/api/v2`, the device API additions, the switch-over of both apps, merged with `main` (`de01c1f`) |
-| `sentrix/baseline-v3` | `d8629eb` | staged rewrite committed (`9e0037a`) + evaluation harness (`05a04fe`) + doc fixes |
-| `sentrix/finetuned-v3` | `66accb9` | baseline + scene integration + training tooling + fine-tuned v3 models |
-| `sentrix/custom-v4` | `3772acf` | baseline + scene integration + training tooling + new DINOv2/YOLO11n models |
-| `sentrix/e2e-repair` | `eb82ff5` | custom-v4 + M1–M5 + fresh-clone setup + docs/8 (Pi plan); the state before M10 |
-| `sentrix/portal` | `594d91b` (= `main`) + M11 (`30074ab`, `6f15ae3`, `fd1bc88`, `1a85f28`, `565c23f`) + M11b review fixes (`ba0bf17`, `819619a` and this hash note; `git log -1 sentrix/portal`); **not pushed** | main + Portal/SOS foundation + the eight tracks + integration, demo tools, e2e tests, live smoke fixes, review fixes, clean-up (M10), multimodal fusion and the talk-down speaker (M11; commits below) |
-| `wip/hw`, `wip/clip`, `wip/ch`, `wip/sos`, `wip/web`, `wip/acct`, `wip/link`, `wip/model` | `4418de3`, `cc53443`, `f19e056`, `0b703b6`, `c340f29`, `e9d251c`, `24b897e`, `3bfb441` | the track branches, all merged into `sentrix/portal`; local only, not pushed |
+| `main` (GitHub, protected since 2026-11-20) | the merge of the integration pull request (2026-11-20; `git log -1 origin/main`) | everything: the integrated product, the new React frontend (D22, M12), body re-ID (D24), room calibration (D23), the v5 room models, the end-semester report and poster, the team workflow (`.github/CODEOWNERS`, `.github/workflows/checks.yml`, `CONTRIBUTING.md`). Changes only through reviewed pull requests; every merge redeploys the Render Portal |
+| `sentrix/portal` (local; the shared checkout `G:\Sentrix`) | working branch | fully merged into `main` on 2026-11-20 (it had carried M11, the 10-28 sweep, D23 and the report); new work goes up as a pull request after `git fetch` and a merge of `origin/main`. The GitHub branch of that name (`48142c0`, 2026-10-15) was deleted: `main` contains it |
+| `deploy/main-2026-11-18` (local; worktree `deploy-main`) | `fa8de16` | the models session's branch (D24, v5 models, Pi runtime notes, delivery fixes); fully merged into `main` |
+| tags `sentrix/baseline-v3`, `sentrix/finetuned-v3`, `sentrix/custom-v4`, `sentrix/e2e-repair` | `d8629eb`, `66accb9`, `3772acf`, `eb82ff5` | the configurations docs/6 compares and the state before M10, kept as tags (branches until 2026-11-20). Only `sentrix/finetuned-v3` holds anything `main` lacks: the fine-tuned v3 models (`models/v4_finetuned/`) the evaluation did not choose |
+
+Removed on 2026-11-20, all contained in `main`: the track branches `wip/hw`,
+`wip/clip`, `wip/ch`, `wip/sos`, `wip/web`, `wip/acct`, `wip/link`,
+`wip/model`, the workflow branches `worktree-wf_59ce1511-338-*`,
+`sentrix/frontend-v2` (M12) and the three `claude/*` fix branches of
+2026-10-28 (their commits reached `main` as `fc5faeb`, `95b9688`, `d290c1c`,
+with `ceca12f` putting `LinkHub._reapply` under the device lock).
 
 Published to `github.com/mehulperimal14/Sentrix` on 2026-10-10. Before publishing,
 history was rewritten once: private runtime data that earlier commits had
