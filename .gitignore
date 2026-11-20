@@ -104,7 +104,7 @@ training/runs/custom_eval/*
 *.sqlite3
 *.jsonl
 # training recordings (D20) downloaded into the working tree: raw video and
-# sound of real people, never committed. The tracked siren sound stays tracked.
+# sound of real people, never committed.
 *.avi
 *.mkv
 *.wav
