@@ -70,10 +70,18 @@ def model_path(*parts: str) -> Path:
     return MODELS_DIR.joinpath(*parts)
 
 
+def weights_override(value: str) -> Path:
+    """A weights file named in an env override (``SENTRIX_*_WEIGHTS``): a
+    relative path is taken from the repository, as ``pi.env`` writes it, never
+    from the current directory, so tools started elsewhere load the same file."""
+    path = Path(value).expanduser()
+    return path if path.is_absolute() else ROOT_DIR / path
+
+
 __all__ = [
     "ROOT_DIR", "PACKAGE_DIR", "MODELS_DIR", "TRAINING_DIR", "DOCS_DIR",
     "WEB_DIR", "STATIC_DIR",
     "VAR_DIR", "EVIDENCE_DIR", "SNAPSHOT_DIR", "EVENTLOG_DIR", "FACES_DIR",
     "LOG_DIR", "CALIBRATION_DIR", "DB_PATH", "LINK_DIR", "PORTAL_VAR_DIR",
-    "RECORDINGS_DIR", "ensure_runtime_dirs", "model_path",
+    "RECORDINGS_DIR", "ensure_runtime_dirs", "model_path", "weights_override",
 ]

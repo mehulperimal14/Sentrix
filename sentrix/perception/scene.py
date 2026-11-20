@@ -68,7 +68,7 @@ from typing import Any
 import numpy as np
 
 from sentrix.config import settings
-from sentrix.paths import CALIBRATION_DIR, model_path
+from sentrix.paths import CALIBRATION_DIR, model_path, weights_override
 from sentrix.utils.logging import get_logger, timed
 
 log = get_logger("scene")
@@ -188,7 +188,7 @@ def _cached_timm_weights(name: str) -> str | None:
 def _resolve() -> Path | None:
     override = os.getenv("SENTRIX_SCENE_WEIGHTS", "").strip()
     if override:
-        path = Path(override)
+        path = weights_override(override)
         return path if path.exists() else None
     for name in _WEIGHTS:
         path = model_path(*name.split("/"))

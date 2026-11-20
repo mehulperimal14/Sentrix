@@ -193,6 +193,18 @@ def test_detector_weights_can_be_pinned_per_role(monkeypatch, tmp_path):
     assert detector._resolve(detector._PERSON_WEIGHTS).name == "yolov8n.pt"
 
 
+def test_relative_weights_overrides_are_taken_from_the_repository(monkeypatch, tmp_path):
+    """pi.env writes ``models/v4_custom/...``; a tool started from another
+    directory must load that file, not look for it under its own cwd."""
+    from sentrix.paths import ROOT_DIR
+    from sentrix.perception import detector, scene
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("SENTRIX_FIRE_WEIGHTS", "models/v4_custom/fire_detector_custom_v4.pt")
+    assert detector._resolve(detector._FIRE_WEIGHTS) ==         ROOT_DIR / "models" / "v4_custom" / "fire_detector_custom_v4.pt"
+    monkeypatch.setenv("SENTRIX_SCENE_WEIGHTS", "models/v4_custom/scene_classifier_custom_v4.pt")
+    assert scene._resolve() == ROOT_DIR / "models" / "v4_custom" / "scene_classifier_custom_v4.pt"
+
+
 def test_knife_videos_come_from_segment_notes():
     sys.path.insert(0, str(ROOT / "training" / "custom"))
     import annotate_boxes
