@@ -49,7 +49,10 @@ class TestDeviceGuard:
             sources.build_source("1")
 
     def test_microphone_is_blocked(self):
-        sd = pytest.importorskip("sounddevice")
+        try:
+            import sounddevice as sd
+        except Exception as exc:      # no PortAudio (a headless CI runner): nothing to block
+            pytest.skip(f"sounddevice unavailable: {exc}")
         with pytest.raises(RuntimeError, match="device guard"):
             sd.rec(10, samplerate=16000, channels=1)
 
