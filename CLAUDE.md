@@ -608,6 +608,17 @@ The Pi is back on the home Wi-Fi (192.168.29.9) on a proper supply (EXT5V
   (`train_detector.py --extra`) failed its bars set in advance (plume
   screenshots 0.37 / 0.02 against 0.50; public fire mAP50 0.448 -> 0.391);
   not shipped (`training/runs/custom/detector/room_fire_v6/RESULT.md`).
+  **05:19 IST: the Pi runs the v5 room scene model** (owner): `SENTRIX_SCENE_WEIGHTS=
+  models/v5_room/scene_classifier_room_v5.pt` in its `.env` (backup
+  `.env.bak-20261121-051903`), `scene_classifier_room_v5.onnx` exported on the Pi
+  by `tools/export_models.py --scene` (parity: logit error 2.1e-5, probability
+  4e-6). The v4 room bars (weapon 0.78, fire 0.75; robbery at the 0.60 floor)
+  apply, flagged stale, until `tools/calibrate_room.py` has 2+ quiet hours of v5
+  scores; then a staged masked theft is checked with `--check` (D26, #37 needs
+  `SENTRIX_ROBBERY_ALARM=1` on the Pi after it merges). `deploy/pi5/pi.env`
+  keeps the default (v4) until that calibration. 05:21 IST: the Pi on main
+  `b554887` (#37, #38) with `SENTRIX_ROBBERY_ALARM=1` in its `.env`; read as the
+  service reads it, robbery is an alarm class and person-gated.
 * **The Pi stays on ONNX.** NCNN is about twice as fast there only with
   ncnn's default fp16 arithmetic, which changes the person head's label set on
   4-6 % of frames (the weapon person gate); in fp32 it equals ONNX and is no
