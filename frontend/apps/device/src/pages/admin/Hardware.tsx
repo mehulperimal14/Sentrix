@@ -1,21 +1,12 @@
-import { ApiError } from '@sentrix/api';
-import { Button, Check, Spinner, Strip, formatDuration, useToast } from '@sentrix/ui';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { Spinner, Strip, formatDuration } from '@sentrix/ui';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '../../lib/api';
 import { KV, Panel, yesNo } from './ui';
 
-/** The unit itself: telemetry, inputs and outputs, the siren test. */
+/** The unit itself: telemetry, inputs and outputs (no siren since D25). */
 export default function Hardware() {
-  const toast = useToast();
-  const [atUnit, setAtUnit] = useState(false);
   const node = useQuery({ queryKey: ['node'], queryFn: () => api.get<any>('/api/node'), refetchInterval: 5000 });
   const health = useQuery({ queryKey: ['health'], queryFn: () => api.get<any>('/api/health'), refetchInterval: 10_000 });
-  const siren = useMutation({
-    mutationFn: () => api.post('/api/node/siren-test', {}),
-    onSuccess: () => toast('The siren sounded for 1 second.'),
-    onError: (e) => toast(e instanceof ApiError ? (e.code === 'rate_limited' ? 'One test a minute: wait and try again.' : e.message) : 'The siren test failed.'),
-  });
   if (node.isLoading) return <Spinner />;
   if (node.isError) return <Strip tone="warn">The hardware status is not available.</Strip>;
   const n = node.data ?? {};
@@ -48,21 +39,16 @@ export default function Hardware() {
             ]}
           />
         </Panel>
-        <Panel title="Lights, siren and sensors">
+        <Panel title="Lights and sensors">
           <KV
             rows={[
               ['Green light', leds.green ?? '—'],
               ['Amber light', leds.amber ?? '—'],
               ['Red light', leds.red ?? '—'],
-              ['Siren', n.siren ? `${n.siren.backend ?? 'siren'}, ${n.siren_armed ? 'armed' : 'disarmed'}, ${n.siren.active ? 'sounding' : 'off'}` : '—'],
               ['Motion (PIR)', yesNo(n.pir)],
               ['Door', yesNo(n.door)],
             ]}
           />
-          <Check id="at-unit" checked={atUnit} onChange={setAtUnit} label="I am at the unit and expect a 1-second siren" />
-          <Button variant="dark" disabled={!atUnit} busy={siren.isPending} onClick={() => siren.mutate()}>
-            Test the siren (1 s)
-          </Button>
         </Panel>
         <Panel title="Services" className="md:col-span-2 xl:col-span-3">
           <KV

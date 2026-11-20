@@ -151,16 +151,6 @@ class FakeReID:
         pass
 
 
-class FakeSiren:
-    name = "fake"
-
-    def __init__(self) -> None:
-        self.activations = 0
-
-    def activate(self) -> None:
-        self.activations += 1
-
-
 def make_pipeline(tmp_path, detector=None, scene=None, identity=None, violence=None,
                   audio=None):
     """A ``Pipeline`` with fake perception and recorded side effects."""
@@ -182,7 +172,6 @@ def make_pipeline(tmp_path, detector=None, scene=None, identity=None, violence=N
     p.tci = TCIEngine()
     p.policy = ClipPolicy()
     p.incidents = IncidentManager()
-    p.siren = FakeSiren()
     p.events = EventLog(directory=tmp_path, source="test")
     p.session_id = p.events.session_id
     p.sos = NullSosService()

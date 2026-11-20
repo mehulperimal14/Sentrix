@@ -11,17 +11,16 @@ Pins (roadmap v2; ``settings.gpio``):
 ======  =========================  ===========================================
 GPIO    Device                     Meaning
 ======  =========================  ===========================================
-17      siren relay (NPN driver)   ``sentrix.io.actuators.GpioSiren``, not here
 5/12/13 green / amber / red LED    see :func:`led_patterns`
 23      PIR (HC-SR50x, 3.3 V out)  motion: pin high
 24      door reed to GND, pull-up  contact closed = door closed
 16      PC817 mains sense, pull-up output low while mains is present
-opt.    siren arming key, pull-up  closed to GND = siren line armed
 opt.    enclosure lid, pull-up     closed to GND = lid shut (open = tamper)
 ======  =========================  ===========================================
 
-The device has no buzzer and no speaker (removed from the hardware on
-2026-10-27, D19): the LEDs, the Local Console and the siren are its outputs.
+The device has no buzzer and no speaker (removed on 2026-10-27, D19) and no
+siren (removed on 2026-11-20, D25; GPIO17 and GPIO26 are free): the LEDs, the
+Local Console and Portal, and the alert channels are its outputs.
 
 The service (``build_service``, flag ``SENTRIX_GPIO_ENABLED``) owns these
 devices. One thread polls the live state five times a second and turns it
@@ -35,7 +34,7 @@ return and tamper, are published to the Portal as ``node.alert`` (docs/7
 
 Pin factory (``SENTRIX_GPIO_PIN_FACTORY``): ``""`` auto = lgpio on a
 Raspberry Pi, mock elsewhere; ``lgpio``; ``mock``. One factory instance per
-process (:func:`shared_pin_factory`) serves the siren relay and this service.
+process (:func:`shared_pin_factory`) serves this service.
 A Pi whose lgpio does not load (``python3-lgpio`` missing, or a venv made
 without ``--system-site-packages``) gets mock pins *and* an error that
 ``/api/health``, the Node page and ``doctor`` show — never silent.
@@ -111,7 +110,7 @@ def resolve_pin_factory(name: str | None = None, *,
     except Exception as exc:
         error = (f"lgpio unavailable ({exc}); install python3-lgpio and create the "
                  f"venv with --system-site-packages")
-        log.error("GPIO: %s — using mock pins, the siren and LEDs are NOT connected", error)
+        log.error("GPIO: %s — using mock pins, the LEDs are NOT connected", error)
         return PinFactoryInfo(_mock_factory(), "mock", False, error)
 
 
@@ -253,9 +252,6 @@ def input_specs(cfg: Any) -> list[InputSpec]:
                   lambda active: bool(active)),
     ]
     specs = [spec for spec in specs if spec.name in fitted]
-    arm = tunables.siren_arm_pin()
-    if arm is not None:
-        specs.append(InputSpec("siren_armed", arm, True, lambda active: bool(active)))
     lid = tunables.tamper_pin()
     if lid is not None:
         specs.append(InputSpec("tamper", lid, True, lambda active: not active))
@@ -265,8 +261,8 @@ def input_specs(cfg: Any) -> list[InputSpec]:
 def pin_conflicts(cfg: Any) -> list[str]:
     """Pins assigned to more than one function (a wiring/config error)."""
     used: dict[int, list[str]] = {}
-    outputs = {"siren": cfg.siren_pin, "led_green": cfg.led_green_pin,
-               "led_amber": cfg.led_amber_pin, "led_red": cfg.led_red_pin}
+    outputs = {"led_green": cfg.led_green_pin, "led_amber": cfg.led_amber_pin,
+               "led_red": cfg.led_red_pin}
     for name, pin in outputs.items():
         used.setdefault(int(pin), []).append(name)
     for spec in input_specs(cfg):
@@ -346,10 +342,6 @@ def live_pipeline() -> Any | None:
     return getattr(engine, "_pipeline", None) if engine else None
 
 
-def live_siren() -> Any | None:
-    return getattr(live_pipeline(), "siren", None)
-
-
 def _live_event_log() -> Any | None:
     return getattr(live_pipeline(), "events", None)
 
@@ -369,8 +361,8 @@ class GpioService:
     """LEDs and inputs (docs/7 §3.6 service; name ``gpio``).
 
     ``pin_factory`` overrides the shared one (tests pass a ``MockFactory``);
-    ``audit``/``publish``/``timer_factory``/``siren`` replace the event log,
-    the link outbox, the debounce timers and the pipeline's siren in tests;
+    ``audit``/``publish``/``timer_factory`` replace the event log, the link
+    outbox and the debounce timers in tests;
     ``run_thread=False`` leaves the loop to the caller: ``poll_once()`` is one
     iteration.
     """
@@ -381,7 +373,6 @@ class GpioService:
                  audit: Callable[..., None] | None = None,
                  publish: Callable[[str, dict], None] | None = None,
                  timer_factory: Callable[..., Any] | None = None,
-                 siren: Callable[[], Any] | None = None,
                  clock: Callable[[], float] = time.monotonic,
                  run_thread: bool = True) -> None:
         self.ctx = ctx
@@ -395,7 +386,6 @@ class GpioService:
         self._audit = audit or default_audit
         self._publish = publish or default_publish
         self._timer_factory = timer_factory
-        self._siren = siren or live_siren
         self._clock = clock
         self._run_thread = run_thread
         self._lock = threading.RLock()
@@ -421,7 +411,6 @@ class GpioService:
             self._started = True
             self._stop.clear()
             self._open_devices()
-            self._register_arming()
         self._initial_alerts()
         self._publish_block(force=True)
         if self._run_thread:
@@ -440,8 +429,6 @@ class GpioService:
             if not self._started:
                 return
             self._started = False
-            from sentrix.io import actuators
-            actuators.clear_arming_source(self.siren_armed)
             for debouncer in self._debouncers.values():
                 debouncer.cancel()
             for device in [*self.leds.values(), *self.inputs.values()]:
@@ -493,16 +480,6 @@ class GpioService:
             device.when_deactivated = debouncer.poke
         for name, error in self.errors.items():
             log.error("GPIO %s unavailable: %s", name, error)
-
-    def _register_arming(self) -> None:
-        if "siren_armed" in self.inputs:
-            from sentrix.io import actuators
-            actuators.set_arming_source(self.siren_armed)
-
-    def siren_armed(self) -> bool | None:
-        """The arming key's position (None without an arming input)."""
-        with self._lock:
-            return self.values.get("siren_armed")
 
     # ── inputs ────────────────────────────────────────────────────────────────
     def _initial_alerts(self) -> None:
@@ -600,7 +577,6 @@ class GpioService:
             if not self._started:
                 return
             self.apply_patterns(led_patterns(live, setup_mode=self.ctx.settings.web.setup_mode))
-        self._release_overdue_siren()
         self._publish_block()
 
     def _run(self) -> None:
@@ -612,37 +588,20 @@ class GpioService:
                 log.error("GPIO loop: %s", exc)
             self._stop.wait(self.poll_seconds)
 
-    def _release_overdue_siren(self) -> None:
-        """Second line behind the siren's own release timer."""
-        siren = self._siren()
-        check = getattr(siren, "release_if_overdue", None)
-        if check is not None:
-            try:
-                check()
-            except Exception as exc:
-                log.error("siren release check failed: %s", exc)
-
     # ── the node block ────────────────────────────────────────────────────────
     def snapshot(self) -> dict[str, Any]:
         """The ``gpio`` sub-block of ``state.node`` (docs/7 §9.2)."""
-        siren = self._siren()
-        status = getattr(siren, "status", None)
-        siren_block = status() if callable(status) else (
-            None if siren is None else {"backend": siren.name, "real": siren.is_real})
         with self._lock:
             return {
                 "pin_factory": self.factory_info.kind, "real": self.factory_info.real,
-                "siren": siren_block,
                 "leds": {c: self.patterns.get(c) for c in ("green", "amber", "red")},
                 "pir": self.values.get("pir"), "door": self.values.get("door"),
                 "mains": self.values.get("mains"),
-                "siren_armed": self.values.get("siren_armed"),
                 "tamper": self.values.get("tamper"),
                 "errors": dict(self.errors) or None,
             }
 
     def _publish_block(self, force: bool = False) -> None:
-        from sentrix.io import actuators
         from sentrix.io.node import merge_node_block
         block = self.snapshot()
         with self._lock:
@@ -650,8 +609,7 @@ class GpioService:
                 return
             self._last_block = block
         merge_node_block(self.ctx.state, gpio=block, pir=block["pir"], door=block["door"],
-                         mains=block["mains"], tamper=block["tamper"],
-                         siren_armed=actuators.siren_armed())
+                         mains=block["mains"], tamper=block["tamper"])
 
 
 def _kind_of(factory: Any) -> str:
@@ -685,7 +643,7 @@ def preflight(settings: Any) -> list[dict[str, str]]:
         has_lgpio = importlib.util.find_spec("lgpio") is not None
         if requested == "mock":
             rows.append({"status": "warn", "name": "pin factory",
-                         "detail": f"mock on {model}: the siren and LEDs are NOT driven"})
+                         "detail": f"mock on {model}: the LEDs are NOT driven"})
         else:
             rows.append({"status": "ok" if has_lgpio else "fail", "name": "pin factory",
                          "detail": f"lgpio on {model}" if has_lgpio else
@@ -694,16 +652,9 @@ def preflight(settings: Any) -> list[dict[str, str]]:
     conflicts = pin_conflicts(cfg)
     rows.append({"status": "fail" if conflicts else "ok", "name": "pin map",
                  "detail": "; ".join(conflicts) if conflicts else
-                 f"siren {cfg.siren_pin}, LEDs {cfg.led_green_pin}/{cfg.led_amber_pin}/"
+                 f"LEDs {cfg.led_green_pin}/{cfg.led_amber_pin}/"
                  f"{cfg.led_red_pin}, PIR {cfg.pir_pin}, door "
                  f"{cfg.door_pin}, mains {cfg.mains_sense_pin}"})
-    arm = tunables.siren_arm_pin()
-    armed = tunables.siren_armed_flag()
-    rows.append({"status": "ok" if (arm is not None or armed) else "warn",
-                 "name": "siren arming",
-                 "detail": f"key switch on GPIO{arm}" if arm is not None else
-                 ("no arming input; SENTRIX_SIREN_ARMED=1" if armed else
-                  "SENTRIX_SIREN_ARMED=0: siren tests are refused")})
     if not settings.gpio.enabled:
         rows.append({"status": "ok", "name": "service", "detail":
                      "off (SENTRIX_GPIO_ENABLED=0): no LEDs or inputs"})

@@ -64,8 +64,8 @@ class TestHardwareConfig:
     def test_fields_exist_with_the_documented_defaults(self):
         from sentrix.config import settings
         gpio, node = settings.gpio, settings.node
-        assert gpio.siren_max_on_seconds == 90.0 and gpio.siren_arm_pin is None
-        assert gpio.siren_armed is True and gpio.tamper_pin is None
+        assert gpio.tamper_pin is None
+        assert not any("siren" in name for name in vars(gpio)), "no siren (D25)"
         assert node.bme280 is False and node.dht22 is False
         assert (node.picamera_main, node.picamera_lores) == ("1280x720", "640x480")
 
@@ -73,14 +73,12 @@ class TestHardwareConfig:
         from sentrix.config import settings
         from sentrix.io import tunables
         import sentrix.config as config_module
-        monkeypatch.delenv("SENTRIX_SIREN_MAX_ON_SECONDS", raising=False)
-        patched = replace(settings, gpio=replace(settings.gpio, siren_max_on_seconds=30.0,
-                                                 tamper_pin=22))
+        monkeypatch.delenv("SENTRIX_TAMPER_PIN", raising=False)
+        patched = replace(settings, gpio=replace(settings.gpio, tamper_pin=22))
         monkeypatch.setattr(config_module, "settings", patched)
-        assert tunables.siren_max_on_seconds() == 30.0 and tunables.tamper_pin() == 22
-        monkeypatch.setenv("SENTRIX_SIREN_MAX_ON_SECONDS", "12")
+        assert tunables.tamper_pin() == 22
         monkeypatch.setenv("SENTRIX_TAMPER_PIN", "99")          # invalid -> no pin
-        assert tunables.siren_max_on_seconds() == 12.0 and tunables.tamper_pin() is None
+        assert tunables.tamper_pin() is None
 
     def test_live_loop_alive(self, monkeypatch):
         import sentrix.app as app_module

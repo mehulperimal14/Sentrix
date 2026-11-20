@@ -231,8 +231,6 @@ class TestSosOwnsItsIncidents:
         fake.submitted = []
         fake._submit = lambda func, *a, **k: fake.submitted.append(func.__name__)
         fake._evidence_context = lambda result: {}
-        fake.siren = SimpleNamespace(activated=0)
-        fake.siren.activate = lambda: setattr(fake.siren, "activated", fake.siren.activated + 1)
         return fake
 
     @staticmethod
@@ -253,7 +251,7 @@ class TestSosOwnsItsIncidents:
         assert "sos:weapon" in incident.actions
         for legacy in ("send_sms", "_create_dispatch", "make_call"):
             assert legacy not in fake.submitted, legacy
-        assert fake.siren.activated == 1, "the siren is not a message: it stays"
+        assert not hasattr(fake, "siren"), "no siren since D25"
 
     def test_without_sos_the_legacy_path_is_unchanged(self):
         import numpy as np
@@ -1005,18 +1003,20 @@ class TestLifespanOrder:
         assert seen_extras["app"] is probe and seen_extras["loop"] is not None
 
 
-# ── siren test ────────────────────────────────────────────────────────────────
-class TestSirenTest:
-    def test_one_shared_limiter(self):
-        from sentrix.io.actuators import ConsoleSiren, siren_test
-        calls = []
-        siren = ConsoleSiren()
-        siren.activate = lambda duration=None: calls.append(duration)
-        first = siren_test(siren, actor=Actor.device_admin())
-        assert first["ok"] and first["seconds"] == 1.0 and calls == [1.0]
-        second = siren_test(siren, actor=OWNER)
-        assert second["code"] == "rate_limited" and second["retry_after"] > 0
-        assert calls == [1.0]
+# ── no siren (D25) ────────────────────────────────────────────────────────────
+class TestNoSiren:
+    def test_the_siren_left_the_product(self):
+        import importlib.util
+        from sentrix.config import settings
+        from sentrix.link import protocol
+        from sentrix.link.client import CAPABILITIES
+        from sentrix.pipeline.escalation import plan_for
+        assert importlib.util.find_spec("sentrix.io.actuators") is None
+        assert importlib.util.find_spec("sentrix.io.self_output") is None
+        assert "siren.test" not in protocol.COMMANDS and "siren" not in CAPABILITIES
+        assert not hasattr(plan_for(5), "siren")
+        assert not any("siren" in name for name in vars(settings.gpio))
+        assert not any("siren" in name for name in vars(settings.alert))
 
 
 # ── services: preflight hook for the doctor ───────────────────────────────────

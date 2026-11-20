@@ -7,7 +7,7 @@
 #
 #   --user NAME        service user (default: sentrix)
 #   --boot-config      append config.txt.snippet to /boot/firmware/config.txt
-#                      (siren held off at boot, RTC charging, watchdog; reboot)
+#                      (RTC charging, watchdog, camera, I2C; reboot)
 #   --ufw [CIDR]       apply the LAN-only firewall (default 192.168.0.0/16)
 #   --modem-apn APN    install the ModemManager 4G profile (route metric 700)
 #   --modem-ecm [IF]   install the ECM/RNDIS 4G dongle profile (default usb0)
@@ -69,7 +69,6 @@ run()  { if [ "$DRY" = 1 ]; then printf '+ %s\n' "$*"; else "$@"; fi; }
 # install_file SRC DEST MODE: copy with @APP_DIR@/@USER@/... filled in.
 render() {
     sed -e "s|@APP_DIR@|$APP_DIR|g" -e "s|@USER@|$SERVICE_USER|g" \
-        -e "s|@SIREN_PIN@|$SIREN_PIN|g" -e "s|@SIREN_OFF@|$SIREN_OFF|g" \
         -e "s|@APN@|${MODEM_APN}|g" -e "s|@IFNAME@|${MODEM_ECM}|g" "$1"
 }
 install_file() {
@@ -104,9 +103,9 @@ echo "SENTRIX Pi setup: $MODEL, app in $APP_DIR, service user $SERVICE_USER"
 # ── 1. apt ────────────────────────────────────────────────────────────────────
 REQUIRED_PKGS="python3-venv python3-pip python3-picamera2 python3-libcamera python3-lgpio \
 libportaudio2 network-manager ufw alsa-utils ffmpeg"
-# alsa-utils: arecord -l to find the USB microphone (and recording sessions),
-# aplay for the sound-file siren; ffmpeg: replaying a video's soundtrack.
-# No espeak-ng: the device has no talk-down speaker (D19).
+# alsa-utils: arecord -l to find the USB microphone (and recording sessions);
+# ffmpeg: replaying a video's soundtrack and muxing recordings. The device
+# makes no sound: no siren (D25), no buzzer or talk-down speaker (D19).
 OPTIONAL_PKGS="rpicam-apps-lite raspi-utils i2c-tools"
 if [ "$APT" = 1 ]; then
     say "apt packages"
@@ -171,12 +170,6 @@ run chown -R "$SERVICE_USER:$SERVICE_USER" var
 run chown "$SERVICE_USER:$SERVICE_USER" .env
 run chmod 600 .env
 
-SIREN_PIN=17
-SIREN_OFF=dl
-if grep -qE '^SENTRIX_SIREN_ACTIVE_HIGH=(0|false|no|off)' .env 2>/dev/null; then
-    SIREN_OFF=dh
-fi
-
 # ── 5. systemd, journald, watchdog ────────────────────────────────────────────
 if [ "$SERVICE" = 1 ]; then
     say "systemd unit, journald caps, hardware watchdog"
@@ -215,10 +208,10 @@ if [ "$BOOT_CONFIG" = 1 ]; then
     if grep -q '>>> SENTRIX >>>' "$CONFIG" 2>/dev/null; then
         echo "SENTRIX block already in $CONFIG"
     elif [ "$DRY" = 1 ]; then
-        echo "+ append config.txt.snippet (gpio=$SIREN_PIN=op,$SIREN_OFF) to $CONFIG"
+        echo "+ append config.txt.snippet to $CONFIG"
     else
         cp "$CONFIG" "$CONFIG.sentrix-backup.$(date +%s)"
-        sed -e "s|^gpio=17=op,dl|gpio=$SIREN_PIN=op,$SIREN_OFF|" "$HERE/config.txt.snippet" >> "$CONFIG"
+        cat "$HERE/config.txt.snippet" >> "$CONFIG"
         echo "appended to $CONFIG (backup next to it); reboot to apply"
     fi
 fi
@@ -229,7 +222,6 @@ fi
 
 # ── 8. checks and next steps ──────────────────────────────────────────────────
 say "checks"
-command -v pinctrl  >/dev/null || warn "pinctrl missing: the unit cannot force the siren pin off after a crash (apt install raspi-utils)"
 command -v vcgencmd >/dev/null || warn "vcgencmd missing: no throttle or EXT5V readings (apt install raspi-utils)"
 if command -v rpi-eeprom-config >/dev/null; then
     if ! rpi-eeprom-config 2>/dev/null | grep -q '^PSU_MAX_CURRENT=5000'; then
@@ -242,7 +234,6 @@ fi
 cat <<EOF
 
 Done. Next (deploy/pi5/README.md):
-  1. Relay test with an LED in place of the siren BEFORE connecting the siren.
-  2. sudo -u $SERVICE_USER $APP_DIR/.venv/bin/python $APP_DIR/tools/doctor.py
-  3. sudo systemctl start sentrix && journalctl -u sentrix -f
+  1. sudo -u $SERVICE_USER $APP_DIR/.venv/bin/python $APP_DIR/tools/doctor.py
+  2. sudo systemctl start sentrix && journalctl -u sentrix -f
 EOF

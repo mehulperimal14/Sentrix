@@ -46,7 +46,7 @@ LINK_IDLE: dict[str, Any] = {
 NODE_IDLE: dict[str, Any] = {
     "profile": "laptop", "cpu_temp_c": None, "throttled": None,
     "under_voltage": None, "ext5v_v": None, "mains": None, "pir": None,
-    "door": None, "siren_armed": None, "gpio": None,
+    "door": None, "gpio": None,
     "uptime_s": None, "updated_at": None,
     # written by sentrix.io.node / gpio once they run (same shape idle)
     "temp_state": None, "throttled_raw": None, "throttle_flags": None,

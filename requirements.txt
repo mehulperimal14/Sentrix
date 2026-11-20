@@ -72,7 +72,7 @@ pyotp>=2.9.0                  # TOTP for admin and Desk operator accounts
 qrcode[pil]>=7.4.2            # device labels and the claim QR
 
 # ── Raspberry Pi hardware (pure Python; mock pins on a laptop) ───────────────
-gpiozero>=2.0.1               # siren relay, LEDs, PIR, door, mains-sense
+gpiozero>=2.0.1               # status LEDs, PIR, door, mains-sense
 
 # ── development ───────────────────────────────────────────────────────────────
 pytest>=8.0.0

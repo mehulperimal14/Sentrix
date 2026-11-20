@@ -6,8 +6,8 @@ runs. What the harness changes is *only* what must not happen during a
 measurement:
 
 * **No side effects.** ``_act`` and ``_submit`` are replaced with no-ops, so a
-  replay can never write evidence, save incident rows, sound the siren or send
-  an SMS — ``.env`` in a developer checkout carries live Twilio credentials.
+  replay can never write evidence, save incident rows, open a dispatch package
+  or send an SMS — ``.env`` in a developer checkout carries live Twilio credentials.
 * **Identity is neutral.** Nobody in the dataset footage is enrolled, and the
   dataset has no authorisation labels. A face match against whoever happens to
   be enrolled on this machine would floor the TCI and hide the threat signal
@@ -94,7 +94,7 @@ def build_eval_pipeline(mode: str = "tick"):
     pipeline = Pipeline(source=_NullSource(), enable_audio=False,
                         event_source="eval")
     pipeline.identity = _UnknownIdentity()
-    pipeline._act = _noop            # snapshots, evidence, SMS, siren, dispatch, call
+    pipeline._act = _noop            # snapshots, evidence, SMS, dispatch, call
     pipeline._submit = _noop         # background writes, incl. incident DB rows
     pipeline._save_open_incident = _noop     # the shutdown save as well
     pipeline.sos = NullSosService()          # never opens an assistance request

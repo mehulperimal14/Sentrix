@@ -202,7 +202,6 @@ class TestPipelineClaims:
             func(*args, **kw) if getattr(func, "__name__", "") in ("send_sms", "make_call")
             else None)
         fake._evidence_context = lambda result: {}
-        fake.siren = SimpleNamespace(activate=lambda: None)
         return fake
 
     @staticmethod

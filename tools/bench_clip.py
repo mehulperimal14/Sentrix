@@ -9,7 +9,7 @@ budget: torch, OpenCV and onnxruntime get ``--threads`` threads each, and
 physical core where the machine has SMT.
 
 It never opens a camera or a microphone, every side effect is stubbed (no
-evidence, incident rows, SMS, siren or dispatch), the event log goes to a
+evidence, incident rows, SMS or dispatch), the event log goes to a
 temporary folder, and it refuses to run with any background service or a
 real SOS service (``services.assert_measurement_safe``).
 
@@ -114,7 +114,7 @@ def main(argv: list[str] | None = None) -> int:
     video = args.video or videos_dir() / "7.mov"
     camera = VideoCamera(video)
     pipeline = Pipeline(source=camera, enable_audio=False, event_source="bench")
-    pipeline._act = noop                 # snapshots, evidence, SMS, siren, dispatch
+    pipeline._act = noop                 # snapshots, evidence, SMS, dispatch
     pipeline._submit = noop              # incident rows, clip bundles, other writes
     pipeline._save_open_incident = noop  # and the synchronous save at shutdown
     assert_measurement_safe(pipeline)

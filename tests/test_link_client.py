@@ -313,7 +313,7 @@ class TestSession:
                                                           OWNER_ACTOR, timeout=5))
         assert ping["ok"] and ping["result"]["pong"] and ping["command_id"]
         refused = run_on(rig.service._loop, hub.send_command(
-            rig.seeded.device_id, "siren.test", {}, Actor("member", id="m").to_dict()))
+            rig.seeded.device_id, "token.rotate", {}, Actor("member", id="m").to_dict()))
         assert refused["code"] == "forbidden_role" and refused["status"] == 403
         rig.service.stop()
         wait_for(lambda: not online(rig), what="offline")

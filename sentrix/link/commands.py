@@ -9,8 +9,7 @@ store access, no PIN handling (the SOS service checks PINs against the
 profile's hashes and never logs them; neither does this module).
 
 Allowlist (``protocol.COMMANDS``); anything else is ``unknown_command``. No
-command runs a shell or code, turns the siren off or touches the evidence
-vault.
+command runs a shell or code or touches the evidence vault.
 
 ==================== =============================================================
 ``sos.respond``      owner/member; a contact may only ``approve`` (the SOS service
@@ -18,7 +17,6 @@ vault.
 ``sos.update``       cloud, operator (Desk) or contact; ``SOS_UPDATE_EVENTS`` only
 ``verdict.set``      owner/member; FALSE goes through ``sos.false_verdict`` (PIN)
 ``mode.set``         owner/member; disarming needs the SOS PIN (``sos.set_mode``)
-``siren.test``       owner with a step-up <= 300 s; 1 s, once a minute process-wide
 ``sms.send``         owner, Desk or cloud; only numbers in the profile's allowlist
                      (owner, CONFIRMED contacts, Desk), <= 30 a day, never while
                      the send guard refuses it
@@ -49,7 +47,6 @@ ALLOWED_ACTORS: dict[str, frozenset] = {
     "sos.update": frozenset({"cloud", "operator", "contact"}),
     "verdict.set": frozenset({"owner", "member"}),
     "mode.set": frozenset({"owner", "member"}),
-    "siren.test": frozenset({"owner"}),
     "sms.send": frozenset({"owner", "operator", "cloud"}),
     "token.rotate": frozenset({"owner"}),
     # The Portal itself unpairs too: an admin transfer or retire ("cloud")
@@ -61,7 +58,7 @@ ALLOWED_ACTORS: dict[str, frozenset] = {
     "demo.close_incident": frozenset({"owner", "member", "operator", "cloud"}),
     "demo.trigger": frozenset({"owner", "member", "operator", "cloud"}),
 }
-STEP_UP_COMMANDS = frozenset({"siren.test", "token.rotate", "unpair"})
+STEP_UP_COMMANDS = frozenset({"token.rotate", "unpair"})
 TEST_MODE_COMMANDS = frozenset({"demo.close_incident", "demo.trigger"})
 #: The service refuses "intrusion" unless SENTRIX_SOS_INTRUSION=1 (D15).
 DEMO_TRIGGER_TYPES = ("weapon", "fire", "assault", "intrusion")
@@ -92,7 +89,7 @@ def _from_sos(result: dict[str, Any], extra: dict | None = None) -> dict[str, An
 class CommandHooks:
     """What the handlers need from the running device."""
 
-    #: The live pipeline (siren). Raises when it cannot be built.
+    #: The live pipeline. Raises when it cannot be built.
     get_pipeline: Callable[[], Any] = lambda: None
     #: The channels service (``services.registry.get("channels")``), or None.
     channels: Callable[[], Any] = lambda: None
@@ -247,19 +244,6 @@ class CommandHandler:
         return _from_sos(self._sos().demo_trigger(kind, actor=actor))
 
     # ── device ────────────────────────────────────────────────────────────────
-    def _cmd_siren_test(self, args: dict, actor: Actor, message: dict) -> dict:
-        from sentrix.io.actuators import siren_test
-        try:
-            pipeline = self.hooks.get_pipeline()
-        except Exception as exc:
-            return outcome("internal", f"no pipeline: {exc}")
-        siren = getattr(pipeline, "siren", None)
-        if siren is None:
-            return outcome("unsupported", "this device has no siren")
-        result = siren_test(siren, actor=actor)
-        fields = {k: result.get(k) for k in ("seconds", "backend", "is_real", "retry_after")}
-        return outcome(result.get("code", "internal"), result.get("message", ""), fields)
-
     def _cmd_sms_send(self, args: dict, actor: Actor, message: dict) -> dict:
         from sentrix.alerting import guard
         from sentrix.alerting.channels.base import Message, Recipient

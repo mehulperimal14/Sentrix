@@ -177,7 +177,7 @@ def check_config(report: Report) -> None:
                f"(obs {settings.policy.min_escalate_observations}) / down "
                f"{settings.policy.deescalate_dwell_seconds}s")
     report.add(OK, "SMS from level", str(settings.alert.sms_min_level))
-    report.add(OK, "siren from level", str(settings.alert.siren_min_level))
+    report.add(OK, "call from level", str(settings.alert.call_min_level))
 
     threat = settings.threat
     report.add(OK, "threat confirmation",
@@ -242,11 +242,6 @@ def check_engines(report: Report) -> None:
     else:
         report.add(WARN, "identity backend",
                    "NONE — failing closed, nobody will be authorised")
-
-    from sentrix.io.actuators import build_siren
-    siren = build_siren()
-    report.add(OK if siren.is_real else WARN, "siren backend",
-               f"{siren.name}{'' if siren.is_real else ' (stub — logs only)'}")
 
     from sentrix.evidence.vault import vault
     chain = vault.verify_chain()

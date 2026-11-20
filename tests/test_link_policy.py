@@ -2,9 +2,9 @@
 
 The tunnel path table (``sentrix/link/policy.py``) and the link commands
 (``sentrix/link/commands.py``): roles, consents from the pushed profile,
-step-up, rate limits, the Desk rule, the SMS allowlist and daily cap, the
-shared siren-test limiter, test-mode-only demo commands, and an audit row for
-everything. No command reaches a real channel: the channels service is a
+step-up, rate limits, the Desk rule, the SMS allowlist and daily cap,
+test-mode-only demo commands, and an audit row for everything. No siren test
+since D25. No command reaches a real channel: the channels service is a
 recording fake.
 """
 
@@ -59,7 +59,7 @@ class TestPathTable:
         assert classify("POST", "/api/sos/requests/r/approve") == "sos_write"
         assert classify("POST", "/api/dispatch/p/send/POLICE") == "sos_write"
         assert classify("POST", "/api/mode") == "mode"
-        assert classify("POST", "/api/node/siren-test") == "siren_test"
+        assert classify("POST", "/api/node/siren-test") == "unknown", "no siren (D25)"
         assert classify("POST", "/api/link/reconnect") == "lc_only"
         assert classify("GET", "/api/recordings") == "record_status"
         assert classify("HEAD", "/api/recordings") == "record_status"
@@ -127,12 +127,11 @@ class TestPathTable:
                      "/api/dispatch/p/send/FIRE", "/api/mode"):
             assert p.check_request("POST", path, OWNER) and p.check_request("POST", path, MEMBER)
 
-    def test_siren_test_owner_with_step_up_only(self):
+    def test_the_siren_test_is_gone(self):
+        """D25: the device has no siren; its old test path is refused to everyone."""
         p = policy()
-        assert p.check_request("POST", "/api/node/siren-test", OWNER)
-        assert p.check_request("POST", "/api/node/siren-test",
-                               STALE_OWNER).code == "step_up_required"
-        assert p.check_request("POST", "/api/node/siren-test", MEMBER).code == "forbidden_role"
+        for actor in (OWNER, STALE_OWNER, MEMBER):
+            assert not p.check_request("POST", "/api/node/siren-test", actor)
 
     def test_lc_only_routes_and_unknown_writes_refused(self):
         p = policy(ALL)
@@ -159,7 +158,7 @@ class TestPathTable:
 
     def test_recording_start_owner_with_step_up_stop_owner_always(self):
         """D20 as amended on 2026-10-28: the owner starts a training recording
-        through the Portal with a fresh step-up (the siren test's rule) and
+        through the Portal with a fresh step-up and
         stops it without one (stopping is never blocked); members and the
         Desk never."""
         p = policy(ALL, help_path=True)
@@ -360,21 +359,10 @@ class TestCommandRules:
         assert h.handle(command("mode.set", {"armed": False, "pin": PIN}))["ok"]
         assert not mode.is_armed()
 
-    def test_siren_test_owner_step_up_once_a_minute(self, temp_db):
-        h, bag = handler()
-        assert h.handle(command("siren.test", actor=MEMBER))["code"] == "forbidden_role"
-        assert h.handle(command("siren.test", actor=STALE_OWNER))["code"] == "step_up_required"
-        first = h.handle(command("siren.test"))
-        assert first["ok"] and first["result"]["seconds"] == 1.0
-        second = h.handle(command("siren.test"))
-        assert second["code"] == "rate_limited" and second["result"]["retry_after"] > 0
-        assert bag.pipeline.siren_calls == [1.0], "1 s, at most once a minute"
-
-    def test_siren_limiter_is_shared_with_the_lc_route(self, temp_db):
-        from sentrix.io.actuators import siren_test
-        h, bag = handler()
-        assert siren_test(bag.pipeline.siren, actor=Actor.device_admin())["ok"]
-        assert h.handle(command("siren.test"))["code"] == "rate_limited"
+    def test_there_is_no_siren_command(self, temp_db):
+        """D25: ``siren.test`` left the allowlist with the siren."""
+        h, _ = handler()
+        assert h.handle(command("siren.test"))["code"] == "unknown_command"
 
     def test_sms_only_to_the_profile_allowlist(self, temp_db, monkeypatch):
         from sentrix.link import profile, protocol
@@ -453,9 +441,8 @@ class TestCommandRules:
         h, bag = handler()
         done = h.handle(command("unpair", actor=actor))
         assert done["ok"] and bag.wiped == [True] and profile.current() is None
-        # Only unpair: the Portal still may not rotate the token or test the siren.
+        # Only unpair: the Portal still may not rotate the token.
         assert h.handle(command("token.rotate", actor=actor))["code"] == "forbidden_role"
-        assert h.handle(command("siren.test", actor=actor))["code"] == "forbidden_role"
 
     def test_demo_commands_only_in_test_mode(self, temp_db):
         h, bag = handler(test_mode=lambda: False)

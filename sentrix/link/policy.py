@@ -21,8 +21,6 @@ gallery writes             owner             consent ``face_recognition``;
                                              older ``/authorized/upload``
 verdict / SOS / dispatch   owner, member
 HOME/ARMED (``/api/mode``) owner, member     the route checks the SOS PIN
-siren test                 owner             step-up (the 1/min limit is
-                                             ``actuators.siren_test``'s)
 recording status           owner             ``GET /api/recordings`` (status and
                                              list; no step-up; D20)
 recording start            owner             step-up; ``POST
@@ -117,7 +115,7 @@ TUNNEL_METHODS = frozenset({"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"})
 # Path classes.
 NEVER, READ_API, MEDIA, FACES = "never", "read_api", "media", "faces"
 GALLERY_WRITE, GALLERY_DELETE = "gallery_write", "gallery_delete"
-SOS_WRITE, MODE, SIREN, LC_ADMIN, UNKNOWN = "sos_write", "mode", "siren_test", "lc_only", "unknown"
+SOS_WRITE, MODE, LC_ADMIN, UNKNOWN = "sos_write", "mode", "lc_only", "unknown"
 RECORD, RECORD_STOP, RECORD_STATUS = "record", "record_stop", "record_status"
 
 
@@ -193,8 +191,6 @@ def classify(method: str, path: str) -> str:
         return SOS_WRITE
     if method == "POST" and path == "/api/mode":
         return MODE
-    if method == "POST" and path == "/api/node/siren-test":
-        return SIREN
     return UNKNOWN
 
 
@@ -308,12 +304,6 @@ class TunnelPolicy:
                 return _refuse("step_up_required", "re-enter your password first", path_class)
             return _allow(path_class)
         if path_class in (SOS_WRITE, MODE):
-            return _allow(path_class)
-        if path_class == SIREN:
-            if actor.type != "owner":
-                return _refuse("forbidden_role", "only the owner may test the siren", path_class)
-            if not actor.stepped_up_within(STEP_UP_SECONDS, self._clock()):
-                return _refuse("step_up_required", "re-enter your password first", path_class)
             return _allow(path_class)
         if path_class in (RECORD_STATUS, RECORD, RECORD_STOP):
             # The files never: deletes and downloads are lc_only above (D20).

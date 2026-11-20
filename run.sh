@@ -10,7 +10,7 @@
 #
 # On a Raspberry Pi the venv is created with --system-site-packages and
 # requirements-pi.txt is installed instead: Picamera2/libcamera and lgpio come
-# from apt and are invisible to a plain venv (the camera and the siren would be
+# from apt and are invisible to a plain venv (the camera and the LEDs would be
 # silently dead). One-time system setup: sudo deploy/pi5/install_pi.sh
 # (apt: python3-picamera2 python3-lgpio libportaudio2).
 #

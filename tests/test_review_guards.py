@@ -77,27 +77,6 @@ class TestNoEmergencyNumberInTestMode:
 
 
 class TestHardwareParity:
-    def test_the_siren_stops_after_the_requested_duration(self, monkeypatch):
-        from sentrix.io import actuators
-        played = {}
-
-        class Proc:
-            def __init__(self, args):
-                played["args"] = args
-
-            def terminate(self):
-                played["stopped_after"] = played.get("slept")
-
-        monkeypatch.setattr(actuators.platform, "system", lambda: "Linux")
-        monkeypatch.setattr(actuators.subprocess, "Popen", Proc)
-        monkeypatch.setattr(actuators.time, "sleep",
-                            lambda s: played.__setitem__("slept", s))
-        siren = actuators.SoundSiren()
-        if not siren.sound_path.exists():
-            pytest.skip("siren.wav not bundled")
-        siren._play(1.0)
-        assert played["stopped_after"] == 1.0
-
     def test_a_pir_edge_reaches_the_clip_buffer(self, monkeypatch):
         import sys
         from types import SimpleNamespace

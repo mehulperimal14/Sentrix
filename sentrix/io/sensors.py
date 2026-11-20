@@ -10,8 +10,8 @@ the unit itself:
   are "now" and bits 16–19 "has happened since boot". Under-voltage *now* is
   the one that corrupts SD cards and browns out the modem.
 * **EXT5V** (and an estimate of board power) from ``vcgencmd pmic_read_adc``
-  on a Pi 5: the roadmap's power pass test is EXT5V ≥ 4.8 V with the siren
-  pulsing and the modem sending.
+  on a Pi 5: the roadmap's power pass test is EXT5V ≥ 4.8 V under full load
+  with the modem sending.
 * **BME280 / DHT22**, each behind its own flag, read through the kernel's IIO
   drivers (``dtoverlay=i2c-sensor,bme280`` / ``dtoverlay=dht11,gpiopin=4``;
   the dht11 driver also serves the DHT22). No Python sensor library: the

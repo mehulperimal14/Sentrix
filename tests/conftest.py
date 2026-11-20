@@ -24,7 +24,7 @@ tables created), ``portal_app`` (a Portal on its own temporary database and
 keys), ``fake_router`` (a ``ChannelRouter`` with a ``FakeTransport`` on every
 channel, a memory outbox and a live-in-test-mode policy). After every test
 the listener registry, the services registry, the runtime mode, the cached
-profile and the siren-test limiter are reset.
+profile and the shared GPIO pin factory are reset.
 """
 
 from __future__ import annotations
@@ -240,14 +240,8 @@ def _sentrix_isolation(tmp_path, monkeypatch):
     mode.clear_override()
     if "sentrix.link.profile" in sys.modules:
         sys.modules["sentrix.link.profile"].forget_cache()
-    if "sentrix.io.actuators" in sys.modules:
-        actuators = sys.modules["sentrix.io.actuators"]
-        actuators._reset_siren_test_limiter()
-        actuators.clear_arming_source()
     if "sentrix.io.gpio" in sys.modules:
         sys.modules["sentrix.io.gpio"]._reset_shared_pin_factory()
-    if "sentrix.io.self_output" in sys.modules:
-        sys.modules["sentrix.io.self_output"].clear()
 
 
 # ── shared fixtures ───────────────────────────────────────────────────────────

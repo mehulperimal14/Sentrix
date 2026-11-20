@@ -6,7 +6,7 @@ This drives the real ``Pipeline.run_live`` - capture thread, inference thread,
 preview - with the real identity engine and the enrolled gallery, and a video
 file standing in for the webcam at its native frame rate. It never opens a
 camera, never records audio, and every side effect is stubbed: no evidence,
-incident rows, SMS, siren or dispatch, and the event log goes to a temporary
+incident rows, SMS or dispatch, and the event log goes to a temporary
 folder.
 
 Reports the preview rate (what the operator sees), the AI rate, frame age
@@ -124,7 +124,7 @@ def main(argv: list[str] | None = None) -> int:
 
     camera = VideoCamera(args.video)
     pipeline = Pipeline(source=camera, enable_audio=False, event_source="bench")
-    pipeline._act = noop                 # snapshots, evidence, SMS, siren, dispatch
+    pipeline._act = noop                 # snapshots, evidence, SMS, dispatch
     pipeline._submit = noop              # incident rows and other background writes
     pipeline._save_open_incident = noop  # and the synchronous save at shutdown
     from sentrix.services import assert_measurement_safe

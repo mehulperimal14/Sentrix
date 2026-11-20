@@ -25,7 +25,7 @@ Usage::
     python tools/replay.py --clips data/clips --limit 20
 
 Side effects are disabled: no camera is opened, no snapshot, evidence,
-incident row, SMS, call, siren or dispatch is produced, whatever ``.env``
+incident row, SMS, call or dispatch is produced, whatever ``.env``
 contains. The microphone stays off unless ``--audio`` is given.
 """
 
@@ -106,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
     # room, not the clip, so live audio would inject an uncorrelated signal
     # into every feature vector. No camera is opened (null source) and
     # every side effect is a no-op: replaying a weapon clip must never text
-    # the phone in .env or sound the siren.
+    # the phone in .env.
     pipeline = Pipeline(source=_NullSource(), enable_audio=args.audio and not args.no_audio,
                         event_source="replay")
     pipeline._act = _noop

@@ -375,7 +375,7 @@ class TestRefusals:
 
 class TestThroughThePortal:
     """D20 as amended on 2026-10-28: the owner starts and stops recordings
-    through the Portal with a fresh step-up (the siren test's rule) and lists
+    through the Portal with a fresh step-up and lists
     them; downloads and deletes stay on the LAN."""
 
     def test_the_owner_with_a_fresh_step_up_starts_and_stops(self, rec):
@@ -554,9 +554,8 @@ class TestHealthAndNode:
         assert body["audio"] is True, "the existing keys stay"
 
     def test_node_reports_the_microphone(self, rec, monkeypatch):
-        from sentrix.io.actuators import ConsoleSiren
         from sentrix.web import node_routes
-        node_pipeline = SimpleNamespace(siren=ConsoleSiren(), audio=None,
+        node_pipeline = SimpleNamespace(audio=None,
                                         source=SimpleNamespace(name="file:x.mp4", online=True))
         monkeypatch.setattr(node_routes, "_pipeline", lambda: node_pipeline)
         assert rec.client.get("/api/node").json()["microphone"] is None

@@ -1,9 +1,8 @@
 # SENTRIX device process on a Raspberry Pi 5 (docs/7 §1.2: one process owns
 # the pipeline, the Local Console, SOS, channels and the link).
 #
-# Template: deploy/pi5/install_pi.sh renders @APP_DIR@, @USER@, @SIREN_PIN@
-# and @SIREN_OFF@ (dl for the NPN driver / active-high relay, dh for an
-# active-low opto board) into /etc/systemd/system/sentrix.service.
+# Template: deploy/pi5/install_pi.sh renders @APP_DIR@ and @USER@ into
+# /etc/systemd/system/sentrix.service.
 #
 #   systemctl status sentrix        journalctl -u sentrix -f
 #
@@ -31,13 +30,7 @@ WorkingDirectory=@APP_DIR@
 # EnvironmentFile would not strip the inline comments .env files carry.
 Environment=PYTHONUNBUFFERED=1
 
-# Relay rule: the siren pin is driven OFF before the process claims it and
-# after it exits however it exits (stop, crash, kill -9). config.txt's
-# gpio=@SIREN_PIN@=op,@SIREN_OFF@ covers power-on until this runs. "+" runs
-# pinctrl as root, "-" keeps a missing pinctrl from blocking the alarm.
-ExecStartPre=-+/usr/bin/pinctrl set @SIREN_PIN@ op @SIREN_OFF@
 ExecStart=@APP_DIR@/.venv/bin/python -m sentrix
-ExecStopPost=-+/usr/bin/pinctrl set @SIREN_PIN@ op @SIREN_OFF@
 
 Restart=always
 RestartSec=3

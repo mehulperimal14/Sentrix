@@ -457,13 +457,7 @@ def hardware_report(*, root: str | Path = "/", vcgencmd: sensors.Vcgencmd | None
     if path is None:
         rows.append(_row("warn", "config.txt", "not found under /boot/firmware"))
     else:
-        level = "dl" if settings.gpio.siren_active_high else "dh"
-        pin = settings.gpio.siren_pin
-        want = f"gpio={pin}=op,{level}"
         compact = [line.replace(" ", "") for line in lines]
-        rows.append(_row("ok" if want in compact else "warn", "siren boot state",
-                         f"{want} present" if want in compact else
-                         f"add {want} to {path} (relay held off from power-on)"))
         if pi5:
             rtc = any(line.startswith("dtparam=rtc_bbat_vchg=") for line in compact)
             rows.append(_row("ok" if rtc else "warn", "RTC cell charging",
