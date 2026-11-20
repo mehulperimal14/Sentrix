@@ -506,6 +506,30 @@ class TestSession:
         wait_for(lambda: len(rig.network.pipes) > count, timeout=10, what="redial")
         assert rig.network.pipes[count - 1].code == protocol.CLOSE_GOING_AWAY,             "the device left the silent connection itself"
 
+    def test_a_session_the_portal_ends_is_logged_with_its_code_and_reason(self, rig):
+        """The demo Pi's link dropped every minute or so on 2026-11-20 and its
+        log said only "link connected" each time."""
+        import logging
+        records = []
+        handler = logging.Handler()
+        handler.emit = records.append
+        logger = logging.getLogger("sentrix.link.client")
+        logger.addHandler(handler)
+        try:
+            start_claimed(rig)
+            records.clear()                        # the claim's "token issued" reconnect
+            session = rig.network.hub.sessions[rig.seeded.device_id]
+
+            async def heartbeat_lost():
+                await session.conn.close(protocol.CLOSE_GOING_AWAY, "heartbeat lost")
+            run_on(rig.service._loop, heartbeat_lost())
+            wait_for(lambda: any("link closed after" in r.getMessage() for r in records),
+                     what="the close in the log")
+        finally:
+            logger.removeHandler(handler)
+        line = next(r.getMessage() for r in records if "link closed after" in r.getMessage())
+        assert f"code {protocol.CLOSE_GOING_AWAY} (heartbeat lost)" in line, line
+
     def test_reconnect_now_and_api_link(self, rig, monkeypatch):
         from fastapi.testclient import TestClient
         from sentrix import services
@@ -666,6 +690,39 @@ class TestPieces:
         assert service._force_bootstrap is True
         assert asyncio.run(after(protocol.CLOSE_UNSUPPORTED)) == 60.0
         assert asyncio.run(after(1006)) is None, "the normal full jitter"
+
+    def test_close_info_names_who_ended_the_session(self):
+        from websockets.exceptions import ConnectionClosedError
+        from websockets.frames import Close
+        portal = ConnectionClosedError(Close(1001, "heartbeat lost"),
+                                       Close(1001, "heartbeat lost"), True)
+        assert link_client._close_info(portal) == (1001, "heartbeat lost", "portal")
+        keepalive = ConnectionClosedError(None, Close(1011, "keepalive ping timeout"))
+        assert link_client._close_info(keepalive) == (1011, "keepalive ping timeout", "device"), \
+            "the device's own close used to be reported as no code at all"
+        crossed = ConnectionClosedError(Close(1000, ""), Close(1011, "keepalive ping timeout"),
+                                        False)
+        assert link_client._close_info(crossed)[2] == "device", "ours went first"
+        assert link_client._close_info(ConnectionClosedError(None, None)) == (None, "", "network")
+        assert (link_client.describe_close(1011, "keepalive ping timeout", "device")
+                == "closed by this device, code 1011 (keepalive ping timeout)")
+        assert (link_client.describe_close(None, "", "network")
+                == "connection lost (no close frame)")
+
+    def test_a_welcomed_session_of_ten_seconds_restarts_the_back_off(self):
+        """It took 60 s connected: after the Portal's wake-up had pushed the
+        back-off to 60 s, a drop within the first minute kept the device away
+        past the Portal's 45 s heartbeat limit, and the Portal paged the
+        contacts for an open alarm (2026-11-20)."""
+        from types import SimpleNamespace
+        welcomed, not_yet = asyncio.Event(), asyncio.Event()
+        welcomed.set()
+        assert link_client.STABLE_SESSION_SECONDS < 45.0
+        assert link_client.stable_session(SimpleNamespace(welcomed=welcomed), 10.0)
+        assert not link_client.stable_session(SimpleNamespace(welcomed=welcomed), 9.9)
+        assert not link_client.stable_session(SimpleNamespace(welcomed=not_yet), 59.0), \
+            "a Portal that accepts and drops before the welcome still backs off"
+        assert not link_client.stable_session(None, 60.0)
 
     def test_build_service_is_off_by_default_and_preflight(self, tmp_path, monkeypatch):
         from types import SimpleNamespace
