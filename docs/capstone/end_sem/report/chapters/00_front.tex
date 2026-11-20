@@ -35,8 +35,8 @@
 {\fontsize{13}{16}\selectfont\bfseries Computer Science and Engineering Department\par
 Thapar Institute of Engineering and Technology\par
 December 2026\par}
-\restoregeometry
 \end{titlepage}
+\restoregeometry
 
 %================== ABSTRACT (i) ==================
 \pagenumbering{roman}
@@ -45,7 +45,7 @@ December 2026\par}
 \addcontentsline{toc}{chapter}{ABSTRACT}
 Home security systems raise far more false alarms than real ones: police studies put the share of burglar-alarm activations that are false at 94--98\,\% \cite{sampson2011false}. Cloud cameras also take private footage out of the home and stop working when the Internet does. SENTRIX is an edge-first home threat-detection product that watches a room with a camera and an optional microphone, decides on the device itself whether a handgun, a visible flame or a corroborated fight is present, and asks the owner before anyone else is alerted.
 
-The product has two programs. The \emph{device} runs on a Raspberry~Pi~5. It combines a YOLO person, weapon and fire detector with ByteTrack, a DINOv2 ViT-B/14 scene classifier trained on the team's own footage, InsightFace face recognition per tracked person, OSNet-AIN body re-identification and a PANNs CNN10 sound tagger whose 4-second windows are aligned to the video. Transparent, published evidence rules (a score must cross its threshold on 2 of 3 fresh evaluations; a weapon needs a person in view; Level~4 and above need two independent modalities) turn the model outputs into a Threat Confidence Index (TCI, 0--1) and a five-level alarm. A confirmed Level~3 opens an assistance request that the owner answers on the web Portal, the device screen or Telegram; contacts and a responder desk are alerted only when the owner asks for help or when a safety default applies (a corroborated Level~4/5, a confirmed fire after two minutes, or the device going offline during an alarm); an unanswered request is recorded as ``unanswered'', never as ``safe''. The cloud \emph{Portal} adds accounts, onboarding, contacts, the SENTRIX Desk and a tunnel to the device's own pages; faces, evidence and video stay on the device.
+The \emph{device}, a Raspberry~Pi~5, combines a YOLO person, weapon and fire detector with ByteTrack, a DINOv2 ViT-B/14 scene classifier trained on the team's own footage, InsightFace face recognition per tracked person, OSNet-AIN body re-identification and a PANNs CNN10 sound tagger whose 4-second windows are aligned to the video. Transparent, published evidence rules (a score must cross its threshold on 2 of 3 fresh evaluations; a weapon needs a person in view; Level~4 and above need two independent modalities) turn the model outputs into a Threat Confidence Index (TCI, 0--1) and a five-level alarm. A confirmed Level~3 opens an assistance request that the owner answers on the web Portal, the device screen or Telegram; contacts and a responder desk are alerted only when the owner asks for help or when a safety default applies (a corroborated Level~4/5, a confirmed fire after two minutes, or the device going offline during an alarm); an unanswered request is recorded as ``unanswered'', never as ``safe''. The cloud \emph{Portal} adds accounts, contacts, the SENTRIX Desk and a tunnel to the device's pages; faces, evidence and video stay on the device.
 
 Measured results: on the team's ten labelled videos, the custom DINOv2 classifier raised validation macro-F1 from 0.281 to 0.768 and cut false alarms from 13.96 to 0.79 per normal minute; the evidence rules then reduced them to 0, and replaying the first 18-minute live session gave 0 alarm onsets at Level~3 and above instead of 9. Handgun episodes reach Level~3 in 9 of 12 cases and flames in 3 of 3; retrained on fifteen videos, the weapon head reaches 11 of 14 weapon episodes. Each room's thresholds are calibrated from the device's own log. The live loop runs at 29.7 fps preview and 5.6 AI decisions per second on a laptop CPU; on the Pi~5 a 4-second clip is analysed in 3.9~s. More than 2,200 automated tests cover the system. Its main limit is data: the models have seen only three rooms, so deployment-room recordings are the next step.
 
@@ -55,7 +55,7 @@ Measured results: on the team's ten labelled videos, the custom DINOv2 classifie
 %================== DECLARATION (ii) ==================
 \chapter*{Declaration}
 \addcontentsline{toc}{chapter}{DECLARATION}
-We hereby declare that the design principles and working prototype model of the project entitled \textbf{SENTRIX: Intelligent Multimodal Edge Threat Intelligence and Physical Security System} is an authentic record of our own work carried out in the Computer Science and Engineering Department, TIET, Patiala, under the guidance of Dr.~Ashutosh Mishra during the academic session 2026.
+We hereby declare that the design principles and working prototype model of the project entitled \textbf{SENTRIX: Intelligent Multimodal Edge Threat Intelligence and Physical Security System} is an authentic record of our own work carried out in the Computer Science and Engineering Department, TIET, Patiala, under the guidance of Dr.~Ashutosh Mishra during the 5th semester (2026).
 
 \vspace{30pt}
 Date: \rule{4cm}{0.4pt}
@@ -78,7 +78,6 @@ Date: \rule{4cm}{0.4pt}
 {\itshape Counter Signed By:}
 
 \vspace{30pt}
-\setstretch{1.15}
 Mentor:\\[28pt]
 Dr. Ashutosh Mishra\\
 Designation: Associate Professor\\
@@ -116,7 +115,6 @@ Date: \rule{4cm}{0.4pt}
 
 %================== TABLE OF CONTENTS ==================
 \begingroup
-\setstretch{1.1}
 \renewcommand{\cftaftertoctitle}{\listrule\noindent\hfill\textbf{\small Page No.}\par}
 \tableofcontents
 \endgroup
@@ -124,7 +122,6 @@ Date: \rule{4cm}{0.4pt}
 
 %================== LIST OF FIGURES ==================
 \begingroup
-\setstretch{1.1}
 \addcontentsline{toc}{chapter}{LIST OF FIGURES}
 \renewcommand{\cftafterloftitle}{\listrule\noindent\textbf{\small Figure No.\hspace{2.6em}Caption}\hfill\textbf{\small Page No.}\par\vspace{-6pt}\noindent\rule{\textwidth}{0.4pt}}
 \listoffigures
@@ -133,7 +130,6 @@ Date: \rule{4cm}{0.4pt}
 
 %================== LIST OF TABLES ==================
 \begingroup
-\setstretch{1.1}
 \addcontentsline{toc}{chapter}{LIST OF TABLES}
 \renewcommand{\cftafterlottitle}{\listrule\noindent\textbf{\small Table No.\hspace{3.0em}Caption}\hfill\textbf{\small Page No.}\par\vspace{-6pt}\noindent\rule{\textwidth}{0.4pt}}
 \listoftables
@@ -144,7 +140,7 @@ Date: \rule{4cm}{0.4pt}
 \chapter*{List of Abbreviations}
 \addcontentsline{toc}{chapter}{LIST OF ABBREVIATIONS}
 \begingroup
-\small\setstretch{1.15}
+\tablefont
 \begin{longtable}{@{}L{2.6cm}L{11.6cm}@{}}
 \hline
 \textbf{AES-GCM} & Advanced Encryption Standard in Galois/Counter Mode\\ \hline

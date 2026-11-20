@@ -8,26 +8,40 @@
 % text and captions, page numbers bottom centre, IEEE references.
 % Look of the headings follows the department's LaTeX template.
 %
-% Build:  tectonic main.tex      (or pdflatex + bibtex + pdflatex x2;
-%         Overleaf: upload this folder, compiler pdfLaTeX)
+% Build:  tectonic main.tex      (XeTeX; or xelatex + bibtex + xelatex x2;
+%         Overleaf: upload this folder, compiler XeLaTeX). The text font
+%         is Times New Roman, as the guidelines ask, so the machine that
+%         builds the report needs that font installed (Windows has it).
 %==============================================================
 \documentclass[12pt,a4paper,oneside]{report}
 
-\usepackage[T1]{fontenc}
-\usepackage{newtxtext,newtxmath}
+\usepackage{amsmath}
+\usepackage{fontspec}
+\usepackage{unicode-math}
+\setmainfont{Times New Roman}
+% Maths: symbols from TeX Gyre Termes Math (a Times design); digits and
+% Latin letters from Times New Roman itself, so every number is in it.
+\setmathfont{texgyretermes-math.otf}
+\setmathfont{Times New Roman}[range={up/{num,latin,Latin}}]
+\setmathfont{Times New Roman Italic}[range={it/{latin,Latin}}]
+\setmathfont{Times New Roman Bold}[range={bfup/{num,latin,Latin}}]
+\setmathrm{Times New Roman}
+\setmonofont{Courier New}
 \usepackage[a4paper,top=1in,bottom=1in,right=1in,left=1.5in,footskip=0.45in]{geometry}
 \usepackage{setspace}
 \usepackage{graphicx}
 \usepackage[table]{xcolor}
 \usepackage{array,tabularx,longtable,multirow,booktabs}
-\usepackage{amsmath}
 \usepackage{enumitem}
 \usepackage{float}
 \usepackage{caption}
 \usepackage{titlesec}
 \usepackage{tocloft}
-\usepackage{algorithm}
+\usepackage[chapter]{algorithm}
 \usepackage{algpseudocode}
+\usepackage{etoolbox}
+\usepackage{relsize}
+\usepackage[nocompress]{cite}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning,shapes.geometric,shapes.multipart,fit,calc,backgrounds,matrix,shadows}
 \usepackage{pdflscape}
@@ -65,10 +79,10 @@
   {\fontsize{16}{19}\selectfont\MakeUppercase}
   [\vspace{4pt}{\titlerule[3pt]}]
 \titlespacing*{name=\chapter,numberless}{0pt}{-10pt}{24pt}
-% ---- Headings: 14 pt bold (sections), 12 pt bold (subsections)
+% ---- Headings: 14 pt bold at every level (guidelines: "14 bold for headings")
 \titleformat{\section}{\normalfont\fontsize{14}{17}\bfseries}{\thesection}{0.6em}{}
-\titleformat{\subsection}{\normalfont\fontsize{12}{15}\bfseries}{\thesubsection}{0.6em}{}
-\titleformat{\subsubsection}{\normalfont\fontsize{12}{15}\bfseries\itshape}{\thesubsubsection}{0.6em}{}
+\titleformat{\subsection}{\normalfont\fontsize{14}{17}\bfseries}{\thesubsection}{0.6em}{}
+\titleformat{\subsubsection}{\normalfont\fontsize{14}{17}\bfseries\itshape}{\thesubsubsection}{0.6em}{}
 \titlespacing*{\section}{0pt}{14pt}{6pt}
 \titlespacing*{\subsection}{0pt}{12pt}{4pt}
 \titlespacing*{\subsubsection}{0pt}{10pt}{3pt}
@@ -117,20 +131,35 @@
 % ---- Tables: 10 pt content, single spacing inside
 \newcommand{\tablefont}{\footnotesize\setstretch{1.05}}
 \renewcommand{\arraystretch}{1.25}
-\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
-\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
-\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+% \hspace{0pt}: lets TeX hyphenate a cell's first word (it never does otherwise)
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash\hspace{0pt}}p{#1}}
+\newcolumntype{C}[1]{>{\centering\arraybackslash\hspace{0pt}}p{#1}}
+\newcolumntype{Y}{>{\raggedright\arraybackslash\hspace{0pt}}X}
 \newcolumntype{R}[1]{>{\raggedleft\arraybackslash}p{#1}}
 \newcommand{\thead}[1]{\textbf{#1}}
 \newcommand{\rowhead}{\rowcolor{sxhead}}
 
-% ---- Algorithms
+% ---- Algorithms: numbered by chapter like figures and tables, 10 pt caption
 \floatname{algorithm}{ALGORITHM}
+\captionsetup[algorithm]{font=footnotesize,labelfont=bf,labelsep=colon}
+
+% ---- References: IEEE guide - single spacing inside an entry, a blank
+%      line between entries; names never replaced by a dash (BSTcontrol)
+\apptocmd{\thebibliography}{\setlength{\itemsep}{\baselineskip}\setlength{\parsep}{0pt}}{}{}
+\makeatletter
+\def\bstctlcite{\@ifnextchar[{\@bstctlcite}{\@bstctlcite[@auxout]}}
+\def\@bstctlcite[#1]#2{\@bsphack\@for\@citeb:=#2\do{%
+  \edef\@citeb{\expandafter\@firstofone\@citeb}%
+  \if@filesw\immediate\write\csname #1\endcsname{\string\citation{\@citeb}}\fi}%
+  \@esphack}
+\makeatother
 \algrenewcommand\algorithmicrequire{\textbf{Input:}}
 \algrenewcommand\algorithmicensure{\textbf{Output:}}
 
 % ---- Small helpers
-\newcommand{\code}[1]{\texttt{\small #1}}
+% Code and file names: may break after an underscore, so long names keep to the margin
+\newcommand{\codeus}{\textunderscore\discretionary{}{}{}}
+\newcommand{\code}[1]{{\ttfamily\smaller\let\_\codeus #1}}
 \newcommand{\rupee}{Rs.\,}
 \newcommand{\figref}[1]{Figure~\ref{#1}}
 \newcommand{\tabref}[1]{Table~\ref{#1}}
@@ -141,6 +170,7 @@
             pdfauthor={Kartik Garg, Akshay Ranveer, Prashant Gagneja, Harshit Mishra, Mehul Perimal}}
 
 \begin{document}
+\bstctlcite{IEEEexample:BSTcontrol}
 
 \input{chapters/00_front}
 

@@ -321,14 +321,15 @@ def gantt():
 
 
 # 10. Automated tests per area -----------------------------------------------
-# pytest --collect-only on branch sentrix/portal (3e1e296): 2128 tests in 71
-# files, grouped by the file-name prefix of each test module.
+# pytest --collect-only on main (37146c3, 20 Nov 2026): 2281 tests in 80
+# files, grouped by the file-name prefix of each test module (test_sos_* and
+# test_portal_sos_* -> SOS; test_ch_* and test_review_guards -> channels; ...).
 def tests():
     areas = [
-        ("Perception and fusion", 276), ("Channels and send guard", 244), ("SOS engine and machine", 238),
-        ("Recording and microphone", 223), ("Pi hardware and deploy kit", 213), ("Contracts and integration", 168),
-        ("Link, tunnel, path table", 160), ("Local Console and web security", 159), ("Clip engine and fast lane", 148),
-        ("Portal accounts and onboarding", 144), ("Evaluation, deploy, tools", 118), ("Pipeline, records, live loop", 63),
+        ("Perception and fusion", 275), ("Channels and send guard", 267), ("Recording and microphone", 247),
+        ("SOS engine and machine", 239), ("Local Console and device API", 220), ("Pi hardware and deploy kits", 218),
+        ("Portal accounts and API", 212), ("Contracts and integration", 182), ("Link, tunnel, path table", 166),
+        ("Clip engine and fast lane", 148), ("Evaluation and tools", 71), ("Pipeline, records, live loop", 36),
     ]
     fig, ax = plt.subplots(figsize=(6.0, 3.0))
     names = [a for a, _ in areas][::-1]
@@ -337,13 +338,44 @@ def tests():
     for b, v in zip(bars, vals):
         ax.text(v + 3, b.get_y() + b.get_height() / 2, str(v), va="center", fontsize=7.5)
     ax.set_yticks(range(len(vals)), names, fontsize=8)
-    ax.set_xlabel("Automated tests (2154 in total)")
+    ax.set_xlabel("Automated tests (2281 in total)")
     ax.set_xlim(0, 310)
     fig.tight_layout()
     save(fig, "fig_tests")
 
 
+# 11. Alarm rules from published practice on the same replayed ticks ----------
+# training/runs/custom_eval/baseline_rules/m11b_replay_all.json
+# (tools/baseline_alarm_rules.py on the M11b tick replay ba0bf17: ten videos,
+# 6 Hz, 3.68 normal minutes; same per-source thresholds for every rule).
+def baseline_rules():
+    names = ["Single frame\n(detection = alarm)", "Five successive\n(Olmos et al.)", "SENTRIX\n(2 of 3 + gates)"]
+    false_onsets = [2, 0, 0]
+    weapon_latency = [0.134, 0.674, 0.168]
+    fire_latency = [0.077, 0.653, 0.077]
+    fig, (a, b) = plt.subplots(1, 2, figsize=(6.3, 2.5))
+    x = range(3)
+    bars = a.bar(x, false_onsets, color=[RED, GREY, GREEN], width=0.55)
+    label_bars(a, bars, fmt="{:.0f}", dy=0.03)
+    a.set_xticks(list(x), names, fontsize=7.5)
+    a.set_ylim(0, 2.6)
+    a.set_ylabel("False Level-3 onsets")
+    a.set_title("(a) False alarms in 3.7 normal minutes")
+    w = 0.36
+    b1 = b.bar([i - w / 2 for i in x], weapon_latency, w, color=BLUE, label="Handgun (9 of 12 caught by each)")
+    b2 = b.bar([i + w / 2 for i in x], fire_latency, w, color=ORANGE, label="Flame (3 of 3 caught by each)")
+    label_bars(b, b1, dy=0.01, size=7)
+    label_bars(b, b2, dy=0.01, size=7)
+    b.set_xticks(list(x), names, fontsize=7.5)
+    b.set_ylim(0, 0.95)
+    b.set_ylabel("Median time to alarm (s)")
+    b.set_title("(b) Delay before the alarm")
+    b.legend(frameon=False, loc="upper left", fontsize=7)
+    fig.tight_layout()
+    save(fig, "fig_baseline_rules")
+
+
 if __name__ == "__main__":
-    for f in (configs, live_session, levels, live_loop, pi_clip, slim, reid, room, gantt, tests):
+    for f in (configs, live_session, levels, live_loop, pi_clip, slim, reid, room, gantt, tests, baseline_rules):
         f()
         print("wrote", f.__name__)

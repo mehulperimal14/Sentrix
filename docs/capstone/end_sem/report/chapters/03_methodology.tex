@@ -87,7 +87,7 @@ An incident opens when the level leaves Level~1 and keeps a frozen \emph{peak sn
 The microphone is read continuously at its native rate and resampled to 16\,kHz mono. Every 1\,s the last 4\,s are tagged by PANNs CNN10 \cite{kong2020panns}, whose 527 AudioSet labels are mapped by a published rule to seven cues: aggression, weapon sound, fire sound, laughter, calm talk, background (television, music, radio) and alarm sounds (e.g. a smoke alarm, or an ambulance or police vehicle passing outside). Each result carries its window as monotonic start and end times. A window votes for a frame only if it overlaps the frame within 1.5\,s; otherwise audio is \emph{unavailable}, never ``calm''. A window counts as a new observation only if it does not overlap the last one counted, so one impulse cannot confirm itself across overlapping windows.
 
 \subsection{Identity per Track and Body Re-identification}
-Each face is attached to the person box that contains it, and each ByteTrack id is \emph{authorised}, \emph{unknown} or \emph{unverified}. Recognition runs on its own thread, re-checking at most every 1\,s, at once when more people appear, and every 5\,s while everyone is recognised; it fails closed before the first verdict and when a verdict is older than 6\,s. A match is held on a track for 60\,s unless the face fails twice in a row. With each face check the device also embeds the bodies with OSNet \cite{zhou2019osnet} and keeps the last 20 face-verified looks of each resident for 30 minutes. At home, a track whose face has not been seen counts as that resident when two consecutive checks match the resident's looks at a cosine of at least 0.85 and at least 0.05 ahead of any other resident. A failed face always wins, a resident already authorised on another track in view is never matched by body, and armed mode ignores bodies. Identity never lowers threat evidence: a recognised resident holding a gun is still a weapon alarm.
+Each face is attached to the person box that contains it, and each ByteTrack id is \emph{authorised}, \emph{unknown} or \emph{unverified}. Recognition runs on its own thread, re-checking at most every 1\,s, at once when more people appear, and every 5\,s while everyone is recognised; it fails closed before the first verdict and when a verdict is older than 6\,s. A match is held on a track for 60\,s unless the face fails twice in a row. With each face check the device also embeds the bodies with OSNet \cite{zhou2019osnet} and keeps the last 20 face-verified looks of each resident for 30 minutes. At home, a track whose face has not been seen counts as that resident when two consecutive checks match the resident's looks at a cosine of at least 0.87 and at least 0.05 ahead of any other resident. A failed face always wins, a resident already authorised on another track in view is never matched by body, and armed mode ignores bodies. Identity never lowers threat evidence: a recognised resident holding a gun is still a weapon alarm.
 
 \subsection{The Clip Engine on the Raspberry Pi}
 \label{sec:clip}
@@ -131,19 +131,32 @@ Every outbound message, on the device and the Portal, passes one guard that re-r
 %--------------------------------------------------------------
 \section{Work Breakdown Structure}
 \label{sec:wbs}
-\figref{fig:wbs} shows the work breakdown structure and \tabref{tab:owners} the ownership of each subsystem.
+\figref{fig:wbs} shows the work breakdown structure of SENTRIX release~1 and \tabref{tab:owners} the ownership of each subsystem. The structure has three levels: the product at the top, six work packages below it, and the deliverables of each package, numbered so that every task in the project plan and every milestone can be traced to one box.
+\begin{enumerate}
+\item \textbf{Data and models} produces everything the device learns from: the custom dataset (1.1) and its checked boxes (1.2), the scene classifier, detector heads, sound and re-identification models (1.3--1.6), and their ONNX exports for the Pi (1.7). Its output is the input of package~2.
+\item \textbf{Detection pipeline} turns camera frames into a committed level: capture and preview (2.1), the perception wrappers (2.2), the evidence rules (2.3), the TCI and level policy (2.4), incidents with the event log (2.5), the encrypted evidence vault (2.6), and the clip engine with its fast lane for the Pi (2.7).
+\item \textbf{Device services} act on a decision: the SOS engine (3.1), the channels with their outbox (3.2) behind the send guard (3.3), the link and tunnel to the Portal (3.4), identity and enrolment (3.5), the training recorder (3.6), and the Local Console API (3.7).
+\item \textbf{Portal and web apps} give the owner, the contacts, the Desk and the company their screens: accounts with two-factor sign-in (4.1), onboarding (4.2), household and consent (4.3), the link hub and proxy (4.4), Desk and administration (4.5), privacy and retention (4.6), and the two React applications (4.7).
+\item \textbf{Hardware} makes the product a physical unit: Pi bring-up (5.1), status LEDs (5.2), sensors and power (5.3), the 4G modem (5.4), the enclosure (5.5), and the installers for the Pi and for Render (5.6, 5.7).
+\item \textbf{Evaluation and quality} runs across all the others: the side-effect-free harness (6.1), replay metrics (6.2), benchmarks (6.3), the test suite (6.4), reviews and audits (6.5), and the documentation including this report (6.6).
+\end{enumerate}
+Packages 1 and 2 were built first, because the live diagnosis showed the detection path had to work before anything was built on it; packages 3--5 were then built in parallel tracks against one written contract; package 6 ran throughout, so that every change was measured before and after.
 
 \begin{figure}[htbp]
 \centering
-\begin{tikzpicture}[font=\scriptsize,
-  root/.style={draw, fill=sxhead, rounded corners=2pt, font=\scriptsize\bfseries, align=center, minimum width=3.2cm},
-  l1/.style={draw, fill=sxlight, rounded corners=2pt, align=center, text width=2.15cm, minimum height=8mm, font=\scriptsize\bfseries},
-  l2/.style={align=left, text width=2.2cm, font=\tiny},
+\begin{tikzpicture}[font=\footnotesize,
+  root/.style={draw, fill=sxhead, rounded corners=2pt, font=\small\bfseries, align=center, minimum width=4cm, minimum height=7mm},
+  l1/.style={draw, fill=sxlight, rounded corners=2pt, align=center, text width=3.9cm, minimum height=7mm, font=\small\bfseries},
+  l2/.style={align=left, text width=3.9cm, font=\footnotesize},
   edge/.style={draw, thick}]
 \node[root] (r) at (0,0) {SENTRIX release 1};
-\foreach \i/\t/\x in {1/1. Data and models/-6.4, 2/2. Detection pipeline/-3.85, 3/3. Device services/-1.3, 4/4. Portal and web apps/1.25, 5/5. Hardware/3.8, 6/6. Evaluation and quality/6.35}{
-  \node[l1] (n\i) at (\x,-1.4) {\t};
-  \draw[edge] (r.south) -- ++(0,-0.35) -| (n\i.north);
+\draw[edge] (r.south) -- (0,-0.85);
+\draw[edge] (-4.85,-0.85) -- (4.85,-0.85);
+\draw[edge] (-2.42,-0.85) -- (-2.42,-5.75);
+\draw[edge] (-4.85,-5.75) -- (4.85,-5.75);
+\foreach \i/\t/\x/\y/\bus in {1/1. Data and models/-4.85/-1.5/-0.85, 2/2. Detection pipeline/0/-1.5/-0.85, 3/3. Device services/4.85/-1.5/-0.85, 4/4. Portal and web apps/-4.85/-6.4/-5.75, 5/5. Hardware/0/-6.4/-5.75, 6/6. Evaluation and quality/4.85/-6.4/-5.75}{
+  \node[l1] (n\i) at (\x,\y) {\t};
+  \draw[edge] (\x,\bus) -- (n\i.north);
 }
 \node[l2, below=1mm of n1] {1.1 Custom dataset\\1.2 Box annotation\\1.3 Scene classifier\\1.4 YOLO11n heads\\1.5 Sound model\\1.6 Re-id model\\1.7 Exports (ONNX)};
 \node[l2, below=1mm of n2] {2.1 Capture, preview\\2.2 Perception\\2.3 Evidence rules\\2.4 TCI, level policy\\2.5 Incidents, event log\\2.6 Evidence vault\\2.7 Clip engine, fast lane};

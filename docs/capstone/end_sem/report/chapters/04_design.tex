@@ -112,7 +112,19 @@
 \label{sec:diagrams}
 
 \subsection{Use Case Diagram}
-\figref{fig:usecase} shows the actors and their main use cases. The device itself is an actor for the use cases it starts on its own (raising an alarm, prompting the owner).
+\figref{fig:usecase} shows the six actors of SENTRIX and their main use cases. On the left are the people who use the Portal:
+\begin{itemize}
+\item The \textbf{owner} (or another adult of the household) activates the account and completes onboarding, watches the live view and the current level, answers an alert (approve with a service, mark a false alarm with the SOS PIN, or ``I'm checking''), manages contacts and settings, and can export or erase the household's data.
+\item An \textbf{emergency contact} has no account. They confirm consent through a link before they receive anything, and later open the alert page they are sent.
+\item The \textbf{Desk operator}, the simulated monitoring centre, acknowledges and closes a request.
+\end{itemize}
+On the right are the actors that act on the device:
+\begin{itemize}
+\item The \textbf{SENTRIX device} is an actor for the use cases it starts on its own. It raises an alarm and seals evidence, prompts the owner and, when the owner approves or a safety default applies, alerts the contacts, and shows its state on the status LEDs.
+\item The \textbf{device administrator} enrols faces and records training video from the device's own administration pages on the home network.
+\item The \textbf{company administrator} provisions devices, creates customers and reviews the tamper-evident audit log.
+\end{itemize}
+Two design decisions are visible in the diagram. Contacts and the Desk have no use case that shows the owner's live video or settings. And no person starts an alarm: only the device raises one, so every alarm can be traced to the votes logged with it.
 
 \begin{figure}[htbp]
 \centering
@@ -142,7 +154,27 @@
 \end{figure}
 
 \subsection{Class Diagram}
-\figref{fig:class} shows the main classes of the device's decision path and their associations (methods abridged).
+\figref{fig:class} shows the main classes of the device's decision path and their associations (methods abridged). It has three columns.
+\begin{itemize}
+\item \textbf{Perception (left).} Each class wraps one model or input:
+  \begin{itemize}
+  \item \code{FrameSource}, with implementations for a USB or network camera, the Pi camera and the demo reel;
+  \item \code{Detector}, the YOLO heads with ByteTrack;
+  \item \code{SceneEngine}, the DINOv2 classifier;
+  \item \code{TrackIdentity}, faces per track, which uses an \code{IdentityWorker} thread and the \code{ReIDEngine} for bodies;
+  \item \code{AudioEngine}, whose \code{result\_for(t)} returns a sound window only if it is aligned with time $t$.
+  \end{itemize}
+\item \textbf{Decision chain (centre).} \code{Pipeline} is composed of the perception classes (diamonds). \code{observe()} gathers one observation from them, \code{decide()} runs the decision chain, and \code{run\_live()} runs capture, inference and preview on separate threads. \code{ClipEngine}, also part of \code{Pipeline}, replaces the per-frame path on the Pi.
+  The chain is a sequence of ``uses'' associations:
+  \begin{itemize}
+  \item \code{EvidenceAccumulator}, with a \code{ConfirmationWindow} per source and the \code{Vote} records, produces confirmed evidence;
+  \item \code{TCIEngine} turns it into a \code{TCIResult};
+  \item \code{LevelPolicy} commits a level;
+  \item \code{IncidentManager} keeps the \code{PeakSnapshot} and claims each side effect exactly once.
+  \end{itemize}
+\item \textbf{Outputs (right).} \code{EvidenceVault} and \code{EventLog} record what happened. \code{SosEngine} runs the assistance request, \code{Router} sends its messages through the send guard and outbox, and \code{LinkService} carries events to the Portal.
+\end{itemize}
+Every association points one way, from perception towards the outputs. So the perception classes know nothing about alarms, and the evaluation harness can replace every output with a null object while running the same decision code.
 
 \begin{figure}[htbp]
 \centering
@@ -188,31 +220,44 @@
 \end{figure}
 
 \subsection{Sequence Diagram}
-\figref{fig:sequence} follows a confirmed handgun from the camera to a closed request, in the order the components act.
+\figref{fig:sequence} follows a confirmed handgun from the camera to a closed request. Time runs downwards; solid arrows are calls or messages, dashed arrows are replies.
+\begin{enumerate}
+\item The camera delivers frames to the pipeline at 15--30\,fps.
+\item For each analysed frame or clip, the pipeline sends its votes to the evidence, TCI and policy chain: detector boxes, scene probabilities and the aligned audio window.
+\item The chain confirms a source after 2 of 3 fresh evaluations, computes the TCI and commits Level~3, which it returns to the pipeline.
+\item The pipeline stores a snapshot, seals the encrypted evidence bundle and calls the SOS engine's trigger with the incident. The trigger is idempotent: a second call for the same incident does nothing.
+\item The SOS engine creates the request and mirrors it, PENDING, to the Portal over the link.
+\item The Portal asks the owner ``Do you need assistance?'' on the Portal, Telegram and e-mail; the device screen asks the same question.
+\item The owner approves and chooses a service (here, Police). The Portal relays the answer to the device, which owns the request while it is online. The engine moves the request to APPROVED and builds the dispatch package.
+\item The Portal sends the alert, with the snapshot, address and timeline, to the confirmed contacts and the Desk.
+\item The Desk acknowledges, and the owner's screen changes to ``The Desk is handling it''.
+\item The Desk resolves the request with an outcome. The request becomes CLOSED and the incident's verdict is set to TRUE, a label for future training.
+\end{enumerate}
+Nothing reaches the contacts before step~7 unless a safety default applies, which the diagram leaves out.
 
 \begin{figure}[htbp]
 \centering
-\begin{tikzpicture}[font=\tiny, ll/.style={draw, fill=sxhead, font=\scriptsize\bfseries, minimum width=1.6cm, align=center},
+\begin{tikzpicture}[font=\scriptsize, ll/.style={draw, fill=sxhead, font=\scriptsize\bfseries, minimum width=1.7cm, align=center},
   msg/.style={-{Stealth[length=1.5mm]}}, ret/.style={-{Stealth[length=1.5mm]}, dashed}]
 \foreach \i/\n/\x in {1/Camera/0, 2/Pipeline/2.05, 3/{Evidence,\\TCI, policy}/4.1, 4/{SOS engine}/6.15, 5/Portal/8.2, 6/Owner/10.25, 7/{Contacts,\\Desk}/12.3}
-  {\node[ll] (h\i) at (\x,0) {\n}; \draw[gray] (h\i.south) -- (\x,-10.4);}
+  {\node[ll] (h\i) at (\x,0) {\n}; \draw[gray] (h\i.south) -- (\x,-13.9);}
 \newcommand{\m}[4]{\draw[msg] (#1,#3) -- node[above, align=center, fill=white, inner sep=1pt]{#4} (#2,#3);}
 \newcommand{\rr}[4]{\draw[ret] (#1,#3) -- node[above, align=center, fill=white, inner sep=1pt]{#4} (#2,#3);}
-\m{0}{2.05}{-0.8}{frames (15--30 fps)}
-\m{2.05}{4.1}{-1.4}{votes: detector, scene,\\aligned audio}
-\draw[msg] (4.1,-1.9) -- ++(0.35,0) |- node[right, pos=0.25, align=left]{2 of 3 fresh\\confirmations} (4.1,-2.5);
-\rr{4.1}{2.05}{-3.0}{Level 3 committed}
-\draw[msg] (2.05,-3.3) -- ++(0.35,0) |- node[right, pos=0.25, align=left]{snapshot,\\AES-GCM bundle} (2.05,-3.9);
-\m{2.05}{6.15}{-4.4}{trigger(incident) (idempotent)}
-\m{6.15}{8.2}{-4.9}{request PENDING\\over the link}
-\m{8.2}{10.25}{-5.5}{``Do you need assistance?''\\Portal, Telegram, e-mail}
-\rr{10.25}{8.2}{-6.3}{approve (Police)}
-\m{8.2}{6.15}{-6.9}{answer relayed}
-\rr{6.15}{8.2}{-7.5}{APPROVED $\rightarrow$ dispatch package}
-\m{8.2}{12.3}{-8.1}{alert + snapshot, address, timeline}
-\rr{12.3}{8.2}{-8.8}{Desk: acknowledge}
-\m{8.2}{10.25}{-9.3}{``The Desk is handling it''}
-\rr{12.3}{8.2}{-10.0}{resolve (outcome) $\rightarrow$ CLOSED, verdict TRUE}
+\m{0}{2.05}{-1.3}{frames\\(15--30 fps)}
+\m{2.05}{4.1}{-2.6}{votes: detector,\\scene, aligned\\audio}
+\draw[msg] (4.1,-2.9) -- ++(0.35,0) |- node[right, pos=0.25, align=left]{2 of 3 fresh\\confirmations} (4.1,-3.6);
+\rr{4.1}{2.05}{-4.5}{Level 3\\committed}
+\draw[msg] (2.05,-4.8) -- ++(0.35,0) |- node[right, pos=0.25, align=left]{snapshot,\\AES-GCM\\bundle} (2.05,-5.7);
+\m{2.05}{6.15}{-6.3}{trigger(incident) (idempotent)}
+\m{6.15}{8.2}{-7.2}{request PENDING\\over the link}
+\m{8.2}{10.25}{-8.8}{``Do you need\\assistance?''\\Portal, Telegram,\\e-mail}
+\rr{10.25}{8.2}{-9.4}{approve (Police)}
+\m{8.2}{6.15}{-10.0}{answer relayed}
+\rr{6.15}{8.2}{-10.8}{APPROVED $\rightarrow$\\dispatch package}
+\m{8.2}{12.3}{-11.6}{alert + snapshot,\\address, timeline}
+\rr{12.3}{8.2}{-12.2}{Desk: acknowledge}
+\m{8.2}{10.25}{-13.0}{``The Desk is\\handling it''}
+\rr{12.3}{8.2}{-13.8}{resolve (outcome) $\rightarrow$\\CLOSED, verdict TRUE}
 \end{tikzpicture}
 \caption{Sequence diagram: from a confirmed handgun to a closed assistance request}
 \label{fig:sequence}
@@ -221,20 +266,29 @@
 \subsection{State Machine Diagram}
 The assistance request is the most safety-critical object in the product; its states and transitions (\figref{fig:sosstates}) are a fixed table in \code{sentrix/sos/states.py} shared by the device and the Portal. Terminal states are Closed, Declined, Expired and Cancelled; Closed can only be reached along the help path, so a request is never ``closed'' without someone having been asked to help.
 
+A request is created as DRAFTED and becomes PENDING when the owner has been prompted. From the prompting states there are four ways out:
+\begin{itemize}
+\item approve, or a duress PIN, which looks like a false alarm on the screen, leads to APPROVED;
+\item decline with the SOS PIN leads to DECLINED;
+\item a FALSE verdict or a test reset leads to CANCELLED;
+\item the end of the answer window leads to EXPIRED, which the screens call ``unanswered''.
+\end{itemize}
+On the help path, APPROVED becomes DISPATCHED when a channel delivers the package and FAILED when none does. A failed request is retried, and a later delivery still makes it DISPATCHED. The Desk acknowledges and finally resolves the request; a request nobody resolves is closed as stale after 24 hours. Reminders, ``I'm checking'', a rising level or the device going offline are recorded as events but do not change the state, so the table stays small enough to test every transition.
+
 \begin{figure}[htbp]
 \centering
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[st/.style={draw, rounded corners=6pt, fill=sxlight, font=\scriptsize\bfseries, minimum width=2.1cm, minimum height=7mm, align=center},
   term/.style={st, fill=sxhead, double},
-  tr/.style={-{Stealth[length=1.8mm]}, thick}, lab/.style={font=\tiny, align=center, fill=white, inner sep=1pt}]
+  tr/.style={-{Stealth[length=1.8mm]}, thick}, lab/.style={font=\scriptsize, align=center, fill=white, inner sep=1pt}]
 \node[circle, fill=black, inner sep=2pt] (init) at (-2.0,0) {};
 \node[st] (dr) at (0,0) {DRAFTED};
-\node[st] (pe) at (3.0,0) {PENDING};
-\node[st] (ap) at (6.6,0) {APPROVED};
-\node[st] (di) at (10.4,0) {DISPATCHED};
-\node[st] (fa) at (6.6,-2.6) {FAILED};
-\node[st] (ac) at (10.4,-2.6) {ACKNOWLEDGED};
-\node[term] (cl) at (8.5,-5.0) {CLOSED};
+\node[st] (pe) at (3.3,0) {PENDING};
+\node[st] (ap) at (7.5,0) {APPROVED};
+\node[st] (di) at (11.7,0) {DISPATCHED};
+\node[st] (fa) at (7.5,-2.6) {FAILED};
+\node[st] (ac) at (11.7,-2.6) {ACKNOWLEDGED};
+\node[term] (cl) at (9.6,-5.0) {CLOSED};
 \node[term] (de) at (-0.6,-3.6) {DECLINED};
 \node[term] (ca) at (1.5,-3.6) {CANCELLED};
 \node[term] (ex) at (3.6,-3.6) {EXPIRED};
@@ -242,7 +296,7 @@ The assistance request is the most safety-critical object in the product; its st
 \node[draw, dashed, rounded corners=5pt, fit=(ap)(di)(fa)(ac), inner sep=7pt, label={[font=\tiny\itshape]above right:Help path}] (help) {};
 \draw[tr] (init) -- node[lab, above]{created} (dr);
 \draw[tr] (dr) -- node[lab, above]{prompted} (pe);
-\draw[tr] (pe) -- node[lab, above]{approve / duress PIN} (ap);
+\draw[tr] (pe) -- node[lab, above]{approve /\\duress PIN} (ap);
 \draw[tr] (dr.north) to[out=40, in=140] node[lab, above]{approve (before the prompt)} (ap.north);
 \draw[tr] (ap) -- node[lab, above]{delivered} (di);
 \draw[tr] (ap) -- node[lab, left]{delivery\\failed} (fa);
@@ -263,6 +317,15 @@ The assistance request is the most safety-critical object in the product; its st
 
 \subsection{Activity Diagram}
 \figref{fig:activity} shows one decision of the tick pipeline (the clip pipeline follows the same path with clip-level confirmation, \tabref{tab:clip}).
+\begin{enumerate}
+\item The tick takes the newest frame and drops older ones, so a decision is never made on stale video.
+\item The detector heads find persons (with track ids), weapons and fire. The scene probabilities, the latest face verdict of each track and the aligned audio window, if there is one, complete the observation.
+\item Fresh votes are pushed into each source's confirmation window.
+\item \emph{First decision.} A class with no confirmed source keeps a score below Level~2: it is shown on the dashboard but never acted on. A confirmed class is scored by how many independent modalities agree: one gives the Level~3 band, two Level~4--5, three at least Level~5.
+\item The TCI is the largest class score, or the unknown-person notice if that is larger.
+\item The level policy commits Levels~2 and~3 at once, and Levels~4 and~5 only after 0.6\,s and two observations.
+\item \emph{Second decision.} At Level~3 or above the side effects run: a snapshot, an evidence bundle, the SOS trigger for an alarm class, and from Level~4 the dispatch package. Below Level~3 the tick only updates the incident, the event log and the dashboard.
+\end{enumerate}
 
 \begin{figure}[htbp]
 \centering
@@ -297,6 +360,27 @@ The assistance request is the most safety-critical object in the product; its st
 \subsection{Data Flow Diagrams}
 \figref{fig:dfd0} is the context (Level~0) diagram and \figref{fig:dfd1} the Level~1 diagram of the device's processes and data stores.
 
+\paragraph{Level~0.} The context diagram treats SENTRIX as one process and shows what crosses its boundary:
+\begin{itemize}
+\item video, audio and sensor events come in from the room;
+\item alerts, the live view and incidents go to the owner, and answers, PINs and settings come back;
+\item contacts and the Desk receive the dispatch package and return acknowledgements and resolutions;
+\item administrators provide provisioning data and faces;
+\item every message to Telegram, e-mail or SMS leaves through the send guard.
+\end{itemize}
+Continuous video flows to no one outside the household: the only picture that leaves is the snapshot in the dispatch package.
+
+\paragraph{Level~1.} The Level~1 diagram opens the device into seven processes and five data stores:
+\begin{itemize}
+\item \textbf{1.0 Capture} reads frames and sound from the room and hands the newest frame to \textbf{2.0 Perceive}, which runs the models and reads face embeddings from the face gallery (D1).
+\item The votes go to \textbf{3.0 Confirm and fuse}, which produces the TCI.
+\item \textbf{4.0 Commit level, incident} appends every tick to the event log (D2) and seals evidence bundles into the vault (D3).
+\item An alarm-class incident starts \textbf{5.0 Assistance request}, which is stored with the incidents in SQLite (D4).
+\item Its prompts and alerts go through \textbf{6.0 Send (guarded)}. This process applies the send guard and queues each message in the outbox (D5), so that a message survives a crash or a lost connection, before delivering it to the phones.
+\item \textbf{7.0 Link and tunnel} carries incident and request events to the Portal over a WebSocket, and brings back the owner's answers and the Portal's tunnel requests.
+\end{itemize}
+No flow leaves the face gallery (D1) or the evidence vault (D3) for the Portal: faces and evidence stay on the device.
+
 \begin{figure}[htbp]
 \centering
 \begin{tikzpicture}[ext/.style={draw, fill=sxhead, font=\scriptsize, align=center, minimum width=2.2cm, minimum height=7mm},
@@ -309,9 +393,9 @@ The assistance request is the most safety-critical object in the product; its st
 \node[ext] (msg) at (0,-2.7) {Telegram, e-mail, SMS};
 \draw[fl] (room) -- node[above, lab, sloped]{video, audio, events} (p);
 \draw[fl] (p.north east) to[bend left=10] node[above, lab, sloped]{alerts, live view, incidents} (owner.west);
-\draw[fl] (owner.south west) to[bend left=10] node[below, lab, sloped]{answers, PINs, settings} (p.east);
-\draw[fl] (p) -- node[below, lab, sloped]{dispatch package} (cont);
-\draw[fl] (cont.north west) to[bend right=25] node[above, lab, sloped, pos=0.6]{acknowledge, resolve} (p.east);
+\draw[fl] (owner.south west) to[bend left=10] node[below, lab, sloped, pos=0.3]{answers, PINs, settings} ([yshift=2mm]p.east);
+\draw[fl] (p.south east) -- node[below, lab, sloped]{dispatch package} (cont.west);
+\draw[fl] (cont.north west) to[bend right=12] node[above, lab, sloped, pos=0.3]{acknowledge, resolve} ([yshift=-3mm]p.east);
 \draw[fl] (adm) -- node[below, lab, sloped]{provisioning, faces} (p);
 \draw[fl] (p) -- node[right, lab]{messages (guarded)} (msg);
 \end{tikzpicture}
@@ -321,7 +405,7 @@ The assistance request is the most safety-critical object in the product; its st
 
 \begin{figure}[htbp]
 \centering
-\begin{tikzpicture}[proc/.style={draw, circle, fill=sxlight, font=\tiny, align=center, minimum size=1.55cm, inner sep=0pt},
+\begin{tikzpicture}[x=0.9cm, proc/.style={draw, circle, fill=sxlight, font=\tiny, align=center, minimum size=1.55cm, inner sep=0pt},
   store/.style={draw, fill=white, font=\tiny, align=center, minimum width=2.1cm, minimum height=5mm, path picture={\draw ([xshift=3mm]path picture bounding box.north west) -- ([xshift=3mm]path picture bounding box.south west);}},
   ext/.style={draw, fill=sxhead, font=\tiny, align=center, minimum width=1.6cm, minimum height=6mm},
   fl/.style={-{Stealth[length=1.5mm]}, thick}, lab/.style={font=\tiny, align=center}]
@@ -361,7 +445,7 @@ The assistance request is the most safety-critical object in the product; its st
 %--------------------------------------------------------------
 \section{User Interface Diagrams}
 \label{sec:ui}
-Both user interfaces are React single-page applications built from one design system (light and dark themes, IST times, icons always next to a word). \figref{fig:sitemap} shows their navigation. The device screen is designed to be read across a room: it is dark, shows the live picture and the level, and switches to a full-screen \emph{alert takeover} with a countdown, the three answers and an on-screen PIN pad when a request opens. The Portal is designed for a phone: on the alert screen the answers come first, and the snapshot and ``what your contacts would get'' follow below. Screenshots of every screen are in Section~\ref{sec:screens}.
+Both user interfaces are React single-page applications built from one design system (light and dark themes, IST times, icons always next to a word). \figref{fig:sitemap} shows their navigation. The device screen is designed to be read across a room: it is dark, shows the live picture and the level, and switches to a full-screen \emph{alert takeover} with a countdown, the three answers and an on-screen PIN pad when a request opens. The Portal is designed for a phone: on the alert screen the answers come first, and the snapshot and ``what your contacts would get'' follow below. Screenshots of the main screens are in Section~\ref{sec:screens}: the device screen and its alert takeover (\figref{fig:scr-wall}), the device administration pages (Figures~\ref{fig:scr-diag}--\ref{fig:scr-devhw}), the owner's alert screens on the Portal (Figures~\ref{fig:scr-alert} and~\ref{fig:scr-ack}), the Desk and onboarding (\figref{fig:scr-desk}), and the settings, privacy and audit pages (\figref{fig:scr-settings}).
 
 \begin{figure}[htbp]
 \centering

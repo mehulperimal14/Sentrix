@@ -43,7 +43,7 @@ Test-mode demo world & \code{tools/demo\_reset.py} and \code{tools/demo\_run.py}
 \caption{The custom dataset as used for the v4 models (the first ten videos; frames per class and split; splits by source video)}
 \label{tab:dataset}
 \centering\tablefont
-\begin{tabular}{|l|c|c|c|c|}
+\begin{tabular}{|L{3.4cm}|C{4.1cm}|C{2.2cm}|C{1.3cm}|C{1.3cm}|}
 \hline\rowhead
 \thead{Class} & \thead{Train} & \thead{Validation} & \thead{Test} & \thead{Total}\\ \hline
 Normal & 373 & 23 & 67 & 463\\ \hline
@@ -87,9 +87,9 @@ Second room: three people, ordinary activity & 29 (normal)\\ \hline
 \node[s, right=of h] (r) {Human review:\\977 labelled frames};
 \node[s, right=of r] (t) {Label timeline\\(1\,s rule)};
 \node[s, below=6mm of r] (b) {Grounding DINO boxes,\\label-gated + QC\\(180 kept, 30 rejected)};
-\node[s, below=6mm of t] (sp) {Split by video:\\7 train, 2 val, 1 test};
+\node[s, below=6mm of t] (sp) {Split by video:\\12 train, 2 val, 1 test};
 \node[s, left=of b] (tr) {Training: DINOv2 head,\\YOLO11n heads};
-\node[s, left=of tr] (cv) {LOVO selection on\\9 videos, OOF\\temperature, thresholds};
+\node[s, left=of tr] (cv) {LOVO selection on\\9 videos (14 for v5),\\OOF temperature,\\thresholds};
 \node[s, left=of cv] (te) {Confirm on val,\\report test once};
 \draw[a] (v) -- (f); \draw[a] (f) -- (h); \draw[a] (h) -- (r); \draw[a] (r) -- (t); \draw[a] (t) -- (sp); \draw[a] (r) -- (b); \draw[a] (sp) -- (b); \draw[a] (b) -- (tr); \draw[a] (tr) -- (cv); \draw[a] (cv) -- (te);
 \end{tikzpicture}}
@@ -160,6 +160,11 @@ so 3.7 minutes of normal footage can only show a rate below about 60 per hour. R
 \label{sec:algorithms}
 
 \paragraph{Evidence confirmation and the TCI.} \algref{alg:evidence} is executed for every tick (or every clip). It implements Equations~(\ref{eq:strength})--(\ref{eq:tci}). The key property is that only a \emph{fresh} evaluation is pushed into a confirmation window, so a model that runs every second tick, or a cached result, cannot confirm itself; and that a modality only counts once, so two classifiers on the same pixels never corroborate each other.
+\begin{itemize}
+\item \textbf{Lines 1--9} handle each vote. A vote whose value is not a number, or whose threshold lies outside $(0,1)$, is marked \emph{gated} and ignored (line~2). Only a fresh evaluation is pushed into the source's window, and entries older than 3\,s fall out (line~4). The source is confirmed for the class when at least 2 of its last 3 entries crossed the threshold (line~6). A weapon vote is withdrawn if no person was seen in the last 2\,s (line~7).
+\item \textbf{Lines 10--19} score each class. Line~11 collects the modalities with a confirmed source and the strength of each (\eqnref{eq:strength}); a detector, a classifier and audio count as three modalities, two classifiers as one. With nothing confirmed the class stays below Level~2 (line~12), and audio alone is capped at Level~2 (line~13). One modality gives the Level~3 band (line~14). Two give Level~4--5, set by the weaker one, and three with strong audio give at least Level~5 (line~15). Line~17 holds experimental classes, a fight without both video and aggression audio, and banter at Level~2.
+\item \textbf{Lines 20--21} add the unknown-person notice and return the TCI with every vote and the role it played, which is what the event log records.
+\end{itemize}
 
 \begin{algorithm}[htbp]
 \caption{Confirmed per-class evidence and the Threat Confidence Index}
@@ -189,6 +194,12 @@ so 3.7 minutes of normal footage can only show a rate below about 60 per hour. R
 \end{algorithm}
 
 \paragraph{Level policy.} \algref{alg:policy} turns the TCI into a committed level. A separate timer per threshold means that a ramp from Level~1 to Level~5 commits each level as it is earned rather than restarting a single dwell at every band change.
+\begin{itemize}
+\item \textbf{Lines 1--5} keep, for each threshold $\tau_k$, a timer $T_k$ that runs while the TCI stays at or above it and a count $n_k$ of observations. Both reset when the TCI drops below the threshold (line~3).
+\item \textbf{Line 6} finds the highest level the TCI supports now. Levels~2 and~3 count at once, because their evidence is already confirmed; Levels~4 and~5 count only after 0.6\,s and two observations, so one strong tick cannot reach the most urgent levels.
+\item \textbf{Lines 7--8.} If that level is higher than the committed one, the level escalates at once (line~7). Otherwise, once no threshold at or above the committed level has been supported for 5\,s, the level steps down to the highest level still supported (line~8).
+\end{itemize}
+This is the rule that fixed the first live run, where a single dwell restarted at every band change and held levels for 20.9\,s.
 
 \begin{algorithm}[htbp]
 \caption{Level policy with per-threshold timers}
@@ -209,6 +220,13 @@ so 3.7 minutes of normal footage can only show a rate below about 60 per hour. R
 \end{algorithm}
 
 \paragraph{Clip engine.} \algref{alg:clip} is the Raspberry~Pi strategy. The cascade spends compute only when there is something to look at: in a still, empty room only the gate runs, but a full cascade is forced at least every 10\,s so that a flame in an empty room is never missed.
+\begin{itemize}
+\item \textbf{Lines 2--3, the gate (S0).} The cascade runs only when something moves, makes a sound or triggers a sensor, while an alarm is active, or when 10\,s have passed since the last full run; otherwise the clip ends at once.
+\item \textbf{Lines 5--6, detection (S1).} Six keyframes are chosen: four spread evenly and the two with the most motion. Results are reused for keyframes this clip shares with the previous one, since consecutive clips overlap by 2\,s. The three detector heads run on the new keyframes at 320\,px.
+\item \textbf{Lines 7--12, the expensive stages (S2--S4)} run only when they can matter: DINOv2 only when a person or a fire candidate was found, the face check only with people present and at most every 2\,s, and the action model only for two or more moving people.
+\item \textbf{Lines 13--14 (S5--S6).} The clip's own 4\,s of sound is classified; it is aligned with the clip by construction. A class is then confirmed within the clip---on two keyframes of one track, or one image region for fire---and the votes go to Algorithms~\ref{alg:evidence} and~\ref{alg:policy}.
+\item \textbf{Lines 16--21, the fast lane,} runs between clips on every fourth buffered frame. Two consecutive hits on the same track raise Level~3 at once (line~18), without waiting up to 4\,s for the next clip. Being a single detector source, it can never go above Level~3.
+\end{itemize}
 
 \begin{algorithm}[htbp]
 \caption{Clip engine cascade (every 2\,s) and fast lane (every 4th frame)}
@@ -235,6 +253,12 @@ so 3.7 minutes of normal footage can only show a rate below about 60 per hour. R
 \end{algorithm}
 
 \paragraph{Body re-identification for residents.} \algref{alg:reid} decides when a track whose face is not visible may still be treated as an enrolled resident at home. The bar of 0.87 was chosen by a rule fixed in advance (Section~\ref{sec:results}): on fourteen videos it accepts 30\,\% of same-person cases and 0.020\,\% of different-people cases.
+\begin{itemize}
+\item \textbf{Line 1} refuses body matching in armed mode, and for a track whose face was seen and did not match: a failed face always wins.
+\item \textbf{Lines 3--5} compare the track's body embedding with the last 20 face-verified looks of each resident. A resident already recognised by face on another track in view is skipped, since one person cannot be in two places.
+\item \textbf{Lines 6--9.} The best resident and its lead over the second best are found (line~6). The match is accepted only if it is at least 0.87, leads by at least 0.05, and does so on this check and the previous one (line~7); otherwise the track stays unverified (line~9).
+\end{itemize}
+An accepted match is shown as ``name (body)'', so the owner can see that the body, not the face, was used.
 
 \begin{algorithm}[htbp]
 \caption{Resident identity from body appearance (home mode only)}
@@ -253,6 +277,11 @@ so 3.7 minutes of normal footage can only show a rate below about 60 per hour. R
 \end{algorithm}
 
 \paragraph{The assistance request sweeper.} \algref{alg:sweeper} runs every few seconds on the device (and on the Portal when it holds authority for an offline device). It is a pure function of the request's snapshot and the time, so it is tested by ``time travel'': the tests move a fake clock and check every message the sweeper decides to send.
+\begin{itemize}
+\item \textbf{Lines 1--10} apply only while the owner is still being asked. There is one reminder at 2, 5, 10 and 20 minutes, with overdue reminders collapsed into one (line~2), and an SMS to the owner if the prompt is still unseen after 10 minutes (line~4). A warning comes 5 minutes before the window ends (line~6), and at the end the request expires as ``unanswered'' (line~8).
+\item \textbf{Lines 11--13} are the safety defaults. How long the confirmed contacts wait depends on the request's type and peak level: no wait for a corroborated Level~4/5 or a duress PIN, 2 minutes for a fire, and no automatic alert for a single-source weapon. The contacts are alerted only once.
+\item \textbf{Lines 14--17} watch the help path. If no channel delivers within 60\,s, the owner is warned that the alert was not delivered, and the request becomes FAILED when the delivery window ends. A request nobody resolves is closed as stale after 24 hours.
+\end{itemize}
 
 \begin{algorithm}[htbp]
 \caption{Assistance request sweeper (owner timeline and safety defaults)}
@@ -318,6 +347,8 @@ so 3.7 minutes of normal footage can only show a rate below about 60 per hour. R
 \label{sec:screens}
 The screenshots below were captured from the product running in its test-mode demo world (Portal and device on one laptop, the held-out handgun clip played through the demo-reel camera, every live switch off); the detections are real outputs of the shipped models, and the people in the frames are team members from the custom dataset.
 
+\figref{fig:scr-wall} shows the device screen, which is designed to be read across a room. While monitoring (left) it shows the live picture with every tracked person labelled---here ``unknown'', because the people in the clip are not enrolled in the demo world---and the current level. When the handgun is confirmed (right), the screen switches to the full-screen alert takeover: the question, the time left to answer, the three answers and a PIN pad for ``false alarm''.
+
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.49\textwidth]{figures/screens_c/dev_wall_idle.png}\hfill
@@ -326,12 +357,16 @@ The screenshots below were captured from the product running in its test-mode de
 \label{fig:scr-wall}
 \end{figure}
 
+\figref{fig:scr-diag} is the Diagnostics page for the device administrator on the home network. It shows what the models see and why the device decided as it did: the overlays on the live picture, each model's score, the scene probabilities against their thresholds, the fusion result with the contribution of every input, and the history of level changes. The false alarms in the demo room were diagnosed on this page.
+
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.92\textwidth]{figures/screens_c/dev_diagnostics.png}
 \caption{Device administration, Diagnostics: live picture with overlays, model scores, scene probabilities with thresholds, the fusion result with the contribution of each input, and the level changes}
 \label{fig:scr-diag}
 \end{figure}
+
+\figref{fig:scr-devadmin} shows two more administration pages. Activity (left) lists the incidents with their picture, the encrypted evidence and the verdict buttons (``Real'' or ``False alarm''); the verdicts become labels for training. Help requests (right) shows the open assistance request and, word for word, the message the contacts and the Desk would receive.
 
 \begin{figure}[H]
 \centering
@@ -341,12 +376,16 @@ The screenshots below were captured from the product running in its test-mode de
 \label{fig:scr-devadmin}
 \end{figure}
 
+\figref{fig:scr-devhw} is the Record video page, where the administrator records deployment-room footage for training (Section~\ref{sec:data}). The files can only be downloaded on the home network.
+
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.5\textwidth]{figures/screens_c/dev_recordings.png}
 \caption{Device administration: Record video for training data}
 \label{fig:scr-devhw}
 \end{figure}
+
+\figref{fig:scr-alert} shows the owner's side of the same alarm on the Portal. On a computer (left) a red bar appears on every page. On a phone (right) the alert screen puts the answers first, so that a frightened person does not have to scroll, and shows the snapshot and what the contacts would receive below them.
 
 \begin{figure}[H]
 \centering
@@ -356,6 +395,8 @@ The screenshots below were captured from the product running in its test-mode de
 \label{fig:scr-alert}
 \end{figure}
 
+After the owner approves, the screen changes to ``The SENTRIX Desk is handling it'' with the request's timeline (\figref{fig:scr-ack}, left). The live view (right) is the device's own video, relayed through the tunnel at no more than 15\,fps and 640\,px wide.
+
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.49\textwidth]{figures/screens_c/portal_alert_ack.png}\hfill
@@ -364,6 +405,8 @@ The screenshots below were captured from the product running in its test-mode de
 \label{fig:scr-ack}
 \end{figure}
 
+\figref{fig:scr-desk} shows the SENTRIX Desk, the simulated monitoring centre (left): the household's address and entry notes, who lives there, the snapshot, and the buttons to acknowledge and close. On the right is the first step of the onboarding wizard that a new customer goes through.
+
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.66\textwidth]{figures/screens_c/desk_request.png}\hfill
@@ -371,6 +414,8 @@ The screenshots below were captured from the product running in its test-mode de
 \caption{SENTRIX Desk request page with location, household, snapshot, acknowledge and close (left); onboarding wizard, step 1 (right)}
 \label{fig:scr-desk}
 \end{figure}
+
+Finally, \figref{fig:scr-settings} shows the owner's alert and PIN settings, the privacy page with consents, export and erasure, and the company audit log, whose hash chain is verified.
 
 \begin{figure}[H]
 \centering
@@ -413,7 +458,7 @@ Testing is layered (\figref{fig:tests}):
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.85\textwidth]{figures/fig_tests.pdf}
-\caption{Automated tests per area (2128 collected on the device and Portal branch)}
+\caption{Automated Python tests per area (2281 collected on main, commit 37146c3)}
 \label{fig:tests}
 \end{figure}
 
@@ -430,7 +475,8 @@ Testing is layered (\figref{fig:tests}):
 \subsection{Test Cases}
 \tabref{tab:testcases} lists representative test cases; each is an automated test in the repository.
 
-\begin{longtable}{|C{0.95cm}|L{2.9cm}|L{4.3cm}|L{3.4cm}|C{0.95cm}|}
+\begingroup\tablefont
+\begin{longtable}{|C{0.95cm}|L{2.8cm}|L{4.1cm}|L{3.4cm}|C{0.95cm}|}
 \caption{Representative test cases}\label{tab:testcases}\\
 \hline\rowhead
 \thead{ID} & \thead{Feature (test file)} & \thead{Input / steps} & \thead{Expected result} & \thead{Result}\\ \hline
@@ -441,53 +487,114 @@ Testing is layered (\figref{fig:tests}):
 \multicolumn{5}{r}{\footnotesize\itshape continued on next page}\\
 \endfoot
 \endlastfoot
-\tablefont TC-01 & \tablefont Confirmation (test\_evidence) & \tablefont One scene vote over threshold, then two below & \tablefont Not confirmed; TCI below Level~2 & \tablefont Pass\\ \hline
-\tablefont TC-02 & \tablefont Confirmation (test\_evidence) & \tablefont A cached value carried on later ticks & \tablefont Does not count again; never confirms itself & \tablefont Pass\\ \hline
-\tablefont TC-03 & \tablefont Person gate & \tablefont Weapon votes with no person for 2.5\,s & \tablefont Weapon gated, no alarm & \tablefont Pass\\ \hline
-\tablefont TC-04 & \tablefont Corroboration (test\_multimodal) & \tablefont Pistol box + gunshot sound aligned & \tablefont Level~4 & \tablefont Pass\\ \hline
-\tablefont TC-05 & \tablefont Audio alone & \tablefont Scream with no visual source & \tablefont At most Level~2, never a weapon & \tablefont Pass\\ \hline
-\tablefont TC-06 & \tablefont Banter & \tablefont Video fight + aligned laughter & \tablefont Held at Level~2, labelled banter & \tablefont Pass\\ \hline
-\tablefont TC-07 & \tablefont Stale audio & \tablefont Audio window 3\,s before the frame & \tablefont Audio ``unavailable'', no vote & \tablefont Pass\\ \hline
-\tablefont TC-08 & \tablefont Unknown person & \tablefont Stranger present 10\,s at home & \tablefont Level~2 only, no snapshot, no SOS & \tablefont Pass\\ \hline
-\tablefont TC-09 & \tablefont Level policy (test\_fusion) & \tablefont TCI ramp rising across several bands & \tablefont Each level commits as earned; L4/L5 after 0.6\,s and 2 observations & \tablefont Pass\\ \hline
-\tablefont TC-10 & \tablefont Records (test\_records) & \tablefont Incident row left open by a crash & \tablefont Every event row on disk before close; open row closed at the next start & \tablefont Pass\\ \hline
-\tablefont TC-11 & \tablefont Evidence (test\_clip\_engine) & \tablefont Two clip bundles sealed & \tablefont Manifest hash chain verifies with 2 entries & \tablefont Pass\\ \hline
-\tablefont TC-12 & \tablefont Identity (test\_identity) & \tablefont Resident and stranger in view (tailgating) & \tablefont Stranger stays unknown & \tablefont Pass\\ \hline
-\tablefont TC-13 & \tablefont Re-id (test\_reid) & \tablefont Armed mode, body matches resident & \tablefont Not authorised (face only) & \tablefont Pass\\ \hline
-\tablefont TC-14 & \tablefont SOS machine (test\_sos\_machine) & \tablefont Confirmed weapon L3 & \tablefont One request DRAFTED $\to$ PENDING; later incidents attach & \tablefont Pass\\ \hline
-\tablefont TC-15 & \tablefont SOS expiry & \tablefont No answer for the whole window & \tablefont EXPIRED, labelled ``Unanswered'', never ``safe'' & \tablefont Pass\\ \hline
-\tablefont TC-16 & \tablefont Duress (test\_sos\_engine) & \tablefont Duress PIN entered & \tablefont Screen shows false alarm; contacts and Desk alerted & \tablefont Pass\\ \hline
-\tablefont TC-17 & \tablefont PIN lockout (test\_sos\_pins) & \tablefont Five wrong PINs & \tablefont Answers locked for 10 minutes & \tablefont Pass\\ \hline
-\tablefont TC-18 & \tablefont Safety default & \tablefont Fire request unanswered for 2 min & \tablefont Confirmed contacts alerted & \tablefont Pass\\ \hline
-\tablefont TC-19 & \tablefont Send guard (test\_ch\_router) & \tablefont Message to 112 with live switches on & \tablefont Always refused & \tablefont Pass\\ \hline
-\tablefont TC-20 & \tablefont Test mode & \tablefont Recipient not on the allowlist & \tablefont SUPPRESSED, nothing sent & \tablefont Pass\\ \hline
-\tablefont TC-21 & \tablefont Link (test\_integration\_m10) & \tablefont 100 forced disconnects & \tablefont 0 events lost after reconnect & \tablefont Pass\\ \hline
-\tablefont TC-22 & \tablefont Path table (test\_link\_policy) & \tablefont Tunnelled request for a LAN-only page or an unknown write & \tablefont Refused & \tablefont Pass\\ \hline
-\tablefont TC-23 & \tablefont Isolation (test\_acct\_isolation) & \tablefont Owner A requests household B's data & \tablefont 403/404, nothing leaked & \tablefont Pass\\ \hline
-\tablefont TC-24 & \tablefont Status LEDs (test\_hw\_gpio) & \tablefont Live level and link changes & \tablefont The LEDs follow the live state & \tablefont Pass\\ \hline
-\tablefont TC-25 & \tablefont Recorder (test\_recorder) & \tablefont Crash by \code{os.\_exit} while recording & \tablefont Partial files recovered at next start & \tablefont Pass\\ \hline
-\tablefont TC-26 & \tablefont Product flow (test\_e2e\_product) & \tablefont Provision $\to$ activate $\to$ onboard $\to$ claim $\to$ L3 $\to$ approve $\to$ Desk & \tablefont Request CLOSED, verdict TRUE & \tablefont Pass\\ \hline
-\tablefont TC-27 & \tablefont Browser: alert journey (sos.spec) & \tablefont Scripted weapon; owner answers; Desk acknowledges and closes & \tablefont Every screen updates; no \code{tel:112} link in test mode & \tablefont Pass\\ \hline
-\tablefont TC-28 & \tablefont Browser: false alarm on a phone & \tablefont Wrong PIN, then the right PIN & \tablefont Wrong PIN refused; marked as false alarm & \tablefont Pass\\ \hline
-\tablefont TC-29 & \tablefont Browser: add a contact (owner.spec) & \tablefont Owner adds an emergency contact & \tablefont Confirmation step with a one-time link shown & \tablefont \textbf{Fail}\\ \hline
+TC-01 & Confirmation (test\_evidence) & One scene vote over threshold, then two below & Not confirmed; TCI below Level~2 & Pass\\ \hline
+TC-02 & Confirmation (test\_evidence) & A cached value carried on later ticks & Does not count again; never confirms itself & Pass\\ \hline
+TC-03 & Person gate & Weapon votes with no person for 2.5\,s & Weapon gated, no alarm & Pass\\ \hline
+TC-04 & Corroboration (test\_multimodal) & Pistol box + gunshot sound aligned & Level~4 & Pass\\ \hline
+TC-05 & Audio alone & Scream with no visual source & At most Level~2, never a weapon & Pass\\ \hline
+TC-06 & Banter & Video fight + aligned laughter & Held at Level~2, labelled banter & Pass\\ \hline
+TC-07 & Stale audio & Audio window 3\,s before the frame & Audio ``unavailable'', no vote & Pass\\ \hline
+TC-08 & Unknown person & Stranger present 10\,s at home & Level~2 only, no snapshot, no SOS & Pass\\ \hline
+TC-09 & Level policy (test\_fusion) & TCI ramp rising across several bands & Each level commits as earned; L4/L5 after 0.6\,s and 2 observations & Pass\\ \hline
+TC-10 & Records (test\_records) & Incident row left open by a crash & Every event row on disk before close; open row closed at the next start & Pass\\ \hline
+TC-11 & Evidence (test\_clip\_engine) & Two clip bundles sealed & Manifest hash chain verifies with 2 entries & Pass\\ \hline
+TC-12 & Identity (test\_identity) & Resident and stranger in view (tailgating) & Stranger stays unknown & Pass\\ \hline
+TC-13 & Re-id (test\_reid) & Armed mode, body matches resident & Not authorised (face only) & Pass\\ \hline
+TC-14 & SOS machine (test\_sos\_machine) & Confirmed weapon L3 & One request DRAFTED $\to$ PENDING; later incidents attach & Pass\\ \hline
+TC-15 & SOS expiry & No answer for the whole window & EXPIRED, labelled ``Unanswered'', never ``safe'' & Pass\\ \hline
+TC-16 & Duress (test\_sos\_engine) & Duress PIN entered & Screen shows false alarm; contacts and Desk alerted & Pass\\ \hline
+TC-17 & PIN lockout (test\_sos\_pins) & Five wrong PINs & Answers locked for 10 minutes & Pass\\ \hline
+TC-18 & Safety default & Fire request unanswered for 2 min & Confirmed contacts alerted & Pass\\ \hline
+TC-19 & Send guard (test\_ch\_router) & Message to 112 with live switches on & Always refused & Pass\\ \hline
+TC-20 & Test mode & Recipient not on the allowlist & SUPPRESSED, nothing sent & Pass\\ \hline
+TC-21 & Link (test\_integration\_m10) & 100 forced disconnects & 0 events lost after reconnect & Pass\\ \hline
+TC-22 & Path table (test\_link\_policy) & Tunnelled request for a LAN-only page or an unknown write & Refused & Pass\\ \hline
+TC-23 & Isolation (test\_acct\_isolation) & Owner A requests household B's data & 403/404, nothing leaked & Pass\\ \hline
+TC-24 & Status LEDs (test\_hw\_gpio) & Live level and link changes & The LEDs follow the live state & Pass\\ \hline
+TC-25 & Recorder (test\_recorder) & Crash by \code{os.\_exit} while recording & Partial files recovered at next start & Pass\\ \hline
+TC-26 & Product flow (test\_e2e\_product) & Provision $\to$ activate $\to$ onboard $\to$ claim $\to$ L3 $\to$ approve $\to$ Desk & Request CLOSED, verdict TRUE & Pass\\ \hline
+TC-27 & Browser: alert journey (sos.spec) & Scripted weapon; owner answers; Desk acknowledges and closes & Every screen updates; no \code{tel:112} link in test mode & Pass\\ \hline
+TC-28 & Browser: false alarm on a phone & Wrong PIN, then the right PIN & Wrong PIN refused; marked as false alarm & Pass\\ \hline
+TC-29 & Browser: add a contact (owner.spec) & Owner adds an emergency contact & Confirmation step with a one-time link shown & \textbf{Fail}\\ \hline
 \end{longtable}
+\endgroup
 
 \subsection{Test Results}
 \label{sec:test-results}
 \begin{itemize}
-\item \textbf{Device and Portal suite} (branch \code{sentrix/portal}, commit \code{5127b3c}, with body re-identification, the v5 detector heads and room calibration): \textbf{2154 passed} in 386.6\,s on the laptop. The device guard blocked 4 webcam/microphone attempts and the socket guard 2 network attempts---all made deliberately by the tests that check those guards.
-\item \textbf{Frontend branch} (\code{sentrix/frontend-v2}, commit \code{c1241c1}, the React applications): Python suite \textbf{2243 passed, 1 skipped} in 385.4\,s; Vitest unit tests \textbf{15 of 15} passed; Playwright browser tests \textbf{22 of 23} passed at desktop and phone sizes. The failing case (TC-29) is the owner adding an emergency contact: the page did not show the ``ask the contact to confirm'' step within 15\,s. It is a known defect to be fixed before the final demonstration; adding contacts through onboarding is covered by passing tests.
+\item \textbf{Python suite on main} (commit \code{37146c3}, 20 November 2026, on the laptop): 2,281 tests collected, \textbf{2,279 passed and 2 failed} in 409\,s. Neither failure is in the product. One test compared the page the Portal serves with a copy of the file whose line endings had been converted; the test now compares the bytes, in a pull request under review. The other, a timing test of the link client, passed when it was run again on its own.
+\item \textbf{The React applications} (commit \code{c1241c1}, now part of main): Vitest unit tests \textbf{15 of 15} passed; Playwright browser tests \textbf{22 of 23} passed at desktop and phone sizes. The failing case (TC-29) is the owner adding an emergency contact: the page did not show the ``ask the contact to confirm'' step within 15\,s. It is a known defect to be fixed before the final demonstration; adding contacts through onboarding is covered by passing tests.
 \item \textbf{Live smoke run} (Portal and device as two real processes linked over a real WebSocket, demo reel): every Local Console page and 14 GET APIs gave the same status directly and through the tunnel; ``scene gun'' produced a PENDING weapon request 8.0--9.8\,s after the clip started and ``scene fire'' 11.6--11.9\,s; approval reached the device as DISPATCHED in 0.01--0.28\,s; MJPEG ran at 29.9\,fps directly and 13.6\,fps through the tunnel (cap 15). Five defects found in the run were fixed with regression tests.
 \item \textbf{Live on the Raspberry~Pi~5 with the Render Portal and Telegram:} detections in the demo room opened assistance requests that were prompted on the Pi's screen and the owner's phone; requests were declined with the PIN, expired unanswered, and in one case approved, dispatched and resolved on the Desk. These were false alarms from the scene classifier in the new room, and they are the data from which the room thresholds were set (Section~\ref{sec:results}). On 20 November the Portal's Telegram messages from Render timed out (\code{ReadTimeout}) while the Portal was waking from suspension; that delivery path has to be re-checked before the demonstration.
 \item \textbf{Bug sweep and audits:} a five-way code audit and a twelve-item bug sweep (October 2026) and a wiring and copy audit (November 2026) each fixed every confirmed finding with a regression test.
 \end{itemize}
+
+\tabref{tab:testsummary} summarises the automated results by feature area, and \tabref{tab:trace} traces every functional requirement of \tabref{tab:fr} to the test cases and test modules that check it. Every requirement is covered by at least one passing test; FR-13 also has the one failing browser test (TC-29), and FR-1 to FR-3 are further measured by the video replays of Section~\ref{sec:results}.
+
+\begin{table}[htbp]
+\caption{Automated test results by feature area (Python suite on main, \code{37146c3}; front-end tests at \code{c1241c1})}
+\label{tab:testsummary}
+\centering\tablefont
+\begin{tabularx}{\textwidth}{|Y|R{1.4cm}|R{1.4cm}|R{2.3cm}|}
+\hline\rowhead
+\thead{Feature area} & \multicolumn{1}{c|}{\thead{Tests}} & \multicolumn{1}{c|}{\thead{Passed}} & \multicolumn{1}{c|}{\thead{Failed}}\\ \hline
+Perception and fusion & 275 & 275 & 0\\ \hline
+Channels and send guard & 267 & 267 & 0\\ \hline
+Recording and microphone & 247 & 247 & 0\\ \hline
+SOS engine and machine & 239 & 239 & 0\\ \hline
+Local Console and device API & 220 & 220 & 0\\ \hline
+Pi hardware and deploy kits & 218 & 218 & 0\\ \hline
+Portal accounts and API & 212 & 211 & 1 (test fault)\\ \hline
+Contracts and integration & 182 & 182 & 0\\ \hline
+Link, tunnel, path table & 166 & 165 & 1 (timing)\\ \hline
+Clip engine and fast lane & 148 & 148 & 0\\ \hline
+Evaluation and tools & 71 & 71 & 0\\ \hline
+Pipeline, records, live loop & 36 & 36 & 0\\ \hline
+\textbf{Python suite, total} & \textbf{2,281} & \textbf{2,279} & \textbf{2}\\ \hline
+Front-end unit tests (Vitest) & 15 & 15 & 0\\ \hline
+Browser journeys (Playwright, desktop and phone) & 23 & 22 & 1 (TC-29)\\ \hline
+\end{tabularx}
+\end{table}
+
+\begingroup\tablefont
+\begin{longtable}{|C{1.1cm}|L{4.0cm}|L{2.4cm}|L{4.5cm}|}
+\caption{Traceability from functional requirements to tests}\label{tab:trace}\\
+\hline\rowhead
+\thead{FR} & \thead{Requirement (short)} & \thead{Test cases} & \thead{Test modules}\\ \hline
+\endfirsthead
+\hline\rowhead
+\thead{FR} & \thead{Requirement (short)} & \thead{Test cases} & \thead{Test modules}\\ \hline
+\endhead
+\multicolumn{4}{r}{\footnotesize\itshape continued on next page}\\
+\endfoot
+\endlastfoot
+FR-1 & Video input, newest frame & -- & \code{test\_live}, \code{test\_hw\_picamera}, \code{test\_clip\_buffer}\\ \hline
+FR-2 & Persons, handguns, fire & TC-03 & \code{test\_pipeline}, \code{test\_clip\_engine}, \code{test\_clip\_fastlane}; video replay\\ \hline
+FR-3 & Scene classification & -- & \code{test\_scene}; video replay\\ \hline
+FR-4 & Residents per track, body re-ID & TC-12, TC-13 & \code{test\_identity}, \code{test\_reid}\\ \hline
+FR-5 & Time-stamped audio cues & TC-05, TC-06, TC-07 & \code{test\_multimodal}, \code{test\_mic\_hotplug}\\ \hline
+FR-6 & Confirmation, gates, TCI & TC-01 to TC-08 & \code{test\_evidence}, \code{test\_fusion}, \code{test\_multimodal}\\ \hline
+FR-7 & Level policy & TC-09 & \code{test\_fusion}\\ \hline
+FR-8 & Incidents, evidence, snapshot & TC-10, TC-11 & \code{test\_records}, \code{test\_clip\_engine}\\ \hline
+FR-9 & One request, owner prompted & TC-14, TC-26, TC-27 & \code{test\_sos\_machine}, \code{test\_sos\_engine}, \code{test\_e2e\_product}\\ \hline
+FR-10 & Answers, reminders, expiry, safety defaults & TC-15 to TC-18, TC-28 & \code{test\_sos\_engine}, \code{test\_sos\_pins}\\ \hline
+FR-11 & Desk acknowledge and resolve & TC-26, TC-27 & \code{test\_link\_portal}, \code{test\_portal\_api\_v2\_sos}\\ \hline
+FR-12 & Status LEDs & TC-24 & \code{test\_hw\_gpio}\\ \hline
+FR-13 & Provisioning, onboarding, contacts, claim & TC-26, TC-29 (Fail) & \code{test\_acct\_onboarding}, \code{test\_acct\_admin}\\ \hline
+FR-14 & Device pages and video through the tunnel & TC-21, TC-22 & \code{test\_link\_tunnel}, \code{test\_link\_policy}, \code{test\_device\_api\_v2\_tunnel}\\ \hline
+FR-15 & Training recordings & TC-25 & \code{test\_recorder}, \code{test\_recording\_routes}, \code{test\_recording\_live}\\ \hline
+FR-16 & Export, erasure, retention & TC-23 & \code{test\_acct\_household}, \code{test\_portal\_api\_v2\_household}, \code{test\_records}\\ \hline
+FR-17 & Audit log and event log & TC-10 & \code{test\_acct\_admin}, \code{test\_records}\\ \hline
+FR-18 & Send guard and test mode & TC-19, TC-20 & \code{test\_ch\_router}, \code{test\_review\_guards}\\ \hline
+\end{longtable}
+\endgroup
 
 %--------------------------------------------------------------
 \section{Results and Discussions}
 \label{sec:results}
 
 \subsection{Choosing the models}
-\figref{fig:configs} compares the three model configurations on the held-out validation videos and on the replay of all ten videos. The models trained on the team's own footage (v4: DINOv2 scene classifier and YOLO11n heads) nearly doubled validation macro-F1 over the fine-tuned v3 models (0.768 vs 0.401) and cut false alarms per normal minute by a factor of nine (0.79 vs 7.12); the evidence rules of M1 then removed the remaining false alarms (0.00) while keeping the same 13 of 18 episodes. The one clear loss of v4 is the test corridor's swung stick, which it never detects (0 of 3 episodes): 39 frames of a stick \emph{carried} in one training video did not teach a stick \emph{swung} in another. Stick is therefore experimental in the product.
+\figref{fig:configs} and \tabref{tab:configs} compare the three model configurations on the held-out validation videos, on the test video and on the replay of all ten videos. The models trained on the team's own footage (v4: DINOv2 scene classifier and YOLO11n heads) nearly doubled validation macro-F1 over the fine-tuned v3 models (0.768 vs 0.401) and cut false alarms per normal minute by a factor of nine (0.79 vs 7.12); the evidence rules of M1 then removed the remaining false alarms (0.00) while keeping the same 13 of 18 episodes. The one clear loss of v4 is the test corridor's swung stick, which it never detects (0 of 3 episodes): 39 frames of a stick \emph{carried} in one training video did not teach a stick \emph{swung} in another. Stick is therefore experimental in the product.
 
 \begin{figure}[htbp]
 \centering
@@ -724,6 +831,21 @@ Industry practice & Cloud face recognition in doorbells (2025) \cite{perez2025ri
 \end{tabularx}
 \end{table}
 
+\paragraph{The alarm rule compared with published practice.} Component scores from public benchmarks cannot be compared with two rooms, but alarm rules can be compared on the same data. \figref{fig:baseline} takes the scores logged in the replay of the ten labelled videos and applies two published rules and SENTRIX's own, with the same thresholds for every rule (\code{tools/baseline\_alarm\_rules.py}):
+\begin{itemize}
+\item \textbf{Single frame:} a detection is an alarm, the common practice in detection papers and in the pre-repair SENTRIX;
+\item \textbf{Five successive detections:} the activation rule of Olmos \emph{et al.} \cite{olmos2018handgun}, applied to each source;
+\item \textbf{SENTRIX:} 2-of-3 confirmation with the person gate, as committed in the replay.
+\end{itemize}
+All three catch the same 9 of 12 handgun and 3 of 3 flame episodes. The single-frame rule raises 2 false Level~3 alarms in 3.7 minutes of normal footage. Five successive detections remove them, but delay every alarm (median 0.67\,s instead of 0.13\,s for handguns). SENTRIX removes them at almost the single-frame delay (0.17\,s). The normal footage is short, so the counts show a direction, not a rate; on the first live session the full evidence rules took 9 onsets at Level~3 and above to none (\figref{fig:livesession}). Neither published rule has SENTRIX's person gate, or its requirement of a second modality before Level~4.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{figures/fig_baseline_rules.pdf}
+\caption{Published alarm rules and SENTRIX's on the same replayed scores (ten labelled videos, tick mode at 6\,Hz): (a) false Level~3 alarms; (b) median time from the start of an episode to the alarm}
+\label{fig:baseline}
+\end{figure}
+
 \section{Inferences Drawn}
 \begin{enumerate}
 \item \textbf{The decision rules matter more than any single model.} The same models produced 9 Level~3 onsets in 18 minutes or none, depending only on confirmation and corroboration rules.
@@ -736,6 +858,13 @@ Industry practice & Cloud face recognition in doorbells (2025) \cite{perez2025ri
 
 \section{Validation of Objectives}
 \label{sec:validation}
+\tabref{tab:validation} checks each objective approved at the proposal stage (Section~\ref{sec:objectives}) against what was built and measured:
+\begin{itemize}
+\item O3 is achieved as stated.
+\item O1 and O5 are achieved with open items: the Pi's 2\,s latency target, and one interface defect.
+\item O2 is achieved with a changed method: the learned fusion model of the mid-semester version had been fitted to synthetic labels and was replaced by transparent rules.
+\item O4 is achieved with a revised budget, after the ESP32 design was replaced by the Raspberry~Pi~5.
+\end{itemize}
 
 \begin{table}[H]
 \caption{Validation of the approved objectives}
