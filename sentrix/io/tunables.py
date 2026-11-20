@@ -8,12 +8,6 @@ re-reads ``pi.env``) still applies, then the field, then the default.
 
 Defaults and why:
 
-* ``siren_max_on_seconds`` 90 — one on-period of the relay never exceeds
-  this, whatever asked for it (the roadmap's hearing note: at 110 dB the safe
-  daily dose is about 90 s at the rated distance). Alarms use 5 s.
-* ``siren_arm_pin`` none — the key switch on the siren's 12 V line can carry a
-  second contact to a GPIO (closed to GND = armed). Without it,
-  ``siren_armed`` (default on) states the switch position for the software.
 * ``tamper_pin`` none — an enclosure lid switch (closed to GND = lid shut).
 * ``inputs`` pir, door, mains — the inputs wired; an unwired one would read a
   fixed level (door "open", mains "lost") and is left out instead.
@@ -51,16 +45,6 @@ def _bool(section: str, field: str, env: str, default: bool) -> bool:
         return bool(value)
     raw = _env(env).lower()
     return default if not raw else raw in ("1", "true", "yes", "on")
-
-
-def _float(section: str, field: str, env: str, default: float) -> float:
-    value = _field(section, field, env)
-    if value is not _MISSING:
-        return float(value)
-    try:
-        return float(_env(env) or default)
-    except ValueError:
-        return default
 
 
 def _optional_pin(section: str, field: str, env: str) -> int | None:
@@ -101,18 +85,6 @@ def parse_size(value: Any, default: tuple[int, int]) -> tuple[int, int]:
     if not (16 <= width <= 4608 and 16 <= height <= 3456):
         return default
     return width - width % 2, height - height % 2
-
-
-def siren_max_on_seconds() -> float:
-    return max(1.0, _float("gpio", "siren_max_on_seconds", "SENTRIX_SIREN_MAX_ON_SECONDS", 90.0))
-
-
-def siren_arm_pin() -> int | None:
-    return _optional_pin("gpio", "siren_arm_pin", "SENTRIX_SIREN_ARM_PIN")
-
-
-def siren_armed_flag() -> bool:
-    return _bool("gpio", "siren_armed", "SENTRIX_SIREN_ARMED", True)
 
 
 def tamper_pin() -> int | None:
@@ -163,6 +135,5 @@ def picamera_rotation() -> int:
     return parse_rotation(_env("SENTRIX_PICAMERA_ROTATION") if value is _MISSING else value)
 
 
-__all__ = ["parse_size", "siren_max_on_seconds", "siren_arm_pin", "siren_armed_flag",
-           "tamper_pin", "bme280_enabled", "dht22_enabled",
+__all__ = ["parse_size", "tamper_pin", "bme280_enabled", "dht22_enabled",
            "picamera_main_size", "picamera_lores_size", "parse_rotation", "picamera_rotation"]

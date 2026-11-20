@@ -30,7 +30,7 @@ deployment section no longer applies: detection stays on the device
 
 | Item | What is missing |
 |---|---|
-| Raspberry Pi 5: siren relay, LEDs, inputs, telemetry, Pi camera, systemd, network failover | a Pi; bench test with an LED in place of the siren (docs 8, `deploy/pi5/README.md`) |
+| Raspberry Pi 5: LEDs, inputs, telemetry, Pi camera, systemd, network failover | a Pi; bench checks of the LEDs and the inputs (docs 8, `deploy/pi5/README.md`) |
 | 4G modem SMS | a modem and SIM; check PDU mode, delivery reports, the AT port |
 | Telegram bot, Brevo / Resend e-mail | a bot token and provider accounts; one rehearsal message per channel to an allowlisted team account |
 | Portal on Oracle / Render with Postgres | Docker run, a live Postgres check (`tools/portal_pg_check.py live`), DNS and TLS |
@@ -74,7 +74,7 @@ This unlocks gates G0, G3 and G5 (`CLAUDE.md` M9), the SOS prompt budget P8
 
 ### 2.2 Models that fit the room (M7)
 
-* One YOLO11n detector (person, pistol, knife, fire) at 640 px from COCO, with
+* One YOLO11n detector for person, weapon and fire at 640 px from COCO, with
   QC'd teacher boxes, rehearsal and all the hard negatives; it replaces three
   YOLO passes.
 * A person-crop weapon classifier as the second vote; the scene classifier
@@ -112,10 +112,10 @@ never tuned on S4.
 
 ### 2.5 Hardware bring-up
 
-In order: the bench kit (doc 8 §8), the LED relay test, debounce checks on
-real PIR, door and mains signals, Picamera2 on the Camera Module 3 (standard lens), the
-clip-mode gate on the Pi with the link running (Gate A, doc 8 §7), then the
-modem on the Pi and network failover with the actual 4G dongle.
+In order: the bench kit (doc 8 §8), debounce checks on real PIR, door and
+mains signals, Picamera2 on the Camera Module 3 (standard lens), the clip-mode
+gate on the Pi with the link running (Gate A, doc 8 §7), then the modem on the
+Pi and network failover with the actual 4G dongle.
 
 ### 2.6 Demo rehearsal
 
@@ -136,7 +136,8 @@ validation samples, and a reported macro-F1 that is a single-epoch spike
 (doc 2 §4). Audio is log-only under decision D1 until this changes.
 
 Recommended 6 classes: `ambient`, `scream`, `glass_break`, `gunshot`,
-`alarm_siren` and **`nuisance_impulsive`** (firecrackers, horns, door slams,
+`alarm_siren` (alarm sounds heard in the room: a smoke alarm or a siren
+outside) and **`nuisance_impulsive`** (firecrackers, horns, door slams,
 dropped objects). The last class gives the model somewhere to put loud but
 harmless sounds; a firecracker-vs-gunshot confusion matrix closes research gap
 RG-5 with evidence. Data: ≥ 200 clips per class from AudioSet, UrbanSound8K and

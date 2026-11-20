@@ -83,7 +83,6 @@ class FakePipeline:
         self.violence = None
         self.audio = None
         self.tci = SimpleNamespace(model_source="rules")
-        self.siren = SimpleNamespace(name="console", is_real=False)
         self.frame = np.zeros((48, 64, 3), np.uint8)
 
     def latest_raw(self):
@@ -381,7 +380,8 @@ class TestTheShell:
         web = ROOT / "sentrix" / "web"
         assert not (web / "templates").exists()
         assert not (web / "static" / "js").exists() and not (web / "static" / "css").exists()
-        assert (web / "static" / "sounds").is_dir() and APP_DIR.is_dir()
+        assert not (web / "static" / "sounds").exists(), "no siren sound (D25)"
+        assert APP_DIR.is_dir()
         assert not hasattr(sentrix.paths, "TEMPLATES_DIR")
         client, csrf = lc_client(console)
         assert client.get("/static/js/app.js").status_code == 404
@@ -411,12 +411,13 @@ class TestCapabilities:
     def test_the_device_admin_uses_everything_on_the_lan(self, console):
         body = lc_client(console)[0].get("/api/session").json()
         assert {"media", "gallery_view", "gallery_write", "verdict", "sos", "dispatch", "mode",
-                "siren_test", "record"} <= set(body["capabilities"])
+                "record"} <= set(body["capabilities"])
+        assert "siren_test" not in body["capabilities"], "no siren (D25)"
         assert body["lan_admin"] is True and body["sos"]["demo_trigger"] is True
 
-    def test_the_owner_edits_the_gallery_tests_the_siren_and_records(self, console):
+    def test_the_owner_edits_the_gallery_and_records(self, console):
         body = tunnel_client(console, "owner").get("/api/session").json()
-        assert {"gallery_write", "siren_test", "record", "verdict", "sos", "mode"} <= set(
+        assert {"gallery_write", "record", "verdict", "sos", "mode"} <= set(
             body["capabilities"])
         assert body["lan_admin"] is False, "the admin's views stay on the LAN"
         assert body["sos"]["demo_trigger"] is False
@@ -424,7 +425,7 @@ class TestCapabilities:
     def test_a_member_sees_the_gallery_read_only(self, console):
         caps = capabilities_of(tunnel_client(console, "member"))
         assert {"gallery_view", "verdict", "sos", "dispatch", "mode"} <= caps
-        assert not caps & {"gallery_write", "siren_test", "record"}
+        assert not caps & {"gallery_write", "record"}
 
     def test_the_desk_operator_gets_nothing_to_act_on(self, console):
         body = tunnel_client(console, "operator").get("/api/session").json()

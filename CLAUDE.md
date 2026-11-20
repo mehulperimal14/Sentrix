@@ -21,7 +21,7 @@ Two programs:
   incidents, event log, encrypted evidence. It serves the **Local Console (LC)**
   on `http://127.0.0.1:8000` and runs the SOS engine, the channel router
   (modem SMS, Telegram, e-mail, Twilio — all behind the send guard) and the
-  outbound link client. Pi I/O: siren relay, LEDs, PIR, door, mains sense,
+  outbound link client. Pi I/O: status LEDs, PIR, door, mains sense,
   node telemetry, watchdog (no buzzer and no speaker since D19). The LC is
   the **device app** (React, D22; `sentrix/web/static/app/`): the wall view
   and alert takeover on the device screen, and the device admin pages on the
@@ -47,7 +47,7 @@ Two programs:
 | 2 SUSPICIOUS | incident opened (log and dashboard only; D4); the most an unrecognised person ever reaches (D15) |
 | 3 ELEVATED | + snapshot, AES-256-GCM evidence bundle, SOS request for weapon, fire and a corroborated fight (D8 as amended by D15) |
 | 4 HIGH | + dispatch package; legacy SMS only when no SOS request owns the incident |
-| 5 CRITICAL | + siren; legacy voice call only when no SOS request owns the incident |
+| 5 CRITICAL | + legacy voice call only when no SOS request owns the incident (no siren since D25) |
 
 The TCI bands 0.20 / 0.40 / 0.65 / 0.85 are asserted, not fitted. One
 confirmed visual modality lands in L3 (≤ 0.62); L4+ needs two independent
@@ -71,7 +71,7 @@ FrameSource (io/sources.py: webcam | file | RTSP | picamera:0 | demo-reel:<json>
   → TCIEngine (fusion/tci.py): TCI = strongest fused class score (no booster, no EMA);
     unknown person / PIR / door = L2 context only; per-input contributions recorded
   → LevelPolicy (fusion/policy.py): per-threshold timers (L4/L5 0.6 s + 2 obs; 5 s down)
-  → IncidentManager (pipeline/incidents.py, PeakSnapshot) → _act: snapshot, evidence, dispatch, siren
+  → IncidentManager (pipeline/incidents.py, PeakSnapshot) → _act: snapshot, evidence, dispatch, SMS, call
   → SOS hook: sos.trigger (idempotent per incident) → sentrix/sos (machine, sweeper, channels)
   → EventLog (var/events/*.jsonl, schema 5, flushed per row; 365 d / 5 GB retention), SystemState (websocket), HUD
 Clip mode (SENTRIX_PIPELINE_MODE=clip, pipeline/clip.py): 4 s window, 2 s hop, optional fast lane.
@@ -314,7 +314,8 @@ removed); the speaker's module, routes, dashboard card, `state.speaker`, the
 link's `speaker` path class and `speaker.audit` event, the Portal's
 `device.speaker_say` audit, pyttsx3, espeak-ng and the `SENTRIX_SPEAKER_*`
 settings removed. The siren, the LEDs, the Local Console/Portal and the alert
-channels are the device's outputs; GPIO26 is free. Docs, env templates, the
+channels were then the device's outputs (the siren went too on 2026-11-20,
+D25); GPIO26 is free. Docs, env templates, the
 Pi installer and the enclosure follow (rev F: no buzzer cup or sound holes).
 The README's level table, split by the old "Speak to the room" section, is
 whole again.
@@ -849,6 +850,7 @@ video/session is never used for tuning.
 | D22 | **A new frontend replaces both server-rendered UIs** (2026-10-28, owner's request; branch `sentrix/frontend-v2`, contract `docs/9_FRONTEND.md`). Two React 19 + TypeScript single-page apps built with Vite and Tailwind 4 from `frontend/` (npm workspaces): the **Portal app** (owner and member app with Home, Activity, People, Settings, Live and the alert screen; 5-step setup; contact token pages; Desk; Admin; sign-in and activation) and the **device app** (wall view and alert takeover on the device screen; device admin on the LAN). Design: the SENTRIX Experience Plan and the platform prototype. The Jinja templates and page JS of `sentrix_portal` and `sentrix/web` are removed; the Python apps serve JSON APIs (Portal `/api/v2`, device `/api/...`) that call the same services, plus the built app (`static/app/`, committed so Render and the Pi need no Node). Owners see the device only through Portal screens fed by the tunnel's JSON (`/d/{id}/api/...`, `/video`, `/ws/threat`); the old engineering dashboard becomes device-admin Diagnostics, LAN only. **No data changes**: no table, column, file or retention meaning changes; new storage is additive. Old links keep working (`/activate/{code}`, `/claim`, `/consent/{token}`, `/c/{token}`, `/a/{token}`, `/sos/{id}`, `/dashboard`, `/setup/wifi`). Nothing is pushed before the Python suite, the frontend unit tests, the Playwright end-to-end run against a demo world and a manual local run pass. *Done and deployed 2026-11-18/19 (M12).* | The team needs a proper product UI for the evaluations; the Experience Plan's audit scored the old pages 3 to 6 out of 10. |
 | D23 | **Room calibration from the device's own event log** (2026-11-19; the M1 per-deployment thresholds, made routine). `tools/calibrate_room.py` reads the live rows of a period the team asserts was quiet and replays the device's own confirmation rule on the logged scene scores at every bar - clip mode: `confirm_keyframes` (2) distinct keyframes, cached ones included, a weapon keyframe only with a person seen in the last 2 s (rebuilt from the logged person boxes, carried across clips); tick mode: 2 of the last 3 fresh evaluations, a 3 s gap resetting - and proposes **max(floor, highest confirming value + 0.10, highest single value + 0.01)**, rounded up to 0.01, capped at 0.95 (a warning above 0.90: the model cannot tell the room's normal from a threat; record the room and fine-tune). It checks itself against the device's logged verdicts. Read-only by default; `--write` merges into `var/calibration/scene.json` after a timestamped backup, never lowers a bar without `--allow-lower`, skips a class with under 2 h scored, and records the scene weights (checkpoint name + size); the scene engine applies a file made for other weights but flags it (`calibration_stale`, the threshold source, a `tools/doctor.py` WARN). `--check LOG` replays a staged-threat session at the proposed bar; `--since/--until/--exclude` drop non-quiet periods. **Not built: an out-of-domain guard** for scene votes (familiarity to the training frames): on the five videos of 2026-11-18 (four new scenes in the old bedroom, one ordinary scene in a second room) the v4 scene model raised no false weapon or fire on their 90 normal frames (29 of them from the second room) and found 1 of 47 weapon frames (`training/runs/eval/baseline_2026-11-18`), so muting it where it is unfamiliar removes nothing there, and in the demo room the calibrated bars had 0 onsets in 5.08 h; it would also need a re-exported ONNX on the Pi. | The demo room's two bars were set by reading the Pi's log by hand; re-calibrating after the room's fine-tune (M6), or after the device moves, must not depend on someone repeating that. The rule reproduces both hand bars within 0.01. |
 | D24 | **Body re-identification from IntrusionSentry** (2026-11-18/19; amends M4's "a new track never inherits it"). IntrusionSentry's OSNet family, shipped as **OSNet-AIN x1_0 trained on MSMT17** (`sentrix/perception/osnet.py`, `models/reid/`, own onnxruntime session, denormals flushed; `SENTRIX_REID_MODEL=auto|histogram|off`, `SENTRIX_REID_THREADS`), chosen over IntrusionSentry's ImageNet weights by a rule fixed before the comparison; embedded with each face check, never per tick. At **home** (`SENTRIX_REID_IDENTITY=1`, default) a track whose face has not been seen is authorised as a resident when its body matches that resident's face-verified looks (last 20, 30 min) at >= **0.87** on **2 checks in a row**, >= 0.05 ahead of any other resident; shown as `name (body)`, `via: "appearance"`. Never in armed mode, against a face that was seen and failed, for a resident authorised by face on another track in view, or with colour-histogram bodies. Global ids at 0.66. The bars belong to these weights. | A resident who turns away or re-enters became "unverified" and, after 10 s at home, an L2 "unrecognised person" (D2); the body bridges that while a stranger was accepted in 0.020 % of measured cases. Identity never relaxes threat evidence (M1), so a wrong body match can at most hide an L2 at home. |
+| D25 | **No siren** (2026-11-20, the owner: "i have removed the siren component from this project, so there's no siren in sentrix"; follows D19). The siren left the hardware and the product: `sentrix/io/actuators.py` (console, sound and GPIO backends, the arming key, the 1 s test and its limiter), `static/sounds/siren.wav`, the L5 side effect (`ActionPlan.siren`, `AlertConfig.siren_*`), `GpioConfig.siren_*` and the `SENTRIX_SIREN*` settings, `POST /api/node/siren-test` and the Hardware page's test button, the link command `siren.test`, the path-table class `siren_test` and the hello capability `siren`, the doctor's siren rows and the `gpio=17=op,dl` boot line, the systemd unit's `pinctrl` hold on the siren pin, and the self-output filter (`sentrix/io/self_output.py`: with no siren, buzzer or speaker the device makes no sound, so every window the microphone hears is the room's). L5 keeps the legacy voice call (only when no SOS request owns the incident). The device's outputs are the three status LEDs (GPIO 5/12/13), the Local Console and Portal, and the alert channels; GPIO17 and GPIO26 are free. The sound model's `siren` cue stays: it is a sound SENTRIX hears (an alarm or an emergency vehicle outside), not a device part. | The siren is out of the demo unit; nothing is offered that the unit cannot do. |
 
 ### Milestones
 
@@ -977,7 +979,7 @@ v1, tunnel + auth bridge, SOS state machine, channels, roles, endpoints).
 - [x] Merge of `main` (the 2026-10-28 sweep and 2026-11-01 clean-up) into the new frontend (`de01c1f`, with `4a1ce34`); duress "help now" opens one duress-flagged request (`0f5db81`); the apps' CSS includes the shared components' classes (`2024b07`); e2e readiness via 127.0.0.1, the PIN test taps the keypad (`c1241c1`); the alert takeover offers the LAN device admin a *Device admin* link (`2867bdf`).
 - [x] Results: Python suite **2243 passed, 1 skipped** (`2024b07`); Vitest **15 passed**; Playwright **22 passed, 1 skipped**, desktop + phone (`c1241c1`). Pushed and deployed: GitHub `main`, the Render Portal and the Pi (at `2867bdf`), 2026-11-18/19.
 - [x] Owner face gallery in the Portal app (2026-11-19, owner's request; local, not yet pushed): People → *Faces SENTRIX recognises* lists the device's faces, uploads photos or takes one from the SENTRIX camera's live preview, removes with a step-up; members see it read-only. The device's `GET /api/authorized` moved from the LC-only list to the path table's `faces` row (consents `remote_view` + `face_recognition`, never the Desk) and checks `gallery_view` itself. Body re-ID still needs no photo (D24). Tried on the laptop demo world: preview and capture through the tunnel, the device's refusal reason shown.
-- [ ] Not done: the Portal app has no recording or siren-test controls (the device's path table still allows both for the owner with a step-up); the Portal's CSP still carries an unused per-request script nonce.
+- [ ] Not done: the Portal app has no recording controls (the device's path table allows them for the owner with a step-up; the siren test went with the siren, D25); the Portal's CSP still carries an unused per-request script nonce.
 
 ### Owners (from the README team table; roles set by the owner on 2026-11-20)
 
@@ -1006,8 +1008,7 @@ correction and QC in weeks 1–3; who deleted `Kartik.jpg` during the run.
 **Owner decisions from the Portal/SOS roadmap (v2, §17):** Pi 5 8 GB now or
 4 GB; Camera Module 3 Wide or Standard, and whether night operation (NoIR + IR)
 is needed; default SOS window 30 or 60 min and whether the D9 safety defaults
-stay on; whether a corroborated fire sounds the siren at L4 instead of L5
-(validate on fire-on-screen hard negatives first); who plays the Desk, owns the
+stay on; who plays the Desk, owns the
 Oracle account and card, and holds and recharges the SIM; demo room, hotspot
 phone, English only or Hindi too; permission for replica weapons and flames and
 the consent notice to the legal cell.

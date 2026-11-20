@@ -60,7 +60,6 @@ def hook_pipeline(sos):
     fake.submitted = []
     fake._submit = lambda func, *a, **k: fake.submitted.append(func.__name__)
     fake._evidence_context = lambda result: {}
-    fake.siren = SimpleNamespace(activate=lambda: fake.submitted.append("siren"))
     return fake
 
 
@@ -108,7 +107,6 @@ class TestPipelineHook:
             engine.work()
             assert "send_sms" not in fake.submitted and "make_call" not in fake.submitted
             assert "_create_dispatch" not in fake.submitted
-            assert "siren" in fake.submitted, "the siren stays"
             req = requests.get_request(req["id"])
             assert req["peak_level"] == 5 and req["urgency"] == "HIGH"
             assert len(requests.list_requests(5)) == 1
@@ -197,8 +195,6 @@ def light_pipelines(monkeypatch):
                  "IdentityEngine", "TrackIdentity", "ReIDEngine"):
         monkeypatch.setattr(engine_module, name, _Light)
     monkeypatch.setattr(engine_module, "EventLog", _Events)
-    monkeypatch.setattr(engine_module, "build_siren",
-                        lambda: SimpleNamespace(name="light", activate=lambda: None))
     built = []
     yield built
     for pipeline in built:

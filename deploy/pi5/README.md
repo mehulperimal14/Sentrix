@@ -2,8 +2,8 @@
 
 The Pi runs the same device process as the laptop (`python -m sentrix`:
 pipeline, Local Console, SOS, channels, Portal link) with the Camera Module 3,
-the siren relay, status LEDs, PIR, door contact and mains sensing (no buzzer
-and no speaker: D19).
+status LEDs, PIR, door contact and mains sensing (no siren since D25, no
+buzzer and no speaker since D19).
 Design, pinout, power and parts: [`docs/8_RASPBERRY_PI5_INTEGRATION.md`](../../docs/8_RASPBERRY_PI5_INTEGRATION.md)
 (§6 for wiring). Pin numbers in code: `settings.gpio` in `sentrix/config.py`.
 
@@ -22,11 +22,11 @@ its own switch, and then only to `SENTRIX_TEST_RECIPIENTS`. Keep it that way.
 | `install_pi.sh` | run once, as root | apt packages, service user, venv **with** `--system-site-packages`, `requirements-pi.txt`, `.env`, systemd, journald, watchdog, NetworkManager, polkit; optional config.txt, firewall, 4G profile |
 | `pi.env` | merged into `.env` by `merge_env.py` | Pi defaults: `CAMERA_SOURCES=picamera:0` at 15 fps, clip mode on ONNX with the fast lane, GPIO and node services on, `buffalo_s`, LAN binding, test mode, SOS and channels on, modem and link off |
 | `merge_env.py` | used by the installer | adds missing keys from `pi.env`; never changes a key `.env` already sets (on a fresh `.env` it replaces the template's values) |
-| `systemd/sentrix.service.in` | `/etc/systemd/system/sentrix.service` | `Type=notify`, `Restart=always`, `WatchdogSec=30`; siren pin forced off before start and after any exit |
+| `systemd/sentrix.service.in` | `/etc/systemd/system/sentrix.service` | `Type=notify`, `Restart=always`, `WatchdogSec=30` |
 | `systemd/10-sentrix-journald.conf` | `/etc/systemd/journald.conf.d/` | journal ≤ 200 MB, 1 GB kept free, one month |
 | `systemd/10-sentrix-watchdog.conf` | `/etc/systemd/system.conf.d/` | systemd pets the hardware watchdog (10 s) |
-| `systemd/sentrix-user.service` | `~/.config/systemd/user/sentrix.service` | the demo unit's way instead: a **user** service from `~/Sentrix` (`Restart=on-failure`, no watchdog, no siren `ExecStopPost`); see "The demo unit" below |
-| `config.txt.snippet` | appended to `/boot/firmware/config.txt` | `gpio=17=op,dl`, RTC charging, `kernel_watchdog_timeout=10`, camera, I2C, optional sensor overlays, the power note |
+| `systemd/sentrix-user.service` | `~/.config/systemd/user/sentrix.service` | the demo unit's way instead: a **user** service from `~/Sentrix` (`Restart=on-failure`, no watchdog); see "The demo unit" below |
+| `config.txt.snippet` | appended to `/boot/firmware/config.txt` | RTC charging, `kernel_watchdog_timeout=10`, camera, I2C, optional sensor overlays, the power note |
 | `networkmanager/20-sentrix-connectivity.conf` | `/etc/NetworkManager/conf.d/` | connectivity check: a link without Internet gets +20000 on its metric, so 4G takes over |
 | `networkmanager/sentrix-modem-gsm.nmconnection.in` | `system-connections/` (0600), `--modem-apn` | 4G through ModemManager, route metric 700 |
 | `networkmanager/sentrix-modem-ecm.nmconnection.in` | `system-connections/` (0600), `--modem-ecm` | 4G dongle in ECM/RNDIS mode (`usb0`), metric 700 |
@@ -39,8 +39,7 @@ its own switch, and then only to `SENTRIX_TEST_RECIPIENTS`. Keep it that way.
 
 The bench kit of docs/8 §8 (Pi 5 8 GB, 27 W supply, Active Cooler, High
 Endurance card, Camera Module 3 (standard lens; hardware/enclosure fits only it) with the 22-pin Standard–Mini cable,
-ML-2020 cell, USB microphone, relay parts, PIR, reed switch, LEDs), an
-LED + 1 kΩ resistor for the relay test, ear protection, and the laptop with
+ML-2020 cell, USB microphone, PIR, reed switch, LEDs) and the laptop with
 the repository (for model exports and provisioning).
 
 ## Bring-up order
@@ -86,7 +85,6 @@ After the reboot:
 
 ```bash
 vcgencmd get_throttled             # throttled=0x0
-pinctrl get 17                     # output, driven low (op dl ... lo)
 ```
 
 ### 4. Doctor
@@ -98,8 +96,8 @@ sudo -u sentrix /opt/sentrix/.venv/bin/python /opt/sentrix/tools/doctor.py
 The hardware section checks the venv's system site packages, the camera
 (enumerated, not opened), OpenCV < 5, temperature, throttling, EXT5V, the
 config.txt lines, `PSU_MAX_CURRENT`, the systemd unit and the network. The
-services section prints the GPIO pin map and the siren arming state, and the
-exported models the runtime will use.
+services section prints the GPIO pin map and the exported models the runtime
+will use.
 
 ### 5. Exported models
 
@@ -118,7 +116,7 @@ NCNN exports (needs `ncnn`/`pnnx`). They were measured on the demo Pi on
 decisions on 4-6 % of frames; in fp32 they are no faster than ONNX. Keep
 `SENTRIX_RUNTIME=onnx` (`training/runs/custom_eval/pi5/RUNTIME_2026-11-20.md`).
 
-### 6. Inputs (siren not connected)
+### 6. Inputs
 
 ```bash
 sudo systemctl start sentrix && journalctl -u sentrix -f
@@ -141,45 +139,23 @@ Debounce is 50 ms in software; check it does not miss or double real edges.
 At start the three LEDs light for 0.5 s (lamp test). Then green solid =
 running; amber solid = link enabled but not connected; amber fast = a fault;
 red slow blink at L3 or with an open SOS request, fast at L4, solid at L5.
-Full table: docs/8 §6.5.
+Full table: docs/8 §6.5. The LEDs are the only outputs on the box: no siren
+(D25) and no buzzer (D19), so GPIO17 and GPIO26 stay free.
 
-### 8. The relay test (LED in place of the siren)
+### 8. Microphone (any USB port)
 
-The siren is wired last. First prove the relay **never** closes when it should
-not, with an LED + 1 kΩ resistor on the relay's NO contact (from 5 V or a
-3 V coin cell) where the siren will go:
+Plug the USB microphone in **while SENTRIX runs**, then move it to another
+port (D21). Each time, the Hardware page's microphone row
+(`/admin/hardware`) names it within a minute, and `tools/doctor.py` lists it
+as the input that would open (it opens none).
 
-| Event | LED must stay | How |
-|---|---|---|
-| Cold start (power off 10 s, on) | off | `gpio=17=op,dl` holds the pin low from the firmware on |
-| Reboot | off | `sudo reboot` |
-| Service stop | off | `sudo systemctl stop sentrix` |
-| Crash | off | `sudo kill -9 $(systemctl show -p MainPID --value sentrix)` (`ExecStopPost` forces the pin low; systemd restarts it) |
-| Mains → UPS switchover | off | pull the mains plug of the UPS (after step 13) |
-| Test | **on for 1 s**, then off | Hardware page (`/admin/hardware`) "Test siren" (once per minute) |
+### 9. A test recording
 
-If the LED lights at boot or stays lit after a stop, the polarity is wrong:
-an active-low opto relay board needs `SENTRIX_SIREN_ACTIVE_HIGH=0` in `.env`
-and `gpio=17=op,dh` in config.txt. Set the first, then re-run
-`sudo deploy/pi5/install_pi.sh --no-apt`, which renders the unit's
-`pinctrl ... dh`; edit the config.txt line by hand (the installer does not
-rewrite an existing SENTRIX block) and reboot. With the NPN driver
-(1 kΩ base, 4.7 kΩ base pull-down, 1N4007 across the coil) the relay is
-active-high and the defaults are right.
-
-### 9. Siren
-
-Connect the siren to the relay's NO contact on the fused 12 V line through
-the arming key (docs/8 §6.3). Ear protection on (110 dB). One test from the
-Hardware page (`/admin/hardware`; `POST /api/node/siren-test`: 1 s, once per
-minute; device admin, or an owner with a fresh step-up through the Portal's
-tunnel, though the Portal app has no button for it).
-
-**Arming key.** Wire the key's second contact from a free GPIO to GND and set
-`SENTRIX_SIREN_ARM_PIN=<gpio>`: the Hardware page shows the key's position and a
-siren test is refused (409) while it is off. Without that input,
-`SENTRIX_SIREN_ARMED=1` (default) says the line is armed. A real alarm drives
-the relay either way; the key is what silences the line.
+From a laptop on the same network, open Device admin → *Record video*
+(`http://<pi>:8000/admin/recordings`) and record one minute with someone
+talking (D20). Download it on the laptop (a browser on the Pi itself cannot
+download): VLC plays the `.avi` with the sound in sync, and the `.json`
+sidecar shows few repeated or dropped frames. Then delete it on the device.
 
 ### 10. Wi-Fi and 4G failover (data)
 
@@ -241,17 +217,16 @@ The Portal must be running first ([`deploy/portal/README.md`](../portal/README.m
 ### 13. Power (12 V UPS path)
 
 Wire docs/8 §6.3: BIS-marked 12 V adapter → router mini UPS → fused 12 V bus →
-F1 → XY-3606 buck (5.2 V) → short USB-C → Pi; F2 → arming key → relay → siren;
-PC817 mains sense on the adapter output. Keep the UPS and its cells outside
-the box. Pass test:
+F1 → XY-3606 buck (5.2 V) → short USB-C → Pi; PC817 mains sense on the
+adapter output. Keep the UPS and its cells outside the box. Pass test:
 
 ```bash
-vcgencmd pmic_read_adc | grep EXT5V   # >= 4.8 V with the siren pulsing and the modem sending
+vcgencmd pmic_read_adc | grep EXT5V   # >= 4.8 V with the modem sending
 vcgencmd get_throttled                # 0x0
 ```
 
-Then 10 mains pulls with no reboot, and the relay test's UPS row again.
-Measure the UPS runtime (the plan's ≈ 2 h+ is an estimate).
+Then 10 mains pulls with no reboot. Measure the UPS runtime (the plan's
+≈ 2 h+ is an estimate).
 
 ### 14. Gate A measurement
 
@@ -351,6 +326,4 @@ alert screen while an SOS request is open. The device admin pages are under
 training recordings are made, downloaded and deleted on `/admin/recordings`
 from a laptop on the same network (a browser on the Pi itself cannot
 download them). Unlike the system service it has no
-hardware watchdog and does not force the siren pin low after an exit, so it
-suits a unit without a siren relay; a box with the siren wired uses
-`install_pi.sh`.
+hardware watchdog; a box that needs one uses `install_pi.sh`.

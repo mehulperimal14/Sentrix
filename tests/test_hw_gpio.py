@@ -1,9 +1,10 @@
 """GPIO service (T-HW): pin factory, debounced inputs, LEDs from the live
-state, node alerts and the ``node`` state block. No buzzer (D19).
+state, node alerts and the ``node`` state block. No buzzer (D19), no siren
+(D25).
 
 Every device runs on gpiozero's ``MockFactory`` (a Raspberry Pi 5); inputs are
-driven with ``MockPin.drive_high/low``. The event log, the link outbox and the
-pipeline's siren are injected fakes.
+driven with ``MockPin.drive_high/low``. The event log and the link outbox are
+injected fakes.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ import pytest
 from gpiozero.pins.mock import MockFactory, MockPin
 
 from sentrix.config import settings
-from sentrix.io import actuators, gpio
+from sentrix.io import gpio
 from sentrix.io.gpio import FAST, OFF, SLOW, SOLID, Debouncer, GpioService
 from sentrix.pipeline.state import SystemState
 
@@ -43,14 +44,11 @@ class ManualTimer:
 
 @pytest.fixture(autouse=True)
 def _clean(monkeypatch):
-    for name in ("SENTRIX_SIREN_ARM_PIN", "SENTRIX_TAMPER_PIN", "SENTRIX_SIREN_ARMED",
-                 "SENTRIX_GPIO_INPUTS"):
+    for name in ("SENTRIX_TAMPER_PIN", "SENTRIX_GPIO_INPUTS"):
         monkeypatch.delenv(name, raising=False)
     ManualTimer.created = []
-    actuators.clear_arming_source()
     gpio._reset_shared_pin_factory()
     yield
-    actuators.clear_arming_source()
     gpio._reset_shared_pin_factory()
 
 
@@ -106,11 +104,10 @@ def _ctx(state=None, *, bounce=0.0, setup_mode=False, **gpio_fields):
                            registry=None, extras={})
 
 
-def _service(factory, ctx=None, recorder=None, siren=None, **kwargs) -> GpioService:
+def _service(factory, ctx=None, recorder=None, **kwargs) -> GpioService:
     recorder = recorder or Recorder()
     service = GpioService(ctx or _ctx(), pin_factory=factory, audit=recorder.audit,
-                          publish=recorder.publish, siren=lambda: siren, run_thread=False,
-                          **kwargs)
+                          publish=recorder.publish, run_thread=False, **kwargs)
     service.recorder = recorder
     return service
 
@@ -258,15 +255,13 @@ class TestInputSpecs:
         assert specs["mains"].pull_up is settings.gpio.mains_present_low
         assert specs["mains"].value(True) is True
 
-    def test_optional_arming_and_tamper_inputs(self, monkeypatch):
-        monkeypatch.setenv("SENTRIX_SIREN_ARM_PIN", "25")
+    def test_optional_tamper_input(self, monkeypatch):
         monkeypatch.setenv("SENTRIX_TAMPER_PIN", "22")
         specs = {s.name: s for s in gpio.input_specs(settings.gpio)}
-        assert specs["siren_armed"].pin == 25 and specs["siren_armed"].value(True) is True
         assert specs["tamper"].pin == 22 and specs["tamper"].value(False) is True
+        assert "siren_armed" not in specs, "no siren arming key since D25"
 
     def test_bad_optional_pins_are_ignored(self, monkeypatch):
-        monkeypatch.setenv("SENTRIX_SIREN_ARM_PIN", "99")
         monkeypatch.setenv("SENTRIX_TAMPER_PIN", "x")
         assert {s.name for s in gpio.input_specs(settings.gpio)} == {"pir", "door", "mains"}
 
@@ -279,9 +274,11 @@ class TestInputSpecs:
 
     def test_pin_conflicts(self, monkeypatch):
         assert gpio.pin_conflicts(settings.gpio) == []
-        monkeypatch.setenv("SENTRIX_SIREN_ARM_PIN", str(settings.gpio.led_amber_pin))
+        monkeypatch.setenv("SENTRIX_TAMPER_PIN", str(settings.gpio.led_amber_pin))
         assert gpio.pin_conflicts(settings.gpio) == [
-            f"GPIO{settings.gpio.led_amber_pin}: led_amber, siren_armed"]
+            f"GPIO{settings.gpio.led_amber_pin}: led_amber, tamper"]
+        monkeypatch.setenv("SENTRIX_TAMPER_PIN", "17")
+        assert gpio.pin_conflicts(settings.gpio) == [], "GPIO17 is free: no siren (D25)"
 
 
 # ── the service ───────────────────────────────────────────────────────────────
@@ -298,7 +295,8 @@ class TestGpioService:
             assert block["leds"] == {"green": OFF, "amber": OFF, "red": OFF}
             assert block["pir"] is False and block["door"] == "open" and block["mains"] is True
             assert node["pir"] is False and node["door"] == "open" and node["mains"] is True
-            assert node["siren_armed"] is True and node["updated_at"]
+            assert node["updated_at"] and "siren_armed" not in node
+            assert "siren" not in block, "no siren (D25)"
             assert service.recorder.alerts() == [], "mains present at start: no alert"
         finally:
             service.stop()
@@ -380,8 +378,7 @@ class TestGpioService:
         finally:
             service.stop()
 
-    def test_tamper_and_arming_key(self, factory, monkeypatch):
-        monkeypatch.setenv("SENTRIX_SIREN_ARM_PIN", "25")
+    def test_tamper(self, factory, monkeypatch):
         monkeypatch.setenv("SENTRIX_TAMPER_PIN", "22")
         _mains_on(factory)
         wire(factory, 22, False)                    # lid shut
@@ -389,17 +386,12 @@ class TestGpioService:
         service = _service(factory, _ctx(live))
         service.start()
         try:
-            assert live.get()["node"]["siren_armed"] is False, "key open = disarmed"
-            assert actuators.siren_arming() == {"armed": False, "source": "input"}
-            factory.pin(25).drive_low()             # key turned on
-            assert actuators.siren_armed() is True
-            assert live.get()["node"]["siren_armed"] is True
+            assert live.get()["node"]["tamper"] is False
             factory.pin(22).drive_high()            # lid opened
             assert live.get()["node"]["tamper"] is True
             assert service.recorder.alerts() == ["tamper"]
         finally:
             service.stop()
-        assert actuators.siren_arming()["source"] == "flag", "stop unregisters the key"
 
     def test_debounced_input_waits_for_the_level_to_hold(self, factory):
         live = SystemState()
@@ -460,21 +452,6 @@ class TestGpioService:
         finally:
             service.stop()
 
-    def test_poll_backs_up_the_siren_release_timer(self, factory):
-        calls = []
-        siren = SimpleNamespace(name="gpio", is_real=False,
-                                release_if_overdue=lambda: calls.append(1) or False,
-                                status=lambda: {"backend": "gpio", "on": False})
-        _mains_on(factory)
-        service = _service(factory, siren=siren)
-        service.start()
-        try:
-            service.poll_once()
-            assert calls == [1]
-            assert service.snapshot()["siren"] == {"backend": "gpio", "on": False}
-        finally:
-            service.stop()
-
     def test_a_busy_pin_is_reported_and_the_rest_works(self, factory):
         from gpiozero import LED
         squatter = LED(settings.gpio.led_amber_pin, pin_factory=factory)
@@ -510,7 +487,7 @@ class TestGpioService:
         live.update(camera_online=True)
         _mains_on(factory)
         service = GpioService(_ctx(live), pin_factory=factory, audit=lambda *a, **k: None,
-                              publish=lambda *a: None, siren=lambda: None, poll_seconds=0.02)
+                              publish=lambda *a: None, poll_seconds=0.02)
         service.start()
         try:
             deadline = time.monotonic() + 3.0
@@ -533,8 +510,8 @@ class TestFactoryAndPreflight:
         monkeypatch.setattr(gpio.sensors, "raspberry_pi_model", lambda root="/": None)
         rows = {r["name"]: r for r in gpio.preflight(settings)}
         assert rows["pin factory"]["status"] == "ok" and "mock" in rows["pin factory"]["detail"]
-        assert rows["pin map"]["status"] == "ok"
-        assert rows["siren arming"]["status"] == "ok"
+        assert rows["pin map"]["status"] == "ok" and "siren" not in rows["pin map"]["detail"]
+        assert "siren arming" not in rows
         assert rows["service"]["detail"].startswith("off")
 
     def test_preflight_on_a_pi_without_lgpio(self, monkeypatch):
@@ -548,10 +525,8 @@ class TestFactoryAndPreflight:
         assert rows["pin factory"]["status"] == "fail"
         assert "python3-lgpio" in rows["pin factory"]["detail"]
 
-    def test_preflight_flags_conflicts_and_disarmed_siren(self, monkeypatch):
+    def test_preflight_flags_conflicts(self, monkeypatch):
         monkeypatch.setattr(gpio.sensors, "raspberry_pi_model", lambda root="/": None)
         monkeypatch.setenv("SENTRIX_TAMPER_PIN", str(settings.gpio.pir_pin))
-        monkeypatch.setenv("SENTRIX_SIREN_ARMED", "0")
         rows = {r["name"]: r for r in gpio.preflight(settings)}
         assert rows["pin map"]["status"] == "fail" and "pir, tamper" in rows["pin map"]["detail"]
-        assert rows["siren arming"]["status"] == "warn"

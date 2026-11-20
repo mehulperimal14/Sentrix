@@ -25,7 +25,7 @@ sections describe what.
 |---|---|---|---|
 | 1 | [System architecture](1_SYSTEM_ARCHITECTURE.md) | repository layout, data flow, threat levels and evidence rules, TCI, evidence chain, threads, security model, non-goals | current |
 | 2 | [Model benchmarks, training results & KPIs](2_MODEL_BENCHMARKS_AND_KPIS.md) | v3 training results and their split contamination (historical); deployed weights; v4 and v5 models; measured latency; KPI status | §1–4, §6 historical (August 2026); §5, §7, §8 current |
-| 3 | [Original hardware plan & BOM](3_HARDWARE_SPECIFICATION_AND_BOM.md) | the mid-semester ESP32 / Orange Pi plan; siren, camera sources and hardware code as built | §1–4 superseded by doc 8; §5–7 current |
+| 3 | [Original hardware plan & BOM](3_HARDWARE_SPECIFICATION_AND_BOM.md) | the mid-semester ESP32 / Orange Pi plan; camera sources and hardware code as built | §1–4 superseded by doc 8; §5–7 current |
 | 4 | [Deployment guide & operations runbook](4_DEPLOYMENT_AND_RUNBOOK.md) | install, configuration and the send switches, the console, models, evaluation, the Portal and the demo tools, operations, troubleshooting, checklist | current |
 | 5 | [Roadmap & remaining work](5_FUTURE_ADVANCEMENTS_AND_CLOUD_DEPLOYMENT.md) | status by area, the critical path (M6–M9, gates), model research notes, Tier 2 items | current |
 | 6 | [Custom dataset evaluation](6_CUSTOM_DATASET_EVALUATION.md) | the team's 765-frame, 10-video dataset; how v4 was chosen; results after the repair, in clip mode and for the slim models | per section (table in its header) |
@@ -66,7 +66,7 @@ contaminated splits, the synthetic fusion model, "tamper-evident" rather than
 | `CLAUDE.md` | project memory: decisions D1–D14, milestones M1–M10 with status, the live diagnosis |
 | `ROADMAP.md` | remaining work in order (W0–W8), owners, Gate A and P1–P8, the demo script, and the guide for training on more custom data |
 | `deploy/portal/README.md` | Portal deployment on Oracle Always Free (India), or Render + Supabase |
-| `deploy/pi5/README.md` | Pi bring-up order, files, the LED test |
+| `deploy/pi5/README.md` | Pi bring-up order, files, the bench checks |
 | `training/runs/` | committed run reports; every measured number in these docs cites one |
 | `training/runs/custom/slim/REPORT.md` | the slim scene model report (protocol in `PROTOCOL.md`) |
 | `THIRD_PARTY.md` | third-party models, datasets, packages and services |

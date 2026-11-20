@@ -117,9 +117,8 @@ class TestInstallPi:
                      "/etc/NetworkManager/system-connections/sentrix-modem-ecm.nmconnection"):
             assert f"-> {dest}" in out, dest
         assert "+ systemctl enable sentrix.service" in out
-        assert "gpio=17=op,dl" in out, "NPN driver: drive low at boot"
+        assert "gpio=17" not in out and "LED in place of the siren" not in out,             "no siren pin held at boot and no relay test (D25)"
         assert "ufw.sh 10.0.0.0/24" in out
-        assert "LED in place of the siren" in out
 
     @needs_bash
     def test_refuses_anything_but_a_pi(self, tmp_path):
@@ -136,7 +135,7 @@ class TestInstallPi:
     def test_every_template_placeholder_is_rendered(self):
         script = (DEPLOY / "install_pi.sh").read_text(encoding="utf-8")
         rendered = set(re.findall(r'-e "s\|@([A-Z_]+)@\|', script))
-        assert rendered == {"APP_DIR", "USER", "SIREN_PIN", "SIREN_OFF", "APN", "IFNAME"}
+        assert rendered == {"APP_DIR", "USER", "APN", "IFNAME"}
         installed = re.findall(r'install_file "\$HERE/([^"]+)"', script)
         assert installed, "install_pi.sh installs templates"
         for relative in installed:
@@ -172,7 +171,7 @@ class TestMergeEnv:
         defaults = merge_env.parse_defaults((DEPLOY / "pi.env").read_text(encoding="utf-8"))
         text, changed = merge_env.merge(template, defaults, fresh=True)
         assert re.search(r"(?m)^CAMERA_SOURCES=picamera:0$", text)
-        assert re.search(r"(?m)^SENTRIX_SIREN=gpio$", text)
+        assert not re.search(r"(?m)^SENTRIX_SIREN", text), "no siren (D25)"
         assert not re.search(r"(?m)^CAMERA_SOURCES=0$", text)
         for key in ("SENTRIX_PASSWORD", "SESSION_SECRET", "EVIDENCE_AES_KEY"):
             assert f"\n{key}=\n" in text, "secrets stay for tools/setup_env.py"
@@ -198,10 +197,9 @@ class TestTemplates:
         for line in ("Type=notify", "NotifyAccess=main", "Restart=always", "WatchdogSec=30",
                      "StartLimitIntervalSec=0", "User=@USER@",
                      "ExecStart=@APP_DIR@/.venv/bin/python -m sentrix",
-                     "ExecStartPre=-+/usr/bin/pinctrl set @SIREN_PIN@ op @SIREN_OFF@",
-                     "ExecStopPost=-+/usr/bin/pinctrl set @SIREN_PIN@ op @SIREN_OFF@",
                      "ReadWritePaths=@APP_DIR@/var -/etc/sentrix"):
             assert line in unit, line
+        assert "SIREN" not in unit and "pinctrl" not in unit, "no siren pin to hold (D25)"
         assert "EnvironmentFile" not in unit.split("[Service]")[1].split("# ")[0], \
             "the app reads .env itself (inline comments)"
 
@@ -215,7 +213,8 @@ class TestTemplates:
     def test_config_txt_snippet(self):
         lines = [l.strip() for l in (DEPLOY / "config.txt.snippet").read_text(
             encoding="utf-8").splitlines() if l.strip() and not l.startswith("#")]
-        for setting in ("gpio=17=op,dl", "dtparam=rtc_bbat_vchg=3000000",
+        assert not any(line.startswith("gpio=17") for line in lines), "no siren (D25)"
+        for setting in ("dtparam=rtc_bbat_vchg=3000000",
                         "kernel_watchdog_timeout=10", "camera_auto_detect=1",
                         "dtparam=i2c_arm=on"):
             assert setting in lines, setting
@@ -252,11 +251,13 @@ class TestTemplates:
         assert 'subject.user !== "@USER@"' in rule
         assert "org.freedesktop.NetworkManager.settings.modify.system" in rule
 
-    def test_readme_has_the_relay_test(self):
+    def test_readme_has_the_bring_up_order(self):
         readme = (DEPLOY / "README.md").read_text(encoding="utf-8")
-        assert "## Bring-up order" in readme and "LED in place of the siren" in readme
-        for event in ("Cold start", "Reboot", "Service stop", "kill -9", "UPS"):
-            assert event in readme, event
+        assert "## Bring-up order" in readme
+        for step in ("### 7. LEDs", "### 8. Microphone", "### 12. Link to the Portal",
+                     "UPS"):
+            assert step in readme, step
+        assert "LED in place of the siren" not in readme and "gpio=17" not in readme,             "no siren relay to test (D25)"
 
     def test_requirements_pi_pins_headless_opencv(self):
         text = (ROOT_DIR / "requirements-pi.txt").read_text(encoding="utf-8")

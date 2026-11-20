@@ -4,12 +4,6 @@
 # (raspi-config nonint do_overlayfs 0, which also makes /boot read-only),
 # turn it off first to edit this file.
 
-# Siren relay held OFF from power-on until SENTRIX claims the pin. "dl" = drive
-# low, right for the NPN driver (SENTRIX_SIREN_ACTIVE_HIGH=1, the default).
-# An active-low opto relay board needs "dh" instead, and
-# SENTRIX_SIREN_ACTIVE_HIGH=0 in .env.
-gpio=17=op,dl
-
 # Charge the RTC cell (rechargeable ML-2020 lithium-manganese only, never a
 # CR2032): evidence timestamps stay right through a power cut with no network.
 dtparam=rtc_bbat_vchg=3000000

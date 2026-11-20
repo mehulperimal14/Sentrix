@@ -107,9 +107,9 @@ class DetectionConfig:
     custom weights: four model loads for three jobs.
 
     Thresholds are asymmetric on purpose. Person detection is cheap to get wrong
-    in either direction, so it sits at the usual 0.35. Weapon and fire feed hard
-    overrides that skip fusion entirely and can trigger a siren, so they need a
-    much higher bar than the 0.25 the previous build shipped with.
+    in either direction, so it sits at the usual 0.35. Weapon and fire raise
+    alarms, so they need a much higher bar than the 0.25 the previous build
+    shipped with.
     """
 
     person_conf: float = _env_float("SENTRIX_PERSON_CONF", 0.35)
@@ -219,7 +219,7 @@ class ThreatConfig:
       alarms had nobody in frame).
     * **One source is capped below L4.** A single confirmed source lands in the
       L3 band (``confirmed_floor``..``single_source_cap``): snapshot and evidence,
-      never SMS or siren. The scene classifier and a detector box together can
+      never SMS or a call. The scene classifier and a detector box together can
       reach L4, and at full strength L5.
     * **Experimental classes never escalate past L2** (assault, robbery — they
       exist in 1-3 clips and cannot be validated; D1).
@@ -269,7 +269,7 @@ class ThreatConfig:
     #: L5. The weaker side sets the value, so L5 (0.85) needs both about 60 % of
     #: the way from threshold to certainty (e.g. scene fire 0.78, box 0.80).
     #: Noisy-OR of the single-source scores needed both at ~0.98, so no class
-    #: could ever reach the siren with the current models.
+    #: could ever reach L5 with the current models.
     corroborated_floor: float = 0.70
     corroborated_cap: float = 0.95
 
@@ -561,7 +561,7 @@ class PolicyConfig:
     L1 band on evidence the evidence layer has already confirmed over several
     observations, so L2 and L3 (dashboard, snapshot, evidence) trust it at once
     — counting persistence twice made L3 take 4 s at 0.5 Hz. L4 and L5 (SMS,
-    dispatch, siren) keep 0.6 s and two observations as a second, independent
+    dispatch, call) keep 0.6 s and two observations as a second, independent
     guard.
     """
 
@@ -633,19 +633,17 @@ class AlertConfig:
     """Notification thresholds and debounce.
 
     Minimum levels are raised relative to the previous build, which sent an SMS
-    at level 2 and fired the siren at level 3 — both far more aggressive than
-    the documented escalation matrix, and the direct cause of the alert storm.
+    at level 2 — far more aggressive than the documented escalation matrix, and
+    the direct cause of the alert storm. (It also sounded a siren at level 3;
+    SENTRIX has no siren since D25.)
     """
 
     sms_min_level: int = 4
     call_min_level: int = 5
-    siren_min_level: int = 5
     dispatch_min_level: int = 4
 
     sms_cooldown_seconds: float = 300.0
     call_cooldown_seconds: float = 600.0
-    siren_cooldown_seconds: float = 60.0
-    siren_duration_seconds: float = 5.0
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -772,8 +770,6 @@ class LinkConfig:
     tunnel_max_response_bytes: int = 16 * 1024 * 1024
     #: Device-enforced limits on commands from the cloud (decisions).
     sms_daily_cap: int = 30
-    siren_test_min_interval_seconds: float = 60.0
-    siren_test_seconds: float = 1.0
     media_requests_per_minute: int = 60
 
 
@@ -818,9 +814,8 @@ class GpioConfig:
     enabled: bool = _env_bool("SENTRIX_GPIO_ENABLED", False)
     #: "" = auto (lgpio on a Pi, gpiozero's mock factory elsewhere).
     pin_factory: str = _env_str("SENTRIX_GPIO_PIN_FACTORY", "")
-    siren_pin: int = 17
-    #: NPN driver with ``gpio=17=op,dl`` in config.txt: HIGH = siren on.
-    siren_active_high: bool = _env_bool("SENTRIX_SIREN_ACTIVE_HIGH", True)
+    #: GPIO17 (the siren relay) and GPIO26 (the buzzer) are free: no siren
+    #: since D25, no buzzer since D19.
     led_green_pin: int = 5
     led_amber_pin: int = 12
     led_red_pin: int = 13
@@ -831,14 +826,6 @@ class GpioConfig:
     #: PC817 output is pulled low while mains power is present.
     mains_present_low: bool = True
     input_bounce_seconds: float = 0.05
-    #: One relay on-period never exceeds this, whatever asked for it (hearing
-    #: note: ~90 s daily dose at 110 dB at the rated distance). Alarms use 5 s.
-    siren_max_on_seconds: float = _env_float("SENTRIX_SIREN_MAX_ON_SECONDS", 90.0)
-    #: GPIO of the siren arming key's second contact (closed to GND = armed);
-    #: None = no input, ``siren_armed`` states the key position.
-    siren_arm_pin: int | None = _env_pin("SENTRIX_SIREN_ARM_PIN")
-    #: Arming state without that input; False refuses siren tests (409).
-    siren_armed: bool = _env_bool("SENTRIX_SIREN_ARMED", True)
     #: Enclosure lid switch (closed to GND = shut); None = not fitted.
     tamper_pin: int | None = _env_pin("SENTRIX_TAMPER_PIN")
     #: Inputs actually wired, of ``pir``, ``door``, ``mains`` ("none" = none).

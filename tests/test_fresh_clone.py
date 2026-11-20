@@ -64,7 +64,7 @@ class TestFirstLogin:
 class TestReplayToolIsSideEffectFree:
     def test_replay_never_acts(self):
         """tools/replay.py used to build a live pipeline: webcam from
-        CAMERA_SOURCES, mic on, and real SMS/siren on a weapon clip."""
+        CAMERA_SOURCES, mic on, and real SMS/calls on a weapon clip."""
         source = (ROOT_DIR / "tools" / "replay.py").read_text(encoding="utf-8")
         for stub in ("pipeline._act = _noop", "pipeline._submit = _noop",
                      "pipeline._save_open_incident = _noop", "source=_NullSource()"):

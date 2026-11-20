@@ -171,7 +171,6 @@ def device_env(demo: dict[str, Any], reel: Path,
         # The link goes to the loopback address (Windows does not resolve
         # *.localhost for Python); browsers use portal.localhost.
         "SENTRIX_PORTAL_URL": f"http://127.0.0.1:{portal_port}",
-        "SENTRIX_SIREN": "console",
     })
     return env
 

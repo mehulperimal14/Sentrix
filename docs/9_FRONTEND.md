@@ -90,9 +90,8 @@ Commands (in `frontend/`): `npm run build`, `npm test` (Vitest), `npm run e2e`
   `face_recognition` consents. Photos go through the tunnel to the device and
   are stored only there (D12). Body re-identification needs no photo: the
   device learns a person's body look from their verified face (D24). The
-  Portal app has no recording or siren-test buttons (the device's path table
-  still allows the owner's recording start/stop and siren test through the
-  tunnel after a step-up).
+  Portal app has no recording buttons (the device's path table still lets the
+  owner start a recording through the tunnel after a step-up, and stop it).
 
 ## 4. JSON API conventions (both apps)
 
@@ -228,7 +227,7 @@ path are a JSON 404.
 | `/admin/sos` | device admin | help requests; in test mode the demo controls (close the incident, the disclosed scripted trigger) |
 | `/admin/recordings` | device admin | Record video: start, stop, download, delete (D20) |
 | `/admin/faces` | device admin | face gallery: capture from the camera, upload, remove |
-| `/admin/hardware` | device admin | this unit, camera and microphone, LEDs, siren and sensors, siren test, services |
+| `/admin/hardware` | device admin | this unit, camera and microphone, LEDs and sensors, services |
 | `/admin/network` | device admin | Portal link, alert channels (test message), who watched through the Portal |
 
 Old device paths redirect: `/dashboard`, `/live` → `/`; `/events`, `/alerts`,

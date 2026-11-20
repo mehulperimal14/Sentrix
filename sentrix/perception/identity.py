@@ -4,7 +4,7 @@ Why this is the most safety-critical module in the system
 ---------------------------------------------------------
 Recognising an enrolled resident forces TCI to a floor value **and suppresses
 every downstream side effect** — no snapshot, no encrypted evidence, no SMS, no
-siren, no database row. A weak matcher here is not a weak feature; it is an
+call, no database row. A weak matcher here is not a weak feature; it is an
 authentication bypass that silently disables the entire product.
 
 The previous implementation had two modes. Mode 1 used ``face_recognition``

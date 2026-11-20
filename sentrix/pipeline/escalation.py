@@ -7,14 +7,15 @@ document describing it. Documented behaviour vs. what actually shipped:
 Level    Documented (docs/1, Table 4)  Previously implemented
 =======  ============================  ==================================
 2        UI status only                snapshot + **SMS** + DB row
-3        snapshot + evidence           snapshot + SMS + **siren** + evidence
+3        snapshot + evidence           snapshot + SMS + evidence
 4        + SMS                         + dispatch package
-5        + call + siren                + voice call
+5        + call                        + voice call
 =======  ============================  ==================================
 
-SMS at level 2 and a siren at level 3 are two full steps more aggressive than
-specified, and level 2 was the system's permanent idle state because of the
-fusion calibration bug. That combination is what produced the alert storm.
+SMS at level 2 was a full step more aggressive than specified (the siren the
+old ladder sounded at level 3 is gone: SENTRIX has no siren since D25), and
+level 2 was the system's permanent idle state because of the fusion
+calibration bug. That combination is what produced the alert storm.
 
 Thresholds now live in configuration rather than in branching code, so the
 ladder is auditable and adjustable without touching logic.
@@ -36,7 +37,6 @@ class ActionPlan:
     snapshot: bool = False
     evidence: bool = False
     sms: bool = False
-    siren: bool = False
     dispatch: bool = False
     call: bool = False
     #: Offer the incident to the SOS service (decision D8: confirmed L3+; the
@@ -45,7 +45,7 @@ class ActionPlan:
 
     @property
     def any_side_effect(self) -> bool:
-        return any((self.snapshot, self.evidence, self.sms, self.siren,
+        return any((self.snapshot, self.evidence, self.sms,
                     self.dispatch, self.call, self.sos))
 
 
@@ -63,7 +63,6 @@ def plan_for(level: int) -> ActionPlan:
         snapshot=level >= evidence.snapshot_min_level,
         evidence=level >= evidence.min_level,
         sms=level >= alert.sms_min_level,
-        siren=level >= alert.siren_min_level,
         dispatch=level >= alert.dispatch_min_level,
         call=level >= alert.call_min_level,
         sos=level >= settings.sos.min_level,

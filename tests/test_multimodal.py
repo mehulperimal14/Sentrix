@@ -33,7 +33,6 @@ from sentrix.fusion.evidence import (AUDIO, VIDEO_CLASSIFIER, VIDEO_DETECTOR,
 from sentrix.fusion.features import FeatureVector
 from sentrix.fusion.policy import LevelPolicy, level_for
 from sentrix.fusion.tci import TCIEngine, contributions
-from sentrix.io import self_output
 from sentrix.paths import model_path
 from sentrix.perception.audio import (AudioEngine, AudioResult, FileAudio, alignment,
                                       audio_votes, block_end_monotonic, neutral_reason)
@@ -45,13 +44,6 @@ CFG = settings.threat
 L2, L3, L4, L5 = settings.policy.thresholds
 CUE_BARS = settings.audio.cue_thresholds
 NO_SCENE = SimpleNamespace(available=False, reset=lambda: None)
-
-
-@pytest.fixture(autouse=True)
-def _no_self_output():
-    self_output.clear()
-    yield
-    self_output.clear()
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -323,27 +315,19 @@ class TestSoundModel:
         assert ev["weapon"].state == "corroborated" and max(levels) >= 4
 
 
-class TestSelfOutput:
-    """Review F3: the device's own siren is not the room."""
+class TestNoSelfOutput:
+    """Review F3 kept the device's own siren out of the vote. Since D25 the
+    device makes no sound at all (no siren; no buzzer or speaker since D19),
+    so every loud window is the room's."""
 
-    def test_a_window_over_the_siren_does_not_vote(self):
+    def test_a_loud_window_is_always_classified(self):
         engine = AudioEngine(capture=False)
-        self_output.mark("siren", 2.0, at=10.0)
         loud = np.random.default_rng(0).normal(0, 0.2, 16000 * 4).astype(np.float32)
         result = engine.classify_window(loud, start=8.0, end=12.0)
-        assert result.model == "self"
-        assert alignment(result, 12.0)["status"] == "self_output"
-        later = engine.classify_window(np.zeros(16000 * 4, np.float32), start=20.0, end=24.0)
-        assert later.model == "quiet"
-
-    def test_a_siren_marks_its_sound(self):
-        from sentrix.io.actuators import SoundSiren
-        siren = SoundSiren.__new__(SoundSiren)
-        siren._play = lambda duration: None
-        siren.activate(1.0)
-        import time
-        now = time.monotonic()
-        assert self_output.overlapping(now, now + 0.5) == "siren"
+        assert result.model not in ("self", "quiet")
+        assert alignment(result, 12.0)["status"] != "self_output"
+        quiet = engine.classify_window(np.zeros(16000 * 4, np.float32), start=20.0, end=24.0)
+        assert quiet.model == "quiet"
 
 
 # ── fight vs banter ───────────────────────────────────────────────────────────

@@ -288,8 +288,8 @@ class NotificationRecord(Base):
 class RemoteAuditRecord(Base):
     """Every tunnelled request and link command the device served or refused.
 
-    The device does not trust the Portal: media, frames, gallery changes,
-    siren tests and SMS sends from the cloud are rate-limited, checked against
+    The device does not trust the Portal: media, frames, gallery changes and
+    SMS sends from the cloud are rate-limited, checked against
     the profile's consent flags, and recorded here (shown on the Node page).
     """
 

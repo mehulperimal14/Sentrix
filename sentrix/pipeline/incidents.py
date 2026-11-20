@@ -2,7 +2,7 @@
 
 The previous pipeline acted per *frame*. At level 2 it enqueued a snapshot, an
 SMS and a database insert on every inference tick, and at level 3 it added an
-encrypted evidence bundle and a siren activation. A single sustained false
+encrypted evidence bundle and a siren activation (no siren since D25). A single sustained false
 positive therefore produced, in ``backend/runtime/``:
 
 * 1,489 encrypted evidence bundles, 1,197 of them level 5

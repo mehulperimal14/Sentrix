@@ -232,7 +232,7 @@ class TestFeatureContract:
 
 class TestPolicyHysteresis:
     def test_costly_levels_require_dwell(self):
-        """L2/L3 trust already-confirmed evidence; L4/L5 (SMS, siren) wait."""
+        """L2/L3 trust already-confirmed evidence; L4/L5 (SMS, call) wait."""
         policy = LevelPolicy()
         assert policy.update(0.95, now=0.0).level == 3, "L3 is immediate"
         assert policy.update(0.95, now=0.1).level == 3, "L5 needs 0.6 s"
@@ -240,7 +240,7 @@ class TestPolicyHysteresis:
 
     def test_single_spike_cannot_reach_the_costly_levels(self):
         """Spikes are rejected upstream (k-of-n confirmation); the policy's own
-        guard keeps one tick from sending an SMS or sounding the siren."""
+        guard keeps one tick from sending an SMS or placing a call."""
         policy = LevelPolicy()
         now = 0.0
         for _ in range(20):
@@ -290,7 +290,7 @@ class TestPolicyHysteresis:
 
     def test_one_frame_at_low_fps_cannot_commit_l4(self):
         """At 0.5 Hz a single observation 'lasts' 2 s; time alone is not enough
-        for the levels that send an SMS or sound the siren."""
+        for the levels that send an SMS or place a call."""
         policy = LevelPolicy()
         policy.update(0.05, now=0.0)
         assert policy.update(0.95, now=2.0).level == 3

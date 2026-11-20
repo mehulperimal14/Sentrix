@@ -283,7 +283,6 @@ def test_the_open_row_gets_its_snapshot_and_evidence_without_a_peak_move(temp_db
     p.incidents = IncidentManager()
     p._submit = lambda func, *a, **k: queue.append((func, a, k))
     p._submit_or_run = lambda func, *a: queue.append((func, a, {}))
-    p.siren = SimpleNamespace(activate=lambda *a: None)
     frame = np.zeros((8, 8, 3), np.uint8)
     result = SimpleNamespace(incident_type="weapon", tci=0.55, raw_tci=0.55, reason="r",
                              features=SimpleNamespace(extras={}, authorized=False,

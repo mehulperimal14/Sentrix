@@ -32,7 +32,7 @@ For the alarm classes (weapon, fire):
   never acted on;
 * audio confirmed with no visual source: L2 at most (``audio_only_cap``);
 * one visual modality confirmed: the L3 band (``confirmed_floor`` ..
-  ``single_source_cap``) - snapshot and evidence, no SMS or siren;
+  ``single_source_cap``) - snapshot and evidence, no SMS or call;
 * two independent modalities confirmed (detector + scene, or video + aligned
   audio): L4 at threshold rising to L5, the weaker of the two setting the
   value (``corroborated_floor`` .. ``corroborated_cap``);
@@ -282,7 +282,7 @@ def three_modality_ok(modalities: dict[str, float], cfg=None) -> bool:
     """The L5 floor for three modalities needs the audio among them to be
     more than a whisper over its bar (``three_modality_audio_min_strength``):
     replica-gun handling scores "Cap gun" 0.2-0.8, and one such sound must not
-    turn a corroborated L4 into a siren."""
+    turn a corroborated L4 into an L5."""
     cfg = cfg or settings.threat
     audio = modalities.get(AUDIO)
     return audio is None or audio >= float(getattr(cfg, "three_modality_audio_min_strength",

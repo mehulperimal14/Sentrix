@@ -71,13 +71,13 @@ SOS_EVENT_KINDS = frozenset(k for k in EVENT_KINDS if k.startswith("sos."))
 
 #: ``command`` names the device accepts (allowlist; anything else is refused
 #: with ``unknown_command``). No shell, no code execution, nothing that turns
-#: off the siren or the evidence vault. Rules the device enforces: docs/7 §5.6.
+#: off the evidence vault. Rules the device enforces: docs/7 §5.6. (No
+#: ``siren.test`` since D25: the device has no siren.)
 COMMANDS = (
     "sos.respond",      # approve | decline | checking | safe | help_now (PIN on device)
     "sos.update",       # cloud-side SOS events: acknowledge | resolve | delivered | ...
     "verdict.set",      # queued Real/False verdict from an offline mirror page
     "mode.set",         # HOME/ARMED; disarm needs the SOS PIN
-    "siren.test",       # 1 s, at most once a minute, owner + step-up
     "sms.send",         # modem SMS, only to numbers in the current profile, 30/day
     "token.rotate",     # device token rotation (answered by token.issue)
     "unpair",           # wipe profile + token (owner + step-up)

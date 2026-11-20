@@ -62,7 +62,6 @@ from sentrix.fusion.evidence import CLASS_ORDER, EvidenceAccumulator
 from sentrix.fusion.features import FeatureVector
 from sentrix.fusion.policy import LevelPolicy
 from sentrix.fusion.tci import TCIEngine, TCIResult
-from sentrix.io.actuators import build_siren
 from sentrix.io.recorder import Recorder, RecorderError, _target_size
 from sentrix.io.sources import FrameSource, _placeholder, build_source
 from sentrix.perception.audio import AudioEngine, AudioResult, audio_votes, neutral_reason
@@ -237,7 +236,6 @@ class Pipeline:
         self.tci = TCIEngine()
         self.policy = LevelPolicy()
         self.incidents = IncidentManager()
-        self.siren = build_siren()
         self.events = EventLog(source=event_source)
         self.session_id = self.events.session_id
         #: SOS assistance requests (docs/7 §7). Null unless the app lifespan
@@ -257,11 +255,11 @@ class Pipeline:
         self._worker.start()
 
         log.info("pipeline ready — detector=%s scene=%s identity=%s audio=%s "
-                 "siren=%s fusion=%s", self.detector.available,
+                 "fusion=%s", self.detector.available,
                  self.scene.weights_name or "off",
                  self.identity.backend or "FAIL-CLOSED",
                  bool(self.audio and self.audio.available),
-                 self.siren.name, self.tci.model_source)
+                 self.tci.model_source)
 
     def _init_live(self) -> None:
         """State shared by the capture, inference and preview paths."""
@@ -601,18 +599,10 @@ class Pipeline:
         # (D8: SMS only offline or unseen after 10 min; the legacy L4 SMS folds
         # into the request's level_rise reminder, the L5 call into its rise5
         # step) and its one dispatch package (opened with the request at L3).
-        # The siren stays: a physical deterrent is not a message.
         sos_owned = any(a == "sos" or a.startswith("sos:") for a in incident.actions)
 
         if plan.sms and not sos_owned and claim(incident, "sms"):
             self._submit(notifier.send_sms, result, level, status)
-
-        if plan.siren and claim(incident, "siren"):
-            # Synchronous: a physical deterrent must not queue behind disk I/O.
-            try:
-                self.siren.activate()
-            except Exception as exc:
-                log.error("siren failed: %s", exc)
 
         if plan.dispatch and not sos_owned and claim(incident, "dispatch"):
             # Queued after the evidence capture above (one FIFO worker), so the

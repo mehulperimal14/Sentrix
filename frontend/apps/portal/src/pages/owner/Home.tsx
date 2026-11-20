@@ -100,7 +100,7 @@ function DeviceHome({ device: d, requests, tz }: { device: RawDevice; requests: 
     status = (
       <>
         <StatusCard tone="off" title={`${d.name} is offline`}>
-          {d.last_seen ? `Since ${formatDayTime(d.last_seen, tz)}. ` : ''}It keeps watching and can sound the siren; alerts reach you by SMS from the unit.
+          {d.last_seen ? `Since ${formatDayTime(d.last_seen, tz)}. ` : ''}It keeps watching and recording evidence; alerts reach you by SMS from the unit.
         </StatusCard>
         <details className="rounded-xl bg-haldi-wash px-3 py-2 text-[13px]">
           <summary className="cursor-pointer font-semibold">What to check</summary>

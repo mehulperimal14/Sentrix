@@ -74,7 +74,7 @@ enrolled, so it would fire on every person and says nothing about threats.
 
 **Harness isolation** (`sentrix/evaluation/harness.py`):
 
-* every side effect is disabled — no evidence, snapshots, SMS, calls, siren or
+* every side effect is disabled — no evidence, snapshots, SMS, calls or
   database rows. `.env` in a developer checkout carries live Twilio credentials;
 * identity is neutral — everyone is an unrecognised, non-degraded person. The
   dataset has no authorisation labels, and a match against whoever happens to be
@@ -144,8 +144,7 @@ Raw scores on all 765 images (`AUROC` of the class vs `normal`):
   like. That single failure produces the 0.043 test accuracy and 20 false
   alarms per minute.
 * **Weapon detection is close to chance on handguns held at close range**, and
-  the three-class head (knife, long_gun, pistol) has no class for the stick used
-  in the corridor.
+  the v3 weapon head has no class for the stick used in the corridor.
 * **Fire is never detected.** None of the 17 hand-held aerosol flame jets
   produces a fire or smoke box at the 0.50 gate; the v3 detector does not
   transfer to this kind of flame.
@@ -243,7 +242,7 @@ model were not: the dataset has no audio and no event-camera data.
 | Model | Starting point | Recipe | Written to |
 |---|---|---|---|
 | Scene classifier | `violence_classifier_real_v3.pt` (ResNet-18); new 5-class head whose `normal`/`assault` rows start from the old `nofight`/`fight` rows | 15 epochs, AdamW (backbone 2e-4, head 2e-3), class-balanced sampling, grayscale/blur/crop augmentation; **600 RWF-2000 clips per class rehearsed** (30 % of draws) | `models/v4_finetuned/scene_classifier_ft_v4.pt` |
-| Weapon detector | `weapon_detector_real_v3.pt` (YOLOv8n) | head extended to knife / long_gun / pistol / **stick**; custom boxes (positives ×3) + 1,500 rehearsal images of the original corpus; early-stopped on custom val | `models/v4_finetuned/weapon_detector_ft_v4.pt` |
+| Weapon detector | `weapon_detector_real_v3.pt` (YOLOv8n) | head extended with a **stick** class; custom boxes (positives ×3) + 1,500 rehearsal images of the original corpus; early-stopped on custom val | `models/v4_finetuned/weapon_detector_ft_v4.pt` |
 | Fire/smoke detector | `fire_smoke_detector_real_v3.pt` (YOLOv8n) | custom fire boxes (positives ×8) + 1,500 rehearsal images | `models/v4_finetuned/fire_smoke_detector_ft_v4.pt` |
 
 ### Selection evidence
@@ -273,7 +272,7 @@ Fusion mode, val split, full product pipeline:
 The fine-tuned weapon head scores lower than v3 did: on val frames 0.35 keeps
 zero false positives and lifts detector recall from 0.20 to 0.31. Replaying the
 val videos confirmed it (accuracy 0.549 → 0.562, identical false alarms). This
-is the *detection floor* only — the siren-capable weapon override stays at 0.55.
+is the *detection floor* only — the weapon override stays at 0.55.
 
 ### Component results
 
@@ -507,7 +506,7 @@ does — the **committed level** — with statistical bounds
 | False onsets at L2 / L3 / L4 / L5 | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
 | Upper 95 % bound on false L3 onsets per hour | 60 | 60 |
 | Caught at L3: weapon / fire / robbery / assault | 9/12, 3/3, 0/1, 0/2 | 9/12, 3/3, 0/1, 0/2 |
-| Caught at L5 (siren): weapon / fire | 2/12, 2/3 | 2/12, 2/3 |
+| Caught at L5: weapon / fire | 2/12, 2/3 | 2/12, 2/3 |
 
 3.7 minutes of normal footage bounds the false-alarm rate only at ≤ 60/hour:
 the dataset cannot show the rate a home system needs. That, and 30 episodes per
@@ -541,7 +540,7 @@ python training/custom/train_scene_classifier.py fit --init violence_v3 --arch r
     --rehearsal 600 --cv-tag ft_r18_reh --tag ft_r18_reh \
     --out models/v4_finetuned/scene_classifier_ft_v4.pt
 python training/custom/train_detector.py --task weapon \
-    --init models/v3_real/weapon_detector_real_v3.pt --classes knife,long_gun,pistol,stick \
+    --init models/v3_real/weapon_detector_real_v3.pt --classes <the v3 head's classes>,stick \
     --rehearsal 1500 --retention 400 --epochs 50 --patience 15 --tag ft_weapon \
     --out models/v4_finetuned/weapon_detector_ft_v4.pt
 python training/custom/train_detector.py --task fire \

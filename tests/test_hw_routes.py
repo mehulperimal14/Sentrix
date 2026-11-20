@@ -1,6 +1,6 @@
-"""LC Node API (T-HW, docs/7 §9.2): ``GET /api/node`` and ``POST
-/api/node/siren-test``. A fake pipeline (mock-pin siren, fake camera) stands
-in; no lifespan runs, so no camera, model or service starts."""
+"""LC Node API (T-HW, docs/7 §9.2): ``GET /api/node``. A fake pipeline (fake
+camera) stands in; no lifespan runs, so no camera, model or service starts.
+The device has no siren (D25), buzzer or speaker (D19)."""
 
 from __future__ import annotations
 
@@ -8,40 +8,21 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
-from gpiozero.pins.mock import MockFactory
 
-from sentrix.io import actuators, gpio
-from sentrix.io.actuators import GpioSiren
 from sentrix.pipeline.state import NODE_IDLE, state
 from sentrix.web import node_routes
 
 PASSWORD = "node-test-password"
 
 
-class Events:
-    def __init__(self) -> None:
-        self.rows = []
-
-    def audit(self, event, **detail):
-        self.rows.append((event, detail))
-
-
 @pytest.fixture
 def fake_pipeline(monkeypatch):
-    factory = MockFactory(revision=gpio.MOCK_REVISION)
-    siren = GpioSiren(pin_factory=factory)
     pipeline = SimpleNamespace(
-        siren=siren, events=Events(),
         source=SimpleNamespace(name="picamera:0", online=True,
                                status=lambda: {"name": "picamera:0", "online": True,
                                                "lores_format": "RGB888"}))
     monkeypatch.setattr(node_routes, "_pipeline", lambda: pipeline)
-    monkeypatch.delenv("SENTRIX_SIREN_ARMED", raising=False)
-    actuators.clear_arming_source()
     yield pipeline
-    siren.close()
-    factory.reset()
-    actuators.clear_arming_source()
     state.update(node=dict(NODE_IDLE))
 
 
@@ -60,14 +41,9 @@ def admin(monkeypatch):
 
 
 class TestNodeStatus:
-    def test_idle_block_plus_siren_camera_and_services(self, admin, fake_pipeline):
+    def test_idle_block_plus_camera_and_services(self, admin, fake_pipeline):
         body = admin.get("/api/node").json()
         assert set(NODE_IDLE) <= set(body)
-        assert body["siren"]["backend"] == "gpio" and body["siren"]["real"] is False
-        assert body["siren"]["armed"] is True and body["siren_armed"] is True
-        assert body["siren_arming"] == {"armed": True, "source": "flag"}
-        assert body["siren_test"] == {"seconds": 1.0, "min_interval_seconds": 60.0,
-                                      "retry_after": None}
         assert body["camera"]["lores_format"] == "RGB888"
         assert body["services"] == {"node": "off", "gpio": "off"}
         assert body["microphone"] is None, "no audio engine: no microphone"
@@ -84,8 +60,7 @@ class TestNodeStatus:
         from sentrix.io.node import merge_node_block
         merge_node_block(state, cpu_temp_c=51.2, mains=False, door="open",
                          gpio={"leds": {"green": "solid", "amber": "fast", "red": "off"},
-                               "pir": False, "door": "open", "mains": False,
-                               "siren": {"on": False}})
+                               "pir": False, "door": "open", "mains": False})
         body = admin.get("/api/node").json()
         assert body["cpu_temp_c"] == 51.2 and body["mains"] is False
         assert body["gpio"]["leds"]["amber"] == "fast"
@@ -96,46 +71,11 @@ class TestNodeStatus:
         anonymous = TestClient(app)
         response = anonymous.get("/api/node")
         assert response.status_code == 401 and response.json()["code"] == "unauthorised"
-        assert anonymous.post("/api/node/siren-test").status_code == 401
-
-
-class TestSirenTestRoute:
-    def test_one_second_then_rate_limited(self, admin, fake_pipeline, monkeypatch):
-        from sentrix.pipeline import engine
-        monkeypatch.setattr(engine, "_pipeline", fake_pipeline)
-        first = admin.post("/api/node/siren-test")
-        assert first.status_code == 200
-        assert first.json()["ok"] and first.json()["seconds"] == 1.0
-        assert fake_pipeline.siren.is_on and fake_pipeline.siren.activations == 1
-        assert fake_pipeline.events.rows == [("siren_test", {"by": "lc:device_admin",
-                                                              "backend": "gpio",
-                                                              "seconds": 1.0})]
-        again = admin.post("/api/node/siren-test")
-        assert again.status_code == 429 and again.json()["code"] == "rate_limited"
-        assert 1 <= int(again.headers["Retry-After"]) <= 60
-        assert fake_pipeline.siren.activations == 1
-        assert admin.get("/api/node").json()["siren_test"]["retry_after"] > 0
-
-    def test_refused_while_the_siren_is_disarmed(self, admin, fake_pipeline, monkeypatch):
-        monkeypatch.setenv("SENTRIX_SIREN_ARMED", "0")
-        refused = admin.post("/api/node/siren-test")
-        assert refused.status_code == 409 and refused.json()["code"] == "conflict"
-        assert "disarmed" in refused.json()["detail"]
-        assert fake_pipeline.siren.activations == 0
-        monkeypatch.setenv("SENTRIX_SIREN_ARMED", "1")
-        assert admin.post("/api/node/siren-test").status_code == 200, \
-            "a refusal does not use the minute's slot"
-
-    def test_the_arming_key_input_decides(self, admin, fake_pipeline):
-        actuators.set_arming_source(lambda: False)
-        assert admin.post("/api/node/siren-test").status_code == 409
-        assert admin.get("/api/node").json()["siren_arming"] == {"armed": False,
-                                                                 "source": "input"}
 
 
 class TestTunnelledCallers:
-    """Who may test is the tunnel path table's rule (sentrix/link/policy.py);
-    the route needs only a principal and never restates it."""
+    """Who may read the node is the tunnel path table's rule
+    (sentrix/link/policy.py); the route needs only a principal."""
 
     @pytest.fixture
     def tunnel_app(self):
@@ -161,26 +101,25 @@ class TestTunnelledCallers:
         monkeypatch.setenv("SENTRIX_PASSWORD", PASSWORD)
         headers = tunnel_auth.build_headers(user_id="u7", user_name="Riya", role="owner",
                                             base="/d/dev-1", step_up_at=None, csrf="c")
-        client = TestClient(tunnel_app)
-        assert client.get("/api/node", headers=headers).status_code == 200
-        result = client.post("/api/node/siren-test", headers=headers)
-        assert result.status_code == 200 and result.json()["ok"]
+        assert TestClient(tunnel_app).get("/api/node", headers=headers).status_code == 200
 
     def test_forged_bridge_headers_are_refused(self, tunnel_app, fake_pipeline, monkeypatch):
         from sentrix.link import tunnel_auth
         monkeypatch.setenv("SENTRIX_PASSWORD", PASSWORD)
         forged = {tunnel_auth.HEADER_SECRET: "guess", tunnel_auth.HEADER_ROLE: "owner",
                   tunnel_auth.HEADER_USER_ID: "x", tunnel_auth.HEADER_BASE: "/d/x"}
-        response = TestClient(tunnel_app).post("/api/node/siren-test", headers=forged)
-        assert response.status_code == 401
-        assert fake_pipeline.siren.activations == 0
+        assert TestClient(tunnel_app).get("/api/node", headers=forged).status_code == 401
+
 
 class TestRemovedHardware:
-    """D19: no buzzer and no talk-down speaker on the device."""
+    """D19: no buzzer and no talk-down speaker; D25: no siren."""
 
-    def test_no_buzzer_test_and_no_speaker(self, admin, fake_pipeline):
+    def test_no_siren_buzzer_or_speaker(self, admin, fake_pipeline):
+        assert admin.post("/api/node/siren-test").status_code == 404
         assert admin.post("/api/node/buzzer-test").status_code == 404
         assert admin.get("/api/speaker").status_code == 404
         assert admin.post("/api/speaker/say", json={"text": "hello"}).status_code == 404
         body = admin.get("/api/node").json()
-        assert "speaker" not in body and "buzzer" not in (body.get("gpio") or {})
+        assert not {"siren", "siren_armed", "siren_arming", "siren_test", "speaker"} & set(body)
+        assert not {"siren", "buzzer"} & set(body.get("gpio") or {})
+        assert admin.get("/static/sounds/siren.wav").status_code == 404

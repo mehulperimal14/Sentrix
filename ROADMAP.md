@@ -63,7 +63,7 @@ deployment-room data are what is missing.
 | Device link, tunnel, Portal hub, `/d/{id}` proxy, video and state relay, SOS mirror | Partly | `sentrix/link/`, `sentrix_portal/`; 100 forced disconnects lose 0 events; two-process loopback run on the laptop (docs/7 §17). Not yet over TLS, the Internet or 4G |
 | Portal accounts, activation codes, TOTP for admin and Desk, admin console, 7-step wizard, contacts, privacy, retention | Done (laptop) | `sentrix_portal/`; `tests/test_acct_*.py`; docs/7 §17 |
 | SENTRIX Desk and contact pages | Done (laptop) | `sentrix_portal/routes/api_v2/desk.py`, `contacts.py` and the Portal app; docs/7 §17 |
-| Raspberry Pi 5 hardware I/O (siren, GPIO, LEDs, PIR, door, mains sense, Picamera2, nmcli, watchdog) | Partly | `sentrix/io/`, `deploy/pi5/`; tested against fake pins, a fake `picamera2` and a fake `vcgencmd`. **Nothing has run on a real Pi** |
+| Raspberry Pi 5 hardware I/O (GPIO, LEDs, PIR, door, mains sense, Picamera2, nmcli, watchdog) | Partly | `sentrix/io/`, `deploy/pi5/`; tested against fake pins, a fake `picamera2` and a fake `vcgencmd`. **Nothing has run on a real Pi** |
 | Portal deployment files (Docker, Caddy, Postgres, backups) | Partly | `deploy/portal/`; checked by `tests/test_deploy_portal.py`. Docker never run; no live Postgres run |
 | Demo tools (`demo_reset.py`, `demo_run.py`, demo reel camera) | Done (laptop) | docs/7 §17 |
 | End-to-end product tests | Done | `tests/test_e2e_product.py` (13 scenarios, commit `7aca186`) |
@@ -121,7 +121,7 @@ Raspberry Pi.
 |---|---|---|---|
 | A | Installer on the Pi (`--system-site-packages`, headless OpenCV, `lgpio`) | Partly | `deploy/pi5/install_pi.sh`, `run.sh`. Never run on a Pi |
 | B | `PiCameraSource` (1280×720 main, 640×480 analysis) | Partly | `sentrix/io/picamera.py`. Needs the real Camera Module 3 |
-| C | GPIO on gpiozero (siren, LEDs, PIR, door, mains) | Partly | `sentrix/io/gpio.py`, `actuators.py`. Needs the bench tests (§6) |
+| C | GPIO on gpiozero (LEDs, PIR, door, mains) | Partly | `sentrix/io/gpio.py`. Needs the bench tests (§6) |
 | D | Clip engine, fast lane, combined YOLO, small scene model, smaller face model, NCNN | Partly | Clip engine and fast lane done. Combined YOLO not started (M7). Slim scene model failed its bar. `buffalo_s` and NCNN not installed |
 | E | Channel router with outbox and retries | Done (fakes) | `sentrix/alerting/channels/router.py` |
 | F | Network failover (Wi-Fi metric 600, modem 700) | Partly | `deploy/pi5/networkmanager/`. Needs the dongle |
@@ -162,7 +162,6 @@ These are small, but each one must be closed or stated in the report.
 | No liveness check on the authorised-face disarm (a photo could clear the entry delay) | docs/7 §16 q6 | State in the report |
 | `buffalo_s` face pack not on disk; `deploy/pi5/pi.env` selects it | docs/7 §16 q10 | Pi identity; match threshold must be re-checked on enrolled team faces |
 | Template wording nit "near opposite the SBI ATM" | docs/7 §17 | Polish before the demo |
-| The custom weapon detector knows `pistol` and `stick` only; there is no knife footage in the custom dataset | `models/v4_custom/weapon_detector_custom_v4_metadata.json` | D1 promises knife: record knife data (§15) or drop knife from the promise |
 | Fight vs banter (D15) is a published rule over an AudioSet tagger, never measured on room audio; the cue thresholds are a priori | `CLAUDE.md` D15, M11 | Record the audio sessions in §15.1; check the cue thresholds on S3, report S4 once |
 
 ---
@@ -173,7 +172,7 @@ These are small, but each one must be closed or stated in the report.
 W0  Decide + order parts ──┬─► W1 Cloud setup (VM, domain, HTTPS, bot, e-mail)
                            ├─► W1 Modem + SIM tested on the laptop
                            └─► W1–W2 Pi bring-up (when parts arrive)
-W2  Bench tests: power, relay (LED first), siren, modem on the Pi
+W2  Bench tests: power, inputs and LEDs, modem on the Pi
 W3  Gate A on the real Pi  ─────► go/no-go 1 (fail → Hailo HAT or laptop hub)
 W3  Real device ↔ Portal over the Internet; M6 recording starts
 W4  Real-channel rehearsals in test mode to team phones; power-cut test
@@ -227,10 +226,10 @@ decisions are written into `CLAUDE.md`.
 
 | Order | Contents | Price |
 |---|---|---|
-| **Order 1: bench kit** | Raspberry Pi 5 8 GB (₹19,852), official 27 W PSU (₹1,255), Active Cooler (₹531), SanDisk High Endurance 128 GB (₹3,699), Camera Module 3 Wide (₹4,379), Pi 5 camera cable 22-pin Standard–Mini (₹117), ML-2020 RTC cell (≈ ₹500), USB microphone (₹289), relay module + transistors + diodes (≈ ₹150), PIR HC-SR505 (₹73), MC-38 door reed switch (₹52), breadboard, jumpers, LEDs, resistors (≈ ₹350); no buzzer or speaker (D19) | **≈ ₹31,250** |
-| **Order 2: integration kit** | BIS-marked 12 V ≥ 4 A adapter (₹566), Resonate router mini UPS 12 V 3 A (₹2,399), XY-3606 step-down 12 V → 5.2 V (₹119), short thick USB-C cable (≈ ₹150), 12 V siren SQR117 (₹194), key/toggle arming switch (≈ ₹50), 3 inline fuses + PC817 optocoupler (≈ ₹80), 7Semi Quectel EC200U-CN 4G modem (₹2,236), Airtel/Vi prepaid SIM (≈ ₹300), IP65 ABS box + label (₹300–899), fan, mesh, cable glands (≈ ₹150), mount, perfboard, terminals (≈ ₹450) | **≈ ₹7,300** |
-| Tools | multimeter, soldering kit, wire stripper, heat-shrink, micro-HDMI cable, card reader, 12 V panel meter, earplugs | ≈ ₹2,000 |
-| **Device total** | Order 1 + Order 2 + tools | **≈ ₹40,500** (cheapest ≈ ₹36,000) |
+| **Order 1: bench kit** | Raspberry Pi 5 8 GB (₹19,852), official 27 W PSU (₹1,255), Active Cooler (₹531), SanDisk High Endurance 128 GB (₹3,699), Camera Module 3 Wide (₹4,379), Pi 5 camera cable 22-pin Standard–Mini (₹117), ML-2020 RTC cell (≈ ₹500), USB microphone (₹289), PIR HC-SR505 (₹73), MC-38 door reed switch (₹52), breadboard, jumpers, LEDs, resistors (≈ ₹350); no siren, buzzer or speaker (D19, D25) | **≈ ₹31,100** |
+| **Order 2: integration kit** | BIS-marked 12 V ≥ 4 A adapter (₹566), Resonate router mini UPS 12 V 3 A (₹2,399), XY-3606 step-down 12 V → 5.2 V (₹119), short thick USB-C cable (≈ ₹150), 3 inline fuses + PC817 optocoupler (≈ ₹80), 7Semi Quectel EC200U-CN 4G modem (₹2,236), Airtel/Vi prepaid SIM (≈ ₹300), IP65 ABS box + label (₹300–899), fan, mesh, cable glands (≈ ₹150), mount, perfboard, terminals (≈ ₹450) | **≈ ₹7,050** |
+| Tools | multimeter, soldering kit, wire stripper, heat-shrink, micro-HDMI cable, card reader, 12 V panel meter | ≈ ₹2,000 |
+| **Device total** | Order 1 + Order 2 + tools | **≈ ₹40,100** (cheapest ≈ ₹35,600) |
 | Running cost | SIM ≈ ₹200/month; demo hotspot data ≈ ₹200–300/month (est.); `.in` domain ≈ ₹500–800/year; Portal on free tiers ₹0 | |
 | Buy only if needed | AI HAT+ 13/26 TOPS (₹9,749 / ₹14,999) if Gate A fails; Camera Module 3 NoIR + 850 nm IR light (₹3,379 + ≈ ₹200–2,000) if night is required; Geekworm X1202 UPS HAT (₹5,299 + cells) if the router UPS fails; MQ-2 + ADS1115 (₹98 + ₹142) for a log-only smoke signal; powered USB hub (≈ ₹800 est.) if the modem browns out | |
 | Do not buy | a Jio SIM for the modem; A7670E modems (no band B40); unbranded 18650 cells; open-frame 230 V supplies; an AI HAT before Gate A; Coral or Intel NCS2 | |
@@ -285,10 +284,10 @@ switches are still **off**.
 |---|---|
 | OS: Raspberry Pi OS 64-bit Lite on the High Endurance card; Active Cooler; ML-2020 RTC cell; SSH keys only | boots; `vcgencmd measure_temp` reads |
 | Camera on CAM/DISP 0 with the 22-pin cable | `rpicam-hello --list-cameras` lists it |
-| `sudo deploy/pi5/install_pi.sh --boot-config --ufw <LAN>/24`, reboot | `vcgencmd get_throttled` = `0x0`; `pinctrl get 17` shows `op dl … lo` |
+| `sudo deploy/pi5/install_pi.sh --boot-config --ufw <LAN>/24`, reboot | `vcgencmd get_throttled` = `0x0` |
 | Device identity: `python tools/provision_device.py device --out /etc/sentrix --label label.html` on the VM's Portal database, copied to the card | `/etc/sentrix/identity.json` (mode 0600) on the Pi |
 | Doctor: `sudo -u sentrix /opt/sentrix/.venv/bin/python /opt/sentrix/tools/doctor.py` | every hardware row passes or is explained |
-| Inputs with the siren **not** connected: PIR, door, mains pull, watched on `GET /api/node` | each input changes state once per action; one `node_alert` row per mains pull |
+| Inputs: PIR, door, mains pull, watched on `GET /api/node` | each input changes state once per action; one `node_alert` row per mains pull |
 | LEDs: lamp test at start; green / amber / red as in the README | matches the README table |
 | Picamera2 checks still open from T-HW: the lores format, the timestamp clock, CPU cost at 15 fps | recorded in `docs/8` |
 | USB microphone plugged in **while SENTRIX runs**, then moved to another port (D21) | the Hardware page's (`/admin/hardware`) microphone row names it within a minute each time; `tools/doctor.py` lists it as the input that would open |
@@ -299,26 +298,14 @@ switches are still **off**.
 | Test | Pass when |
 |---|---|
 | `PSU_MAX_CURRENT=5000` set with `sudo rpi-eeprom-config --edit` (non-PD supply) | without it USB gets 600 mA and the modem browns out |
-| Full load: clip engine running, siren pulsing (LED stand-in first), modem sending | EXT5V (`vcgencmd pmic_read_adc`) ≥ 4.8 V; `get_throttled` = `0x0` |
+| Full load: clip engine running, modem sending | EXT5V (`vcgencmd pmic_read_adc`) ≥ 4.8 V; `get_throttled` = `0x0` |
 | 10 mains pulls on the UPS | no reboot; 10 `node_alert` rows; LC shows `mains: false` each time |
 | Run time on the UPS | measured and written into `docs/8` (v2 says ≈ 2 h+, to be measured) |
 
 Safety: sealed BIS-marked adapters only; never rewire 230 V; keep the UPS and
 its lithium cells outside the box.
 
-### 6.3 Alarm (relay and siren) test
-
-Wire an LED with a 1 kΩ resistor where the siren will go. The LED must stay
-off through: a cold start, `sudo reboot`, `systemctl stop sentrix`,
-`kill -9` of the service, and a mains → UPS switch. "Test siren" on the Node
-page must light it for 1 s, at most once a minute (`deploy/pi5/README.md`,
-"The relay test"). Only then connect the 12 V siren on its own fuse.
-
-Real siren tests: earplugs, 3 m or more away, 5 s bursts, daytime only (110 dB:
-the safe daily dose is ≈ 90 s at the rated distance). With the key switch
-off, a siren test must answer 409.
-
-### 6.4 Modem test
+### 6.3 Modem test
 
 1. **On the laptop first (W1):** plug in the modem with the Airtel/Vi SIM. Set
    `SENTRIX_MODEM_ENABLED=1` and `SENTRIX_CHANNELS_ENABLED=1` and leave
@@ -567,7 +554,6 @@ Tick each line in order. Each one depends on the lines above it.
 
 - [ ] Pi boots; cooler, RTC cell; `install_pi.sh` done; doctor passes.
 - [ ] Camera, PIR, door, mains, LEDs checked.
-- [ ] Relay test with an LED passed; then the siren with the key switch.
 - [ ] Power test: EXT5V ≥ 4.8 V under load, 10 mains pulls, UPS run time.
 - [ ] Modem: SMS to one team phone; failover to 4G.
 - [ ] Gate A (or the chosen fallback).
@@ -608,11 +594,10 @@ Tick each line in order. Each one depends on the lines above it.
 | Oracle signup, card or capacity problems | Medium | start in W0; Render + Supabase fallback rehearsed |
 | Campus network blocks the Portal or Telegram | Medium | own hotspot phone; domain tested from the room in W1 |
 | False alarms in the demo room (the models were trained in two other rooms) | High | `CLAUDE.md` §5: the room is out of distribution; record deployment-room data; P8 before contacts get single-source alerts |
-| Knife is promised (D1) but no custom knife data exists | High | record knife clips (§15) or drop knife from the demo promise |
 | A clip misses its trigger in the demo | Medium | ≥ 9/10 pre-runs; disclosed scripted trigger; recorded video |
 | Schema change after the first cloud deploy breaks the Portal database | Medium | Alembic baseline before the first deploy |
 | Users think SENTRIX calls the police | Low | button wording, "Call 112 now" first, the disclaimer in every SOS |
-| Siren noise or mains/lithium accident | Low | LED tests first, earplugs, BIS adapters, cells outside the box |
+| Mains or lithium accident | Low | BIS adapters, cells outside the box |
 | Live keys in `.env` reach a test | Low | guard, two switches, allowlist, socket guard in tests; never copy `.env` between machines |
 | Scope: data recording competes with demo preparation | High | code freeze end of W6; model retraining is after the prototype |
 
@@ -625,15 +610,13 @@ Tick each line in order. Each one depends on the lines above it.
 | 1 | Pi 5 8 GB (₹19,852) or a 4 GB from KSP (unconfirmed ₹12,300) | 8 GB unless KSP confirms | Order 1 |
 | 2 | Camera Module 3 Wide or Standard; night operation (NoIR + IR light)? | Wide; night out of scope (D5) unless the teachers require it | Order 1, data recording |
 | 3 | SOS default window 30 or 60 min; accept the safety defaults (D9)? | 30 min; safety defaults on | demo settings |
-| 4 | Should a corroborated fire sound the siren at L4 instead of L5? | no, until fire-on-screen hard negatives are tested | — |
-| 5 | Who plays the Desk; who owns the Oracle account and card; who holds and recharges the SIM | Kartik plays the Desk (v2 §14) | §4, §5 |
-| 6 | Demo date and room; English only or Hindi too | English only (Hindi templates are Tier 2) | §11 |
-| 7 | Permission for replica weapons and flames on campus; consent notice to the legal cell | ask in W0 | data recording, demo |
-| 8 | If Gate A fails: Hailo HAT, laptop hub, or fewer passes | decide at go/no-go 1 | §7 |
-| 9 | Owners may log in to the LC directly? (now: no; LC keeps `SENTRIX_PASSWORD`) | keep no | — |
-| 10 | CUDA torch in the app environment (moves DINOv2 to the RTX 4060) | not needed for the demo | laptop speed only |
-| 11 | Knife in the promise without knife data | drop it unless knife clips are recorded and pass G1/G2 | demo promise |
-| 12 | Who deleted `Kartik.jpg` during the first live run (no audit then; gallery changes are audited now) | — | — |
+| 4 | Who plays the Desk; who owns the Oracle account and card; who holds and recharges the SIM | Kartik plays the Desk (v2 §14) | §4, §5 |
+| 5 | Demo date and room; English only or Hindi too | English only (Hindi templates are Tier 2) | §11 |
+| 6 | Permission for replica weapons and flames on campus; consent notice to the legal cell | ask in W0 | data recording, demo |
+| 7 | If Gate A fails: Hailo HAT, laptop hub, or fewer passes | decide at go/no-go 1 | §7 |
+| 8 | Owners may log in to the LC directly? (now: no; LC keeps `SENTRIX_PASSWORD`) | keep no | — |
+| 9 | CUDA torch in the app environment (moves DINOv2 to the RTX 4060) | not needed for the demo | laptop speed only |
+| 10 | Who deleted `Kartik.jpg` during the first live run (no audit then; gallery changes are audited now) | — | — |
 
 ---
 
@@ -683,7 +666,6 @@ object is visible. Classes:
 | Class | In the alarm path (D1) | Examples |
 |---|---|---|
 | handgun (replica) | yes | drawn from a pocket, pointed, held at the side |
-| knife | yes | kitchen knife held, raised, half hidden |
 | visible flame | yes | lighter flame, small controlled flame in a tray |
 | assault (staged fight) | L3 only with aligned aggression audio (D15) | **with sound**: shouting, screaming, a slap on a cushion; actors agree a script and a stop word |
 | play-fighting / banter | must stay ≤ L2, labelled banter (D15 banter rule) | the same moves as the staged fight, with laughter and calm talk; as many clips as the fight |
@@ -707,7 +689,6 @@ are not:
 
 * a phone, TV remote, stapler or hair dryer held like a pistol;
 * a closed umbrella, broom or rolled newspaper held like a stick;
-* a spoon, spatula or pen held like a knife;
 * an unlit lighter; an aerosol can without a flame;
 * a fire video playing on a TV or phone screen; a candle photo;
 * red or orange clothing, a red bag, an orange lamp, sunset light;
@@ -787,7 +768,7 @@ weeks (`CLAUDE.md` open questions).
 3. **Boxes.** `training/custom/annotate_boxes.py` proposes boxes with
    GroundingDINO, but only on frames whose reviewed label already says the
    object is there, and a weapon box must overlap a person (held objects).
-   Add prompts for knife and for the new rooms to its `PROMPTS` table first.
+   Add prompts for the new rooms to its `PROMPTS` table first.
    Then review every contact sheet under `--qc-dir` and list rejected boxes in
    `box_qc_rejects.txt` (`--reject`). A positive frame without an accepted box
    is excluded from detector training, never turned into a negative.
@@ -845,11 +826,11 @@ Use the GPU environment (`C:\Users\PC\anaconda3\envs\sentrix\python.exe`,
 Python 3.11, CUDA). Write down the command, the commit and the power source
 with every run.
 
-**a) Unified YOLO11n detector (M7, Kartik).** One detector for person, pistol,
-knife and fire at 640, replacing today's three YOLO passes (the largest Pi
-cost, `docs/8` §7). Start from COCO `yolo11n.pt`; add the QC'd teacher boxes;
-add rehearsal images from the public corpora (pistol, knife, fire only; smoke
-dropped; `SENTRIX_WEAPON_DATA`, `SENTRIX_FIRE_DATA`); add **all** hard
+**a) Unified YOLO11n detector (M7, Kartik).** One detector for person, weapon
+and fire at 640, replacing today's three YOLO passes (the largest Pi cost,
+`docs/8` §7). Start from COCO `yolo11n.pt`; add the QC'd teacher boxes; add
+rehearsal images from the public weapon and fire corpora (smoke dropped;
+`SENTRIX_WEAPON_DATA`, `SENTRIX_FIRE_DATA`); add **all** hard
 negatives as background images. `training/custom/train_detector.py` trains one
 task at a time today:
 
@@ -857,8 +838,8 @@ task at a time today:
 python training/custom/train_detector.py --task weapon --init yolo11n.pt --classes pistol,stick --rehearsal 1500 --retention 400 --tag new_weapon --out models/v4_custom/weapon_detector_custom_v4.pt
 ```
 
-The unified detector needs a new task in that script (all four classes and the
-person class in one YOLO dataset). Keep `--retention` to check the public
+The unified detector needs a new task in that script (the weapon, fire and
+person classes in one YOLO dataset). Keep `--retention` to check the public
 classes are not forgotten. Then use the detector with ByteTrack, the held-object
 association and k-of-n confirmation (`sentrix/fusion/evidence.py`), and a
 flicker check for fire.

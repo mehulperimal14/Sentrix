@@ -191,7 +191,6 @@ class FakePipeline:
     """What the link and ``health_payload`` read from the live pipeline."""
 
     def __init__(self) -> None:
-        from sentrix.io.actuators import ConsoleSiren
         self.session_id = "test-session"
         self.source = SimpleNamespace(online=True, name="file:clip.mp4")
         self.detector = SimpleNamespace(available=True)
@@ -201,9 +200,6 @@ class FakePipeline:
         self.identity = SimpleNamespace(backend=None, enrolled=[], enrolled_files=set())
         self.audio = None
         self.tci = SimpleNamespace(model_source="evidence")
-        self.siren = ConsoleSiren()
-        self.siren_calls: list = []
-        self.siren.activate = lambda duration=None: self.siren_calls.append(duration)
         self.events = SimpleNamespace(audit=lambda event, **detail: None)
         self._seq = 0
         self.jpeg_quality: list[int] = []

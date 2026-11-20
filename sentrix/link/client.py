@@ -63,7 +63,7 @@ IDENTITY_FILE = "identity.json"
 TOKEN_FILE = "token.json"
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 #: Capabilities this build offers in ``hello``.
-CAPABILITIES = ("tunnel", "video", "state", "sms", "siren")
+CAPABILITIES = ("tunnel", "video", "state", "sms")
 #: Gallery audit events mirrored as ``gallery.audit`` (no images, ever).
 GALLERY_EVENTS = frozenset({"gallery_enrolled", "gallery_removed", "gallery_rejected"})
 #: How often the pump looks for new outbox rows (s); producers on other

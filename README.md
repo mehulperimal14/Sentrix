@@ -100,7 +100,7 @@ D8–D14 in [`CLAUDE.md`](CLAUDE.md) §6 and the state machine in
 |   device-enforced command rules                   |   |                                   |
 | LC (FastAPI) on :8000: device app + JSON API      |   | SQLite (dev) / Postgres (deploy)  |
 | SQLite var/sentrix.db, vault, faces               |   +-----------------------------------+
-| Pi 5: siren relay, LEDs, PIR, door, mains sense,  |
+| Pi 5: status LEDs, PIR, door, mains sense,        |
 |   node telemetry, watchdog, 4G modem              |
 +--------------------------------------------------+
 ```
@@ -110,8 +110,7 @@ about the device comes from the device's own JSON API under
 `/d/{device_id}/api/...` (plus `/video` and `/ws/threat`), so the LAN and the
 remote views read the same data; no device page is tunnelled. The device does not trust the Portal: it checks
 consent flags for video and media, allows SMS only to numbers in the current
-profile (30 a day), rate-limits siren tests, and has no command that disables
-the siren or the evidence.
+profile (30 a day), and has no command that disables the evidence vault.
 
 ### How a detection becomes an alarm
 
@@ -128,7 +127,7 @@ a model score and the alarm:
 | One visual modality confirmed | L3 (snapshot and evidence; SOS prompt) |
 | Two modalities confirmed for one class (detector + scene, or video + aligned audio, e.g. a pistol box and a gunshot) | L4; L5 when the weaker is well above threshold, or when all three agree |
 | Audio alone (gunshot, smoke alarm) | at most L2; a scream alone is never a weapon |
-| Fight (assault) | L2 (experimental) unless the video fight **and** aligned aggression audio (shouting, screaming) agree with 2+ people and motion: then L3. Aligned laughter or very calm talk (banter) keeps it at L2 - shown, never hidden; TV, music or radio make the audio neutral; the device's own siren is never heard as the room. Unvalidated until room recordings exist |
+| Fight (assault) | L2 (experimental) unless the video fight **and** aligned aggression audio (shouting, screaming) agree with 2+ people and motion: then L3. Aligned laughter or very calm talk (banter) keeps it at L2 - shown, never hidden; TV, music or radio make the audio neutral. Unvalidated until room recordings exist |
 | Robbery, stick, smoke | experimental: logged and shown, never above L2 |
 | Unknown person, PIR, door | presence context: an unrecognised person (3 s armed, 10 s at home), or armed-mode sensor activity with nobody recognised, is an **L2 only** in both modes |
 
@@ -139,10 +138,10 @@ the dashboard's Threat Analysis card (decision D15).
 | Level | Side effects |
 |---|---|
 | 1 SECURE | log |
-| 2 SUSPICIOUS | incident opened (log and dashboard) |
-| 3 ELEVATED | snapshot, AES-256-GCM evidence bundle, SOS request for alarm classes |
-| 4 HIGH | dispatch package (legacy SMS only when no SOS request owns the incident) |
-| 5 CRITICAL | siren (legacy voice call only when no SOS request owns the incident) |
+| 2 SUSPICIOUS | incident opened (log and dashboard only) |
+| 3 ELEVATED | + snapshot, AES-256-GCM evidence bundle, SOS request for weapon, fire and a corroborated fight |
+| 4 HIGH | + dispatch package; legacy SMS only when no SOS request owns the incident |
+| 5 CRITICAL | + legacy voice call only when no SOS request owns the incident |
 
 The TCI is the strongest confirmed class evidence. It is not smoothed: the
 number on the gauge, in the log and on the incident is the number the level was
@@ -193,8 +192,8 @@ of the scene classifier (Hugging Face cache) and InsightFace `buffalo_l`
 * **NVIDIA GPU:** install the CUDA build of PyTorch before `requirements.txt`; the
   scene model moves to the GPU automatically.
 * **Raspberry Pi 5:** `run.sh` detects the Pi and installs `requirements-pi.txt`
-  into a venv with system site packages. Bring-up order, `install_pi.sh` and the
-  relay test with an LED are in [`deploy/pi5/README.md`](deploy/pi5/README.md).
+  into a venv with system site packages. Bring-up order and `install_pi.sh` are
+  in [`deploy/pi5/README.md`](deploy/pi5/README.md).
 
 Manual install instead of the scripts:
 
@@ -213,7 +212,6 @@ Add to `.env`:
 ```bash
 CAMERA_SOURCES=training/datasets/sentrix_custom/videos/gun.mov   # loops; any video path works
 SENTRIX_AUDIO=0         # keep the microphone closed
-SENTRIX_SIREN=console   # print the siren instead of sounding it
 ```
 
 ### 4. Start the Portal (optional)
@@ -416,7 +414,7 @@ Never tune or select on the test video `wa02`.
 
 | Folder | What it holds |
 |---|---|
-| `sentrix/` | The device: `perception/` (detector, scene, identity, audio, behaviour, motion, re-id), `fusion/` (evidence rules, TCI, level policy), `pipeline/` (engine, 4 s clip engine, fast lane, incidents, event log, state), `runtime/` (torch/onnx/ncnn backends), `sos/` (machine, policy, PINs, templates, sweeper, service), `alerting/` (send guard, dispatch, channels: router, modem, Telegram, e-mail, Twilio), `link/` (client, protocol, tunnel, command rules), `io/` (cameras, demo reel, siren, GPIO, node, Wi-Fi, watchdog), `storage/` (SQLite), `evidence/` (vault), `web/` (Local Console: JSON API, video, websocket, `static/app/` the built device app), `evaluation/` |
+| `sentrix/` | The device: `perception/` (detector, scene, identity, audio, behaviour, motion, re-id), `fusion/` (evidence rules, TCI, level policy), `pipeline/` (engine, 4 s clip engine, fast lane, incidents, event log, state), `runtime/` (torch/onnx/ncnn backends), `sos/` (machine, policy, PINs, templates, sweeper, service), `alerting/` (send guard, dispatch, channels: router, modem, Telegram, e-mail, Twilio), `link/` (client, protocol, tunnel, command rules), `io/` (cameras, demo reel, GPIO, node, Wi-Fi, watchdog), `storage/` (SQLite), `evidence/` (vault), `web/` (Local Console: JSON API, video, websocket, `static/app/` the built device app), `evaluation/` |
 | `sentrix_portal/` | The Portal: `routes/` (`api_v2/`: the JSON API for auth, onboarding, home, household, contacts, consent, settings, SOS, Desk, admin, privacy; link hub, device proxy, hooks, `spa.py`), `services/` (accounts, hub, SOS, notify, retention), `static/app/` (the built Portal app) |
 | `frontend/` | The two React apps' sources (D22): `packages/ui` (design system), `packages/api` (fetch client), `apps/portal`, `apps/device`, `e2e/` (Playwright). Built into `sentrix_portal/static/app/` and `sentrix/web/static/app/` |
 | `models/` | Weights the runtime loads: `v4_custom/` (default: DINOv2 scene classifier, YOLO11n weapon and fire heads), `v3_real/`, `v5_slim/` (slim scene heads, experimental), `yolov8n.pt`, and provenance checkpoints |
@@ -468,7 +466,7 @@ or a live Postgres yet.**
 | Detection to SOS request | working on bundled clips | docs/7 §17: PENDING weapon request 8.0–9.8 s after `scene gun`; fire 11.6–11.9 s after `scene fire` |
 | Remote view through the tunnel | working, capped | docs/7 §17: MJPEG 29.9 fps direct, 13.6 fps tunnelled (cap 15) |
 | Telegram, e-mail, modem SMS, Twilio | Telegram live on the demo unit (test mode); the rest code and fake-transport tests only | Telegram bot in polling mode to the two allowlisted team chats; no e-mail account or modem used |
-| Raspberry Pi 5 | clip profile running in the demo room; siren, PIR, door and mains not bench-checked | `training/runs/custom_eval/pi5/REPORT.md` (clip p50 3.9 s at 320 px); bench checks still to do (deploy/pi5/README.md) |
+| Raspberry Pi 5 | clip profile running in the demo room; PIR, door and mains not bench-checked | `training/runs/custom_eval/pi5/REPORT.md` (clip p50 3.9 s at 320 px); bench checks still to do (deploy/pi5/README.md) |
 | Room calibration (D23) | run on the demo unit 2026-11-19 | `training/runs/calibration/pi5_demo_room_2026-11-19/REPORT.md`: same decision as the device on 8,956 of 8,956 clips; weapon 0.78, fire 0.75 in force |
 | 4 s clip engine | replay meets Gate A's detection criterion; too slow on the laptop | `training/runs/custom_eval/clip/`: weapon L3 9/12 with the fast lane, fire 3/3, 0 false onsets; ONNX + fast lane compute p95 2145 ms vs a 1.6 s budget |
 | Training recordings on the dashboard (D20), a USB microphone in any port (D21) | working on the laptop | `tests/test_recorder.py` (real OpenCV and ffmpeg round trips), `tests/test_recording_*.py`; the card driven in a browser against a synthetic camera; the microphone chooser against a fake sound library only. Not yet run on the Pi or with a real microphone |

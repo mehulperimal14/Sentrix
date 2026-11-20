@@ -89,7 +89,7 @@ class TestCorroboration:
 
     def test_realistic_corroborated_fire_reaches_l5(self):
         """0.9 / 0.9 stopped at L4: noisy-OR of capped scores needed ~0.98 on
-        both sides, so no class could ever sound the siren (review S-F3)."""
+        both sides, so no class could ever reach L5 (review S-F3)."""
         ev = run([scene(fire=0.9) | detector(fire=0.9)] * 3)
         assert ev["fire"].score >= L5 and "corroborated" in ev["fire"].reason
 

@@ -178,7 +178,6 @@ class DevicePipeline:
 
     def __init__(self) -> None:
         import numpy as np
-        from sentrix.io.actuators import ConsoleSiren
         self.session_id = "e2e-session"
         self.source = SimpleNamespace(online=True, name="file:demo.mp4")
         self.detector = SimpleNamespace(available=True)
@@ -188,9 +187,6 @@ class DevicePipeline:
         self.identity = SimpleNamespace(backend=None, enrolled={}, enrolled_files=set())
         self.audio = None
         self.tci = SimpleNamespace(model_source="evidence")
-        self.siren = ConsoleSiren()
-        self.siren_calls: list = []
-        self.siren.activate = lambda duration=None: self.siren_calls.append(duration)
         self.events = FakeEvents()
         self.incidents = SimpleNamespace(current=None)
         self.closed: list[str] = []

@@ -86,7 +86,6 @@ from pathlib import Path
 import numpy as np
 
 from sentrix.config import settings
-from sentrix.io import self_output
 from sentrix.paths import model_path
 from sentrix.utils.logging import get_logger, timed
 
@@ -152,7 +151,7 @@ CNN_CUES: dict[str, str] = {
 CUE_NAMES = ("aggression", "weapon_sound", "fire_sound", "benign_social", "calm_talk",
              "background", "siren")
 #: ``AudioResult.model`` values that are not a classification of the room.
-UNUSABLE_MODELS = {"none": "unclassified", "error": "unclassified", "self": "self_output"}
+UNUSABLE_MODELS = {"none": "unclassified", "error": "unclassified"}
 #: The cue each class reads as source ``audio``. A weapon also reads
 #: aggression, as source ``audio_aggression``: it corroborates a visible gun
 #: but never stands alone (``evidence.CORROBORATE_ONLY``).
@@ -236,8 +235,8 @@ def alignment(result: AudioResult | None, at: float, tolerance: float | None = N
         return {"status": "none", "lag_s": None, "tolerance_s": tolerance}
     unusable = UNUSABLE_MODELS.get(getattr(result, "model", ""))
     if unusable is not None:
-        # Nothing classified (no model, inference failed) or the device's own
-        # siren: never "heard, nothing there".
+        # Nothing classified (no model, inference failed): never "heard,
+        # nothing there".
         return {"status": unusable, "lag_s": None, "tolerance_s": tolerance}
     if result.end is None:
         return {"status": "untimed", "lag_s": None, "tolerance_s": tolerance}
@@ -1230,12 +1229,7 @@ class AudioEngine:
         samples = np.nan_to_num(np.asarray(samples, dtype=np.float32).reshape(-1))
         if rms is None:
             rms = float(np.sqrt(np.mean(samples ** 2))) if len(samples) else 0.0
-        own = (self_output.overlapping(start, end)
-               if start is not None and end is not None else None)
-        if own is not None:
-            # The device's own siren: not the room.
-            result = AudioResult(0.0, f"own {own}", 0.0, rms=rms, model="self")
-        elif rms < self.cfg.audio_rms_floor:
+        if rms < self.cfg.audio_rms_floor:
             # Energy gate. Skipping inference on a quiet room is both a large
             # compute saving and the single most effective acoustic
             # false-alarm suppressor available.

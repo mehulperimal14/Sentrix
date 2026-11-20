@@ -488,9 +488,9 @@ class TestHardwareReport:
     def test_healthy_pi5(self, tmp_path):
         rows = _report(pi_tree(tmp_path, config=GOOD_CONFIG))
         for name in ("platform", "CSI camera", "CPU temperature", "throttling", "EXT5V",
-                     "siren boot state", "RTC cell charging", "hardware watchdog",
-                     "PSU_MAX_CURRENT", "network"):
+                     "RTC cell charging", "hardware watchdog", "PSU_MAX_CURRENT", "network"):
             assert rows[name]["status"] == "ok", (name, rows[name])
+        assert "siren boot state" not in rows, "no siren (D25)"
         assert "imx708_wide" in rows["CSI camera"]["detail"]
         assert "not opened" in rows["CSI camera"]["detail"]
         assert rows["systemd unit"]["status"] == "warn"
@@ -506,20 +506,8 @@ class TestHardwareReport:
         assert "under_voltage" in rows["throttling"]["detail"]
         assert rows["EXT5V"]["status"] == "warn"
         assert rows["CSI camera"]["status"] == "warn"
-        assert rows["siren boot state"]["status"] == "warn"
-        assert "gpio=17=op,dl" in rows["siren boot state"]["detail"]
         assert rows["PSU_MAX_CURRENT"]["status"] == "warn"
         assert rows["network"]["status"] == "warn"
-
-    def test_active_low_siren_wants_drive_high(self, tmp_path):
-        root = pi_tree(tmp_path, config="gpio=17=op,dl\n")
-        gpio_low = replace(settings.gpio, siren_active_high=False)
-        rows = {r["name"]: r for r in node.hardware_report(
-            root=root, vcgencmd=fake_vcgencmd({}), camera_info=lambda: [],
-            eeprom=lambda: None, network_status=lambda: {"available": False},
-            settings=SimpleNamespace(gpio=gpio_low, node=settings.node))}
-        assert rows["siren boot state"]["status"] == "warn"
-        assert "gpio=17=op,dh" in rows["siren boot state"]["detail"]
 
     def test_pi4_skips_pi5_only_rows(self, tmp_path):
         rows = _report(pi_tree(tmp_path, model="Raspberry Pi 4 Model B Rev 1.5",

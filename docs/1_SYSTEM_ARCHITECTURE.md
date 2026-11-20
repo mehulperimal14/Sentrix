@@ -19,7 +19,7 @@ Console and the cloud Portal.**
 SENTRIX watches a camera and a microphone, runs a stack of neural models over
 both, and turns their outputs into a **Threat Confidence Index (TCI)** in
 `[0, 1]`. The TCI drives a five-level ladder: logging, evidence capture,
-SOS request, SMS and dispatch package, siren.
+SOS request, SMS and dispatch package, voice call.
 
 Detection runs on the device (a laptop today, a Raspberry Pi 5 later). There is
 no cloud inference. Since this version the device can also link to the
@@ -44,7 +44,7 @@ contacts. The Portal is optional: without it the device works as before.
 | SOS assistance requests | Built; off unless `SENTRIX_SOS_ENABLED=1` (doc 7 §7) |
 | Channels: modem SMS, Telegram, e-mail, legacy Twilio | Built, tested with fake transports only; every send needs two switches (doc 7 §8) |
 | Device link to the Portal, tunnel, remote video | Built; off unless `SENTRIX_LINK_ENABLED=1` (doc 7 §5) |
-| Pi hardware: gpiozero siren relay, LEDs, PIR, door, mains, telemetry, Pi camera | Built, tested against fakes only; no Pi has run it (doc 8) |
+| Pi hardware: gpiozero LEDs, PIR, door, mains, telemetry, Pi camera | Built, tested against fakes only; no Pi has run it (doc 8) |
 | Voice SOS | Not wired. The Vosk model is not shipped |
 | UCF-Crime anomaly model | Not wired (doc 2 §6) |
 
@@ -60,7 +60,7 @@ Sentrix/
 │   ├── services.py             optional services: node, gpio, channels, sos, link
 │   ├── mode.py                 HOME / ARMED, persisted in var/mode.json
 │   ├── io/                     camera sources (webcam, file, RTSP, picamera:, demo-reel:),
-│   │                           siren, GPIO, node telemetry, sensors, Wi-Fi, watchdog
+│   │                           GPIO, node telemetry, sensors, Wi-Fi, watchdog
 │   ├── perception/             detector, scene, violence, audio, identity, behaviour,
 │   │                           motion, reid
 │   ├── fusion/                 features (contract), evidence, tci, policy, calibration
@@ -124,10 +124,10 @@ Sentrix/
 ┌──────────────────────────────────────────────────────────────────────┐
 │ Incidents (pipeline/incidents.py) → action plan (escalation.py)       │
 │ side effects on the sentrix-tasks FIFO, each at most once per incident│
-└───┬──────────────┬───────────────────┬──────────────────┬────────────┘
-    ▼              ▼                   ▼                  ▼
- snapshot,      SOS trigger         legacy SMS / call,   siren
- evidence       (L3, if the SOS     dispatch package     (L5)
+└───┬──────────────┬───────────────────┬───────────────────────────────┘
+    ▼              ▼                   ▼
+ snapshot,      SOS trigger         legacy SMS / call,
+ evidence       (L3, if the SOS     dispatch package
  vault (L3)     service wants it)   (skipped once SOS
                 → doc 7 §7          owns the incident)
     │
@@ -159,14 +159,15 @@ Bands from `PolicyConfig.thresholds`; actions from `AlertConfig`,
 |---|---|---|---|
 | 0.00 – 0.20 | 1 | `SECURE` | Log only |
 | 0.20 – 0.40 | 2 | `SUSPICIOUS` | Incident opened; log and dashboard only (decision D4) |
-| 0.40 – 0.65 | 3 | `ELEVATED` | + snapshot, AES-256-GCM evidence bundle; + SOS request for weapon, fire and armed intrusion when the SOS service runs (D8). No siren |
+| 0.40 – 0.65 | 3 | `ELEVATED` | + snapshot, AES-256-GCM evidence bundle; + SOS request for weapon, fire and a corroborated fight when the SOS service runs (D8) |
 | 0.65 – 0.85 | 4 | `HIGH` | + SMS and dispatch package (legacy path); with SOS, the request turns urgent and the safety defaults alert contacts |
-| 0.85 – 1.00 | 5 | `CRITICAL` | + siren; voice call (legacy path) |
+| 0.85 – 1.00 | 5 | `CRITICAL` | + voice call (legacy path) |
 
 Once the SOS service owns an incident, the legacy L4 SMS, L4 package and L5
-call are skipped; their job moves into the request's `rise4` / `rise5` steps.
-The siren stays (doc 7 §7.2). Every send goes through the send guard, which
-refuses everything by default (doc 7 §8.1).
+call are skipped; their job moves into the request's `rise4` / `rise5` steps
+(doc 7 §7.2). Every send goes through the send guard, which refuses everything
+by default (doc 7 §8.1). The device makes no sound: its outputs are the three
+status LEDs, the Local Console and the Portal, and the alert channels.
 
 **Evidence rules** (`ThreatConfig`; they replaced the single-frame hard
 overrides after the first live run, `CLAUDE.md` §5 and M1):
@@ -204,12 +205,11 @@ steps down once the TCI has not touched its threshold for 5 s. There is no
 display smoothing: the gauge, the event log, the SMS and the incident record
 carry the value the level was decided on.
 
-> **History.** v2.1 documented L4 SMS and an L5 siren while the shipped code
-> sent SMS at L2 and fired the siren at L3. With the fusion defect below, that
-> produced 1,489 evidence bundles and 2,415 snapshots from one sustained false
-> positive. The first live run (`CLAUDE.md` §5) then showed single-frame
-> overrides firing on one tick of the scene classifier; M1 replaced them with
-> the rules above.
+> **History.** v2.1 documented SMS at L4 while the shipped code sent SMS at
+> L2. With the fusion defect below, that produced 1,489 evidence bundles and
+> 2,415 snapshots from one sustained false positive. The first live run
+> (`CLAUDE.md` §5) then showed single-frame overrides firing on one tick of the
+> scene classifier; M1 replaced them with the rules above.
 
 ---
 
@@ -352,8 +352,8 @@ to `SENTRIX_TEST_RECIPIENTS`; emergency numbers are always refused (doc 7
   simulated responder console) and the confirmed emergency contacts. For
   serious events the safety defaults alert contacts without waiting for the
   owner (doc 7 §7.5); emergency services are never contacted automatically.
-- **No cloud inference.** Detection, levels, siren and evidence stay on the
-  device and keep working without the Portal.
+- **No cloud inference.** Detection, levels and evidence stay on the device
+  and keep working without the Portal.
 - **No frame-level rows in SQL.** Frame detail goes to the JSONL event log; the
   database holds one row per incident.
 - **No identity fallback.** Without a face-embedding backend the system reports

@@ -12,9 +12,9 @@ from sentrix.pipeline.incidents import IncidentManager
 
 
 class TestEscalationLadder:
-    """The shipped ladder was two steps more aggressive than every document:
-    SMS at level 2 and siren at level 3. Combined with the fusion bug pinning
-    the system at level 2, that produced the alert storm."""
+    """The shipped ladder was more aggressive than every document: SMS at
+    level 2 (and a siren at level 3; no siren since D25). Combined with the
+    fusion bug pinning the system at level 2, that produced the alert storm."""
 
     def test_level_1_does_nothing(self):
         plan = plan_for(1)
@@ -23,13 +23,12 @@ class TestEscalationLadder:
     def test_level_2_does_not_message_anyone(self):
         plan = plan_for(2)
         assert not plan.sms, "SMS at level 2 caused the alert storm"
-        assert not plan.siren and not plan.call and not plan.evidence
+        assert not plan.call and not plan.evidence
 
-    def test_level_3_does_not_sound_the_siren(self):
+    def test_level_3_seals_evidence_and_calls_nobody(self):
         plan = plan_for(3)
         assert plan.evidence
-        assert not plan.siren, "siren at level 3 is two steps early"
-        assert not plan.call
+        assert not plan.sms and not plan.call
 
     def test_level_4_messages_and_prepares_dispatch(self):
         plan = plan_for(4)
@@ -38,15 +37,15 @@ class TestEscalationLadder:
 
     def test_level_5_is_full_escalation(self):
         plan = plan_for(5)
-        assert all((plan.sms, plan.siren, plan.call, plan.dispatch,
-                    plan.evidence, plan.snapshot))
+        assert all((plan.sms, plan.call, plan.dispatch, plan.evidence, plan.snapshot))
+        assert not hasattr(plan, "siren"), "no siren since D25"
 
     def test_out_of_range_is_clamped(self):
         assert plan_for(99).level == 5 and plan_for(-3).level == 1
 
     def test_ladder_is_monotonic(self):
         """No action may switch off as severity increases."""
-        fields = ("snapshot", "evidence", "sms", "siren", "dispatch", "call")
+        fields = ("snapshot", "evidence", "sms", "dispatch", "call")
         for lower, upper in zip(range(1, 5), range(2, 6)):
             for field in fields:
                 if getattr(plan_for(lower), field):

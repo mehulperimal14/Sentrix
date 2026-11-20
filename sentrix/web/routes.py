@@ -20,8 +20,8 @@ to static mounts. Anyone who could reach the port could download:
 ``docs/4`` stated that "all /api/* and /ws/* endpoints require a valid
 HMAC-signed session cookie", which was true and the wrong scope.
 
-Now ``/static`` serves only the device app's build and the siren sound that
-ship with the package, and every artifact is served through an authenticated
+Now ``/static`` serves only the device app's build that ships with the
+package, and every artifact is served through an authenticated
 route that resolves paths inside a fixed base directory.
 
 The API serves two audiences (docs/7 §9): the device admin on the LAN and
@@ -86,10 +86,9 @@ WS_REAUTH_SECONDS = 60.0
 #: stay on the LAN (the path table refuses them to every tunnelled role).
 ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
     "device_admin": frozenset({"pages", "media", "gallery_view", "gallery_write",
-                               "verdict", "sos", "dispatch", "mode", "siren_test",
-                               "record"}),
+                               "verdict", "sos", "dispatch", "mode", "record"}),
     "owner": frozenset({"pages", "media", "gallery_view", "gallery_write",
-                        "verdict", "sos", "dispatch", "mode", "siren_test", "record"}),
+                        "verdict", "sos", "dispatch", "mode", "record"}),
     "member": frozenset({"pages", "media", "gallery_view", "verdict", "sos",
                          "dispatch", "mode"}),
     "operator": frozenset(),
@@ -388,8 +387,6 @@ def health_payload() -> dict:
         "microphone": audio_status(getattr(pipeline, "audio", None)),
         "recording": _recording_brief(pipeline),
         "fusion_source": pipeline.tci.model_source,
-        "siren_backend": pipeline.siren.name,
-        "siren_is_real": pipeline.siren.is_real,
         "notifier_online": __import__(
             "sentrix.alerting.notifier", fromlist=["notifier"]).notifier.online,
         "evidence_key_persistent": vault.persistent,
