@@ -1,0 +1,61 @@
+49 event log(s), events_20261023_175605_18082d5f53f2.jsonl .. events_20261121_015920_c352552ca01f.jsonl; a person needed for: weapon, robbery
+
+== weapon ==
+  scored: 11020 clip/tick observations, 20895 values, 6.15 h
+  per value: median 0.1868, p99 0.5455, p99.9 0.683, max 0.7647
+  highest confirming value 0.7321, highest single value 0.7647
+  at floor     0.50: 51 onset(s), 100 confirmed observation(s)
+  at proposed  0.84: 0 onset(s), 0 confirmed observation(s)
+  at in_force  0.78: 0 onset(s), 0 confirmed observation(s)
+  PROPOSED 0.84 (set by confirming max + 0.10); 0 onsets in 6.15 h -> 95 % upper bound 0.488 per hour
+  replay check: same verdict as the device on 10884 of 10884 clips (at the bar it applied)
+    2026-11-19T01:01:04  confirm 0.732  single 0.765  clip a448be3ff3f9
+    2026-11-19T01:00:56  confirm 0.682  single 0.703  clip a448be3ff3f9
+    2026-11-18T21:02:30  confirm 0.650  single 0.668  clip 1b2e4ee7de56
+    2026-11-19T01:13:16  confirm 0.644  single 0.658  clip a448be3ff3f9
+    2026-10-24T04:12:48  confirm 0.637  single 0.642  clip dc2cb4794810
+    2026-10-24T04:13:50  confirm 0.628  single 0.632  clip dc2cb4794810
+    2026-11-18T21:02:20  confirm 0.619  single 0.689  clip 1b2e4ee7de56
+    2026-10-24T04:15:17  confirm 0.618  single 0.618  clip dc2cb4794810
+    2026-10-24T04:13:43  confirm 0.614  single 0.618  clip dc2cb4794810
+    2026-10-24T04:14:24  confirm 0.609  single 0.625  clip dc2cb4794810
+
+== fire ==
+  scored: 11020 clip/tick observations, 20895 values, 6.15 h
+  per value: median 0.0785, p99 0.2768, p99.9 0.6471, max 0.7196
+  highest confirming value 0.6524, highest single value 0.7196
+  at floor     0.45: 15 onset(s), 37 confirmed observation(s)
+  at proposed  0.76: 0 onset(s), 0 confirmed observation(s)
+  at in_force  0.75: 0 onset(s), 0 confirmed observation(s)
+  PROPOSED 0.76 (set by confirming max + 0.10); 0 onsets in 6.15 h -> 95 % upper bound 0.488 per hour
+  replay check: same verdict as the device on 10884 of 10884 clips (at the bar it applied)
+    2026-11-21T02:56:32  confirm 0.652  single 0.679  clip c352552ca01f
+    2026-10-28T04:48:59  confirm 0.650  single 0.653  clip ead5bf51243e
+    2026-11-21T03:19:28  confirm 0.647  single 0.666  clip c352552ca01f
+    2026-11-21T02:55:45  confirm 0.634  single 0.667  clip c352552ca01f
+    2026-11-21T02:55:49  confirm 0.634  single 0.707  clip c352552ca01f
+    2026-11-21T02:58:33  confirm 0.630  single 0.641  clip c352552ca01f
+    2026-11-02T00:36:48  confirm 0.627  single 0.716  clip 459e75c2883b
+    2026-11-21T02:56:37  confirm 0.624  single 0.668  clip c352552ca01f
+    2026-11-21T02:52:35  confirm 0.617  single 0.651  clip c352552ca01f
+    2026-11-21T02:52:18  confirm 0.608  single 0.694  clip c352552ca01f
+
+== robbery ==
+  scored: 11020 clip/tick observations, 20895 values, 6.15 h
+  per value: median 0.0735, p99 0.1607, p99.9 0.2583, max 0.3018
+  highest confirming value 0.2753, highest single value 0.3018
+  at floor     0.60: 0 onset(s), 0 confirmed observation(s)
+  at proposed  0.60: 0 onset(s), 0 confirmed observation(s)
+  at in_force  0.60: 0 onset(s), 0 confirmed observation(s)
+  PROPOSED 0.60 (set by floor); 0 onsets in 6.15 h -> 95 % upper bound 0.488 per hour
+  replay check: same verdict as the device on 10884 of 10884 clips (at the bar it applied)
+    2026-11-20T19:25:34  confirm 0.275  single 0.281  clip 6a527796b56a
+    2026-11-20T19:25:40  confirm 0.274  single 0.281  clip 6a527796b56a
+    2026-11-20T19:25:51  confirm 0.272  single 0.278  clip 6a527796b56a
+    2026-11-20T19:25:29  confirm 0.264  single 0.278  clip 6a527796b56a
+    2026-11-20T19:25:46  confirm 0.261  single 0.270  clip 6a527796b56a
+    2026-11-20T19:26:03  confirm 0.256  single 0.260  clip 6a527796b56a
+    2026-11-20T19:25:11  confirm 0.256  single 0.275  clip 6a527796b56a
+    2026-11-20T19:25:17  confirm 0.255  single 0.261  clip 6a527796b56a
+    2026-11-18T20:57:13  confirm 0.255  single 0.297  clip 1b2e4ee7de56
+    2026-11-20T19:26:09  confirm 0.253  single 0.255  clip 6a527796b56a

@@ -1,0 +1,2245 @@
+{
+ "v4_off": {
+  "videos": {
+   "vid02": {
+    "peak_level": 4,
+    "peak_types": [
+     "weapon"
+    ],
+    "first_L3": [
+     12.0,
+     "weapon"
+    ],
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.0711,
+    "keyframes_scored": 27,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [
+     {
+      "t": 12.0,
+      "type": "weapon",
+      "gt": "weapon"
+     }
+    ],
+    "threat_episodes": [
+     [
+      "weapon",
+      10.82,
+      18.32
+     ]
+    ]
+   },
+   "vid03": {
+    "peak_level": 4,
+    "peak_types": [
+     "intrusion",
+     "weapon"
+    ],
+    "first_L3": [
+     9.167,
+     "weapon"
+    ],
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.059,
+    "keyframes_scored": 20,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [
+     {
+      "t": 9.167,
+      "type": "weapon",
+      "gt": "weapon"
+     }
+    ],
+    "threat_episodes": [
+     [
+      "weapon",
+      8.6,
+      10.76
+     ],
+     [
+      "weapon",
+      12.72,
+      12.85
+     ],
+     [
+      "weapon",
+      13.36,
+      14.87
+     ]
+    ]
+   },
+   "vid05": {
+    "peak_level": 3,
+    "peak_types": [
+     "normal",
+     "weapon"
+    ],
+    "first_L3": [
+     6.833,
+     "weapon"
+    ],
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.0846,
+    "keyframes_scored": 19,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [
+     {
+      "t": 6.833,
+      "type": "weapon",
+      "gt": "assault"
+     }
+    ],
+    "threat_episodes": [
+     [
+      "assault",
+      0.0,
+      7.49
+     ],
+     [
+      "weapon",
+      7.68,
+      10.65
+     ]
+    ]
+   },
+   "vid06": {
+    "peak_level": 4,
+    "peak_types": [
+     "fire"
+    ],
+    "first_L3": [
+     8.167,
+     "fire"
+    ],
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.0556,
+    "keyframes_scored": 24,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [
+     {
+      "t": 8.167,
+      "type": "fire",
+      "gt": "fire"
+     },
+     {
+      "t": 16.0,
+      "type": "fire",
+      "gt": "fire"
+     }
+    ],
+    "threat_episodes": [
+     [
+      "fire",
+      4.84,
+      4.99
+     ],
+     [
+      "fire",
+      5.68,
+      8.33
+     ],
+     [
+      "fire",
+      12.79,
+      17.51
+     ]
+    ]
+   },
+   "vid07": {
+    "peak_level": 4,
+    "peak_types": [
+     "intrusion",
+     "weapon"
+    ],
+    "first_L3": [
+     69.333,
+     "weapon"
+    ],
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.0841,
+    "keyframes_scored": 154,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [
+     {
+      "t": 69.333,
+      "type": "weapon",
+      "gt": "weapon"
+     },
+     {
+      "t": 94.0,
+      "type": "weapon",
+      "gt": "weapon"
+     }
+    ],
+    "threat_episodes": [
+     [
+      "weapon",
+      67.29,
+      70.12
+     ],
+     [
+      "weapon",
+      72.31,
+      80.14
+     ],
+     [
+      "weapon",
+      92.51,
+      96.66
+     ]
+    ]
+   },
+   "wa01": {
+    "peak_level": 3,
+    "peak_types": [
+     "normal",
+     "weapon"
+    ],
+    "first_L3": [
+     20.0,
+     "weapon"
+    ],
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.1346,
+    "keyframes_scored": 46,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [
+     {
+      "t": 20.0,
+      "type": "weapon",
+      "gt": "weapon"
+     }
+    ],
+    "threat_episodes": [
+     [
+      "weapon",
+      13.0,
+      29.84
+     ],
+     [
+      "assault",
+      35.48,
+      38.48
+     ]
+    ]
+   },
+   "wa03": {
+    "peak_level": 2,
+    "peak_types": [
+     "intrusion",
+     "normal"
+    ],
+    "first_L3": null,
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.758,
+    "keyframes_scored": 13,
+    "keyframes_ge_0_60": 2,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [],
+    "threat_episodes": [
+     [
+      "robbery",
+      18.68,
+      20.68
+     ]
+    ]
+   },
+   "mmtheft": {
+    "peak_level": 2,
+    "peak_types": [
+     "intrusion"
+    ],
+    "first_L3": null,
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.1907,
+    "keyframes_scored": 70,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [],
+    "threat_episodes": [
+     [
+      "robbery",
+      17.68,
+      51.37
+     ]
+    ]
+   },
+   "mmassault": {
+    "peak_level": 2,
+    "peak_types": [
+     "intrusion"
+    ],
+    "first_L3": null,
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.1412,
+    "keyframes_scored": 27,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [],
+    "threat_episodes": [
+     [
+      "assault",
+      10.02,
+      13.19
+     ]
+    ]
+   },
+   "mmgun": {
+    "peak_level": 2,
+    "peak_types": [
+     "intrusion"
+    ],
+    "first_L3": null,
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.1031,
+    "keyframes_scored": 17,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [],
+    "threat_episodes": [
+     [
+      "weapon",
+      2.51,
+      7.19
+     ]
+    ]
+   },
+   "mmknife": {
+    "peak_level": 3,
+    "peak_types": [
+     "intrusion",
+     "weapon"
+    ],
+    "first_L3": [
+     12.333,
+     "weapon"
+    ],
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.1276,
+    "keyframes_scored": 27,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [
+     {
+      "t": 12.333,
+      "type": "weapon",
+      "gt": "weapon"
+     }
+    ],
+    "threat_episodes": [
+     [
+      "weapon",
+      8.85,
+      14.36
+     ]
+    ]
+   },
+   "nvroom2": {
+    "peak_level": 2,
+    "peak_types": [
+     "intrusion"
+    ],
+    "first_L3": null,
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.1258,
+    "keyframes_scored": 29,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [],
+    "threat_episodes": []
+   },
+   "vid04": {
+    "peak_level": 2,
+    "peak_types": [
+     "intrusion"
+    ],
+    "first_L3": null,
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.0823,
+    "keyframes_scored": 24,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [],
+    "threat_episodes": [
+     [
+      "fire",
+      10.61,
+      13.81
+     ]
+    ]
+   },
+   "gun": {
+    "peak_level": 3,
+    "peak_types": [
+     "intrusion",
+     "weapon"
+    ],
+    "first_L3": [
+     10.0,
+     "weapon"
+    ],
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.1063,
+    "keyframes_scored": 19,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [
+     {
+      "t": 10.0,
+      "type": "weapon",
+      "gt": "weapon"
+     }
+    ],
+    "threat_episodes": [
+     [
+      "weapon",
+      1.01,
+      11.83
+     ]
+    ]
+   }
+  },
+  "commit": "4e210e8",
+  "models": {
+   "person": "yolov8n.pt",
+   "weapon": "weapon_detector_room_v5.pt",
+   "fire": "fire_detector_room_v5.pt",
+   "violence": null,
+   "scene": "scene_classifier_custom_v4.pt",
+   "fusion": "evidence"
+  },
+  "settings": {
+   "robbery_alarm": false,
+   "experimental_classes": [
+    "assault",
+    "robbery"
+   ],
+   "person_gated_classes": [
+    "weapon"
+   ],
+   "sos_alarm_classes": [
+    "weapon",
+    "fire",
+    "assault"
+   ],
+   "scene_thresholds_env": "{\"weapon\": 0.78, \"fire\": 0.75, \"robbery\": 0.60}",
+   "scene_weights_env": null,
+   "runtime": "torch",
+   "imgsz": 320
+  },
+  "committed_all": {
+   "L2": {
+    "onsets": 15,
+    "false_onsets": 4,
+    "false_onsets_per_hour": 58.738,
+    "false_onsets_per_hour_ci95": [
+     16.0042,
+     150.3929
+    ],
+    "normal_time_at_level": 0.47,
+    "episodes": {
+     "weapon": {
+      "episodes": 11,
+      "caught": 10,
+      "recall": 0.9091,
+      "recall_ci95": [
+       0.5872,
+       0.9977
+      ],
+      "median_latency": 1.334,
+      "p95_latency": 8.092,
+      "within_2s": 6
+     },
+     "assault": {
+      "episodes": 3,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.7076
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     },
+     "fire": {
+      "episodes": 3,
+      "caught": 2,
+      "recall": 0.6667,
+      "recall_ci95": [
+       0.0943,
+       0.9916
+      ],
+      "median_latency": 2.848,
+      "p95_latency": 3.176,
+      "within_2s": 0
+     },
+     "robbery": {
+      "episodes": 2,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.8419
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     }
+    }
+   },
+   "L3": {
+    "onsets": 10,
+    "false_onsets": 0,
+    "false_onsets_per_hour": 0.0,
+    "false_onsets_per_hour_ci95": [
+     0.0,
+     54.1695
+    ],
+    "normal_time_at_level": 0.0886,
+    "episodes": {
+     "weapon": {
+      "episodes": 11,
+      "caught": 10,
+      "recall": 0.9091,
+      "recall_ci95": [
+       0.5872,
+       0.9977
+      ],
+      "median_latency": 1.334,
+      "p95_latency": 8.092,
+      "within_2s": 6
+     },
+     "assault": {
+      "episodes": 3,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.7076
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     },
+     "fire": {
+      "episodes": 3,
+      "caught": 2,
+      "recall": 0.6667,
+      "recall_ci95": [
+       0.0943,
+       0.9916
+      ],
+      "median_latency": 2.848,
+      "p95_latency": 3.176,
+      "within_2s": 0
+     },
+     "robbery": {
+      "episodes": 2,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.8419
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     }
+    }
+   },
+   "L4": {
+    "onsets": 5,
+    "false_onsets": 0,
+    "false_onsets_per_hour": 0.0,
+    "false_onsets_per_hour_ci95": [
+     0.0,
+     54.1695
+    ],
+    "normal_time_at_level": 0.0504,
+    "episodes": {
+     "weapon": {
+      "episodes": 11,
+      "caught": 5,
+      "recall": 0.4545,
+      "recall_ci95": [
+       0.1675,
+       0.7662
+      ],
+      "median_latency": 1.176,
+      "p95_latency": 3.502,
+      "within_2s": 3
+     },
+     "assault": {
+      "episodes": 3,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.7076
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     },
+     "fire": {
+      "episodes": 3,
+      "caught": 1,
+      "recall": 0.3333,
+      "recall_ci95": [
+       0.0084,
+       0.9057
+      ],
+      "median_latency": 3.212,
+      "p95_latency": 3.212,
+      "within_2s": 0
+     },
+     "robbery": {
+      "episodes": 2,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.8419
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     }
+    }
+   },
+   "L5": {
+    "onsets": 0,
+    "false_onsets": 0,
+    "false_onsets_per_hour": 0.0,
+    "false_onsets_per_hour_ci95": [
+     0.0,
+     54.1695
+    ],
+    "normal_time_at_level": 0.0,
+    "episodes": {
+     "weapon": {
+      "episodes": 11,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.2849
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     },
+     "assault": {
+      "episodes": 3,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.7076
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     },
+     "fire": {
+      "episodes": 3,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.7076
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     },
+     "robbery": {
+      "episodes": 2,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.8419
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     }
+    }
+   },
+   "normal_hours": 0.0681
+  }
+ },
+ "v4_on": {
+  "videos": {
+   "vid02": {
+    "peak_level": 4,
+    "peak_types": [
+     "weapon"
+    ],
+    "first_L3": [
+     12.0,
+     "weapon"
+    ],
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.0711,
+    "keyframes_scored": 27,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [
+     {
+      "t": 12.0,
+      "type": "weapon",
+      "gt": "weapon"
+     }
+    ],
+    "threat_episodes": [
+     [
+      "weapon",
+      10.82,
+      18.32
+     ]
+    ]
+   },
+   "vid03": {
+    "peak_level": 4,
+    "peak_types": [
+     "intrusion",
+     "weapon"
+    ],
+    "first_L3": [
+     9.167,
+     "weapon"
+    ],
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.059,
+    "keyframes_scored": 20,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [
+     {
+      "t": 9.167,
+      "type": "weapon",
+      "gt": "weapon"
+     }
+    ],
+    "threat_episodes": [
+     [
+      "weapon",
+      8.6,
+      10.76
+     ],
+     [
+      "weapon",
+      12.72,
+      12.85
+     ],
+     [
+      "weapon",
+      13.36,
+      14.87
+     ]
+    ]
+   },
+   "vid05": {
+    "peak_level": 3,
+    "peak_types": [
+     "normal",
+     "weapon"
+    ],
+    "first_L3": [
+     6.833,
+     "weapon"
+    ],
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.0846,
+    "keyframes_scored": 19,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [
+     {
+      "t": 6.833,
+      "type": "weapon",
+      "gt": "assault"
+     }
+    ],
+    "threat_episodes": [
+     [
+      "assault",
+      0.0,
+      7.49
+     ],
+     [
+      "weapon",
+      7.68,
+      10.65
+     ]
+    ]
+   },
+   "vid06": {
+    "peak_level": 4,
+    "peak_types": [
+     "fire"
+    ],
+    "first_L3": [
+     8.167,
+     "fire"
+    ],
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.0556,
+    "keyframes_scored": 24,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [
+     {
+      "t": 8.167,
+      "type": "fire",
+      "gt": "fire"
+     },
+     {
+      "t": 16.0,
+      "type": "fire",
+      "gt": "fire"
+     }
+    ],
+    "threat_episodes": [
+     [
+      "fire",
+      4.84,
+      4.99
+     ],
+     [
+      "fire",
+      5.68,
+      8.33
+     ],
+     [
+      "fire",
+      12.79,
+      17.51
+     ]
+    ]
+   },
+   "vid07": {
+    "peak_level": 4,
+    "peak_types": [
+     "intrusion",
+     "weapon"
+    ],
+    "first_L3": [
+     69.333,
+     "weapon"
+    ],
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.0841,
+    "keyframes_scored": 154,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [
+     {
+      "t": 69.333,
+      "type": "weapon",
+      "gt": "weapon"
+     },
+     {
+      "t": 94.0,
+      "type": "weapon",
+      "gt": "weapon"
+     }
+    ],
+    "threat_episodes": [
+     [
+      "weapon",
+      67.29,
+      70.12
+     ],
+     [
+      "weapon",
+      72.31,
+      80.14
+     ],
+     [
+      "weapon",
+      92.51,
+      96.66
+     ]
+    ]
+   },
+   "wa01": {
+    "peak_level": 3,
+    "peak_types": [
+     "normal",
+     "weapon"
+    ],
+    "first_L3": [
+     20.0,
+     "weapon"
+    ],
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.1346,
+    "keyframes_scored": 46,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [
+     {
+      "t": 20.0,
+      "type": "weapon",
+      "gt": "weapon"
+     }
+    ],
+    "threat_episodes": [
+     [
+      "weapon",
+      13.0,
+      29.84
+     ],
+     [
+      "assault",
+      35.48,
+      38.48
+     ]
+    ]
+   },
+   "wa03": {
+    "peak_level": 2,
+    "peak_types": [
+     "intrusion",
+     "normal"
+    ],
+    "first_L3": null,
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.758,
+    "keyframes_scored": 13,
+    "keyframes_ge_0_60": 2,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [],
+    "threat_episodes": [
+     [
+      "robbery",
+      18.68,
+      20.68
+     ]
+    ]
+   },
+   "mmtheft": {
+    "peak_level": 2,
+    "peak_types": [
+     "intrusion"
+    ],
+    "first_L3": null,
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.1907,
+    "keyframes_scored": 70,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [],
+    "threat_episodes": [
+     [
+      "robbery",
+      17.68,
+      51.37
+     ]
+    ]
+   },
+   "mmassault": {
+    "peak_level": 2,
+    "peak_types": [
+     "intrusion"
+    ],
+    "first_L3": null,
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.1412,
+    "keyframes_scored": 27,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [],
+    "threat_episodes": [
+     [
+      "assault",
+      10.02,
+      13.19
+     ]
+    ]
+   },
+   "mmgun": {
+    "peak_level": 2,
+    "peak_types": [
+     "intrusion"
+    ],
+    "first_L3": null,
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.1031,
+    "keyframes_scored": 17,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [],
+    "threat_episodes": [
+     [
+      "weapon",
+      2.51,
+      7.19
+     ]
+    ]
+   },
+   "mmknife": {
+    "peak_level": 3,
+    "peak_types": [
+     "intrusion",
+     "weapon"
+    ],
+    "first_L3": [
+     12.333,
+     "weapon"
+    ],
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.1276,
+    "keyframes_scored": 27,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [
+     {
+      "t": 12.333,
+      "type": "weapon",
+      "gt": "weapon"
+     }
+    ],
+    "threat_episodes": [
+     [
+      "weapon",
+      8.85,
+      14.36
+     ]
+    ]
+   },
+   "nvroom2": {
+    "peak_level": 2,
+    "peak_types": [
+     "intrusion"
+    ],
+    "first_L3": null,
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.1258,
+    "keyframes_scored": 29,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [],
+    "threat_episodes": []
+   },
+   "vid04": {
+    "peak_level": 2,
+    "peak_types": [
+     "intrusion"
+    ],
+    "first_L3": null,
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.0823,
+    "keyframes_scored": 24,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [],
+    "threat_episodes": [
+     [
+      "fire",
+      10.61,
+      13.81
+     ]
+    ]
+   },
+   "gun": {
+    "peak_level": 3,
+    "peak_types": [
+     "intrusion",
+     "weapon"
+    ],
+    "first_L3": [
+     10.0,
+     "weapon"
+    ],
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.1063,
+    "keyframes_scored": 19,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [
+     {
+      "t": 10.0,
+      "type": "weapon",
+      "gt": "weapon"
+     }
+    ],
+    "threat_episodes": [
+     [
+      "weapon",
+      1.01,
+      11.83
+     ]
+    ]
+   }
+  },
+  "commit": "4e210e8",
+  "models": {
+   "person": "yolov8n.pt",
+   "weapon": "weapon_detector_room_v5.pt",
+   "fire": "fire_detector_room_v5.pt",
+   "violence": null,
+   "scene": "scene_classifier_custom_v4.pt",
+   "fusion": "evidence"
+  },
+  "settings": {
+   "robbery_alarm": true,
+   "experimental_classes": [
+    "assault"
+   ],
+   "person_gated_classes": [
+    "weapon",
+    "robbery"
+   ],
+   "sos_alarm_classes": [
+    "weapon",
+    "fire",
+    "assault",
+    "robbery"
+   ],
+   "scene_thresholds_env": "{\"weapon\": 0.78, \"fire\": 0.75, \"robbery\": 0.60}",
+   "scene_weights_env": null,
+   "runtime": "torch",
+   "imgsz": 320
+  },
+  "committed_all": {
+   "L2": {
+    "onsets": 15,
+    "false_onsets": 4,
+    "false_onsets_per_hour": 58.738,
+    "false_onsets_per_hour_ci95": [
+     16.0042,
+     150.3929
+    ],
+    "normal_time_at_level": 0.47,
+    "episodes": {
+     "weapon": {
+      "episodes": 11,
+      "caught": 10,
+      "recall": 0.9091,
+      "recall_ci95": [
+       0.5872,
+       0.9977
+      ],
+      "median_latency": 1.334,
+      "p95_latency": 8.092,
+      "within_2s": 6
+     },
+     "assault": {
+      "episodes": 3,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.7076
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     },
+     "fire": {
+      "episodes": 3,
+      "caught": 2,
+      "recall": 0.6667,
+      "recall_ci95": [
+       0.0943,
+       0.9916
+      ],
+      "median_latency": 2.848,
+      "p95_latency": 3.176,
+      "within_2s": 0
+     },
+     "robbery": {
+      "episodes": 2,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.8419
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     }
+    }
+   },
+   "L3": {
+    "onsets": 10,
+    "false_onsets": 0,
+    "false_onsets_per_hour": 0.0,
+    "false_onsets_per_hour_ci95": [
+     0.0,
+     54.1695
+    ],
+    "normal_time_at_level": 0.0886,
+    "episodes": {
+     "weapon": {
+      "episodes": 11,
+      "caught": 10,
+      "recall": 0.9091,
+      "recall_ci95": [
+       0.5872,
+       0.9977
+      ],
+      "median_latency": 1.334,
+      "p95_latency": 8.092,
+      "within_2s": 6
+     },
+     "assault": {
+      "episodes": 3,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.7076
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     },
+     "fire": {
+      "episodes": 3,
+      "caught": 2,
+      "recall": 0.6667,
+      "recall_ci95": [
+       0.0943,
+       0.9916
+      ],
+      "median_latency": 2.848,
+      "p95_latency": 3.176,
+      "within_2s": 0
+     },
+     "robbery": {
+      "episodes": 2,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.8419
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     }
+    }
+   },
+   "L4": {
+    "onsets": 5,
+    "false_onsets": 0,
+    "false_onsets_per_hour": 0.0,
+    "false_onsets_per_hour_ci95": [
+     0.0,
+     54.1695
+    ],
+    "normal_time_at_level": 0.0504,
+    "episodes": {
+     "weapon": {
+      "episodes": 11,
+      "caught": 5,
+      "recall": 0.4545,
+      "recall_ci95": [
+       0.1675,
+       0.7662
+      ],
+      "median_latency": 1.176,
+      "p95_latency": 3.502,
+      "within_2s": 3
+     },
+     "assault": {
+      "episodes": 3,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.7076
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     },
+     "fire": {
+      "episodes": 3,
+      "caught": 1,
+      "recall": 0.3333,
+      "recall_ci95": [
+       0.0084,
+       0.9057
+      ],
+      "median_latency": 3.212,
+      "p95_latency": 3.212,
+      "within_2s": 0
+     },
+     "robbery": {
+      "episodes": 2,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.8419
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     }
+    }
+   },
+   "L5": {
+    "onsets": 0,
+    "false_onsets": 0,
+    "false_onsets_per_hour": 0.0,
+    "false_onsets_per_hour_ci95": [
+     0.0,
+     54.1695
+    ],
+    "normal_time_at_level": 0.0,
+    "episodes": {
+     "weapon": {
+      "episodes": 11,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.2849
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     },
+     "assault": {
+      "episodes": 3,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.7076
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     },
+     "fire": {
+      "episodes": 3,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.7076
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     },
+     "robbery": {
+      "episodes": 2,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.8419
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     }
+    }
+   },
+   "normal_hours": 0.0681
+  }
+ },
+ "v5_on": {
+  "videos": {
+   "vid02": {
+    "peak_level": 4,
+    "peak_types": [
+     "weapon"
+    ],
+    "first_L3": [
+     12.0,
+     "weapon"
+    ],
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.1213,
+    "keyframes_scored": 27,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [
+     {
+      "t": 12.0,
+      "type": "weapon",
+      "gt": "weapon"
+     }
+    ],
+    "threat_episodes": [
+     [
+      "weapon",
+      10.82,
+      18.32
+     ]
+    ]
+   },
+   "vid03": {
+    "peak_level": 4,
+    "peak_types": [
+     "weapon"
+    ],
+    "first_L3": [
+     9.167,
+     "weapon"
+    ],
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.0787,
+    "keyframes_scored": 20,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [
+     {
+      "t": 9.167,
+      "type": "weapon",
+      "gt": "weapon"
+     }
+    ],
+    "threat_episodes": [
+     [
+      "weapon",
+      8.6,
+      10.76
+     ],
+     [
+      "weapon",
+      12.72,
+      12.85
+     ],
+     [
+      "weapon",
+      13.36,
+      14.87
+     ]
+    ]
+   },
+   "vid05": {
+    "peak_level": 3,
+    "peak_types": [
+     "normal",
+     "weapon"
+    ],
+    "first_L3": [
+     6.833,
+     "weapon"
+    ],
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.0709,
+    "keyframes_scored": 19,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [
+     {
+      "t": 6.833,
+      "type": "weapon",
+      "gt": "assault"
+     }
+    ],
+    "threat_episodes": [
+     [
+      "assault",
+      0.0,
+      7.49
+     ],
+     [
+      "weapon",
+      7.68,
+      10.65
+     ]
+    ]
+   },
+   "vid06": {
+    "peak_level": 3,
+    "peak_types": [
+     "fire",
+     "intrusion",
+     "normal"
+    ],
+    "first_L3": [
+     8.167,
+     "fire"
+    ],
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.0761,
+    "keyframes_scored": 24,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [
+     {
+      "t": 8.167,
+      "type": "fire",
+      "gt": "fire"
+     },
+     {
+      "t": 16.0,
+      "type": "fire",
+      "gt": "fire"
+     }
+    ],
+    "threat_episodes": [
+     [
+      "fire",
+      4.84,
+      4.99
+     ],
+     [
+      "fire",
+      5.68,
+      8.33
+     ],
+     [
+      "fire",
+      12.79,
+      17.51
+     ]
+    ]
+   },
+   "vid07": {
+    "peak_level": 4,
+    "peak_types": [
+     "intrusion",
+     "weapon"
+    ],
+    "first_L3": [
+     69.333,
+     "weapon"
+    ],
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.0815,
+    "keyframes_scored": 154,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [
+     {
+      "t": 69.333,
+      "type": "weapon",
+      "gt": "weapon"
+     },
+     {
+      "t": 94.0,
+      "type": "weapon",
+      "gt": "weapon"
+     }
+    ],
+    "threat_episodes": [
+     [
+      "weapon",
+      67.29,
+      70.12
+     ],
+     [
+      "weapon",
+      72.31,
+      80.14
+     ],
+     [
+      "weapon",
+      92.51,
+      96.66
+     ]
+    ]
+   },
+   "wa01": {
+    "peak_level": 3,
+    "peak_types": [
+     "normal",
+     "weapon"
+    ],
+    "first_L3": [
+     18.0,
+     "weapon"
+    ],
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.1509,
+    "keyframes_scored": 46,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [
+     {
+      "t": 18.0,
+      "type": "weapon",
+      "gt": "weapon"
+     }
+    ],
+    "threat_episodes": [
+     [
+      "weapon",
+      13.0,
+      29.84
+     ],
+     [
+      "assault",
+      35.48,
+      38.48
+     ]
+    ]
+   },
+   "wa03": {
+    "peak_level": 2,
+    "peak_types": [
+     "intrusion",
+     "normal"
+    ],
+    "first_L3": null,
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.7652,
+    "keyframes_scored": 13,
+    "keyframes_ge_0_60": 2,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [],
+    "threat_episodes": [
+     [
+      "robbery",
+      18.68,
+      20.68
+     ]
+    ]
+   },
+   "mmtheft": {
+    "peak_level": 3,
+    "peak_types": [
+     "robbery"
+    ],
+    "first_L3": [
+     18.0,
+     "robbery"
+    ],
+    "first_robbery_L3_t": 18.0,
+    "robbery_typed_rows": 214,
+    "robbery_state_best": "confirmed",
+    "robbery_confirmed_clip_ends": [
+     18.0,
+     20.0,
+     22.0,
+     24.0,
+     26.0,
+     28.0,
+     30.0,
+     32.0,
+     34.0,
+     36.0,
+     38.0,
+     40.0,
+     42.0,
+     44.0,
+     46.0,
+     48.0,
+     50.0,
+     52.0
+    ],
+    "robbery_confirmed_clips": 18,
+    "peak_scene_robbery": 0.8585,
+    "keyframes_scored": 70,
+    "keyframes_ge_0_60": 56,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [
+     {
+      "t": 18.0,
+      "type": "robbery",
+      "gt": "robbery"
+     }
+    ],
+    "threat_episodes": [
+     [
+      "robbery",
+      17.68,
+      51.37
+     ]
+    ]
+   },
+   "mmassault": {
+    "peak_level": 2,
+    "peak_types": [
+     "intrusion"
+    ],
+    "first_L3": null,
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.1458,
+    "keyframes_scored": 27,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [],
+    "threat_episodes": [
+     [
+      "assault",
+      10.02,
+      13.19
+     ]
+    ]
+   },
+   "mmgun": {
+    "peak_level": 3,
+    "peak_types": [
+     "intrusion",
+     "weapon"
+    ],
+    "first_L3": [
+     6.0,
+     "weapon"
+    ],
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.0695,
+    "keyframes_scored": 17,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [
+     {
+      "t": 6.0,
+      "type": "weapon",
+      "gt": "weapon"
+     }
+    ],
+    "threat_episodes": [
+     [
+      "weapon",
+      2.51,
+      7.19
+     ]
+    ]
+   },
+   "mmknife": {
+    "peak_level": 3,
+    "peak_types": [
+     "intrusion",
+     "weapon"
+    ],
+    "first_L3": [
+     10.0,
+     "weapon"
+    ],
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.0771,
+    "keyframes_scored": 27,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [
+     {
+      "t": 10.0,
+      "type": "weapon",
+      "gt": "weapon"
+     }
+    ],
+    "threat_episodes": [
+     [
+      "weapon",
+      8.85,
+      14.36
+     ]
+    ]
+   },
+   "nvroom2": {
+    "peak_level": 2,
+    "peak_types": [
+     "intrusion"
+    ],
+    "first_L3": null,
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.0862,
+    "keyframes_scored": 29,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [],
+    "threat_episodes": []
+   },
+   "vid04": {
+    "peak_level": 2,
+    "peak_types": [
+     "intrusion"
+    ],
+    "first_L3": null,
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.113,
+    "keyframes_scored": 24,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [],
+    "threat_episodes": [
+     [
+      "fire",
+      10.61,
+      13.81
+     ]
+    ]
+   },
+   "gun": {
+    "peak_level": 3,
+    "peak_types": [
+     "intrusion",
+     "weapon"
+    ],
+    "first_L3": [
+     10.0,
+     "weapon"
+    ],
+    "first_robbery_L3_t": null,
+    "robbery_typed_rows": 0,
+    "robbery_state_best": "unconfirmed",
+    "robbery_confirmed_clip_ends": [],
+    "robbery_confirmed_clips": 0,
+    "peak_scene_robbery": 0.1168,
+    "keyframes_scored": 19,
+    "keyframes_ge_0_60": 0,
+    "robbery_votes_gated_flag": 0,
+    "L3_onsets": [
+     {
+      "t": 10.0,
+      "type": "weapon",
+      "gt": "weapon"
+     }
+    ],
+    "threat_episodes": [
+     [
+      "weapon",
+      1.01,
+      11.83
+     ]
+    ]
+   }
+  },
+  "commit": "4e210e8",
+  "models": {
+   "person": "yolov8n.pt",
+   "weapon": "weapon_detector_room_v5.pt",
+   "fire": "fire_detector_room_v5.pt",
+   "violence": null,
+   "scene": "scene_classifier_room_v5.pt",
+   "fusion": "evidence"
+  },
+  "settings": {
+   "robbery_alarm": true,
+   "experimental_classes": [
+    "assault"
+   ],
+   "person_gated_classes": [
+    "weapon",
+    "robbery"
+   ],
+   "sos_alarm_classes": [
+    "weapon",
+    "fire",
+    "assault",
+    "robbery"
+   ],
+   "scene_thresholds_env": "{\"weapon\": 0.78, \"fire\": 0.75, \"robbery\": 0.60}",
+   "scene_weights_env": "G:\\Sentrix\\.claude\\worktrees\\robbery-l3\\models\\v5_room\\scene_classifier_room_v5.pt",
+   "runtime": "torch",
+   "imgsz": 320
+  },
+  "committed_all": {
+   "L2": {
+    "onsets": 15,
+    "false_onsets": 3,
+    "false_onsets_per_hour": 44.054,
+    "false_onsets_per_hour_ci95": [
+     9.0849,
+     128.7433
+    ],
+    "normal_time_at_level": 0.4857,
+    "episodes": {
+     "weapon": {
+      "episodes": 11,
+      "caught": 11,
+      "recall": 1.0,
+      "recall_ci95": [
+       0.7151,
+       1.0
+      ],
+      "median_latency": 1.176,
+      "p95_latency": 6.993,
+      "within_2s": 7
+     },
+     "assault": {
+      "episodes": 3,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.7076
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     },
+     "fire": {
+      "episodes": 3,
+      "caught": 2,
+      "recall": 0.6667,
+      "recall_ci95": [
+       0.0943,
+       0.9916
+      ],
+      "median_latency": 2.848,
+      "p95_latency": 3.176,
+      "within_2s": 0
+     },
+     "robbery": {
+      "episodes": 2,
+      "caught": 1,
+      "recall": 0.5,
+      "recall_ci95": [
+       0.0126,
+       0.9874
+      ],
+      "median_latency": 0.322,
+      "p95_latency": 0.322,
+      "within_2s": 1
+     }
+    }
+   },
+   "L3": {
+    "onsets": 12,
+    "false_onsets": 0,
+    "false_onsets_per_hour": 0.0,
+    "false_onsets_per_hour_ci95": [
+     0.0,
+     54.1695
+    ],
+    "normal_time_at_level": 0.1076,
+    "episodes": {
+     "weapon": {
+      "episodes": 11,
+      "caught": 11,
+      "recall": 1.0,
+      "recall_ci95": [
+       0.7151,
+       1.0
+      ],
+      "median_latency": 1.176,
+      "p95_latency": 6.993,
+      "within_2s": 7
+     },
+     "assault": {
+      "episodes": 3,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.7076
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     },
+     "fire": {
+      "episodes": 3,
+      "caught": 2,
+      "recall": 0.6667,
+      "recall_ci95": [
+       0.0943,
+       0.9916
+      ],
+      "median_latency": 2.848,
+      "p95_latency": 3.176,
+      "within_2s": 0
+     },
+     "robbery": {
+      "episodes": 2,
+      "caught": 1,
+      "recall": 0.5,
+      "recall_ci95": [
+       0.0126,
+       0.9874
+      ],
+      "median_latency": 0.322,
+      "p95_latency": 0.322,
+      "within_2s": 1
+     }
+    }
+   },
+   "L4": {
+    "onsets": 3,
+    "false_onsets": 0,
+    "false_onsets_per_hour": 0.0,
+    "false_onsets_per_hour_ci95": [
+     0.0,
+     54.1695
+    ],
+    "normal_time_at_level": 0.0272,
+    "episodes": {
+     "weapon": {
+      "episodes": 11,
+      "caught": 4,
+      "recall": 0.3636,
+      "recall_ci95": [
+       0.1093,
+       0.6921
+      ],
+      "median_latency": 2.626,
+      "p95_latency": 4.978,
+      "within_2s": 2
+     },
+     "assault": {
+      "episodes": 3,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.7076
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     },
+     "fire": {
+      "episodes": 3,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.7076
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     },
+     "robbery": {
+      "episodes": 2,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.8419
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     }
+    }
+   },
+   "L5": {
+    "onsets": 0,
+    "false_onsets": 0,
+    "false_onsets_per_hour": 0.0,
+    "false_onsets_per_hour_ci95": [
+     0.0,
+     54.1695
+    ],
+    "normal_time_at_level": 0.0,
+    "episodes": {
+     "weapon": {
+      "episodes": 11,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.2849
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     },
+     "assault": {
+      "episodes": 3,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.7076
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     },
+     "fire": {
+      "episodes": 3,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.7076
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     },
+     "robbery": {
+      "episodes": 2,
+      "caught": 0,
+      "recall": 0.0,
+      "recall_ci95": [
+       0.0,
+       0.8419
+      ],
+      "median_latency": null,
+      "p95_latency": null,
+      "within_2s": 0
+     }
+    }
+   },
+   "normal_hours": 0.0681
+  }
+ }
+}

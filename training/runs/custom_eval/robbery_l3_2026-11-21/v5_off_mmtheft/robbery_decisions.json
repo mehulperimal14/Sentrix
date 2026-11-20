@@ -1,0 +1,1035 @@
+{
+ "settings": {
+  "robbery_alarm": false,
+  "experimental_classes": [
+   "assault",
+   "robbery"
+  ],
+  "person_gated_classes": [
+   "weapon"
+  ],
+  "sos_alarm_classes": [
+   "weapon",
+   "fire",
+   "assault"
+  ],
+  "scene_thresholds_env": "{\"weapon\": 0.78, \"fire\": 0.75, \"robbery\": 0.60}",
+  "scene_weights_env": "G:\\Sentrix\\.claude\\worktrees\\robbery-l3\\models\\v5_room\\scene_classifier_room_v5.pt",
+  "runtime": "torch",
+  "imgsz": 320
+ },
+ "decisions": [
+  {
+   "video": "mmtheft.mp4",
+   "t": 2.0,
+   "kind": "clip",
+   "level": 1,
+   "tci": 0.0,
+   "incident_type": "normal",
+   "robbery_state": "unconfirmed",
+   "robbery_confirmed": false,
+   "robbery_experimental": true,
+   "robbery_score": 0.0,
+   "robbery_votes": [],
+   "scene_robbery_keyframes": [],
+   "persons_recent": 0
+  },
+  {
+   "video": "mmtheft.mp4",
+   "t": 4.0,
+   "kind": "clip",
+   "level": 1,
+   "tci": 0.0191,
+   "incident_type": "normal",
+   "robbery_state": "unconfirmed",
+   "robbery_confirmed": false,
+   "robbery_experimental": true,
+   "robbery_score": 0.0191,
+   "robbery_votes": [
+    {
+     "source": "scene",
+     "value": 0.0602,
+     "threshold": 0.6,
+     "hits": 0,
+     "seen": 2,
+     "confirmed": false,
+     "gated": null,
+     "fresh": true,
+     "modality": "video_classifier",
+     "role": "for",
+     "span_s": 0.0,
+     "unit": "keyframes",
+     "group": null
+    }
+   ],
+   "scene_robbery_keyframes": [
+    0.0602,
+    0.0413
+   ],
+   "persons_recent": 1,
+   "scene_thresholds": {
+    "fire": 0.75,
+    "weapon": 0.78,
+    "assault": 0.85,
+    "robbery": 0.6
+   }
+  },
+  {
+   "video": "mmtheft.mp4",
+   "t": 6.0,
+   "kind": "clip",
+   "level": 1,
+   "tci": 0.0225,
+   "incident_type": "normal",
+   "robbery_state": "unconfirmed",
+   "robbery_confirmed": false,
+   "robbery_experimental": true,
+   "robbery_score": 0.0225,
+   "robbery_votes": [
+    {
+     "source": "scene",
+     "value": 0.0712,
+     "threshold": 0.6,
+     "hits": 0,
+     "seen": 3,
+     "confirmed": false,
+     "gated": null,
+     "fresh": true,
+     "modality": "video_classifier",
+     "role": "for",
+     "span_s": 0.0,
+     "unit": "keyframes",
+     "group": null
+    }
+   ],
+   "scene_robbery_keyframes": [
+    0.0602,
+    0.0712,
+    0.0617
+   ],
+   "persons_recent": 1,
+   "scene_thresholds": {
+    "fire": 0.75,
+    "weapon": 0.78,
+    "assault": 0.85,
+    "robbery": 0.6
+   }
+  },
+  {
+   "video": "mmtheft.mp4",
+   "t": 8.0,
+   "kind": "clip",
+   "level": 1,
+   "tci": 0.0197,
+   "incident_type": "normal",
+   "robbery_state": "unconfirmed",
+   "robbery_confirmed": false,
+   "robbery_experimental": true,
+   "robbery_score": 0.0197,
+   "robbery_votes": [
+    {
+     "source": "scene",
+     "value": 0.0623,
+     "threshold": 0.6,
+     "hits": 0,
+     "seen": 2,
+     "confirmed": false,
+     "gated": null,
+     "fresh": true,
+     "modality": "video_classifier",
+     "role": "for",
+     "span_s": 0.0,
+     "unit": "keyframes",
+     "group": null
+    }
+   ],
+   "scene_robbery_keyframes": [
+    0.0617,
+    0.0623
+   ],
+   "persons_recent": 0,
+   "scene_thresholds": {
+    "fire": 0.75,
+    "weapon": 0.78,
+    "assault": 0.85,
+    "robbery": 0.6
+   }
+  },
+  {
+   "video": "mmtheft.mp4",
+   "t": 10.0,
+   "kind": "clip",
+   "level": 1,
+   "tci": 0.0017,
+   "incident_type": "normal",
+   "robbery_state": "unconfirmed",
+   "robbery_confirmed": false,
+   "robbery_experimental": true,
+   "robbery_score": 0.0,
+   "robbery_votes": [],
+   "scene_robbery_keyframes": [],
+   "persons_recent": 0
+  },
+  {
+   "video": "mmtheft.mp4",
+   "t": 12.0,
+   "kind": "clip",
+   "level": 1,
+   "tci": 0.0191,
+   "incident_type": "normal",
+   "robbery_state": "unconfirmed",
+   "robbery_confirmed": false,
+   "robbery_experimental": true,
+   "robbery_score": 0.0191,
+   "robbery_votes": [
+    {
+     "source": "scene",
+     "value": 0.0602,
+     "threshold": 0.6,
+     "hits": 0,
+     "seen": 1,
+     "confirmed": false,
+     "gated": null,
+     "fresh": true,
+     "modality": "video_classifier",
+     "role": "for",
+     "span_s": 0.0,
+     "unit": "keyframes",
+     "group": null
+    }
+   ],
+   "scene_robbery_keyframes": [
+    0.0602
+   ],
+   "persons_recent": 1,
+   "scene_thresholds": {
+    "fire": 0.75,
+    "weapon": 0.78,
+    "assault": 0.85,
+    "robbery": 0.6
+   }
+  },
+  {
+   "video": "mmtheft.mp4",
+   "t": 14.0,
+   "kind": "clip",
+   "level": 1,
+   "tci": 0.0168,
+   "incident_type": "normal",
+   "robbery_state": "unconfirmed",
+   "robbery_confirmed": false,
+   "robbery_experimental": true,
+   "robbery_score": 0.0168,
+   "robbery_votes": [
+    {
+     "source": "scene",
+     "value": 0.0531,
+     "threshold": 0.6,
+     "hits": 0,
+     "seen": 2,
+     "confirmed": false,
+     "gated": null,
+     "fresh": true,
+     "modality": "video_classifier",
+     "role": "for",
+     "span_s": 0.0,
+     "unit": "keyframes",
+     "group": null
+    }
+   ],
+   "scene_robbery_keyframes": [
+    0.0531,
+    0.0474
+   ],
+   "persons_recent": 1,
+   "scene_thresholds": {
+    "fire": 0.75,
+    "weapon": 0.78,
+    "assault": 0.85,
+    "robbery": 0.6
+   }
+  },
+  {
+   "video": "mmtheft.mp4",
+   "t": 16.0,
+   "kind": "clip",
+   "level": 1,
+   "tci": 0.1445,
+   "incident_type": "normal",
+   "robbery_state": "unconfirmed",
+   "robbery_confirmed": false,
+   "robbery_experimental": true,
+   "robbery_score": 0.1445,
+   "robbery_votes": [
+    {
+     "source": "scene",
+     "value": 0.4565,
+     "threshold": 0.6,
+     "hits": 0,
+     "seen": 4,
+     "confirmed": false,
+     "gated": null,
+     "fresh": true,
+     "modality": "video_classifier",
+     "role": "for",
+     "span_s": 0.0,
+     "unit": "keyframes",
+     "group": null
+    }
+   ],
+   "scene_robbery_keyframes": [
+    0.0531,
+    0.0474,
+    0.4179,
+    0.4565
+   ],
+   "persons_recent": 1,
+   "scene_thresholds": {
+    "fire": 0.75,
+    "weapon": 0.78,
+    "assault": 0.85,
+    "robbery": 0.6
+   }
+  },
+  {
+   "video": "mmtheft.mp4",
+   "t": 18.0,
+   "kind": "clip",
+   "level": 2,
+   "tci": 0.35,
+   "incident_type": "robbery",
+   "robbery_state": "confirmed",
+   "robbery_confirmed": true,
+   "robbery_experimental": true,
+   "robbery_score": 0.35,
+   "robbery_votes": [
+    {
+     "source": "scene",
+     "value": 0.7222,
+     "threshold": 0.6,
+     "hits": 2,
+     "seen": 2,
+     "confirmed": true,
+     "gated": null,
+     "fresh": true,
+     "modality": "video_classifier",
+     "role": "for",
+     "span_s": 0.867,
+     "unit": "keyframes",
+     "group": null
+    }
+   ],
+   "scene_robbery_keyframes": [
+    0.6286,
+    0.7222
+   ],
+   "persons_recent": 2,
+   "scene_thresholds": {
+    "fire": 0.75,
+    "weapon": 0.78,
+    "assault": 0.85,
+    "robbery": 0.6
+   }
+  },
+  {
+   "video": "mmtheft.mp4",
+   "t": 20.0,
+   "kind": "clip",
+   "level": 2,
+   "tci": 0.35,
+   "incident_type": "robbery",
+   "robbery_state": "confirmed",
+   "robbery_confirmed": true,
+   "robbery_experimental": true,
+   "robbery_score": 0.35,
+   "robbery_votes": [
+    {
+     "source": "scene",
+     "value": 0.8132,
+     "threshold": 0.6,
+     "hits": 3,
+     "seen": 3,
+     "confirmed": true,
+     "gated": null,
+     "fresh": true,
+     "modality": "video_classifier",
+     "role": "for",
+     "span_s": 2.001,
+     "unit": "keyframes",
+     "group": null
+    }
+   ],
+   "scene_robbery_keyframes": [
+    0.6286,
+    0.8053,
+    0.8132
+   ],
+   "persons_recent": 2,
+   "scene_thresholds": {
+    "fire": 0.75,
+    "weapon": 0.78,
+    "assault": 0.85,
+    "robbery": 0.6
+   }
+  },
+  {
+   "video": "mmtheft.mp4",
+   "t": 22.0,
+   "kind": "clip",
+   "level": 2,
+   "tci": 0.35,
+   "incident_type": "robbery",
+   "robbery_state": "confirmed",
+   "robbery_confirmed": true,
+   "robbery_experimental": true,
+   "robbery_score": 0.35,
+   "robbery_votes": [
+    {
+     "source": "scene",
+     "value": 0.8132,
+     "threshold": 0.6,
+     "hits": 4,
+     "seen": 4,
+     "confirmed": true,
+     "gated": null,
+     "fresh": true,
+     "modality": "video_classifier",
+     "role": "for",
+     "span_s": 1.935,
+     "unit": "keyframes",
+     "group": null
+    }
+   ],
+   "scene_robbery_keyframes": [
+    0.7904,
+    0.8053,
+    0.8132,
+    0.7461
+   ],
+   "persons_recent": 2,
+   "scene_thresholds": {
+    "fire": 0.75,
+    "weapon": 0.78,
+    "assault": 0.85,
+    "robbery": 0.6
+   }
+  },
+  {
+   "video": "mmtheft.mp4",
+   "t": 24.0,
+   "kind": "clip",
+   "level": 2,
+   "tci": 0.35,
+   "incident_type": "robbery",
+   "robbery_state": "confirmed",
+   "robbery_confirmed": true,
+   "robbery_experimental": true,
+   "robbery_score": 0.35,
+   "robbery_votes": [
+    {
+     "source": "scene",
+     "value": 0.8585,
+     "threshold": 0.6,
+     "hits": 2,
+     "seen": 2,
+     "confirmed": true,
+     "gated": null,
+     "fresh": true,
+     "modality": "video_classifier",
+     "role": "for",
+     "span_s": 0.934,
+     "unit": "keyframes",
+     "group": null
+    }
+   ],
+   "scene_robbery_keyframes": [
+    0.7129,
+    0.8585
+   ],
+   "persons_recent": 1,
+   "scene_thresholds": {
+    "fire": 0.75,
+    "weapon": 0.78,
+    "assault": 0.85,
+    "robbery": 0.6
+   }
+  },
+  {
+   "video": "mmtheft.mp4",
+   "t": 26.0,
+   "kind": "clip",
+   "level": 2,
+   "tci": 0.35,
+   "incident_type": "robbery",
+   "robbery_state": "confirmed",
+   "robbery_confirmed": true,
+   "robbery_experimental": true,
+   "robbery_score": 0.35,
+   "robbery_votes": [
+    {
+     "source": "scene",
+     "value": 0.843,
+     "threshold": 0.6,
+     "hits": 3,
+     "seen": 3,
+     "confirmed": true,
+     "gated": null,
+     "fresh": true,
+     "modality": "video_classifier",
+     "role": "for",
+     "span_s": 1.668,
+     "unit": "keyframes",
+     "group": null
+    }
+   ],
+   "scene_robbery_keyframes": [
+    0.7129,
+    0.843,
+    0.8295
+   ],
+   "persons_recent": 1,
+   "scene_thresholds": {
+    "fire": 0.75,
+    "weapon": 0.78,
+    "assault": 0.85,
+    "robbery": 0.6
+   }
+  },
+  {
+   "video": "mmtheft.mp4",
+   "t": 28.0,
+   "kind": "clip",
+   "level": 2,
+   "tci": 0.35,
+   "incident_type": "robbery",
+   "robbery_state": "confirmed",
+   "robbery_confirmed": true,
+   "robbery_experimental": true,
+   "robbery_score": 0.35,
+   "robbery_votes": [
+    {
+     "source": "scene",
+     "value": 0.8295,
+     "threshold": 0.6,
+     "hits": 3,
+     "seen": 3,
+     "confirmed": true,
+     "gated": null,
+     "fresh": true,
+     "modality": "video_classifier",
+     "role": "for",
+     "span_s": 2.368,
+     "unit": "keyframes",
+     "group": null
+    }
+   ],
+   "scene_robbery_keyframes": [
+    0.8295,
+    0.7773,
+    0.8002
+   ],
+   "persons_recent": 1,
+   "scene_thresholds": {
+    "fire": 0.75,
+    "weapon": 0.78,
+    "assault": 0.85,
+    "robbery": 0.6
+   }
+  },
+  {
+   "video": "mmtheft.mp4",
+   "t": 30.0,
+   "kind": "clip",
+   "level": 2,
+   "tci": 0.35,
+   "incident_type": "robbery",
+   "robbery_state": "confirmed",
+   "robbery_confirmed": true,
+   "robbery_experimental": true,
+   "robbery_score": 0.35,
+   "robbery_votes": [
+    {
+     "source": "scene",
+     "value": 0.8157,
+     "threshold": 0.6,
+     "hits": 2,
+     "seen": 2,
+     "confirmed": true,
+     "gated": null,
+     "fresh": true,
+     "modality": "video_classifier",
+     "role": "for",
+     "span_s": 2.602,
+     "unit": "keyframes",
+     "group": null
+    }
+   ],
+   "scene_robbery_keyframes": [
+    0.8157,
+    0.7572
+   ],
+   "persons_recent": 1,
+   "scene_thresholds": {
+    "fire": 0.75,
+    "weapon": 0.78,
+    "assault": 0.85,
+    "robbery": 0.6
+   }
+  },
+  {
+   "video": "mmtheft.mp4",
+   "t": 32.0,
+   "kind": "clip",
+   "level": 2,
+   "tci": 0.35,
+   "incident_type": "robbery",
+   "robbery_state": "confirmed",
+   "robbery_confirmed": true,
+   "robbery_experimental": true,
+   "robbery_score": 0.35,
+   "robbery_votes": [
+    {
+     "source": "scene",
+     "value": 0.7662,
+     "threshold": 0.6,
+     "hits": 3,
+     "seen": 3,
+     "confirmed": true,
+     "gated": null,
+     "fresh": true,
+     "modality": "video_classifier",
+     "role": "for",
+     "span_s": 1.468,
+     "unit": "keyframes",
+     "group": null
+    }
+   ],
+   "scene_robbery_keyframes": [
+    0.766,
+    0.7572,
+    0.7662
+   ],
+   "persons_recent": 1,
+   "scene_thresholds": {
+    "fire": 0.75,
+    "weapon": 0.78,
+    "assault": 0.85,
+    "robbery": 0.6
+   }
+  },
+  {
+   "video": "mmtheft.mp4",
+   "t": 34.0,
+   "kind": "clip",
+   "level": 2,
+   "tci": 0.35,
+   "incident_type": "robbery",
+   "robbery_state": "confirmed",
+   "robbery_confirmed": true,
+   "robbery_experimental": true,
+   "robbery_score": 0.35,
+   "robbery_votes": [
+    {
+     "source": "scene",
+     "value": 0.7939,
+     "threshold": 0.6,
+     "hits": 3,
+     "seen": 3,
+     "confirmed": true,
+     "gated": null,
+     "fresh": true,
+     "modality": "video_classifier",
+     "role": "for",
+     "span_s": 1.601,
+     "unit": "keyframes",
+     "group": null
+    }
+   ],
+   "scene_robbery_keyframes": [
+    0.7662,
+    0.7939,
+    0.7726
+   ],
+   "persons_recent": 1,
+   "scene_thresholds": {
+    "fire": 0.75,
+    "weapon": 0.78,
+    "assault": 0.85,
+    "robbery": 0.6
+   }
+  },
+  {
+   "video": "mmtheft.mp4",
+   "t": 36.0,
+   "kind": "clip",
+   "level": 2,
+   "tci": 0.35,
+   "incident_type": "robbery",
+   "robbery_state": "confirmed",
+   "robbery_confirmed": true,
+   "robbery_experimental": true,
+   "robbery_score": 0.35,
+   "robbery_votes": [
+    {
+     "source": "scene",
+     "value": 0.8313,
+     "threshold": 0.6,
+     "hits": 3,
+     "seen": 3,
+     "confirmed": true,
+     "gated": null,
+     "fresh": true,
+     "modality": "video_classifier",
+     "role": "for",
+     "span_s": 2.935,
+     "unit": "keyframes",
+     "group": null
+    }
+   ],
+   "scene_robbery_keyframes": [
+    0.7905,
+    0.7726,
+    0.8313
+   ],
+   "persons_recent": 1,
+   "scene_thresholds": {
+    "fire": 0.75,
+    "weapon": 0.78,
+    "assault": 0.85,
+    "robbery": 0.6
+   }
+  },
+  {
+   "video": "mmtheft.mp4",
+   "t": 38.0,
+   "kind": "clip",
+   "level": 2,
+   "tci": 0.35,
+   "incident_type": "robbery",
+   "robbery_state": "confirmed",
+   "robbery_confirmed": true,
+   "robbery_experimental": true,
+   "robbery_score": 0.35,
+   "robbery_votes": [
+    {
+     "source": "scene",
+     "value": 0.8313,
+     "threshold": 0.6,
+     "hits": 3,
+     "seen": 3,
+     "confirmed": true,
+     "gated": null,
+     "fresh": true,
+     "modality": "video_classifier",
+     "role": "for",
+     "span_s": 3.002,
+     "unit": "keyframes",
+     "group": null
+    }
+   ],
+   "scene_robbery_keyframes": [
+    0.8313,
+    0.806,
+    0.7948
+   ],
+   "persons_recent": 1,
+   "scene_thresholds": {
+    "fire": 0.75,
+    "weapon": 0.78,
+    "assault": 0.85,
+    "robbery": 0.6
+   }
+  },
+  {
+   "video": "mmtheft.mp4",
+   "t": 40.0,
+   "kind": "clip",
+   "level": 2,
+   "tci": 0.35,
+   "incident_type": "robbery",
+   "robbery_state": "confirmed",
+   "robbery_confirmed": true,
+   "robbery_experimental": true,
+   "robbery_score": 0.35,
+   "robbery_votes": [
+    {
+     "source": "scene",
+     "value": 0.806,
+     "threshold": 0.6,
+     "hits": 4,
+     "seen": 4,
+     "confirmed": true,
+     "gated": null,
+     "fresh": true,
+     "modality": "video_classifier",
+     "role": "for",
+     "span_s": 3.002,
+     "unit": "keyframes",
+     "group": null
+    }
+   ],
+   "scene_robbery_keyframes": [
+    0.806,
+    0.7948,
+    0.766,
+    0.7654
+   ],
+   "persons_recent": 1,
+   "scene_thresholds": {
+    "fire": 0.75,
+    "weapon": 0.78,
+    "assault": 0.85,
+    "robbery": 0.6
+   }
+  },
+  {
+   "video": "mmtheft.mp4",
+   "t": 42.0,
+   "kind": "clip",
+   "level": 2,
+   "tci": 0.35,
+   "incident_type": "robbery",
+   "robbery_state": "confirmed",
+   "robbery_confirmed": true,
+   "robbery_experimental": true,
+   "robbery_score": 0.35,
+   "robbery_votes": [
+    {
+     "source": "scene",
+     "value": 0.8005,
+     "threshold": 0.6,
+     "hits": 4,
+     "seen": 4,
+     "confirmed": true,
+     "gated": null,
+     "fresh": true,
+     "modality": "video_classifier",
+     "role": "for",
+     "span_s": 2.001,
+     "unit": "keyframes",
+     "group": null
+    }
+   ],
+   "scene_robbery_keyframes": [
+    0.766,
+    0.7654,
+    0.7612,
+    0.8005
+   ],
+   "persons_recent": 1,
+   "scene_thresholds": {
+    "fire": 0.75,
+    "weapon": 0.78,
+    "assault": 0.85,
+    "robbery": 0.6
+   }
+  },
+  {
+   "video": "mmtheft.mp4",
+   "t": 44.0,
+   "kind": "clip",
+   "level": 2,
+   "tci": 0.35,
+   "incident_type": "robbery",
+   "robbery_state": "confirmed",
+   "robbery_confirmed": true,
+   "robbery_experimental": true,
+   "robbery_score": 0.35,
+   "robbery_votes": [
+    {
+     "source": "scene",
+     "value": 0.8144,
+     "threshold": 0.6,
+     "hits": 4,
+     "seen": 4,
+     "confirmed": true,
+     "gated": null,
+     "fresh": true,
+     "modality": "video_classifier",
+     "role": "for",
+     "span_s": 1.868,
+     "unit": "keyframes",
+     "group": null
+    }
+   ],
+   "scene_robbery_keyframes": [
+    0.7612,
+    0.7423,
+    0.8005,
+    0.8144
+   ],
+   "persons_recent": 1,
+   "scene_thresholds": {
+    "fire": 0.75,
+    "weapon": 0.78,
+    "assault": 0.85,
+    "robbery": 0.6
+   }
+  },
+  {
+   "video": "mmtheft.mp4",
+   "t": 46.0,
+   "kind": "clip",
+   "level": 2,
+   "tci": 0.35,
+   "incident_type": "robbery",
+   "robbery_state": "confirmed",
+   "robbery_confirmed": true,
+   "robbery_experimental": true,
+   "robbery_score": 0.35,
+   "robbery_votes": [
+    {
+     "source": "scene",
+     "value": 0.8275,
+     "threshold": 0.6,
+     "hits": 2,
+     "seen": 2,
+     "confirmed": true,
+     "gated": null,
+     "fresh": true,
+     "modality": "video_classifier",
+     "role": "for",
+     "span_s": 3.002,
+     "unit": "keyframes",
+     "group": null
+    }
+   ],
+   "scene_robbery_keyframes": [
+    0.8275,
+    0.7571
+   ],
+   "persons_recent": 1,
+   "scene_thresholds": {
+    "fire": 0.75,
+    "weapon": 0.78,
+    "assault": 0.85,
+    "robbery": 0.6
+   }
+  },
+  {
+   "video": "mmtheft.mp4",
+   "t": 48.0,
+   "kind": "clip",
+   "level": 2,
+   "tci": 0.35,
+   "incident_type": "robbery",
+   "robbery_state": "confirmed",
+   "robbery_confirmed": true,
+   "robbery_experimental": true,
+   "robbery_score": 0.35,
+   "robbery_votes": [
+    {
+     "source": "scene",
+     "value": 0.7746,
+     "threshold": 0.6,
+     "hits": 3,
+     "seen": 3,
+     "confirmed": true,
+     "gated": null,
+     "fresh": true,
+     "modality": "video_classifier",
+     "role": "for",
+     "span_s": 2.001,
+     "unit": "keyframes",
+     "group": null
+    }
+   ],
+   "scene_robbery_keyframes": [
+    0.7571,
+    0.7409,
+    0.7746
+   ],
+   "persons_recent": 1,
+   "scene_thresholds": {
+    "fire": 0.75,
+    "weapon": 0.78,
+    "assault": 0.85,
+    "robbery": 0.6
+   }
+  },
+  {
+   "video": "mmtheft.mp4",
+   "t": 50.0,
+   "kind": "clip",
+   "level": 2,
+   "tci": 0.35,
+   "incident_type": "robbery",
+   "robbery_state": "confirmed",
+   "robbery_confirmed": true,
+   "robbery_experimental": true,
+   "robbery_score": 0.35,
+   "robbery_votes": [
+    {
+     "source": "scene",
+     "value": 0.7788,
+     "threshold": 0.6,
+     "hits": 4,
+     "seen": 4,
+     "confirmed": true,
+     "gated": null,
+     "fresh": true,
+     "modality": "video_classifier",
+     "role": "for",
+     "span_s": 3.002,
+     "unit": "keyframes",
+     "group": null
+    }
+   ],
+   "scene_robbery_keyframes": [
+    0.7409,
+    0.7746,
+    0.7553,
+    0.7788
+   ],
+   "persons_recent": 1,
+   "scene_thresholds": {
+    "fire": 0.75,
+    "weapon": 0.78,
+    "assault": 0.85,
+    "robbery": 0.6
+   }
+  },
+  {
+   "video": "mmtheft.mp4",
+   "t": 52.0,
+   "kind": "clip",
+   "level": 2,
+   "tci": 0.35,
+   "incident_type": "robbery",
+   "robbery_state": "confirmed",
+   "robbery_confirmed": true,
+   "robbery_experimental": true,
+   "robbery_score": 0.35,
+   "robbery_votes": [
+    {
+     "source": "scene",
+     "value": 0.7788,
+     "threshold": 0.6,
+     "hits": 4,
+     "seen": 4,
+     "confirmed": true,
+     "gated": null,
+     "fresh": true,
+     "modality": "video_classifier",
+     "role": "for",
+     "span_s": 2.001,
+     "unit": "keyframes",
+     "group": null
+    }
+   ],
+   "scene_robbery_keyframes": [
+    0.7756,
+    0.7553,
+    0.7788,
+    0.7676
+   ],
+   "persons_recent": 1,
+   "scene_thresholds": {
+    "fire": 0.75,
+    "weapon": 0.78,
+    "assault": 0.85,
+    "robbery": 0.6
+   }
+  }
+ ]
+}
