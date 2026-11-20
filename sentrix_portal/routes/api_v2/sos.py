@@ -13,6 +13,8 @@ target is the simulated Desk, never ``tel:112`` (D13).
 
 from __future__ import annotations
 
+import asyncio
+import time
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Request, Response
@@ -153,12 +155,37 @@ async def sos_answer(request_id: str, body: AnswerIn, db: Session = DB,
     target = row.id
     if body.action == "help_now":
         target = (result.get("request") or {}).get("id") or row.id
+        if target != row.id:
+            await _await_mirror(db, target)
     db.expire_all()
     shown = db.get(AssistanceRequest, target)
     if shown is None or shown.household_id != principal.household_id:
         shown, target = db.get(AssistanceRequest, row.id), row.id
     return AnswerOut(message=views.OWNER_MESSAGES["ok"], request_id=target,
                      request=owner_request(shown), events=owner_events(db, shown))
+
+
+#: How long the answer waits for a new request's mirror (s).
+MIRROR_WAIT_SECONDS = 3.0
+
+
+async def _await_mirror(db: Session, request_id: str,
+                        seconds: float = MIRROR_WAIT_SECONDS) -> None:
+    """Online, the device answers "help now" before its new request's
+    ``sos.created`` reaches the Portal over the link, so the new request's
+    mirror may not exist yet: the answer then showed the old, unanswered
+    request (an end-to-end test failed about 2 runs in 5 on it). Wait
+    briefly for the row. Commit first: the hub stores the event on its own
+    connection and must not wait for this one's SQLite write lock."""
+    db.commit()
+    deadline = time.monotonic() + seconds
+    while True:
+        db.expire_all()
+        if db.get(AssistanceRequest, request_id) is not None:
+            return
+        if time.monotonic() >= deadline:
+            return
+        await asyncio.sleep(0.05)
 
 
 # ── action links (/a/<token>) ─────────────────────────────────────────────────
