@@ -264,6 +264,11 @@ class NcnnHead:
         self._net = ncnn.Net()
         self._net.opt.num_threads = max(1, int(threads))
         self._net.opt.use_vulkan_compute = False
+        # ncnn's defaults compute in fp16 on CPUs that have it (the Pi 5's
+        # Cortex-A76): about twice ONNX's speed there, but the person head's
+        # labels differ from ONNX on 4-6 % of frames; in fp32 it equals ONNX
+        # and is no faster. The Pi runs ONNX (training/runs/custom_eval/pi5/
+        # RUNTIME_2026-11-20.md); on x86 there is no fp16 path and NCNN = ONNX.
         self._net.load_param(str(self.path / "model.ncnn.param"))
         self._net.load_model(str(self.path / "model.ncnn.bin"))
 
