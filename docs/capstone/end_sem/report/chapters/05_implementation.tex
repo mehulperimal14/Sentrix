@@ -479,7 +479,7 @@ Testing is layered (\figref{fig:tests}):
 \item \textbf{Device and Portal suite} (branch \code{sentrix/portal}, commit \code{5127b3c}, with body re-identification, the v5 detector heads and room calibration): \textbf{2154 passed} in 386.6\,s on the laptop. The device guard blocked 4 webcam/microphone attempts and the socket guard 2 network attempts---all made deliberately by the tests that check those guards.
 \item \textbf{Frontend branch} (\code{sentrix/frontend-v2}, commit \code{c1241c1}, the React applications): Python suite \textbf{2243 passed, 1 skipped} in 385.4\,s; Vitest unit tests \textbf{15 of 15} passed; Playwright browser tests \textbf{22 of 23} passed at desktop and phone sizes. The failing case (TC-29) is the owner adding an emergency contact: the page did not show the ``ask the contact to confirm'' step within 15\,s. It is a known defect to be fixed before the final demonstration; adding contacts through onboarding is covered by passing tests.
 \item \textbf{Live smoke run} (Portal and device as two real processes linked over a real WebSocket, demo reel): every Local Console page and 14 GET APIs gave the same status directly and through the tunnel; ``scene gun'' produced a PENDING weapon request 8.0--9.8\,s after the clip started and ``scene fire'' 11.6--11.9\,s; approval reached the device as DISPATCHED in 0.01--0.28\,s; MJPEG ran at 29.9\,fps directly and 13.6\,fps through the tunnel (cap 15). Five defects found in the run were fixed with regression tests.
-\item \textbf{Live on the Raspberry~Pi~5 with the Render Portal and Telegram:} detections in the demo room opened assistance requests that were prompted on the Pi's screen and the owner's phone; requests were declined with the PIN, expired unanswered, and in one case approved, dispatched and resolved on the Desk. These were false alarms from the scene classifier in the new room, and they are the data from which the room thresholds were set (Section~\ref{sec:results}).
+\item \textbf{Live on the Raspberry~Pi~5 with the Render Portal and Telegram:} detections in the demo room opened assistance requests that were prompted on the Pi's screen and the owner's phone; requests were declined with the PIN, expired unanswered, and in one case approved, dispatched and resolved on the Desk. These were false alarms from the scene classifier in the new room, and they are the data from which the room thresholds were set (Section~\ref{sec:results}). On 20 November the Portal's Telegram messages from Render timed out (\code{ReadTimeout}) while the Portal was waking from suspension; that delivery path has to be re-checked before the demonstration.
 \item \textbf{Bug sweep and audits:} a five-way code audit and a twelve-item bug sweep (October 2026) and a wiring and copy audit (November 2026) each fixed every confirmed finding with a regression test.
 \end{itemize}
 
@@ -575,6 +575,12 @@ The five new videos are in the training split, so their replay is in-sample.
 \end{itemize}
 The final model is fit on the training split. A room's thresholds belong to one model (D23), so v5 ships in the repository but is \emph{opt-in} (\code{SENTRIX\_SCENE\_WEIGHTS}). The demo Pi stays on v4 until v5 has run a few quiet hours in that room and the room has been calibrated again.
 
+The Pi runs the v5 weapon head but keeps the v4 fire head (the owner's choice, 19 November). In the Pi's own configuration (clip mode, 320\,px, ONNX), replaying the fourteen training and validation videos:
+\begin{itemize}
+\item both fire heads bring 3 of 3 fires to Level~3 and raise no false Level~3;
+\item the v5 fire head loses the corroboration that took two fires to Level~4 and one to Level~5 with v4.
+\end{itemize}
+
 \begin{table}[htbp]
 \caption{v4 and v5 detector heads (held-out validation: gun, vid04; replay: all fifteen videos, tick mode at 6\,Hz with their soundtracks, partly in-sample)}
 \label{tab:v5heads}
@@ -601,7 +607,9 @@ False onsets at Level 3 (4.9 normal minutes) & 1 & 1\\ \hline
 \label{fig:liveloop}
 \end{figure}
 
-On the Raspberry~Pi~5 the same models must share four cores. \figref{fig:piclip} shows the clip engine measured on the Pi with the held-out handgun clip as a 30\,fps camera. At 640\,px the object stage alone takes 5.6\,s and three clips in four are dropped; at 320\,px the clip takes 3.9\,s, every other clip is analysed and decisions are about 4\,s old, with the same Level~3 recall on the replay (9/9 handgun, 3/3 fire on the nine training and validation videos) and one Level~4 handgun episode fewer. The shipped profile is therefore 320\,px with two scene frames; the fast lane (about 3.5 passes per second, 35--39\,ms per head at 320\,px) provides the quick Level~3 path. The 1.6\,s budget is not yet met: the DINOv2 stage alone takes about 1.2\,s per frame on the Pi, which is why a Hailo NPU or an NCNN build is the planned next step.
+On the Raspberry~Pi~5 the same models must share four cores. \figref{fig:piclip} shows the clip engine measured on the Pi with the held-out handgun clip as a 30\,fps camera. At 640\,px the object stage alone takes 5.6\,s and three clips in four are dropped; at 320\,px the clip takes 3.9\,s, every other clip is analysed and decisions are about 4\,s old, with the same Level~3 recall on the replay (9/9 handgun, 3/3 fire on the nine training and validation videos) and one Level~4 handgun episode fewer. The shipped profile is therefore 320\,px with two scene frames; the fast lane (about 3.5 passes per second, 35--39\,ms per head at 320\,px) provides the quick Level~3 path. The 1.6\,s budget is not yet met: the DINOv2 stage alone takes about 1.2\,s per frame on the Pi.
+
+NCNN does not close that gap. On the Pi it runs the three heads in about half ONNX's time (person 18 against 39\,ms), but only with ncnn's default fp16 arithmetic, which changes the person head's decisions on 4--6\,\% of frames; the person head gates weapon evidence. In fp32 NCNN equals ONNX and is no faster. Even fp16 would save only about 0.3\,s of the 3.9\,s clip, which the scene model dominates. The Pi therefore stays on ONNX, and a Hailo NPU is the planned next step.
 
 \begin{figure}[htbp]
 \centering
@@ -625,7 +633,7 @@ To make the scene stage fit the Pi, MobileNetV3-L and EfficientNet-B0 heads were
 \begin{itemize}
 \item \textbf{Same weights as the prototype.} The earlier IntrusionSentry prototype used OSNet x1\_0 with ImageNet weights. These separate people better than colour histograms (AUROC 0.83 against 0.73).
 \item \textbf{Re-identification-trained weights.} OSNet x1\_0 and OSNet-AIN x1\_0, both trained for re-identification on MSMT17, do better still (0.92 and 0.93). OSNet-AIN was chosen by a rule fixed before the comparison: the most same-person cases at a bar that accepts at most 0.05\,\% of different people.
-\item \textbf{Speed.} These checkpoints contain denormal weights, which made CPU inference 6--17 times slower. Zeroing them brought OSNet-AIN to 10.3\,ms per crop with unchanged features.
+\item \textbf{Speed.} These checkpoints contain denormal weights, which made CPU inference 6--17 times slower. Zeroing them brought OSNet-AIN to 10.3\,ms per crop with unchanged features. On the Pi it takes about 50\,ms per crop, on the recognition thread with each face check, never on the clip engine.
 \end{itemize}
 With the five November videos (fourteen videos; 1500 same-person and 25,408 different-people cases of the identity rule), the bar moved from 0.86 to 0.87. The rule, 20 looks and two checks in a row, reaches AUROC 0.97 and accepts 30\,\% of same-person cases and 0.020\,\% of different people.
 
@@ -660,6 +668,14 @@ The margins were thinner than the rule asks for. One keyframe reached p(weapon) 
 The calibration file records the scene model it was made for. If another model loads, the device keeps the thresholds but flags them as stale, so a retrained model is followed by a new calibration.
 
 The cost is the same as before, one step higher: a replica gun or flame scored between the old and new thresholds no longer reaches Level~3 from the scene model alone. The replica tests in that room, which the tool can replay with \code{--check}, are still to do.
+
+The calibration covers the scene model only, and the room still produces false alarms from the detectors. From 18 to 20 November every Level~3 in the demo room came from the fast lane's weapon detector alone:
+\begin{itemize}
+\item seven onsets in all: the v4 head saw a ``pistol'' (0.55--0.83) four times, and the v5 head a ``knife'' (0.57--0.60) three times;
+\item the owner marked four of them false; the other three were not reviewed;
+\item the scene model, at its room thresholds, raised none.
+\end{itemize}
+The detectors have no per-room threshold yet; extending the calibration to them is the next step.
 
 \begin{table}[htbp]
 \caption{Room calibration of the demonstration Pi from its own log (clip mode, v4 scene model)}

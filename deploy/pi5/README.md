@@ -113,8 +113,10 @@ scp -r models/exported pi@<pi>:/tmp/ && ssh pi@<pi> 'sudo cp -r /tmp/exported /o
 ```
 
 A missing export falls back to torch (slow on the Pi). `--ncnn` also writes
-NCNN exports, but needs `ncnn`/`pnnx`, which were never installed, so NCNN is
-untested.
+NCNN exports (needs `ncnn`/`pnnx`). They were measured on the demo Pi on
+2026-11-20. In fp16 they are twice as fast but change the person head's
+decisions on 4-6 % of frames; in fp32 they are no faster than ONNX. Keep
+`SENTRIX_RUNTIME=onnx` (`training/runs/custom_eval/pi5/RUNTIME_2026-11-20.md`).
 
 ### 6. Inputs (siren not connected)
 

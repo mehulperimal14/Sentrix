@@ -1,6 +1,6 @@
 # End-semester report (CPG-299, December 2026)
 
-`SENTRIX_CPG299_EndSem_Report.pdf` is the compiled report (109 pages, A4).
+`SENTRIX_CPG299_EndSem_Report.pdf` is the compiled report (110 pages, A4).
 It was last updated on 19 Nov 2026, with:
 - the five videos added on 18 Nov (977 frames from 15 videos);
 - the v5 detector heads;

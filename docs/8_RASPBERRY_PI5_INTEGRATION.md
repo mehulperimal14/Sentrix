@@ -232,9 +232,17 @@ incident seals evidence, the clip around it is sealed (5 fps), then 8 s after it
 writes the exports to `models/exported/` (not committed; built on the laptop and
 copied) and checks parity. Measured parity (`training/runs/custom_eval/clip/export_parity.json`):
 YOLO raw scores within 2.5e-5, scene probabilities within 2e-6 end to end. A
-missing export falls back to torch. ONNX sessions never spin-wait. The NCNN
-backend is tested only against a fake `ncnn` module: `ncnn`/`pnnx` were not
-installed, so no NCNN export exists yet.
+missing export falls back to torch. ONNX sessions never spin-wait.
+
+**NCNN, measured on the Pi (2026-11-20): not used.** The NCNN exports agree
+with ONNX within 1e-5 on the laptop. On the Pi they run the 320 px heads in
+about half ONNX's time (person 18.0 against 38.6 ms, weapon 16.3 against 34.0,
+fire 16.1 against 33.9), but only with ncnn's default fp16 arithmetic. In fp16
+the person head's set of labels differs from ONNX on 4-6 % of frames, and
+that head gates weapon evidence. With fp32 arithmetic NCNN equals ONNX and is
+no faster. So the Pi stays on ONNX
+(`training/runs/custom_eval/pi5/RUNTIME_2026-11-20.md`). fp16 would have saved
+about 0.3 s of the 3.9 s clip; the scene model dominates.
 
 **Faces.** `SENTRIX_FACE_MODEL=buffalo_s` (SCRFD-500M + MobileFaceNet) is
 supported and is the Pi default in `pi.env`. The pack was not on disk, so it is
@@ -458,7 +466,9 @@ Where the time goes (ONNX + fast lane bench): S1 objects p50 636 / p95 1344 ms
 (three YOLO passes per keyframe), S2 scene p50 401 / p95 507 ms (DINOv2-B on 2
 keyframes), fast-lane pass p50 61 / p95 115 ms at 3.75 passes/s. Scaled to the
 Pi (§2), the current models will not fit: Gate A needs M7's single detector,
-probably one scene keyframe per clip (the slim report's suggestion), and NCNN.
+probably one scene keyframe per clip (the slim report's suggestion), and an NPU
+(NCNN is faster on the Pi only in fp16, which changes decisions: §5 T1,
+Runtimes and exports).
 Tools for the Pi run: `tools/bench_clip.py --runtime onnx --fast-lane --seconds
 3600 --json ...` (side effects stubbed, refuses to run with live services) and
 `tools/replay_custom_videos.py --mode clip --fast-lane --threads 4`.
