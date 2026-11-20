@@ -1,7 +1,8 @@
 # End-semester report (CPG-299, December 2026)
 
-`SENTRIX_CPG299_EndSem_Report.pdf` is the compiled report (124 pages, A4).
-It was last updated on 20 Nov 2026, after an audit against the department's
+`SENTRIX_CPG299_EndSem_Report.pdf` is the compiled report (125 pages, A4).
+It was last updated on 21 Nov 2026: the demo Pi's switch to the v5 fire head
+(Sections 5.3.3 and 5.5.4). On 20 Nov it was audited against the department's
 report, IEEE-reference and PPT/poster guidelines and the coordinator's e-mail:
 - research questions RQ1-RQ4 open the literature survey (Section 2.1), each
   topic says what it answers, and Section 2.1.5 answers each question;
@@ -116,6 +117,26 @@ The numbers come from the same sources as the report.
 - `poster/poster.html`: the source. It takes the images from `report/figures/`
   by relative path. To print it, open it in Chrome and choose A3 landscape
   with no margins.
+
+## Deck
+
+`deck/SENTRIX_CPG299_Deck.pdf` and `deck/SENTRIX_CPG299_Deck.pptx` are the
+final-evaluation deck: 17 slides, 16:9, in the order of the department's PPT
+guideline, with speaker notes on every slide (the PPTX holds pictures of the
+slides, so fonts and layout stay as designed).
+
+## Videos
+
+`video/NARRATION.md` and `video/narration.srt` are the narration and captions
+of the five submission videos, one per student (8 min 3 s, 1920 x 1080). They
+follow the department's video guideline in its order: the student's title card
+(name, roll number, project, title, university) from the first frame for 16 s,
+the team's roles, then components, connections (README and wiring), inputs,
+start/stop/troubleshooting, a complete test-mode run, and the results with
+their limits. The narrator is Kokoro's "Michael" voice (offline); in Kartik
+Garg's video the team's roles are in his own voice; the music is generated
+for the videos. The MP4 files (about 86 MB each) and the submission zip are
+too large for git and are not committed.
 
 ## Screenshots
 
