@@ -579,9 +579,22 @@ The Pi is back on the home Wi-Fi (192.168.29.9) on a proper supply (EXT5V
   almost no flame (public fire AP50 0.000, v5 0.487; held-out val fire AUROC
   0.587, v5 0.964); its only edge was the L4/L5 corroboration on the training
   fire videos it had memorised (section 4.3, *Pi configuration replay*). Scene
-  model unchanged (v4, room bars weapon 0.78, fire 0.75). **Not measured: a
-  live flame in front of the Pi with the v5 head**; still to test in the room
-  before the demonstration.
+  model unchanged (v4, room bars weapon 0.78, fire 0.75). **Live flame with
+  the v5 head (same night, 02:51-02:53 and 02:55-02:57 IST; the second an
+  aerosol flame plume filling about half the picture close to the camera): no
+  fire Level 3, and not a bug.** The fire detector drew no box on any keyframe
+  (vote 0.00 against its 0.50 floor); offline on two Portal screenshots of the
+  plume the v5 head scored 0.01-0.08 as the Pi's `fire_detector_room_v5_320.onnx`,
+  as the 640 px ONNX and as the `.pt` through ultralytics at 320/640 alike (v4:
+  no box). Its only flames from our footage are 17 frames (vid04, vid06) of
+  small, pale aerosol jets in another room, so the room's plume is out of its
+  domain. The scene model reached p(fire) 0.69 / 0.71 (bar 0.75, which cannot
+  come down: the quiet log's confirming max is 0.650); the Level 2 rows were
+  the unrecognised person. Before 30 Nov: record the room's flames (several
+  sizes and distances, plus no-flame footage) with the Record button, fine-tune
+  the fire head on this laptop, re-export the 320 px ONNX and test again (#20);
+  fallback for the panel: a recorded flame clip through the demo reel, shown as
+  a replay.
 * **The Pi stays on ONNX.** NCNN is about twice as fast there only with
   ncnn's default fp16 arithmetic, which changes the person head's label set on
   4-6 % of frames (the weapon person gate); in fp32 it equals ONNX and is no
@@ -775,7 +788,7 @@ validated** (2 videos / 1 event). Only two rooms are represented.
 | Pi 5 demo room, fire (2026-10-23 and 10-27: 16,927 clips, 12.1 h; 5,435 scored by the scene model, 5.7 h, no flame in view) | scene p(fire) per keyframe median 0.073, p99 0.212, p99.9 0.494, max 0.646; the confirming second keyframe never above 0.587; confirmed clips at 0.45 / 0.50 / 0.55 / >= 0.60: 4 / 1 / 1 / 0 (the 2 false fire L3s); the fire detector drew no fire box. Per-deployment threshold **fire 0.70** (owner approved 2026-10-28) next to weapon 0.75 | the Pi's event log and database (read-only analysis 2026-10-28) |
 | Body re-id, three OSNet checkpoints on the custom videos (ByteTrack tracks, same track >= 2 s apart vs two people in one frame; `wa02` refused) | nine videos: pairwise AUROC ImageNet x1_0 0.831 / MSMT17 x1_0 0.917 / **MSMT17 OSNet-AIN 0.931** (chosen); identity rule (20 looks, two checks) at each one's bar (<= 0.05 % different): 37.3 / 39.0 / 42.3 % same-person. 14 videos (with the new ones): AIN pairwise 0.935, global-id bar 0.66 (1 % different), identity bar **0.87** (30.1 % same, 0.020 % different) | `training/runs/reid/osnet_weights_compare/`, `osnet_ain_14videos/` |
 | v5 room detector heads vs v4 (held-out: old val = gun + vid04; `wa02` reported only) | weapon: false alarms at 0.25 on normal frames 0.0 / 0.015 (= v4), old-val AUROC 0.748 -> **0.871**, recall@0.25 0.13 -> 0.22, public test pistol AP50 0.007 -> **0.699**, knife **0.717**, `wa02` AUROC 0.47 -> 0.90; fire: old-val AUROC 0.587 -> **0.964**, false alarms 0 / 0, public fire AP50 0.000 -> **0.487** (vid04's flame still under 0.25). Replay of 15 videos: weapon at L3 9/14 -> 11/14 (fire at L5 2/3 -> 0/3, L3 and L4 unchanged), the new gun/knife scenes L2 -> L3, 1 false L3 onset before and after | `training/runs/eval/detectors_2026-11-19/`, `fire_candidate_2026-11-19/`, `custom_eval/baseline_2026-11-19/`, `v5det_2026-11-19/` |
-| Pi configuration replay (clip mode, ONNX 320 px, fast lane, v4 scene; 14 train + val videos) | v4 heads / v5 heads: false L3 onsets 0 / 0; weapon at L3 9/11 / 9/11, L4 5 / 4, L5 4 / 3; fire at L3 3/3 / 3/3, **L4 2 / 0, L5 1 / 0**; val frame macro-F1 0.405 / 0.509; held-out val episodes identical. At 320 px the v5 heads add no L3 catches and lose fire corroboration on the training fire videos v4 had memorised; the Pi runs v5 heads since main `2867bdf`; the owner kept v4 fire on the Pi from 2026-11-19 (`SENTRIX_FIRE_WEIGHTS` in `deploy/pi5/pi.env`, applied on the Pi 2026-11-20) and **switched it to the v5 fire head on 2026-11-21**: live in the demo room the v4 head drew no fire box on a lighter flame or burning paper (section 2, *Pi sync*); a live flame with the v5 head on the Pi is not measured yet. The weapon head stays v5 | `training/runs/custom_eval/pi_clip_v4heads_2026-11-19/`, `pi_clip_v5heads_2026-11-19/` |
+| Pi configuration replay (clip mode, ONNX 320 px, fast lane, v4 scene; 14 train + val videos) | v4 heads / v5 heads: false L3 onsets 0 / 0; weapon at L3 9/11 / 9/11, L4 5 / 4, L5 4 / 3; fire at L3 3/3 / 3/3, **L4 2 / 0, L5 1 / 0**; val frame macro-F1 0.405 / 0.509; held-out val episodes identical. At 320 px the v5 heads add no L3 catches and lose fire corroboration on the training fire videos v4 had memorised; the Pi runs v5 heads since main `2867bdf`; the owner kept v4 fire on the Pi from 2026-11-19 (`SENTRIX_FIRE_WEIGHTS` in `deploy/pi5/pi.env`, applied on the Pi 2026-11-20) and **switched it to the v5 fire head on 2026-11-21**: live in the demo room the v4 head drew no fire box on a lighter flame or burning paper (section 2, *Pi sync*). Live flame tests with the v5 head the same night: no box either (0.01-0.08 against 0.50 on the room's aerosol plume, out of its domain), so fire needs the room's own flame footage. The weapon head stays v5 | `training/runs/custom_eval/pi_clip_v4heads_2026-11-19/`, `pi_clip_v5heads_2026-11-19/` |
 | Pi 5 runtimes (heads at 320 px, 4 threads; `pi_runtime_parity.py`) | p50 ONNX / NCNN fp16 (ncnn's default on the A76) / NCNN fp32: person 38.6 / 18.0 / 39.5 ms, weapon v5 34.0 / 16.3 / 34.0, fire v4 33.9 / 16.1 / 34.0. Against ONNX on 102 frames: fp16 person top-score error 0.054, label set differs on 4 / 6 / 2 frames at 0.25 / 0.35 / 0.5 (weapon 1 / 0 / 0, fire 0); fp32 identical. **ONNX stays** | `training/runs/custom_eval/pi5/RUNTIME_2026-11-20.md` |
 | Body re-ID on the Pi (OSNet-AIN MSMT17, onnxruntime 2 threads, 121 crops of vid07) | **49.6 ms a crop** (p95 51.6) at batch 1, 52.8 ms at batch 4; laptop 10.3 ms | same |
 | v5 room scene classifier vs v4 (as the product runs it, floors applied) | LOVO over 14 videos: tuned macro-F1 0.433 (mmgun 1.00, mmknife 0.54; assault and robbery 0). Held out: old-val macro-F1 0.700 -> **0.743**, weapon recall 0.36 -> 0.45 (AUROC 0.786 -> 0.843), 0 of 90 held-out normal frames flagged (= v4); public stills: same ranking, weapon recall at the bar 0.34 -> 0.09, false alarms 2.1 % -> 0 % | `training/runs/custom/scene_cv/dino_b_last4_v5/`, `eval/scene_room_v5_fp16/` |

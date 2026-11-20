@@ -2,7 +2,7 @@
 
 `SENTRIX_CPG299_EndSem_Report.pdf` is the compiled report (125 pages, A4).
 It was last updated on 21 Nov 2026: the demo Pi's switch to the v5 fire head
-(Sections 5.3.3 and 5.5.4). On 20 Nov it was audited against the department's
+and the live flame tests in the demo room (Sections 5.3.3 and 5.5.4). On 20 Nov it was audited against the department's
 report, IEEE-reference and PPT/poster guidelines and the coordinator's e-mail:
 - research questions RQ1-RQ4 open the literature survey (Section 2.1), each
   topic says what it answers, and Section 2.1.5 answers each question;
