@@ -175,7 +175,7 @@ overrides after the first live run, `CLAUDE.md` §5 and M1):
 | Rule | Result |
 |---|---|
 | a source crosses its threshold on 2 of the last 3 fresh evaluations (gap ≤ 3 s) | the source is *confirmed* for that class |
-| weapon vote (robbery too with `SENTRIX_ROBBERY_ALARM=1`) with no person seen in the last 2 s | does not count |
+| weapon vote (robbery too with `SENTRIX_ROBBERY_ALARM=1`) with no person seen in the last 2 s | does not count (with the person detector unavailable a weapon vote counts, a robbery vote does not) |
 | one confirmed source | class evidence 0.45–0.62 → L3 |
 | a classifier **and** a detector confirmed | 0.70 + 0.25 × the weaker side's margin over its threshold → L4; L5 from a margin of about 0.6 |
 | assault, robbery (experimental, D1) | capped at 0.35 → L2; robbery with `SENTRIX_ROBBERY_ALARM=1` (D26) scores as one confirmed source → L3 |

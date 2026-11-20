@@ -485,8 +485,10 @@ Limits that matter for any claim:
 * **Assault and robbery cannot be validated** (2 videos / 1 event). They stay
   experimental, capped at L2, unless `SENTRIX_ROBBERY_ALARM=1` (D26, the demo
   unit's masked-theft scene) makes a confirmed robbery an L3: out of fold the
-  scene model found none of the robbery frames, so that L3 rests on the demo
-  room's own test.
+  scene model found none of the robbery frames, and in the replay the v4 scene
+  model the demo unit runs kept the staged masked theft at L2 even with the
+  switch on (only the opt-in v5 model, trained on that video, raised it), so
+  that L3 rests on the demo room's own test.
 * **No fitted fusion model.** The TCI is a published rule over confirmed
   evidence until real session logs exist (M8).
 * **Darkness and faces closer than 1 m** are out of scope for an RGB webcam.
