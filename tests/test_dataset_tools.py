@@ -194,8 +194,9 @@ def test_detector_weights_can_be_pinned_per_role(monkeypatch, tmp_path):
 
 
 def test_relative_weights_overrides_are_taken_from_the_repository(monkeypatch, tmp_path):
-    """pi.env writes ``models/v4_custom/...``; a tool started from another
-    directory must load that file, not look for it under its own cwd."""
+    """A relative pin in .env (e.g. ``SENTRIX_FIRE_WEIGHTS=models/v4_custom/...``)
+    is taken from the repository; a tool started from another directory must
+    load that file, not look for it under its own cwd."""
     from sentrix.paths import ROOT_DIR
     from sentrix.perception import detector, scene
     monkeypatch.chdir(tmp_path)

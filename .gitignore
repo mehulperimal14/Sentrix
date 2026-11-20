@@ -119,6 +119,10 @@ coverage.xml
 CLAUDE.local.md
 # Office lock files (docs/capstone/)
 ~$*
+# capstone submission package and videos: too large for git (docs/capstone/end_sem/README.md)
+docs/capstone/end_sem/*.zip
+docs/capstone/end_sem/SUBMISSION_README.txt
+docs/capstone/end_sem/video/*.mp4
 
 # frontend (D22)
 node_modules/
