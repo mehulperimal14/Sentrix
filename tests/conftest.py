@@ -196,7 +196,11 @@ try:
                   "check_input_settings"):
         if hasattr(_sd, _name):
             setattr(_sd, _name, _guarded_audio(_name))
-except (ImportError, OSError):                      # pragma: no cover - no PortAudio
+except Exception:                                   # pragma: no cover - no PortAudio
+    # No PortAudio library, or one that cannot initialise (sounddevice raises
+    # PortAudioError on import when PulseAudio has no server, as on a CI
+    # machine): no microphone can open, so there is nothing to block. The
+    # app's own import in sentrix/perception/audio.py falls back the same way.
     pass
 
 
